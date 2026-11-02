@@ -369,7 +369,7 @@ class Swing {
     // AIR SLINGSHOT (off until set): the same draw and release in the air,
     // from two webs both under tension (slingshotTaut), launching along them.
     // Its own switch: the ground's WEB SLINGSHOT stays as it is either way.
-    // MOMENTUM LEAP (off until set): a charged leap keeps the speed the body
+    // RUNNING LEAP (off until set): a charged leap keeps the speed the body
     // runs at along its way, the charge's push on top (run_update::
     // momentumLeap). Off: the leap as it was, from rest.
     // SOFT LANDING (off until set): a fall the swing flies with no web

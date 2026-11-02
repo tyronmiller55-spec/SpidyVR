@@ -233,7 +233,7 @@ struct Values {
     // session's timeline about running, landing and the mod's ground run, to
     // send back. Off by default. Nothing moves differently either way.
     bool runLogs = false;
-    // MOMENTUM LEAP (the tab's MOMENTUM LEAP; Swing::allowMomentumLeap,
+    // RUNNING LEAP (the tab's RUNNING LEAP; Swing::allowMomentumLeap,
     // run_update::leapVelocity): a charged leap keeps the run's speed along
     // its way and adds the charge on top; a long one from a fast run goes
     // further and flatter. Off by default: a leap starts from rest, as before.

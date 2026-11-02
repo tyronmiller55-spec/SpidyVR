@@ -184,7 +184,7 @@ class RunLog {
     float measured_{}, top_{}, lastAirH_{}, lastAirV_{}, landing_{-1};
     char line_[lineBytes]{};
 };
-// MOMENTUM LEAP (vr_settings::Values::momentumLeap, off by default;
+// RUNNING LEAP (vr_settings::Values::momentumLeap, off by default;
 // Swing::allowMomentumLeap): a charged leap from the ground that keeps the
 // run's speed. The leap's way is the stick's (or, with the stick at rest, the
 // run's); of the body's speed across the ground, `carry` of what goes that way
