@@ -253,7 +253,7 @@ inline bool gameOwnsGround(bool fresh, const Data& d) {
 // Version 26 appends softLanding (off by default): a fall with no web eases
 // to 9 m/s down over its last metres (Swing::allowSoftLanding, SOFT LANDING).
 // Version 25 appends momentumLeap (off by default): a charged leap keeps the
-// run's speed (Swing::allowMomentumLeap, MOMENTUM LEAP).
+// run's speed (Swing::allowMomentumLeap, RUNNING LEAP).
 // Version 24 appends webAngle, degrees -45 to 45 (0 as before), and
 // wristShooters (off by default): the line each hand's webs leave along
 // (web_aim.hpp, WEB ANGLE and WRIST SHOOTERS).

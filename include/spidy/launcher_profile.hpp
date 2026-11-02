@@ -129,7 +129,7 @@ inline constexpr ProfileSetting profileSettings[] = {
     tabOnly("run_curve", Item::runCurve, &Values::runCurve),
     tabOnly("native_run_at_percent", Item::nativeRunAt, 50, 90, &Values::nativeRunPercent),
     tabOnly("run_logs", Item::runLogs, &Values::runLogs),
-    tabOnly("momentum_leap", Item::momentumLeap, &Values::momentumLeap),
+    tabOnly("running_leap", Item::momentumLeap, &Values::momentumLeap),
     tabOnly("early_jump", Item::earlyJump, 0, 2, &Values::earlyJump),
     tabOnly("soft_landing", Item::softLanding, &Values::softLanding),
     retired("wall_distance_cm", vr_settings::fixedWallDistance),

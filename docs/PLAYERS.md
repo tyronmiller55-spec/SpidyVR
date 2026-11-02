@@ -964,7 +964,7 @@ VR settings
   RUN LOGS         (off until you switch it on) writes how fast you run,
                    land and take off to the session's log, for sending
                    back. Changes nothing in play.
-  MOMENTUM LEAP    (off until you switch it on) a charged leap (hold A on
+  RUNNING LEAP    (off until you switch it on) a charged leap (hold A on
                    the ground) keeps the speed you run at and adds its
                    charge on top; a full one from a fast run is a long
                    jump, further and flatter. Off: as before.
@@ -977,7 +977,7 @@ VR settings
                    ground; your speed across is kept. Off: as before.
   Changes apply at once. The launcher starts your next session with them;
   its options show every one of them but VR VIEW too.
-  NEAR CLIP, RECORDING FOV, UI STYLE, BLOW SOUNDS, PC MEDIA, NATIVE RUN, AIR SLINGSHOT, WEB ANGLE, WRIST SHOOTERS, DODGE TUMBLE, RUN CURVE, NATIVE RUN AT, RUN LOGS, MOMENTUM LEAP, EARLY JUMP, SOFT LANDING, HEIGHT, SEATED, EYE AIM,
+  NEAR CLIP, RECORDING FOV, UI STYLE, BLOW SOUNDS, PC MEDIA, NATIVE RUN, AIR SLINGSHOT, WEB ANGLE, WRIST SHOOTERS, DODGE TUMBLE, RUN CURVE, NATIVE RUN AT, RUN LOGS, RUNNING LEAP, EARLY JUMP, SOFT LANDING, HEIGHT, SEATED, EYE AIM,
   SMART ANCHOR, WEB RANGE, WEB SPEED, ELASTIC WEB, SOFT RELEASE, SWING
   ASSIST, SLINGSHOT SPEED, SINGLE HAND YANK STRENGTH, TWO HAND WEB ZIP, HAND ROPE STEERING, RECORDING
   SMOOTHING, REEL HAPTICS, SWING HAPTICS, the four body haptics switches
