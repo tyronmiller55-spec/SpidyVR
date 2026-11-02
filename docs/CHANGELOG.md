@@ -14,10 +14,11 @@ Per-check results are in [VALIDATION.md](VALIDATION.md).
   the difference) once the ground below is within 3 m of the feet or 0.35 s
   of the fall (one ray down a native step, `Swing::predictNativeStep`;
   `run_update::softLandVertical`). The speed across is not touched; a web, a
-  wall, the swing itself and anything slower are as before. The stick
-  already reaches the game in the air, so its run is asked for as the feet
-  land; NATIVE RUN's RT is not sent before the touchdown (RT in the air is
-  the game's web swing). The game's own air history (time and height in the
+  wall, the swing itself and anything slower are as before. While such a
+  fall lasts (faster than 4 m/s down) the game gets the left stick too, as
+  on the ground, so its first step there is the run asked for (in flight it
+  otherwise gets none); the swing still moves the body, and NATIVE RUN's RT
+  is not sent before the touchdown (RT in the air is the game's web swing). The game's own air history (time and height in the
   air), which may still choose a hard landing, is not touched: its fields
   are not known yet (RUN LOGS records each touchdown's speeds and the speed
   0.3 s after it, to find out). Swing settings version 26.
