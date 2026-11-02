@@ -307,6 +307,8 @@ template <class V> auto switchOf(Item item, V& v) -> decltype(&v.aimMarkers) {
         return &v.swingHaptics;
     case Item::pcMedia:
         return &v.pcMedia;
+    case Item::nativeRun:
+        return &v.nativeRun;
     case Item::seated:
         return &v.seated;
     case Item::flipReprojection:
@@ -353,9 +355,9 @@ Values sanitized(Values v) {
     v.automaticHandThreshold = std::clamp(v.automaticHandThreshold, 50, 300);
     return v;
 }
-const std::array<Row, 70>& rows() {
+const std::array<Row, 71>& rows() {
     // The help fits the game's description column beside the rows.
-    static const std::array<Row, 70> all{{
+    static const std::array<Row, 71> all{{
         {Item::none, "WEBS", nullptr, {}},
         {Item::webStyle, "WEB STYLE",
          "Arcade: webs pass lamp posts, signs and cars, and swings stay above the street.", webStyleChoices},
@@ -510,6 +512,10 @@ const std::array<Row, 70>& rows() {
         {Item::steadyHud,
          "STEADY HUD",
          "The HUD shown by the headset itself: it holds still when the game falls behind.",
+         {}},
+        {Item::nativeRun,
+         "NATIVE RUN",
+         "Ground only: stick past 70% holds the game's RT: sprint, vaults, wall runs.",
          {}},
         {Item::realisticFlips,
          "REALISTIC FLIPS",
@@ -724,6 +730,7 @@ constexpr TabOnly tabOnly[] = {
     {"swing_haptics", &Values::swingHaptics, nullptr},
     {"pc_media", &Values::pcMedia, nullptr},
     {"single_hand_yank_percent", nullptr, &Values::singleHandYankPercent},
+    {"native_run", &Values::nativeRun, nullptr},
 };
 } // namespace
 std::string tabOnlyText(const Values& v) {
