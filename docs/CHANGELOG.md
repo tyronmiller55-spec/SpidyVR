@@ -3,7 +3,28 @@
 Every build, newest first, with what changed, why, and what was measured.
 Per-check results are in [VALIDATION.md](VALIDATION.md).
 
-**Latest build (unreleased): NATIVE RUN, the game's own sprint, vaults and
+**Latest build (unreleased): AIR SLINGSHOT, the web slingshot in the air.**
+
+- **Before.** The web slingshot (WEB SLINGSHOT: two webs, both grips held,
+  both arms drawn until the hands buzz, then let go) worked only standing on
+  the ground; in the air letting go of two webs only let go.
+- **AIR SLINGSHOT** (EXPERIMENTAL, after NATIVE RUN; the launcher's Moving
+  card; `air_slingshot` in `spidy_vr.ini` and profiles; off by default): the
+  same draw in the air, when both webs hold real surfaces at least 1.5 m
+  apart and both are under tension (`Swing::slingshotTaut`: a pull over the
+  last step, or stretched to their length). The hands buzz with the charge
+  as on the ground; letting go of both within 0.2 s launches along the two
+  webs, never slower than the player already goes that way. A slack line
+  holds the charge; a landing, a wall, A, a charged leap, a snap turn or a
+  lost hand cancels it. While a drawn air slingshot buzzes, a one-hand yank
+  and the two-hand zip wait. Its own switch: WEB SLINGSHOT on the ground is
+  unchanged with it on or off. Swing settings version 23.
+- **Validation.** Core checks cover the air draw and launch, the speed kept,
+  an undrawn release, a landing mid-draw, slack lines, the ground slingshot
+  unchanged, the settings packet, the row and its `spidy_vr.ini` key;
+  launcher checks the profile key. Not played in a headset yet.
+
+**Earlier build (unreleased): NATIVE RUN, the game's own sprint, vaults and
 wall runs on foot.**
 
 - **Before.** On the ground the left stick only jogged: the game's RT, its

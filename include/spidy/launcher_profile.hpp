@@ -122,6 +122,7 @@ inline constexpr ProfileSetting profileSettings[] = {
     tabOnly("wall_run_camera_tilt", Item::wallRunCameraTilt, &Values::wallRunCameraTilt),
     tabOnly("half_punch_damage", Item::halfPunchDamage, &Values::halfPunchDamage),
     tabOnly("native_run", Item::nativeRun, &Values::nativeRun),
+    tabOnly("air_slingshot", Item::airSlingshot, &Values::airSlingshot),
     retired("wall_distance_cm", vr_settings::fixedWallDistance),
     tabOnly("realistic_flips", Item::realisticFlips, &Values::realisticFlips),
     tabOnly("rotation_strength", Item::automaticStrength, 25, 100, &Values::automaticStrength),
