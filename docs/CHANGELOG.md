@@ -3,13 +3,13 @@
 Every build, newest first, with what changed, why, and what was measured.
 Per-check results are in [VALIDATION.md](VALIDATION.md).
 
-**Latest build (unreleased): MOMENTUM LEAP and EARLY JUMP, running jumps that keep the run.**
+**Latest build (unreleased): RUNNING LEAP and EARLY JUMP, running jumps that keep the run.**
 
 - **Before.** A charged leap (A held on the ground) set the body's velocity
   from rest: up by its charge, and at most 12 m/s along the stick whatever
   the run's speed, so a sprint ended in a slower leap. A tap of A reached the
   game only as it was let go, up to 0.18 s after the press.
-- **MOMENTUM LEAP** (EXPERIMENTAL, after RUN LOGS; `momentum_leap` in
+- **RUNNING LEAP** (EXPERIMENTAL, after RUN LOGS; `running_leap` in
   `spidy_vr.ini` and profiles; off by default): the leap keeps all of the
   run's speed along its way (the stick's, or the run's with the stick at
   rest) and half of the speed across it, and adds 60% of the charge's own

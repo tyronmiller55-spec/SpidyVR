@@ -1447,7 +1447,7 @@ void Swing::step(float dt, const Input& in, const WorldQueries& world, const Wor
             body_.velocity = limited(
                 along + Vec3{0, config_.leapUp + (config_.leapUpFull - config_.leapUp) * leapQueued_, 0},
                 config_.maxSpeed);
-            // MOMENTUM LEAP: the run's speed along the leap's way kept, the charge on top.
+            // RUNNING LEAP: the run's speed along the leap's way kept, the charge on top.
             if (momentumLeap_)
                 body_.velocity = run_update::leapVelocity(run_update::momentumLeap, run, in.move, leapQueued_,
                                                           config_.leapUp, config_.leapUpFull,

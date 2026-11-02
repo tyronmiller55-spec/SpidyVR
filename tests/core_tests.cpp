@@ -9203,7 +9203,7 @@ int main() {
         game_swing::Command old;old.serial=1;old.version=3;old.bytes=game_swing::commandBytesV3;
         check(game_swing::valid(old)&&game_swing::input(old).leap==0,"a version 3 command refused");
     });
-    test("MOMENTUM LEAP: Leap{} is the leap as before; on, a run's speed kept along the leap, a long jump", [] {
+    test("RUNNING LEAP: Leap{} is the leap as before; on, a run's speed kept along the leap, a long jump", [] {
         using namespace run_update;
         const SwingConfig c;
         // The leap as it was, for any charge, stick and run: the run plays no part.
@@ -22485,20 +22485,20 @@ int main() {
                   std::strcmp(all[66].title, "RUN LOGS") == 0 && all[66].choices.empty() &&
                   all[66].place == Place::tab,
               "RUN CURVE, NATIVE RUN AT and RUN LOGS: in the tab, after DODGE TUMBLE");
-        check(all[67].item == Item::momentumLeap && std::strcmp(all[67].title, "MOMENTUM LEAP") == 0 &&
+        check(all[67].item == Item::momentumLeap && std::strcmp(all[67].title, "RUNNING LEAP") == 0 &&
                   all[67].choices.empty() && all[67].place == Place::tab && all[68].item == Item::earlyJump &&
                   std::strcmp(all[68].title, "EARLY JUMP") == 0 && all[68].choices.size() == 3 &&
                   std::strcmp(all[68].choices[0], "OFF") == 0 && std::strcmp(all[68].choices[2], "RUNNING") == 0 &&
                   all[68].place == Place::tab,
-              "MOMENTUM LEAP and EARLY JUMP (OFF, QUICK TAP, RUNNING): in the tab, after RUN LOGS");
+              "RUNNING LEAP and EARLY JUMP (OFF, QUICK TAP, RUNNING): in the tab, after RUN LOGS");
         {
             Values v;
             check(!v.momentumLeap && v.earlyJump == 0 && defaultChoice(Item::momentumLeap) == 0 &&
                       defaultChoice(Item::earlyJump) == 0,
                   "momentum leap or early jump on by default");
-            check(withTabOnly({}, "momentum_leap=1\nearly_jump=7\n").momentumLeap &&
-                      withTabOnly({}, "momentum_leap=1\nearly_jump=7\n").earlyJump == 2,
-                  "spidy_vr.ini keeps momentum_leap and early_jump, within range");
+            check(withTabOnly({}, "running_leap=1\nearly_jump=7\n").momentumLeap &&
+                      withTabOnly({}, "running_leap=1\nearly_jump=7\n").earlyJump == 2,
+                  "spidy_vr.ini keeps running_leap and early_jump, within range");
         }
         {
             Values v;
@@ -22815,7 +22815,7 @@ int main() {
                   "flip_reprojection=0\nsteady_hud=0\nreel_haptics=0\nswing_haptics=0\n"
                   "pc_media=0\nsingle_hand_yank_percent=100\nnative_run=0\nair_slingshot=0\nweb_angle_"
                   "degrees=0\nwrist_shooters=0\n"
-                  "dodge_tumble=0\nrun_curve=0\nnative_run_at_percent=70\nrun_logs=0\nmomentum_leap=0\nearly_jump=0\n",
+                  "dodge_tumble=0\nrun_curve=0\nnative_run_at_percent=70\nrun_logs=0\nrunning_leap=0\nearly_jump=0\n",
               "the defaults' text");
         Values changed = defaults;
         changed.recordingFov = 140;
