@@ -357,6 +357,8 @@ template <class V> auto switchOf(Item item, V& v) -> decltype(&v.aimMarkers) {
         return &v.wristShooters;
     case Item::spidyRun:
         return &v.spidyRun;
+    case Item::spidyRunFromStanding:
+        return &v.spidyRunFromStanding;
     case Item::softLanding:
         return &v.softLanding;
     case Item::momentumLeap:
@@ -417,9 +419,9 @@ Values sanitized(Values v) {
     v.automaticHandThreshold = std::clamp(v.automaticHandThreshold, 50, 300);
     return v;
 }
-const std::array<Row, 84>& rows() {
+const std::array<Row, 85>& rows() {
     // The help fits the game's description column beside the rows.
-    static const std::array<Row, 84> all{{
+    static const std::array<Row, 85> all{{
         {Item::none, "WEBS", nullptr, {}},
         {Item::webStyle, "WEB STYLE",
          "Arcade: webs pass lamp posts, signs and cars, and swings stay above the street.", webStyleChoices},
@@ -611,6 +613,10 @@ const std::array<Row, 84>& rows() {
         {Item::spidyRun,
          "SPIDY RUN",
          "Land fast and keep running at that speed, steering, until it eases off.",
+         {}},
+        {Item::spidyRunFromStanding,
+         "RUN FROM STANDING",
+         "With SPIDY RUN: hold the stick fully to start it from a stand. Off as before.",
          {}},
         {Item::webAimSource, "WEB AIM",
          "MODEL FOREARM: webs follow the body's forearm. CONTROLLER as before.", webAimSourceChoices},
@@ -859,6 +865,7 @@ constexpr TabOnly tabOnly[] = {
     {"early_jump", nullptr, &Values::earlyJump},
     {"soft_landing", &Values::softLanding, nullptr},
     {"spidy_run", &Values::spidyRun, nullptr},
+    {"spidy_run_from_standing", &Values::spidyRunFromStanding, nullptr},
     {"web_aim_source", nullptr, &Values::webAimSource},
     {"forearm_blend", nullptr, &Values::forearmBlend},
 };

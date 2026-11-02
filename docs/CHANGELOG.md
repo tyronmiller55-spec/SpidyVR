@@ -3,7 +3,34 @@
 Every build, newest first, with what changed, why, and what was measured.
 Per-check results are in [VALIDATION.md](VALIDATION.md).
 
-**Latest build (unreleased): WEB AIM: MODEL FOREARM, webs along the arm you see.**
+**Latest build (unreleased): SPIDY RUN FROM STANDING, the mod's run from a stand.**
+
+- **Before.** SPIDY RUN started only from a landing faster than 10 m/s
+  across; from a stand or a walk the game's run (and NATIVE RUN) was all
+  there was.
+- **SPIDY RUN FROM STANDING** (EXPERIMENTAL, the tab's RUN FROM STANDING
+  after SPIDY RUN; `spidy_run_from_standing` in `spidy_vr.ini` and profiles;
+  off by default; it does nothing unless SPIDY RUN is on too): on the ground,
+  off any wall, with no web and no mount, the stick held past 90% of its tilt
+  for 0.3 s starts SPIDY RUN from the body's own speed across (a stand, a
+  walk or the game's run). While the stick stays past 90% the run builds to
+  the sprint at 24 m/s a second and on past it at 3 m/s a second to 14 m/s,
+  with no decay (`run_update::standRunStep`); the turn rate and the brake are
+  SPIDY RUN's. Eased under 90% it is SPIDY RUN from a landing: it decays to
+  the sprint (at once, under it) and the game's run takes over; a second
+  without the stick ends it as well. After a run from standing ends, the stick
+  has to come back under 50% before another starts, so a run the game takes
+  back (combat, a prompt, a vent) does not start again every frame. It reuses
+  SPIDY RUN's failure fallback unchanged: a body under half the speed asked
+  for 0.25 s ends the run, and three such ends switch SPIDY RUN (both ways in)
+  off until the settings change. Swing settings version 28.
+- **Validation.** Core checks cover the build to the sprint and past it, the
+  cap, the unheld step being SPIDY RUN's exactly, the turn rate, the hold
+  time, either switch off, a walk, the air, ending when eased off, the re-arm,
+  switching it off, the packet and the row; launcher checks the profile key.
+  Not played in a headset yet.
+
+**Earlier build (unreleased): WEB AIM: MODEL FOREARM, webs along the arm you see.**
 
 - **Before.** Every web left along the controller's line (its aim pose's -Z),
   turned only by WEB ANGLE and WRIST SHOOTERS, whatever the forearm of the
