@@ -3423,7 +3423,7 @@ DWORD WINAPI run(void*) {
                             if (values.runLogs) {
                                 run_update::RunSample sample;
                                 sample.seconds = frame.seconds;
-                                sample.fresh = swingFresh && playing;
+                                sample.fresh = swingFresh && steering && !calibrationInput;
                                 sample.grounded = swingState.grounded != 0;
                                 sample.owned = swingState.owned != 0;
                                 sample.webbed = swingState.webs[0].attached || swingState.webs[1].attached;
