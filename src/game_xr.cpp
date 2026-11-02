@@ -14,6 +14,7 @@
 #include "spidy/eye_snapshot.hpp"
 #include "spidy/game_bridge_protocol.hpp"
 #include "spidy/game_dodge.hpp"
+#include "spidy/web_aim.hpp"
 #include "spidy/game_grab.hpp"
 #include "spidy/game_menu.hpp"
 #include "spidy/game_offers.hpp"
@@ -1353,6 +1354,8 @@ DWORD WINAPI run(void*) {
             s.halfPunchDamage = values.halfPunchDamage;
             s.singleHandYankPercent = static_cast<uint32_t>(values.singleHandYankPercent);
             s.airSlingshot = values.airSlingshot;
+            s.webAngle = values.webAngle;
+            s.wristShooters = values.wristShooters;
             sentSwingSettings = s;
             swingSettingsSent = true;
             // A hand-over owns the walls while it lasts; the player's own
@@ -4528,8 +4531,12 @@ DWORD WINAPI run(void*) {
                             const auto kind = static_cast<game_swing::AimKind>(aim.kind);
                             // The hand moved with the player to this image, as its glove does.
                             const Vec3 origin = input.aim.position + travel;
+                            // Along the line its webs leave (WEB ANGLE, WRIST
+                            // SHOOTERS; web_aim.hpp), as the swing's aim previews.
+                            const Pose webLine = web_aim::shooterAim(input.aim, static_cast<int>(hand),
+                                                                     {values.webAngle, values.wristShooters});
                             const Vec3 direction =
-                                steady.aim(normalized(input.aim.orientation.rotate({0, 0, -1})),
+                                steady.aim(normalized(webLine.orientation.rotate({0, 0, -1})),
                                            trackingTurn(rendered.swing));
                             const float reach = length(aim.point - input.aim.position);
                             AimMarker marker;
