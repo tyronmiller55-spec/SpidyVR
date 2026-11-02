@@ -1372,6 +1372,7 @@ DWORD WINAPI run(void*) {
             s.singleHandYankPercent = static_cast<uint32_t>(values.singleHandYankPercent);
             s.airSlingshot = values.airSlingshot;
             s.momentumLeap = values.momentumLeap;
+            s.softLanding = values.softLanding;
             s.webAngle = values.webAngle;
             s.wristShooters = values.wristShooters;
             sentSwingSettings = s;
