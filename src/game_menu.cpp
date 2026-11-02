@@ -14,6 +14,7 @@
 #include <algorithm>
 #include <array>
 #include <atomic>
+#include <bitset>
 #include <cmath>
 #include <cstring>
 #include <iterator>
@@ -136,8 +137,10 @@ vr_settings::Values shown;
 // Bits 1 << Item changed in the tab and not taken yet. 64 of them: the haptics'
 // groups took Item past 31, where a 32-bit shift is undefined (x86 wraps it
 // onto another setting's bit).
-uint64_t pending{};
-static_assert(static_cast<unsigned>(vr_settings::lastItem) < 64, "more settings than pending's bits");
+// One bit an Item (an uint8_t): 64 bits held items 1-63, and NATIVE RUN is the 64th.
+using ItemBits = std::bitset<256>;
+ItemBits pending{};
+static_assert(static_cast<unsigned>(vr_settings::lastItem) < ItemBits{}.size(), "more settings than pending's bits");
 std::atomic<uint64_t> tabsBuilt{}, changesMade{};
 std::atomic<uint32_t> failure{};
 std::atomic<bool> hooked{}, created{};
@@ -394,7 +397,7 @@ void change(Item item, int index) {
     AcquireSRWLockExclusive(&lock);
     const bool changed = vr_settings::choose(item, index, shown);
     if (changed)
-        pending |= uint64_t{1} << static_cast<unsigned>(item);
+        pending.set(static_cast<unsigned>(item));
     ReleaseSRWLockExclusive(&lock);
     if (changed)
         ++changesMade;
@@ -593,9 +596,9 @@ bool matches(uintptr_t at, const unsigned char* bytes, size_t count) {
         return false;
     }
 }
-vr_settings::Values copyItems(const vr_settings::Values& from, vr_settings::Values to, uint64_t which) {
+vr_settings::Values copyItems(const vr_settings::Values& from, vr_settings::Values to, const ItemBits& which) {
     for (unsigned i = 1; i <= static_cast<unsigned>(vr_settings::lastItem); ++i)
-        if (which & (uint64_t{1} << i))
+        if (which.test(i))
             vr_settings::choose(static_cast<Item>(i), vr_settings::choice(static_cast<Item>(i), from), to);
     return to;
 }
@@ -643,17 +646,17 @@ void game_menu::uninstall() {
 void game_menu::publish(const vr_settings::Values& values) {
     AcquireSRWLockExclusive(&lock);
     // A change from the tab not taken yet stays as the tab left it.
-    shown = pending ? copyItems(shown, values, pending) : values;
+    shown = pending.any() ? copyItems(shown, values, pending) : values;
     ReleaseSRWLockExclusive(&lock);
 }
 bool game_menu::take(vr_settings::Values& values) {
     AcquireSRWLockExclusive(&lock);
-    const uint64_t which = pending;
-    if (which)
+    const ItemBits which = pending;
+    if (which.any())
         values = copyItems(shown, values, which);
-    pending = 0;
+    pending.reset();
     ReleaseSRWLockExclusive(&lock);
-    return which != 0;
+    return which.any();
 }
 Telemetry game_menu::telemetry() {
     Telemetry t;
