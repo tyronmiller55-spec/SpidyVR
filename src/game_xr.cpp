@@ -3367,7 +3367,8 @@ DWORD WINAPI run(void*) {
                                 game_swing::gameOwnsGround(swingFresh, swingState) && !walk.jump &&
                                 !walk.interact && !walk.zip && !walk.aim && !walk.pull && !walk.heal &&
                                 !walk.demand.any() && !onCrawl;
-                            if (nativeRun.update(runAllowed, walk.right, walk.forward))
+                            nativeRun.update(runAllowed, walk.right, walk.forward);
+                            if (nativeRun.held())
                                 walk.parkour = true;
                         }
                         walk.scan = templePress.held() && steering;
