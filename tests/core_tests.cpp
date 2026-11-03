@@ -1556,7 +1556,9 @@ int main() {
         s.webAngle = 46;
         check(!game_swing::validSettings(s), "a web angle over 45 accepted");
         s.webAngle = 0;
-        s.wristShooters = 2;
+        s.wristShooters = 2; // PALM SHOOTERS (v6)
+        check(game_swing::validSettings(s), "PALM SHOOTERS' 2 refused");
+        s.wristShooters = 3;
         check(!game_swing::validSettings(s), "an invalid wrist shooters switch accepted");
         Values v;
         check(v.webAngle == 0 && !v.wristShooters && defaultChoice(Item::webAngle) == 3 &&
@@ -1597,10 +1599,35 @@ int main() {
         const Quat aimOff = Quat::around({1, 0, 0}, -.3f);
         check(close(line(aimOff * forearmTurn(down15, {}, aimOff)), down15),
               "the aim frame's offset not undone");
-        // Clamped at 35 degrees.
+        // FOREARM AIM LIMIT 35 (v3-v5's clamp) holds at 35 degrees; v6's default has no limit.
         const Vec3 side60{std::sin(60 * deg), 0, -std::cos(60 * deg)};
-        check(std::abs(turnAngle(forearmTurn(side60, {}, {})) - forearmClampDegrees * deg) < 1e-3f,
+        check(std::abs(turnAngle(forearmTurn(side60, {}, {}, forearmClampDegrees)) - forearmClampDegrees * deg) <
+                  1e-3f,
               "the turn not held to 35 degrees");
+        check(close(line(forearmTurn(side60, {}, {})), side60) &&
+                  std::abs(turnAngle(forearmTurn(side60, {}, {})) - 60 * deg) < 1e-3f,
+              "v6's default limit clamped a 60 degree forearm");
+        const Vec3 side120{std::sin(120 * deg), 0, -std::cos(120 * deg)};
+        check(close(line(forearmTurn(side120, {}, {})), side120), "a forearm 120 degrees off not followed");
+        check(std::abs(turnAngle(forearmTurn(side120, {}, {}, 90)) - 90 * deg) < 1e-3f, "the 90 degree limit");
+        {
+            ForearmAim wide;
+            wide.update(true, forearmTurn(side60, {}, {}), 1.f / 90);
+            check(close(line(wide.smoothed), side60), "ForearmAim clamped by default");
+            ForearmAim narrow;
+            narrow.update(true, forearmTurn(side60, {}, {}), 1.f / 90, 35);
+            check(std::abs(turnAngle(narrow.smoothed) - 35 * deg) < 1e-3f, "ForearmAim's limit not taken");
+        }
+        // The web goes parallel to the forearm, elbow to wrist, out past the wrist: not
+        // out of the palm. A forearm along -Z with the controller pitched 40 degrees
+        // down gives the forearm's line, not the controller's.
+        {
+            const Vec3 elbow{0, 1, .3f}, wrist{0, 1, 0};
+            const Quat grip = Quat::around({1, 0, 0}, -40 * deg);
+            const Vec3 inGrip = forearmInGrip(elbow, wrist, grip);
+            const Quat turnOn = forearmTurn(inGrip, grip, grip);
+            check(close(line(grip * turnOn), {0, 0, -1}), "the web not parallel to the forearm (elbow->wrist)");
+        }
         // Mirrored hands, mirrored turns (x -> -x: the turn's y and z change sign).
         const Vec3 left{std::sin(12 * deg), -std::sin(10 * deg), -1}, right{-left.x, left.y, left.z};
         const Quat tl = forearmTurn(normalized(left), {}, {}), tr = forearmTurn(normalized(right), {}, {});
@@ -1641,7 +1668,7 @@ int main() {
         const Pose wrist = shooterAim(level, 0, {0, true}, t15);
         check(std::abs(dot(line(wrist.orientation), down15)) < 1e-4f &&
                   close(line(wrist.orientation), {1, 0, 0}),
-              "WRIST SHOOTERS not square to the forearm");
+              "PALM SHOOTERS (the old WRIST SHOOTERS) not square to the forearm");
         // The identity turn is the old shooterAim exactly.
         const Quat held = Quat::around({0, 1, 0}, .7f) * Quat::around({1, 0, 0}, -.3f);
         for (int hand = 0; hand < 2; ++hand) {
