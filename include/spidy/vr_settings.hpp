@@ -286,6 +286,12 @@ struct Values {
     // (a frame's flicker of the ground, a prompt or a vent no longer drops
     // and raises it), and stays off in a fight. Off by default: as before.
     bool steadyStates = false;
+    // COMBAT RESPONSIVE (the tab's COMBAT RESPONSIVE; v5): in a fight (the
+    // combat camera, or an enemy in reach within 3 s) the swing starts no
+    // SPIDY RUN or landing carry and ends one going on, so the game moves
+    // the body for its blows and dodges; NATIVE RUN holds no RT; and A is
+    // the game's jump at once, no charge. Off by default: as before.
+    bool combatResponsive = false;
     // How much speed a fast one-hand web yank adds, percent (the tab's SINGLE
     // HAND YANK STRENGTH; Swing::singleHandYankStrength): 100 as before.
     int singleHandYankPercent = 100;
@@ -418,8 +424,9 @@ enum class Item : uint8_t {
     webLandingSmooth,
     webLandingImpact,
     steadyStates,
+    combatResponsive,
 };
-inline constexpr Item lastItem = Item::steadyStates;
+inline constexpr Item lastItem = Item::combatResponsive;
 // Where a row shows: in the tab; on the pause menu's first page instead,
 // under RESUME: VR VIEW (the user, October 15: "move the VIEW: GAME SCREEN to
 // the first menu (the one with resume)"); or only in the launcher's options:
@@ -442,7 +449,7 @@ struct Row {
     std::span<const char* const> choices{};
     Place place{};
 };
-const std::array<Row, 88>& rows();
+const std::array<Row, 89>& rows();
 // The most choices a row shows (game_menu's buffers): a row with more would
 // lose its last ones.
 inline constexpr size_t maxChoices = 9;

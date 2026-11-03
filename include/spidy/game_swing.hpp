@@ -134,6 +134,7 @@ struct Command {
     // (a zip to a point), its Y (a web strike; a car's in a chase), a
     // prompt's button - and the swing lets it have the hero once it takes
     // him (AirYield). Zero until October 18, when it was `reserved`.
+    // Bit 1 (v5, COMBAT RESPONSIVE): the player fights now (Input::fighting).
     uint32_t asks{};
     uint64_t sampleTimeNs = 1;
     // Version 3: a flip's tilt of the tracking space (Input::tilt). Version 2
@@ -598,7 +599,7 @@ inline bool valid(const Command& c) {
           (c.version == 6 && c.bytes == sizeof(c))) ||
         !std::isfinite(c.leap) || c.leap < 0 || c.leap > 1 || !finite(c.look) || length(c.look) > 1.01f ||
         !c.serial || c.focused > 1 || c.jump > 1 || c.leaseMs > 250 || (c.focused && !c.leaseMs) ||
-        !finite(c.move) || length(c.move) > 1.001f || !std::isfinite(c.trackingYaw) || c.asks > 1 ||
+        !finite(c.move) || length(c.move) > 1.001f || !std::isfinite(c.trackingYaw) || c.asks > 3 ||
         !std::isfinite(c.sampleSeconds) || c.sampleSeconds <= 0 || c.sampleSeconds > .1f ||
         (c.focused && !c.sampleTimeNs) || !std::isfinite(tilt) || tilt < .99f || tilt > 1.01f)
         return false;
@@ -743,6 +744,8 @@ inline Input input(const Command& c) {
     Input out;
     out.focused = c.focused != 0;
     out.jump = c.jump != 0;
+    // Bit 1 of asks (v5, COMBAT RESPONSIVE): the player fights now.
+    out.fighting = (c.asks & 2u) != 0;
     out.move = c.move;
     out.trackingYaw = c.trackingYaw;
     const float n =
