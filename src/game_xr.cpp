@@ -1416,7 +1416,7 @@ DWORD WINAPI run(void*) {
             s.webLandingSmooth = values.webLandingSmooth;
             s.webLandingImpact = static_cast<float>(values.webLandingImpact);
             s.webAngle = values.webAngle;
-            s.wristShooters = values.wristShooters;
+            s.wristShooters = values.palmShooters ? 2u : values.wristShooters ? 1u : 0u;
             sentSwingSettings = s;
             swingSettingsSent = true;
             // A hand-over owns the walls while it lasts; the player's own
@@ -2494,7 +2494,9 @@ DWORD WINAPI run(void*) {
                         // the controller's pose now (web_aim::forearmTurn), smoothed, and
                         // back to the controller's line whenever the body cannot say. The
                         // swing puts the turn on the webs' line alone (WebTurns).
-                        if (values.webAimSource == static_cast<int>(web_aim::Source::forearm) &&
+                        // WRIST SHOOTERS (v6): parallel to the forearm, the same turns.
+                        if ((values.webAimSource == static_cast<int>(web_aim::Source::forearm) ||
+                             values.wristShooters) &&
                             swingWebTurns) {
                             using web_aim::Fallback;
                             const auto arms = native_body::forearms();
@@ -2516,18 +2518,20 @@ DWORD WINAPI run(void*) {
                                     why = Fallback::untracked;
                                 else if (!native_body::drawn() || !f.valid)
                                     why = Fallback::notSolved;
-                                else if (forearmStaleFrames > 2)
+                                else if (forearmStaleFrames > web_aim::forearmStaleFrames)
                                     why = Fallback::stale;
                                 else if (!(f.handError >= 0 && f.handError <= web_aim::forearmMiss))
                                     why = Fallback::wristMiss;
-                                else if (arms.tilted)
-                                    why = Fallback::tilted;
+                                // A flip's tilt is no fallback since v6: the solve turns
+                                // the whole body back with it (body_ik step 7) and the
+                                // wrist miss check still guards the sample. V5 fell back
+                                // in 492 of 1134 forearm aim: lines for it.
                                 const Quat aimNow = input.hands[i].aim.orientation;
                                 Quat target{};
                                 if (why == Fallback::none) {
                                     target =
                                         web_aim::forearmTurn(web_aim::forearmInGrip(f.elbow, f.wrist, f.grip),
-                                                             motion.grips[i].orientation, aimNow);
+                                                             motion.grips[i].orientation, aimNow, 180.f);
                                     if (forearmAims[i].primed)
                                         forearmJitter[i] = std::max(
                                             forearmJitter[i],
@@ -2535,8 +2539,15 @@ DWORD WINAPI run(void*) {
                                                 57.29578f);
                                     forearmTargets[i] = target;
                                 }
-                                forearmAims[i].update(why == Fallback::none, target, dt);
-                                webTurnsNow[i] = forearmAims[i].turn(values.forearmBlend);
+                                const float limit = static_cast<float>(values.forearmAimLimit);
+                                const bool clamped =
+                                    why == Fallback::none && web_aim::turnAngle(target) * 57.29578f > limit + .05f;
+                                forearmAims[i].update(why == Fallback::none, target, dt, limit);
+                                // WRIST SHOOTERS without MODEL FOREARM takes all of it.
+                                webTurnsNow[i] = forearmAims[i].turn(
+                                    values.webAimSource == static_cast<int>(web_aim::Source::forearm)
+                                        ? values.forearmBlend
+                                        : 100);
                                 turns.turns[i] = webTurnsNow[i];
                                 // In the diagnostics only as it changes
                                 // (diag_log::ChangeOnly); the timeline as before.
@@ -2557,18 +2568,29 @@ DWORD WINAPI run(void*) {
                                     const float lag =
                                         web_aim::turnAngle(f.grip.conjugate() * motion.grips[i].orientation) *
                                         57.29578f;
-                                    char line[320];
+                                    char line[480];
                                     std::snprintf(
                                         line, sizeof(line),
-                                        "forearm aim: %s %s, turn %.1f deg (target %.1f), weight %.2f, "
+                                        "forearm aim: %s %s (%s), %s, turn %.1f deg (target %.1f), limit %.0f "
+                                        "deg%s, weight %.2f, "
                                         "blend %d%%, wrist miss %.3f, stale %u, forearm vs controller "
-                                        "%.1f deg, grip lag %.1f deg, palm.x %+.2f, jitter %.2f deg",
+                                        "%.1f deg, grip lag %.1f deg, palm.x %+.2f, jitter %.2f deg%s",
                                         i ? "R" : "L", web_aim::fallbackName(why),
+                                        why == Fallback::none ? "active: the forearm's line"
+                                                              : "fallback: the controller's line",
+                                        values.webAimSource == static_cast<int>(web_aim::Source::forearm)
+                                            ? (values.wristShooters ? "MODEL FOREARM + WRIST SHOOTERS"
+                                                                    : "MODEL FOREARM")
+                                            : "WRIST SHOOTERS",
+                                        web_aim::turnAngle(webTurnsNow[i]) * 57.29578f,
+                                        web_aim::turnAngle(target) * 57.29578f, limit,
+                                        clamped ? ", clamped" : ", not clamped",
                                         web_aim::turnAngle(webTurnsNow[i]) * 57.29578f,
                                         web_aim::turnAngle(target) * 57.29578f, forearmAims[i].weight,
                                         values.forearmBlend, f.handError, forearmStaleFrames,
                                         f.valid ? off : -1.f, f.valid ? lag : -1.f,
-                                        dot(f.palm, aimNow.rotate({1, 0, 0})), forearmJitter[i]);
+                                        dot(f.palm, aimNow.rotate({1, 0, 0})), forearmJitter[i],
+                                        arms.tilted ? ", flip tilt" : "");
                                     if (logNow)
                                         game_prompts::note(line, false);
                                     if (diagNow)
@@ -5021,7 +5043,7 @@ DWORD WINAPI run(void*) {
                             // Along the line its webs leave (WEB ANGLE, WRIST
                             // SHOOTERS; web_aim.hpp), as the swing's aim previews.
                             // WEB AIM: MODEL FOREARM: the turn the swing was sent.
-                            const web_aim::Shooters shooters{values.webAngle, values.wristShooters};
+                            const web_aim::Shooters shooters{values.webAngle, values.palmShooters};
                             const Pose webLine =
                                 webTurnsOn ? web_aim::shooterAim(input.aim, static_cast<int>(hand), shooters,
                                                                  webTurnsNow[hand])
