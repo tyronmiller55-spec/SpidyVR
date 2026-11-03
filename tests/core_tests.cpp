@@ -1700,7 +1700,7 @@ int main() {
     });
     test("slingshot settings append to the old wire format and default off", [] {
         game_swing::Settings s;
-        check(s.version == 28 && s.bytes == 132 && !s.webSlingshot, "wrong slingshot defaults");
+        check(s.version == 29 && s.bytes == 140 && !s.webSlingshot, "wrong slingshot defaults");
         check(offsetof(game_swing::Settings, webSlingshot) == 48, "old settings moved");
         s.webSlingshot = 1; check(game_swing::validSettings(s), "ON refused");
         s.webSlingshot = 2; check(!game_swing::validSettings(s), "invalid switch accepted");
@@ -2363,7 +2363,7 @@ int main() {
         check(vr_settings::choose(vr_settings::Item::betterClimbing, 1, v), "ON failed");
         check(vr_settings::withTabOnly({}, vr_settings::tabOnlyText(v)).betterClimbing, "switch not saved");
         game_swing::Settings s;
-        check(s.version == 28 && s.bytes == 132 && offsetof(game_swing::Settings, betterClimbing) == 52,
+        check(s.version == 29 && s.bytes == 140 && offsetof(game_swing::Settings, betterClimbing) == 52,
               "settings moved old fields");
         s.betterClimbing = 1; check(game_swing::validSettings(s), "ON refused");
         s.betterClimbing = 2; check(!game_swing::validSettings(s), "invalid switch accepted");
@@ -3719,7 +3719,7 @@ int main() {
     test("merged settings keep phone suppression, arcade webs and hand climbing independent", [] {
         using namespace game_swing;
         Settings s;
-        check(s.version == 28 && s.bytes == 132, "updated settings did not append the climbing field");
+        check(s.version == 29 && s.bytes == 140, "updated settings did not append the climbing field");
         check(offsetof(Settings, noBlows) == 36 && offsetof(Settings, arcade) == 40 &&
               offsetof(Settings, handClimb) == 44, "upstream phone or arcade fields moved");
         s.noBlows = 3;
@@ -9494,6 +9494,102 @@ int main() {
         packet.bytes = game_swing::settingsBytesV25;
         check(game_swing::validSettings(packet), "version 25 settings packet refused");
     });
+    test("SMOOTH WEB LANDING: eased fall, carried speed and steady contact below the impact speed; off as before", [] {
+        using namespace web_landing;
+        const Tuning& k = tuning;
+        // The fall: untouched far above, slow or with no ground; eased toward fallTarget near it.
+        check(easeFall(-15, 20, 1.f / 60) == -15 && easeFall(-3, 1, 1.f / 60) == -3 &&
+                  easeFall(-15, -1, 1.f / 60) == -15,
+              "a web landing's fall eased where it should not be");
+        float vy = -15;
+        for (int i = 0; i < 120; ++i)
+            vy = easeFall(vy, 1, 1.f / 120);
+        near(vy, -k.fallTarget, .05f);
+        // The carry: over the floor it decays toward it, its way kept; at the floor nothing.
+        Vec3 along{0, 0, -14};
+        for (int i = 0; i < 30; ++i)
+            along = carryStep(along, 1.f / 60);
+        check(along.z < -k.floor && along.z > -14 && along.x == 0 && along.y == 0, "the carry did not decay");
+        near(length(carryStep({3, 0, 0}, .1f)), 3);
+        check(length(carryStep({NAN, 0, 0}, .1f)) == 0, "a carry from no number");
+        // The impact speed: under it gentle, at it not.
+        check(gentle({10, -10, 0}, 24) && !gentle({20, -20, 0}, 24) && !gentle({NAN, 0, 0}, 24),
+              "the impact speed misjudged");
+        // The contact: a flicker of a step is no change while active; a lasting one is; inactive as it is.
+        Contact c;
+        check(!c.update(.025f, false, true), "airborne at first");
+        check(!c.update(.025f, true, true) && !c.update(.025f, false, true), "a step's ground taken");
+        check(c.flickers() == 1, "the flicker not counted");
+        check(!c.update(.025f, true, true) && c.update(.025f, true, true), "lasting ground not taken");
+        check(c.update(.025f, false, true) && c.update(.025f, false, true) && !c.update(.04f, false, true),
+              "lasting air not taken after contactAir");
+        Contact off;
+        check(off.update(.025f, true, false) && !off.update(.025f, false, false), "inactive, the contact changed");
+        // The swing: a web held from the anchor 20 m up, then a fall near the street.
+        const auto landing = [&](bool on, Vec3 fall, Vec3 measured, bool& carrying) {
+            Street world;
+            SwingConfig cfg = inert();
+            cfg.gravity = 9.81f;
+            Swing sw(cfg);
+            sw.allowWebLandingSmooth(on, 24);
+            Input in = aimed();
+            in.focused = true;
+            Body body{{0, 0, 0}, {}, false};
+            for (int i = 0; i < 120 && !sw.webs()[0].attached; ++i)
+                sw.predictNativeStep(1.f / 90, in, world, body);
+            check(sw.webs()[0].attached, "no web held for the landing");
+            const Vec3 eased = sw.predictNativeStep(1.f / 60, in, world, {{0, 3, 0}, fall, false}).velocity;
+            const Vec3 landed = sw.predictNativeStep(1.f / 60, in, world, {{0, 1, 0}, measured, true}).velocity;
+            carrying = sw.landCarrying();
+            return std::pair{eased, landed};
+        };
+        bool carryOn{}, carryOff{};
+        const auto [onAir, onGround] = landing(true, {8, -12, 0}, {1, 0, 0}, carryOn);
+        const auto [offAir, offGround] = landing(false, {8, -12, 0}, {1, 0, 0}, carryOff);
+        check(onAir.y > offAir.y + 1, "SMOOTH WEB LANDING did not ease a web-held fall");
+        near(onAir.x, offAir.x, .05f);
+        check(carryOn && !carryOff, "the landing's speed not carried, or carried with the setting off");
+        check(onGround.x > 6 && offGround.x < 1.5f, "the carry did not keep the landing's speed across");
+        // At the impact speed or over it: the landing as before.
+        bool fastOn{}, fastOff{};
+        const auto [fastAirOn, fastGroundOn] = landing(true, {20, -20, 0}, {1, 0, 0}, fastOn);
+        const auto [fastAirOff, fastGroundOff] = landing(false, {20, -20, 0}, {1, 0, 0}, fastOff);
+        check(length(fastAirOn - fastAirOff) < 1e-4f && length(fastGroundOn - fastGroundOff) < 1e-4f && !fastOn,
+              "a landing over the impact speed changed");
+        Swing fresh(inert());
+        check(!fresh.webLandingSmoothEnabled() && !fresh.landCarrying(), "SMOOTH WEB LANDING on by default");
+        game_swing::Settings packet;
+        check(packet.version == 29 && packet.bytes == 140 && !packet.webLandingSmooth &&
+                  packet.webLandingImpact == 24 &&
+                  offsetof(game_swing::Settings, webLandingSmooth) == game_swing::settingsBytesV28,
+              "SMOOTH WEB LANDING not appended, or on by default");
+        packet.webLandingSmooth = 2;
+        check(!game_swing::validSettings(packet), "an invalid SMOOTH WEB LANDING switch accepted");
+        packet = {};
+        packet.webLandingImpact = 2;
+        check(!game_swing::validSettings(packet), "an impact speed under 5 m/s accepted");
+        packet = {};
+        packet.version = 28;
+        packet.bytes = game_swing::settingsBytesV28;
+        check(game_swing::validSettings(packet), "version 28 settings packet refused");
+        vr_settings::Values values;
+        check(!values.webLandingSmooth && values.webLandingImpact == 24 &&
+                  vr_settings::defaultChoice(vr_settings::Item::webLandingSmooth) == 0 &&
+                  vr_settings::defaultChoice(vr_settings::Item::webLandingImpact) == 3,
+              "SMOOTH WEB LANDING on, or its impact not 24 m/s, by default");
+        check(vr_settings::withTabOnly({}, "web_landing_smooth=1\nweb_landing_impact_speed=16\n").webLandingSmooth &&
+                  vr_settings::withTabOnly({}, "web_landing_impact_speed=16\n").webLandingImpact == 16 &&
+                  vr_settings::withTabOnly({}, "web_landing_impact_speed=99\n").webLandingImpact == 40 &&
+                  !vr_settings::withTabOnly({}, "").webLandingSmooth,
+              "spidy_vr.ini keeps web_landing_smooth and web_landing_impact_speed, within range");
+        const auto& all = vr_settings::rows();
+        check(all[74].item == vr_settings::Item::webLandingSmooth &&
+                  std::strcmp(all[74].title, "SMOOTH WEB LANDING") == 0 && all[74].choices.empty() &&
+                  all[75].item == vr_settings::Item::webLandingImpact &&
+                  std::strcmp(all[75].title, "WEB LANDING IMPACT") == 0 && all[75].choices.size() == 7 &&
+                  std::strcmp(all[75].choices[3], "24 M/S") == 0,
+              "SMOOTH WEB LANDING and WEB LANDING IMPACT: in the tab, after FOREARM BLEND");
+    });
     test("SPIDY RUN: the wall run's momentum on the ground - entry, steering, decay to the sprint", [] {
         using namespace run_update;
         const GroundRun& k = groundRun;
@@ -9617,7 +9713,7 @@ int main() {
         Swing fresh(inert());
         check(!fresh.groundRunEnabled() && !fresh.groundRunning(), "SPIDY RUN on by default");
         game_swing::Settings packet;
-        check(packet.version == 28 && packet.bytes == 132 && !packet.spidyRun &&
+        check(packet.version == 29 && packet.bytes == 140 && !packet.spidyRun &&
                   offsetof(game_swing::Settings, spidyRun) == game_swing::settingsBytesV26,
               "SPIDY RUN not appended, or on by default");
         packet.spidyRun = 2;
@@ -9755,7 +9851,7 @@ int main() {
             check(!sw.groundRunning(), "the air started a run from standing");
         }
         game_swing::Settings packet;
-        check(packet.version == 28 && packet.bytes == 132 && !packet.spidyRunStanding &&
+        check(packet.version == 29 && packet.bytes == 140 && !packet.spidyRunStanding &&
                   offsetof(game_swing::Settings, spidyRunStanding) == game_swing::settingsBytesV27,
               "SPIDY RUN FROM STANDING not appended, or on by default");
         packet.spidyRunStanding = 2;
@@ -22211,7 +22307,7 @@ int main() {
     test("free combat: settings default to called combat and preserve older packet layouts", [] {
         using namespace game_swing;
         Settings s;
-        check(s.version == 28 && s.bytes == 132 && s.combatVisuals == 1 &&
+        check(s.version == 29 && s.bytes == 140 && s.combatVisuals == 1 &&
                   offsetof(Settings, combatVisuals) == 56,
               "free combat broke the settings defaults or layout");
         s.combatVisuals = 0;
@@ -22258,7 +22354,7 @@ int main() {
         check(withTabOnly(Values{}, "single_hand_yank_percent=999\n").singleHandYankPercent == 300,
               "saved single-hand yank strength was not clamped");
         game_swing::Settings packet;
-        check(packet.version == 28 && packet.bytes == 132 && !packet.halfPunchDamage &&
+        check(packet.version == 29 && packet.bytes == 140 && !packet.halfPunchDamage &&
                   packet.singleHandYankPercent == 100 &&
                   offsetof(game_swing::Settings, halfPunchDamage) == 96 &&
                   offsetof(game_swing::Settings, singleHandYankPercent) == 100,
@@ -22853,10 +22949,12 @@ int main() {
                                   Item::automaticMinimumSpeed, Item::automaticReleaseFlip, Item::automaticResponse,
                                   Item::automaticHandStrength, Item::automaticFalloff,     Item::automaticHandThreshold,
                                   Item::automaticAirBrake,     Item::automaticCombat};
-        check(all.size() == 74 + std::size(realistic), "the realistic flips' rows are not the last");
+        // The realistic flips' rows come last, after the EXPERIMENTAL rows before them.
+        constexpr size_t firstRealistic = 76;
+        check(all.size() == firstRealistic + std::size(realistic), "the realistic flips' rows are not the last");
         for (size_t i = 0; i < std::size(realistic); ++i)
-            check(all[74 + i].item == realistic[i], "the realistic flips' rows out of order");
-        check(std::strcmp(all[74].title, "REALISTIC FLIPS") == 0 && all[74].choices.empty(),
+            check(all[firstRealistic + i].item == realistic[i], "the realistic flips' rows out of order");
+        check(std::strcmp(all[firstRealistic].title, "REALISTIC FLIPS") == 0 && all[firstRealistic].choices.empty(),
               "realistic flips: a switch, first of its rows");
         check(all[50].item == Item::controlledFlips && all[53].item == Item::joystickRunCamera &&
                   all[54].item == Item::wallRunCameraTilt && all[55].item == Item::halfPunchDamage,
@@ -23057,7 +23155,7 @@ int main() {
                                                          : Place::tab),
                   "a row in the wrong place");
         }
-        check(std::count_if(all.begin(), all.end(), [](const Row& r) { return r.place == Place::tab; }) == 80,
+        check(std::count_if(all.begin(), all.end(), [](const Row& r) { return r.place == Place::tab; }) == 82,
               "the tab's own rows");
         check(all[1].item == Item::webStyle && std::strcmp(all[1].title, "WEB STYLE") == 0 &&
                   all[1].choices.size() == 2 && std::strcmp(all[1].choices[0], "REALISTIC") == 0 &&
@@ -23295,7 +23393,7 @@ int main() {
                   "flip_reprojection=0\nsteady_hud=0\nreel_haptics=0\nswing_haptics=0\n"
                   "pc_media=0\nsingle_hand_yank_percent=100\nnative_run=0\nair_slingshot=0\nweb_angle_"
                   "degrees=0\nwrist_shooters=0\n"
-                  "dodge_tumble=0\nrun_curve=0\nnative_run_at_percent=70\nrun_logs=0\nrunning_leap=0\nearly_jump=0\nsoft_landing=0\nspidy_run=0\nspidy_run_from_standing=0\nweb_aim_source=0\nforearm_blend=100\n",
+                  "dodge_tumble=0\nrun_curve=0\nnative_run_at_percent=70\nrun_logs=0\nrunning_leap=0\nearly_jump=0\nsoft_landing=0\nspidy_run=0\nspidy_run_from_standing=0\nweb_aim_source=0\nforearm_blend=100\nweb_landing_smooth=0\nweb_landing_impact_speed=24\n",
               "the defaults' text");
         Values changed = defaults;
         changed.recordingFov = 140;
