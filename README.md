@@ -1,3 +1,6 @@
+> [!NOTE]
+> **Community build — SpidyVR 0.8.0 + Native Run Beta.** This fork offers an unofficial beta with opt-in NATIVE RUN and other movement/web features: [download](https://github.com/tyronmiller55-spec/SpidyVR/releases/tag/v0.8.0-native-run-beta1) · [what it is & how to enable](docs/NATIVE_RUN_BETA.md). Not endorsed by Ilya; report bugs on [this fork's Issues](https://github.com/tyronmiller55-spec/SpidyVR/issues). The official Spidy is at [IlyaMez/SpidyVR](https://github.com/IlyaMez/SpidyVR).
+
 <p align="center">
   <a href="https://github.com/IlyaMez/SpidyVR/releases/latest"><img src="docs/images/readme/hero.jpg" alt="Spider-Man in full VR. Spidy is a free PC VR mod for Marvel's Spider-Man Remastered, recorded in the headset on Quest 3." width="100%"></a>
 </p>
