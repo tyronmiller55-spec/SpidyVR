@@ -554,6 +554,36 @@ BridgeCall sampleWarp{};
 BridgeCall sampleOffers{}, useOffer{}, aimOffer{};
 std::mutex lifecycle, telemetry;
 HANDLE worker{};
+// STARTUP STAGES and the watchdog (diag_log::Stages). diagPublish: the worker
+// and the watchdog both copy the diagnostics out; one at a time keeps the
+// sequence's odd/even meaning for run_game_vr.py.
+diag_log::Stages startupStages;
+std::mutex diagPublish;
+void publishDiag() {
+    std::lock_guard lock(diagPublish);
+    auto& g = SpidyDiagData;
+    if (!g.build[0])
+        strncpy_s(g.build, diag_log::build(), _TRUNCATE);
+    InterlockedIncrement64(&g.sequence);
+    diag_log::copyOut(g);
+    InterlockedIncrement64(&g.sequence);
+}
+void stageLine(int stage, const char* detail = nullptr) {
+    diag_log::writef("stage: %s%s%s", diag_log::Stages::name(stage), detail ? " - " : "", detail ? detail : "");
+}
+// Once a second while the worker runs: a "watchdog:" line when it is due, and
+// the diagnostics published, as the stuck worker would not.
+DWORD WINAPI watchdog(void* handle) {
+    char line[diag_log::lineChars];
+    while (WaitForSingleObject(static_cast<HANDLE>(handle), 1000) == WAIT_TIMEOUT) {
+        if (startupStages.check(GetTickCount64(), line, sizeof(line))) {
+            diag_log::write(line);
+            publishDiag();
+        }
+    }
+    CloseHandle(static_cast<HANDLE>(handle));
+    return 0;
+}
 std::atomic<bool> stopRequested{};
 std::atomic<uint64_t> keepAliveDeadline{};
 void message(uint32_t status, uint32_t error, const char* text) {
@@ -1612,6 +1642,7 @@ DWORD WINAPI run(void*) {
             history.clear();
         };
         while (!stopRequested && (!nativeDeadline || GetTickCount64() < nativeDeadline)) {
+            startupStages.beat(GetTickCount64());
             if (!config.durationMs && GetTickCount64() >= keepAliveDeadline)
                 break;
             double copyMs{}, overlayMs{};
@@ -2757,29 +2788,28 @@ DWORD WINAPI run(void*) {
                                     const float lag =
                                         web_aim::turnAngle(f.grip.conjugate() * motion.grips[i].orientation) *
                                         57.29578f;
+                                    web_aim::ForearmAimLine fields;
+                                    fields.right = i != 0;
+                                    fields.reason = web_aim::fallbackName(why);
+                                    fields.active = why == Fallback::none;
+                                    fields.modelForearm =
+                                        values.webAimSource == static_cast<int>(web_aim::Source::forearm);
+                                    fields.wristShooters = values.wristShooters != 0;
+                                    fields.turnDegrees = web_aim::turnAngle(webTurnsNow[i]) * 57.29578f;
+                                    fields.targetDegrees = web_aim::turnAngle(target) * 57.29578f;
+                                    fields.limitDegrees = limit;
+                                    fields.clamped = clamped;
+                                    fields.weight = forearmAims[i].weight;
+                                    fields.blend = values.forearmBlend;
+                                    fields.handError = f.handError;
+                                    fields.stale = forearmStaleFrames;
+                                    fields.offDegrees = f.valid ? off : -1.f;
+                                    fields.lagDegrees = f.valid ? lag : -1.f;
+                                    fields.palmX = dot(f.palm, aimNow.rotate({1, 0, 0}));
+                                    fields.jitterDegrees = forearmJitter[i];
+                                    fields.tilted = arms.tilted;
                                     char line[480];
-                                    std::snprintf(
-                                        line, sizeof(line),
-                                        "forearm aim: %s %s (%s), %s, turn %.1f deg (target %.1f), limit %.0f "
-                                        "deg%s, weight %.2f, "
-                                        "blend %d%%, wrist miss %.3f, stale %u, forearm vs controller "
-                                        "%.1f deg, grip lag %.1f deg, palm.x %+.2f, jitter %.2f deg%s",
-                                        i ? "R" : "L", web_aim::fallbackName(why),
-                                        why == Fallback::none ? "active: the forearm's line"
-                                                              : "fallback: the controller's line",
-                                        values.webAimSource == static_cast<int>(web_aim::Source::forearm)
-                                            ? (values.wristShooters ? "MODEL FOREARM + WRIST SHOOTERS"
-                                                                    : "MODEL FOREARM")
-                                            : "WRIST SHOOTERS",
-                                        web_aim::turnAngle(webTurnsNow[i]) * 57.29578f,
-                                        web_aim::turnAngle(target) * 57.29578f, limit,
-                                        clamped ? ", clamped" : ", not clamped",
-                                        web_aim::turnAngle(webTurnsNow[i]) * 57.29578f,
-                                        web_aim::turnAngle(target) * 57.29578f, forearmAims[i].weight,
-                                        values.forearmBlend, f.handError, forearmStaleFrames,
-                                        f.valid ? off : -1.f, f.valid ? lag : -1.f,
-                                        dot(f.palm, aimNow.rotate({1, 0, 0})), forearmJitter[i],
-                                        arms.tilted ? ", flip tilt" : "");
+                                    web_aim::formatForearmAimLine(line, sizeof(line), fields);
                                     if (logNow)
                                         game_prompts::note(line, false);
                                     if (diagNow)
@@ -4495,15 +4525,8 @@ DWORD WINAPI run(void*) {
 
                         d.vrButtons = trackedFrame.buttons;
                         d.vrButtonsPlayed = vrButtonsPlayed;
-                        {
-                            // The session's diagnostics, as they come (diag_log.hpp).
-                            auto& g = SpidyDiagData;
-                            if (!g.build[0])
-                                strncpy_s(g.build, diag_log::build(), _TRUNCATE);
-                            InterlockedIncrement64(&g.sequence);
-                            diag_log::copyOut(g);
-                            InterlockedIncrement64(&g.sequence);
-                        }
+                        // The session's diagnostics, as they come (diag_log.hpp).
+                        publishDiag();
                         auto& p = SpidyPromptData;
                         InterlockedIncrement64(&p.sequence);
                         p.invokes = prompts.invokes;
@@ -4622,6 +4645,8 @@ DWORD WINAPI run(void*) {
                         nativeDeadline =
                             config.durationMs ? GetTickCount64() + config.durationMs : UINT64_MAX;
                         message(3, 0, "Headset active");
+                        if (startupStages.mark(diag_log::Stages::headset, GetTickCount64()))
+                            stageLine(diag_log::Stages::headset);
                         return false; // initialization can exceed one predicted display interval
                     }
                     // Without gameplay the screen shows the game's presented
@@ -4676,6 +4701,8 @@ DWORD WINAPI run(void*) {
                         firstImageDeadline = GetTickCount64() + 3000;
                         message(3, 0, vrPlay ? "Gameplay found; waiting for the first eye images"
                                              : "A scene found; waiting for its first eye images");
+                        if (startupStages.mark(diag_log::Stages::views, GetTickCount64()))
+                            stageLine(diag_log::Stages::views, vrPlay ? "gameplay" : "a scene");
                         // Initialization can exceed one predicted display
                         // interval. A scene's screen keeps the game's frame.
                         return !vrPlay;
@@ -5677,6 +5704,11 @@ DWORD WINAPI run(void*) {
             const bool submitted = runtime.lastFrameSubmitted();
             if (submitted) {
                 ++submittedFrames;
+                if (const int stage = startupStages.submitted(GetTickCount64()))
+                    stageLine(stage, drawn == Presentation::gameScreen     ? "the game's screen"
+                                     : drawn == Presentation::stereoScreen ? "the game's screen in 3D"
+                                     : drawn == Presentation::flat         ? "flat"
+                                                                           : "the eye images");
                 lastPresentedMs = GetTickCount64();
                 if (!presented || drawn != shownKind) {
                     presented = true;
@@ -5893,6 +5925,16 @@ extern "C" __declspec(dllexport) DWORD WINAPI SpidyXrStart(void* input) {
     keepAliveDeadline = GetTickCount64() + 10000;
     message(1, 0, "Starting OpenXR");
     worker = CreateThread(nullptr, 0, run, nullptr, 0, nullptr);
+    if (worker) {
+        // The watchdog holds its own handle to the worker and ends with it.
+        HANDLE watched{};
+        if (DuplicateHandle(GetCurrentProcess(), worker, GetCurrentProcess(), &watched, SYNCHRONIZE, FALSE, 0)) {
+            if (HANDLE dog = CreateThread(nullptr, 0, watchdog, watched, 0, nullptr))
+                CloseHandle(dog);
+            else
+                CloseHandle(watched);
+        }
+    }
     return worker ? 0 : 1003;
 }
 extern "C" __declspec(dllexport) DWORD WINAPI SpidyXrKeepAlive(void*) {
