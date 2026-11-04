@@ -2,6 +2,8 @@
 #include "math.hpp"
 #include <algorithm>
 #include <cmath>
+#include <cstddef>
+#include <cstdio>
 
 // WEB ANGLE and WRIST SHOOTERS (vr_settings::Values::webAngle, wristShooters):
 // which way a hand's webs leave it. The controller's aim pose points its -Z
@@ -150,6 +152,38 @@ inline Quat forearmTurn(Vec3 inGrip, Quat gripNow, Quat aimNow, float limitDegre
     if (!finite(local) || length(local) < .5f)
         return {};
     return clampTurn(arc({0, 0, -1}, local), std::clamp(limitDegrees, 0.f, 180.f) * 3.14159265f / 180);
+}
+// One "forearm aim:" line (the diagnostics and the report's timeline), from
+// named fields rather than a long printf list in game_xr. v6 (78a43ed) passed
+// the turn and target twice there, two arguments more than the format had: every
+// later field moved two along, and the last %s read palm.x's double as a
+// pointer. 0.0 printed "(null)"; the first solved forearm (palm.x about +-1)
+// crashed the game, an access violation, a second after VR became active (the
+// November 3 sessions, three times at the same address).
+struct ForearmAimLine {
+    bool right{}, active{}, modelForearm{}, wristShooters{}, clamped{}, tilted{};
+    const char* reason = "";
+    float turnDegrees{}, targetDegrees{}, limitDegrees{}, weight{}, handError{}, offDegrees{}, lagDegrees{},
+          palmX{}, jitterDegrees{};
+    int blend{};
+    unsigned stale{};
+};
+inline int formatForearmAimLine(char* out, std::size_t size, const ForearmAimLine& l) {
+    if (!out || !size)
+        return 0;
+    return std::snprintf(
+        out, size,
+        "forearm aim: %s %s (%s), %s, turn %.1f deg (target %.1f), limit %.0f deg%s, weight %.2f, blend %d%%, "
+        "wrist miss %.3f, stale %u, forearm vs controller %.1f deg, grip lag %.1f deg, palm.x %+.2f, jitter "
+        "%.2f deg%s",
+        l.right ? "R" : "L", l.reason ? l.reason : "",
+        l.active ? "active: the forearm's line" : "fallback: the controller's line",
+        l.modelForearm ? (l.wristShooters ? "MODEL FOREARM + WRIST SHOOTERS" : "MODEL FOREARM") : "WRIST SHOOTERS",
+        static_cast<double>(l.turnDegrees), static_cast<double>(l.targetDegrees),
+        static_cast<double>(l.limitDegrees), l.clamped ? ", clamped" : ", not clamped",
+        static_cast<double>(l.weight), l.blend, static_cast<double>(l.handError), l.stale,
+        static_cast<double>(l.offDegrees), static_cast<double>(l.lagDegrees), static_cast<double>(l.palmX),
+        static_cast<double>(l.jitterDegrees), l.tilted ? ", flip tilt" : "");
 }
 // One hand's forearm turn, smoothed, and how much of it is used (weight: 0
 // the controller's line, 1 the forearm's).

@@ -973,6 +973,10 @@ VR settings
                    "diag ..." and are saved in reports\ as
                    game-vr-<time>-diag.log, which starts with the build and
                    your settings: that file is the one to send back.
+                   It also says how far VR got ("stage: ...") and, when
+                   the game crashed, "The game crashed (exit code ...)":
+                   send that file with the game's newest log from
+                   Documents\Marvel's Spider-Man Remastered.
   RUNNING LEAP    (off until you switch it on) a charged leap (hold A on
                    the ground) keeps the speed you run at and adds its
                    charge on top; a full one from a fast run is a long

@@ -1574,6 +1574,82 @@ int main() {
                   !withTabOnly({}, "").wristShooters,
               "spidy_vr.ini's web_angle_degrees not clamped, or wrist_shooters on when absent");
     });
+    test("WEB AIM: the forearm aim: line formats every field in its place (v6 crashed on palm.x)", [] {
+        using namespace web_aim;
+        ForearmAimLine l;
+        l.right = true;
+        l.reason = "none";
+        l.active = l.modelForearm = l.wristShooters = true;
+        l.turnDegrees = 12.5f;
+        l.targetDegrees = 13.5f;
+        l.limitDegrees = 180;
+        l.weight = .75f;
+        l.blend = 100;
+        l.handError = .02f;
+        l.stale = 3;
+        l.offDegrees = 40.f;
+        l.lagDegrees = 1.5f;
+        l.palmX = -1.f; // v6 read this double as the last %s's pointer: an access violation
+        l.jitterDegrees = .5f;
+        l.tilted = true;
+        char out[480];
+        formatForearmAimLine(out, sizeof(out), l);
+        const std::string text = out;
+        check(text.rfind("forearm aim: R none (active: the forearm's line), MODEL FOREARM + WRIST SHOOTERS, ", 0) ==
+                  0,
+              "the line's head");
+        for (const char* part :
+             {"turn 12.5 deg (target 13.5), limit 180 deg, not clamped, weight 0.75, blend 100%",
+              "wrist miss 0.020, stale 3, forearm vs controller 40.0 deg, grip lag 1.5 deg, palm.x -1.00",
+              "jitter 0.50 deg, flip tilt"})
+            check(text.find(part) != std::string::npos, part);
+        l.palmX = 1.f;
+        l.tilted = l.active = false;
+        formatForearmAimLine(out, sizeof(out), l);
+        check(std::string(out).find("palm.x +1.00, jitter 0.50 deg") != std::string::npos &&
+                  std::string(out).find("(null)") == std::string::npos,
+              "a fallback line");
+        check(formatForearmAimLine(nullptr, 0, l) == 0, "no buffer");
+    });
+    test("STARTUP STAGES: stage lines once each, the watchdog for no first frame or a stuck worker", [] {
+        diag_log::Stages s;
+        char out[diag_log::lineChars];
+        check(!s.check(1000, out, sizeof(out)), "a watchdog before the worker began");
+        s.beat(1000);
+        check(s.mark(diag_log::Stages::headset, 1000) && !s.mark(diag_log::Stages::headset, 1100),
+              "headset active marked twice");
+        check(s.mark(diag_log::Stages::views, 2000) && !s.mark(diag_log::Stages::headset, 2100) &&
+                  s.stage() == diag_log::Stages::views,
+              "a stage went back");
+        s.beat(10900);
+        check(!s.check(10900, out, sizeof(out)), "the watchdog before 10 s");
+        s.beat(11000);
+        check(s.check(11000, out, sizeof(out)) &&
+                  std::string(out).find("no frame reached the headset 10.0 s after it went active") !=
+                      std::string::npos &&
+                  std::string(out).find("waiting for the first eye images") != std::string::npos,
+              out);
+        check(!s.check(12000, out, sizeof(out)), "the watchdog repeated within 10 s");
+        check(s.submitted(12500) == diag_log::Stages::firstFrame && s.submitted(12510) == diag_log::Stages::none,
+              "the first frame");
+        for (int i = 2; i < 300; ++i)
+            s.submitted(12510 + i);
+        check(s.frames() == 300 && s.stage() == diag_log::Stages::running, "300 frames");
+        s.beat(13000);
+        check(!s.check(17000, out, sizeof(out)), "a running worker 4 s quiet");
+        check(s.check(21000, out, sizeof(out)) && std::string(out).find("running (300 frames") != std::string::npos,
+              "a worker stuck after 300 frames");
+        diag_log::Stages t;
+        t.beat(1000);
+        t.mark(diag_log::Stages::headset, 1000);
+        t.submitted(1100);
+        t.beat(2000);
+        check(!t.check(6900, out, sizeof(out)), "silent under 5 s");
+        check(t.check(7000, out, sizeof(out)) &&
+                  std::string(out).find("has not come round for 5.0 s") != std::string::npos &&
+                  std::string(out).find("1 frames submitted") != std::string::npos,
+              out);
+    });
     test("WEB AIM: MODEL FOREARM turns the webs onto the forearm, clamped, smoothed, falling back", [] {
         using namespace web_aim;
         auto line = [](Quat q) { return q.rotate({0, 0, -1}); };
