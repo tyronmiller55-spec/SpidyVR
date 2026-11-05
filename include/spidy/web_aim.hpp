@@ -75,13 +75,15 @@ enum class Source : int { controller = 0, forearm = 1 };
 // samples, so the webs stayed clamped near the controller ("they keep
 // tracking my palm"): v6 takes the limit from the setting, none by default.
 constexpr float forearmClampDegrees = 35, forearmLimitDefault = 180, forearmSmoothSeconds = .08f, forearmFallbackSeconds = .15f,
-                forearmMiss = .1f;
+                forearmMiss = .1f,
+                forearmAlignDegrees = 45.f;
 // A sample this many VR frames without a new solve is stale (v3-v5: 2; the
 // V5 session fell back as stale in 164 lines, mostly at 3; the forearm is
 // carried on the grip now, so a solve 100 ms old still points right).
 constexpr unsigned forearmStaleFrames = 8;
 // Why a hand's sample is not used (the log's reason).
-enum class Fallback : int { none, off, untracked, notSolved, wristMiss, stale, gameCamera, tilted };
+enum class Fallback : int { none, off, untracked, notSolved, wristMiss, stale, gameCamera, tilted,
+                            armsOverlay, misaligned };
 inline const char* fallbackName(Fallback f) {
     switch (f) {
     case Fallback::none:
@@ -100,6 +102,10 @@ inline const char* fallbackName(Fallback f) {
         return "game camera";
     case Fallback::tilted:
         return "flip tilt";
+    case Fallback::armsOverlay:
+        return "arms overlay";
+    case Fallback::misaligned:
+        return "misaligned";
     }
     return "?";
 }
