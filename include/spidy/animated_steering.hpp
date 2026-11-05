@@ -3,11 +3,11 @@
 // the left stick so its magnitude runs the hero along his current facing
 // (read from the actor transform), instead of camera-relative every way.
 //
-// Right-stick whole-model yaw and midair spherical steering need an
-// authoritative actor orientation write. native_movement::Command carries
-// velocity only; no proven facing RVA exists. Those are NOT implemented here
-// and must not be faked with GameTrackingRig / CameraLook view yaw (that would
-// turn the camera or HMD path, not the model).
+// Right-stick whole-model yaw is NOT a facing RVA write. When the separate
+// ANIMATED MODEL YAW setting is on, yaw is requested through the game's
+// left-stick walk-facing path (animated_model_yaw.hpp; VALIDATION /
+// InteractStep). CameraLook view yaw must not be used as a substitute.
+// Midair spherical aiming remains out of scope.
 //
 // Outside pose yield the sticks are untouched (no double-apply with normal
 // camera-relative walk).
