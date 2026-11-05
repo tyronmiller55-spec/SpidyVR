@@ -26663,7 +26663,7 @@ int main() {
         data->main.push(longLine.c_str());
         check(std::strlen(data->main.at(1)) == lineChars - 1, "a long line not cut to the slot");
         // The layout run_game_vr.py's diag_snapshot reads.
-        check(Data{}.magic == 0x47414944 && Data{}.version == 1 && sizeof(Data) == 34696,
+        check(Data{}.magic == 0x47414944 && Data{}.version == 2 && sizeof(Data) == 50064,
               "SpidyDiagData's layout moved: change run_game_vr.py's DIAG_ constants with it");
         check(buildId("0.7.0", "56fb4f8abc", "x") == "Spidy 0.7.0 (commit 56fb4f8abc)" &&
                   buildId("0.7.0", "", "20261103-1600Z") == "Spidy 0.7.0 (built 20261103-1600Z)",
