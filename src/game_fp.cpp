@@ -45,7 +45,7 @@ using Visibility = void(__fastcall*)(void* entity);
 uintptr_t exe{};
 GetJoint getJoint{};
 Visibility hideEntity{}, showEntity{};
-std::atomic<bool> wanted{}, released{};
+std::atomic<bool> wanted{}, released{}, followHeroOn{};
 std::atomic<uintptr_t> heroObject{};
 std::atomic<uint32_t> sourceKind{};      // Status::source
 std::atomic<uint32_t> standIn{}, twin{}; // pool handles
@@ -1689,6 +1689,22 @@ void want(bool on) {
         viewOnCamera = false;
     }
 }
+void followHero(bool on) {
+    // ANIMATED HEAD: hero-only head sample + shrink, no cutscene worker.
+    if (on == followHeroOn.load(std::memory_order_relaxed))
+        return;
+    followHeroOn.store(on, std::memory_order_relaxed);
+    if (on) {
+        // Re-latch frameLevel's axes when parkour yield starts (as a cut).
+        // Only the atomic cutCount from this XR thread; frameLevel compares it.
+        ++cutCount;
+    } else if (!wanted.load(std::memory_order_relaxed)) {
+        shrinkObject[0] = shrinkObject[1] = 0;
+    }
+}
+bool followingHero() {
+    return followHeroOn.load(std::memory_order_relaxed);
+}
 void sceneCamera(int mode) {
     cameraMode = mode < 0 ? 0 : mode > 2 ? 2 : mode;
 }
@@ -1708,7 +1724,7 @@ void hero(uintptr_t instance) {
     heroObject = instance;
     // Requests from the worker are carried out here, on the game's own thread.
     drain();
-    if (released.exchange(false) && !wanted.load()) {
+    if (released.exchange(false) && !wanted.load() && !followHeroOn.load(std::memory_order_relaxed)) {
         shrinkObject[0] = shrinkObject[1] = 0;
         showAll();
         haveHead = false;
@@ -1716,7 +1732,8 @@ void hero(uintptr_t instance) {
     }
     // While wanted the head is sampled (and what is kept hidden hidden) every frame, whether or not an eye
     // command for the scene has arrived yet: that is what tells the XR worker a scene can be shown this way.
-    if (wanted.load()) {
+    // followHero (ANIMATED HEAD) samples the hero the same way without the cutscene worker.
+    if (wanted.load() || followHeroOn.load(std::memory_order_relaxed)) {
         Mat4 sampled{};
         frame(sampled);
     }
@@ -1795,18 +1812,21 @@ bool cameraFrame(Mat4& head) {
     return true;
 }
 bool frame(Mat4& head) {
-    if (!wanted.load()) {
+    const bool cutscene = wanted.load();
+    const bool gameplay = followHeroOn.load(std::memory_order_relaxed);
+    if (!cutscene && !gameplay) {
         prevSet = levelSet = false;
         return false;
     }
-    if (cameraMode.load(std::memory_order_relaxed) == 2) {
+    if (cutscene && cameraMode.load(std::memory_order_relaxed) == 2) {
         // The scene's own camera is the view: nothing is hidden or shrunk, no head is looked for.
         shrinkObject[0] = shrinkObject[1] = 0;
         return cameraFrame(head);
     }
-    keepHidden();
+    if (cutscene)
+        keepHidden();
     uint64_t source = 0;
-    const uint32_t kind = sourceKind.load();
+    const uint32_t kind = cutscene ? sourceKind.load() : 2u; // gameplay: the hero only
     if (kind == 2)
         source = heroObject.load();
     else if (kind == 3 || kind == 4) {
@@ -1909,9 +1929,9 @@ bool frame(Mat4& head) {
         ++nSamples;
         {
             // For the log, every 2.5 s: where the eyes are, and where the scene's camera is (a view that sits
-            // on the camera is not a head that moves with the character).
+            // on the camera is not a head that moves with the character). Skip for ANIMATED HEAD gameplay.
             static ULONGLONG lastView{};
-            if (now - lastView >= 2500) {
+            if (cutscene && now - lastView >= 2500) {
                 lastView = now;
                 float cam[16];
                 const bool haveCam = cameraNow(cam);
@@ -1937,7 +1957,7 @@ bool frame(Mat4& head) {
         ++nMisses;
     } else {
         // No head, and none held: the scene's own camera, when that is what the player asked for.
-        if (cameraMode.load(std::memory_order_relaxed) == 1 && cameraFrame(head))
+        if (cutscene && cameraMode.load(std::memory_order_relaxed) == 1 && cameraFrame(head))
             return true;
         ++nMisses;
         return false;
@@ -2055,7 +2075,7 @@ bool shrinkJoints(float* joints, uintptr_t rig, uintptr_t a, uintptr_t b) {
 }
 } // namespace
 bool shrinkHead(float* joints, uintptr_t rig) {
-    if (!wanted.load(std::memory_order_relaxed))
+    if (!wanted.load(std::memory_order_relaxed) && !followHeroOn.load(std::memory_order_relaxed))
         return false;
     const uintptr_t a = shrinkObject[0].load(std::memory_order_relaxed),
                     b = shrinkObject[1].load(std::memory_order_relaxed);

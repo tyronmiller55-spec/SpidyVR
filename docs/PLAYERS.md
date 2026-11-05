@@ -994,6 +994,14 @@ VR settings
                    mantles. Swing, web, zip and wall-run stay with the mod.
                    While it yields, your VR hands follow the game's pose.
                    Off by default.
+  ANIMATED HEAD    (OFF until you pick LEVEL or FULL; EXPERIMENTAL, after
+                   ANIMATED MOVES) while ANIMATED MOVES is yielding, the
+                   view follows Spider-Man's gameplay head the way finishers
+                   do. LEVEL: only his place follows, on a level frame — you
+                   look about freely (safer). FULL: the view turns with the
+                   anim head (parkour flips). Off by default; only does
+                   anything while ANIMATED MOVES is yielding. Swing hybrid
+                   (anim direction+velocity, mod keeps rotation) is not this.
   DODGE TUMBLE     (OFF until you pick one) when the game dodges, your
                    view tips toward the dodge (LEAN) or turns a full roll
                    (ROLL, sideways dodges) so you can tell it dodged. Your
@@ -1080,7 +1088,7 @@ VR settings
                    Off: v5's jump, the game's, up to 0.2 s later.
   Changes apply at once. The launcher starts your next session with them;
   its options show every one of them but VR VIEW too.
-  NEAR CLIP, RECORDING FOV, UI STYLE, BLOW SOUNDS, PC MEDIA, NATIVE RUN, AIR SLINGSHOT, WEB ANGLE, WRIST SHOOTERS, DODGE TUMBLE, RUN CURVE, NATIVE RUN AT, RUN LOGS, RUNNING LEAP, EARLY JUMP, SOFT LANDING, SPIDY RUN, RUN FROM STANDING, WEB AIM, FOREARM BLEND, SMOOTH WEB LANDING, WEB LANDING IMPACT, STEADY STATES, COMBAT RESPONSIVE, SPIDY RUN JUMP, FOREARM AIM LIMIT, PALM SHOOTERS, HEAD PROBE, ANIMATED MOVES, HEIGHT, SEATED, EYE AIM,
+  NEAR CLIP, RECORDING FOV, UI STYLE, BLOW SOUNDS, PC MEDIA, NATIVE RUN, AIR SLINGSHOT, WEB ANGLE, WRIST SHOOTERS, DODGE TUMBLE, RUN CURVE, NATIVE RUN AT, RUN LOGS, RUNNING LEAP, EARLY JUMP, SOFT LANDING, SPIDY RUN, RUN FROM STANDING, WEB AIM, FOREARM BLEND, SMOOTH WEB LANDING, WEB LANDING IMPACT, STEADY STATES, COMBAT RESPONSIVE, SPIDY RUN JUMP, FOREARM AIM LIMIT, PALM SHOOTERS, HEAD PROBE, ANIMATED MOVES, ANIMATED HEAD, HEIGHT, SEATED, EYE AIM,
   SMART ANCHOR, WEB RANGE, WEB SPEED, ELASTIC WEB, SOFT RELEASE, SWING
   ASSIST, SLINGSHOT SPEED, SINGLE HAND YANK STRENGTH, TWO HAND WEB ZIP, HAND ROPE STEERING, RECORDING
   SMOOTHING, REEL HAPTICS, SWING HAPTICS, the four body haptics switches

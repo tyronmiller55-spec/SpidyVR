@@ -1030,6 +1030,11 @@ DWORD WINAPI run(void*) {
         bool headProbeWas{};
         bool animatedMovesYieldWas{};
         int64_t animatedMovesDiagAt{};
+        bool animatedHeadFollowWas{};
+        Pose animHeadRef{};
+        bool animHeadRefSet{};
+        float animHeadTurn{};
+        bool animHeadFlick{};
         std::array<float, 2> forearmJitter{};
         game_pad::TemplePress templePress;
         uint32_t chargesBefore{}, leapsBefore{}, scansBefore{};
@@ -1494,6 +1499,7 @@ DWORD WINAPI run(void*) {
             s.webLandingSmooth = values.webLandingSmooth;
             s.headProbe = values.headProbe;
             s.animatedMoves = values.animatedMoves;
+            s.animatedHead = static_cast<uint32_t>(values.animatedHead);
             s.webLandingImpact = static_cast<float>(values.webLandingImpact);
             s.webAngle = values.webAngle;
             s.wristShooters = values.palmShooters ? 2u : values.wristShooters ? 1u : 0u;
@@ -4863,6 +4869,8 @@ DWORD WINAPI run(void*) {
                                       : h > standingEye
                                           ? standingEye + (h - standingEye) * std::min(1.f, frame.seconds * 4)
                                           : standingEye - std::min(standingEye - h, frame.seconds * .01f);
+                    bool yieldAnim = false;
+                    auto animHeadMode = animated_moves::HeadFollow::off;
                     if (bodyStarted) {
                         // The hero's body follows the headset and the controllers,
                         // placed from the same feet as the eyes.
@@ -4881,6 +4889,8 @@ DWORD WINAPI run(void*) {
                         // drive the body (clear bodyOn; blend back). Swing / web /
                         // zip / wall-run stay with the mod. NATIVE RUN's RT is
                         // untouched. VR hands follow the game's pose while yielding.
+                        // ANIMATED HEAD (Off|Level|Full, default Off): while yielding,
+                        // eyes use the finisher path on the hero's gameplay head.
                         head_probe::StateInputs animState;
                         animState.playing = steering && !calibrationInput;
                         animState.fresh = swingFresh;
@@ -4892,7 +4902,11 @@ DWORD WINAPI run(void*) {
                         animState.dodging = dodging;
                         animState.runRt = nativeRun.held();
                         animState.wall = swingState.wall;
-                        const bool yieldAnim = animated_moves::yieldsBody(values.animatedMoves, animState);
+                        yieldAnim = animated_moves::yieldsBody(values.animatedMoves, animState);
+                        animHeadMode = animated_moves::headFollow(values.animatedHead);
+                        const bool headFollow =
+                            animated_moves::followsHead(values.animatedHead, yieldAnim) && !flatScreen;
+                        game_fp::followHero(headFollow);
                         if (yieldAnim != animatedMovesYieldWas) {
                             diag_log::writef("animated moves: %s (%s)",
                                              yieldAnim ? "game anim drives body" : "mod body again",
@@ -4904,6 +4918,17 @@ DWORD WINAPI run(void*) {
                             diag_log::writef("animated moves: still yielding (%s)",
                                              animated_moves::yieldName(animState));
                             animatedMovesDiagAt = frame.predictedDisplayTime;
+                        }
+                        if (headFollow != animatedHeadFollowWas) {
+                            diag_log::writef("animated moves: head follow %s (%s)",
+                                             animated_moves::headFollowName(animHeadMode),
+                                             animated_moves::yieldName(animState));
+                            animatedHeadFollowWas = headFollow;
+                            if (!headFollow) {
+                                animHeadRefSet = false;
+                                animHeadTurn = 0;
+                                animHeadFlick = false;
+                            }
                         }
                         pose.flags = (flatScreen || !values.body || yieldAnim ? 0u : native_body::bodyOn) |
                                      native_body::hideHead |
@@ -5025,22 +5050,78 @@ DWORD WINAPI run(void*) {
                             pose.tilt = yaw * tilt * yaw.conjugate();
                         }
                         native_body::submit(pose);
+                    } else {
+                        game_fp::followHero(false);
+                        if (animatedHeadFollowWas) {
+                            diag_log::writef("animated moves: head follow off (no body)");
+                            animatedHeadFollowWas = false;
+                            animHeadRefSet = false;
+                            animHeadTurn = 0;
+                            animHeadFlick = false;
+                        }
                     }
                     // Keep publishing tracking while the engine renders earlier
                     // commands. The presentation loop no longer waits for this pose.
+                    // ANIMATED HEAD while yielding: eyes relative to the hero's gameplay
+                    // head (anchored 2 Full / 4 Level), resolved on the render thread
+                    // like finishers (stereo_probe::resolveScene → game_fp::frame).
+                    const bool headFollowEyes =
+                        animated_moves::followsHead(values.animatedHead, yieldAnim) && !flatScreen;
                     native_eyes::Command eyes;
                     eyes.enabled = flatScreen ? 2 : 1;
                     eyes.serial = ++serial;
                     eyes.leaseMs = 250;
                     eyes.anchor = motion.anchor;
-                    eyes.anchored = 1;
-                    for (unsigned i = 0; i < 2; ++i) {
-                        eyes.eyes[i].world = motion.eyes[i];
-                        const auto& f = motion.fovs[i];
-                        eyes.eyes[i].fov[0] = f.left;
-                        eyes.eyes[i].fov[1] = f.right;
-                        eyes.eyes[i].fov[2] = f.down;
-                        eyes.eyes[i].fov[3] = f.up;
+                    if (headFollowEyes) {
+                        if (!animHeadRefSet) {
+                            animHeadRef = {frame.head.position, screenAhead(frame.head, 0).orientation};
+                            animHeadRefSet = validTrackedPose(frame.head);
+                            animHeadTurn = 0;
+                            animHeadFlick = false;
+                        }
+                        const bool followFull = animHeadMode == animated_moves::HeadFollow::full;
+                        eyes.anchored = followFull ? 2u : 4u;
+                        if (!followFull) {
+                            // Level: right stick turns the view, as in cutscenes with
+                            // head tracking off.
+                            const float x = frame.hands[1].stickX;
+                            const float degrees = 3.14159265f / 180;
+                            if (values.smoothTurn > 0) {
+                                if (std::abs(x) > .15f)
+                                    animHeadTurn -= x * static_cast<float>(values.smoothTurn) * degrees *
+                                                    frame.seconds;
+                            } else if (values.snapTurn > 0) {
+                                if (!animHeadFlick && std::abs(x) > .7f) {
+                                    animHeadFlick = true;
+                                    animHeadTurn -= (x > 0 ? 1.f : -1.f) *
+                                                    static_cast<float>(values.snapTurn) * degrees;
+                                } else if (animHeadFlick && std::abs(x) < .4f)
+                                    animHeadFlick = false;
+                            }
+                        }
+                        const Pose toRef = inverse(animHeadRef);
+                        const Mat4 axes = {1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1};
+                        const Pose turned{{}, Quat::yaw(animHeadTurn)};
+                        for (unsigned i = 0; i < 2; ++i) {
+                            Pose eye = compose(turned, compose(toRef, frame.eyes[i].pose));
+                            eyes.eyes[i].world = native_view::relativePose(axes, eye);
+                            const auto& f = frame.eyes[i].fov;
+                            eyes.eyes[i].fov[0] = f.left;
+                            eyes.eyes[i].fov[1] = f.right;
+                            eyes.eyes[i].fov[2] = f.down;
+                            eyes.eyes[i].fov[3] = f.up;
+                        }
+                    } else {
+                        animHeadRefSet = false;
+                        eyes.anchored = 1;
+                        for (unsigned i = 0; i < 2; ++i) {
+                            eyes.eyes[i].world = motion.eyes[i];
+                            const auto& f = motion.fovs[i];
+                            eyes.eyes[i].fov[0] = f.left;
+                            eyes.eyes[i].fov[1] = f.right;
+                            eyes.eyes[i].fov[2] = f.down;
+                            eyes.eyes[i].fov[3] = f.up;
+                        }
                     }
                     // The HUD panel for this command's frame, as the head sees it:
                     // fixed in the room, so a reused image the headset turns to a
@@ -5053,6 +5134,9 @@ DWORD WINAPI run(void*) {
                     saved.serial = eyes.serial;
                     saved.motion = motion;
                     saved.trackingEyes = frame.eyes;
+                    // Same as finishers: placeEyes re-resolves the head each frame
+                    // (stereo_probe) instead of keeping a latched gameplay head.
+                    saved.scene = headFollowEyes;
                     if (motion.active)
                         saved.rigTurn =
                             flip_reprojection::trackingTurn(motion.headPose.orientation, frame.head.orientation);

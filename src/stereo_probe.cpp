@@ -742,9 +742,10 @@ void updateHero(bool immersive, bool hide) {
 }
 bool heroPosition(Vec3& position);
 bool retiring();
-// A first-person scene's command (anchored 2) with its eyes put on the head of
-// the character the scene plays, as that head is now (game_fp.hpp). Without a
-// head the command is switched off, and the eyes follow the game's own camera.
+// A first-person scene's command (anchored 2 or 4), or ANIMATED HEAD while
+// ANIMATED MOVES yields, with its eyes put on the head as that head is now
+// (game_fp::frame / frameLevel; followHero for gameplay). Without a head the
+// command is switched off, and the eyes follow the game's own camera.
 void resolveScene(native_eyes::Command& c) {
     if ((c.anchored != 2 && c.anchored != 4) || !c.enabled)
         return;

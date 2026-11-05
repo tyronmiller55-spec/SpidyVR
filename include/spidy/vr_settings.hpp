@@ -324,6 +324,11 @@ struct Values {
     // (NATIVE RUN). Swing / web / zip / wall-run stay with the mod. Off by
     // default (animated_moves.hpp).
     bool animatedMoves = false;
+    // ANIMATED HEAD (the tab's ANIMATED HEAD; Off|Level|Full, default Off):
+    // while ANIMATED MOVES yields, attach the view to the hero's gameplay head
+    // like finishers (anchored 4 Level / 2 Full). Only active while yielding
+    // (animated_moves.hpp).
+    int animatedHead = 0;
     // How much speed a fast one-hand web yank adds, percent (the tab's SINGLE
     // HAND YANK STRENGTH; Swing::singleHandYankStrength): 100 as before.
     int singleHandYankPercent = 100;
@@ -463,8 +468,9 @@ enum class Item : uint8_t {
     palmShooters,
     headProbe,
     animatedMoves,
+    animatedHead,
 };
-inline constexpr Item lastItem = Item::animatedMoves;
+inline constexpr Item lastItem = Item::animatedHead;
 // Where a row shows: in the tab; on the pause menu's first page instead,
 // under RESUME: VR VIEW (the user, October 15: "move the VIEW: GAME SCREEN to
 // the first menu (the one with resume)"); or only in the launcher's options:
@@ -487,7 +493,7 @@ struct Row {
     std::span<const char* const> choices{};
     Place place{};
 };
-const std::array<Row, 95>& rows();
+const std::array<Row, 96>& rows();
 // The most choices a row shows (game_menu's buffers): a row with more would
 // lose its last ones.
 inline constexpr size_t maxChoices = 9;

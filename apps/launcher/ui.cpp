@@ -1893,6 +1893,11 @@ void App::options(ImVec2 origin, ImVec2 size) {
                "parkour, vaults and mantles. Swing, web, zip and wall-run stay with the mod. Off by "
                "default (play-feel change; needs a yes to merge upstream).",
                S(42), [&] { tabToggle("##animatedmoves", Item::animatedMoves); });
+        option("Animated head (experimental)",
+               "While Animated moves yields: the view follows Spider-Man's gameplay head like finishers. "
+               "LEVEL keeps the place level (look freely); FULL turns with the anim (parkour flips). "
+               "Off by default. Only active when Animated moves is yielding.",
+               S(150), [&] { tabCombo("##animatedhead", Item::animatedHead); });
         option("Web aim (experimental)",
                "MODEL FOREARM: your webs leave along the forearm of the Spider-Man body you see, rather than "
                "along the controller, and go back to the controller's line whenever the body cannot say "

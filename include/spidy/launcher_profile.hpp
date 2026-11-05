@@ -146,6 +146,7 @@ inline constexpr ProfileSetting profileSettings[] = {
     tabOnly("palm_shooters", Item::palmShooters, &Values::palmShooters),
     tabOnly("head_probe", Item::headProbe, &Values::headProbe),
     tabOnly("animated_moves", Item::animatedMoves, &Values::animatedMoves),
+    tabOnly("animated_head", Item::animatedHead, 0, 2, &Values::animatedHead),
     retired("wall_distance_cm", vr_settings::fixedWallDistance),
     tabOnly("realistic_flips", Item::realisticFlips, &Values::realisticFlips),
     tabOnly("rotation_strength", Item::automaticStrength, 25, 100, &Values::automaticStrength),

@@ -117,6 +117,9 @@ static_assert(std::size(webAngleChoices) == std::size(webAngles));
 constexpr int dodgeTumbles[] = {0, 1, 2};
 constexpr const char* dodgeTumbleChoices[] = {"OFF", "LEAN", "ROLL"};
 static_assert(std::size(dodgeTumbleChoices) == std::size(dodgeTumbles));
+constexpr int animatedHeads[] = {0, 1, 2};
+constexpr const char* animatedHeadChoices[] = {"OFF", "LEVEL", "FULL"};
+static_assert(std::size(animatedHeadChoices) == std::size(animatedHeads));
 constexpr int nativeRunPercents[] = {50, 60, 70, 80, 90};
 constexpr const char* nativeRunPercentChoices[] = {"50%", "60%", "70%", "80%", "90%"};
 static_assert(std::size(nativeRunPercentChoices) == std::size(nativeRunPercents));
@@ -175,6 +178,8 @@ std::span<const int> steps(Item item) {
         return webAngles;
     case Item::dodgeTumble:
         return dodgeTumbles;
+    case Item::animatedHead:
+        return animatedHeads;
     case Item::earlyJump:
         return earlyJumps;
     case Item::webAimSource:
@@ -258,6 +263,8 @@ float numberOf(Item item, const Values& v) {
         return static_cast<float>(v.webAngle);
     case Item::dodgeTumble:
         return static_cast<float>(v.dodgeTumble);
+    case Item::animatedHead:
+        return static_cast<float>(v.animatedHead);
     case Item::earlyJump:
         return static_cast<float>(v.earlyJump);
     case Item::webAimSource:
@@ -429,6 +436,7 @@ Values sanitized(Values v) {
     v.singleHandYankPercent = std::clamp(v.singleHandYankPercent, 50, 300);
     v.webAngle = std::clamp(v.webAngle, -45, 45);
     v.dodgeTumble = std::clamp(v.dodgeTumble, 0, 2);
+    v.animatedHead = std::clamp(v.animatedHead, 0, 2);
     v.earlyJump = std::clamp(v.earlyJump, 0, 2);
     v.webAimSource = std::clamp(v.webAimSource, 0, 1);
     v.forearmBlend = std::clamp(v.forearmBlend, 0, 100);
@@ -451,9 +459,9 @@ Values sanitized(Values v) {
     v.automaticHandThreshold = std::clamp(v.automaticHandThreshold, 50, 300);
     return v;
 }
-const std::array<Row, 95>& rows() {
+const std::array<Row, 96>& rows() {
     // The help fits the game's description column beside the rows.
-    static const std::array<Row, 95> all{{
+    static const std::array<Row, 96> all{{
         {Item::none, "WEBS", nullptr, {}},
         {Item::webStyle, "WEB STYLE",
          "Arcade: webs pass lamp posts, signs and cars, and swings stay above the street.", webStyleChoices},
@@ -676,6 +684,9 @@ const std::array<Row, 95>& rows() {
          "Diagnostics only: logs Spidey's head against the headset. Changes nothing.", {}},
         {Item::animatedMoves, "ANIMATED MOVES",
          "Game anim drives the body for ground parkour, vaults and mantles (NATIVE RUN).", {}},
+        {Item::animatedHead, "ANIMATED HEAD",
+         "While ANIMATED MOVES yields: view follows the anim head. LEVEL place only; FULL turns with it.",
+         animatedHeadChoices},
         {Item::realisticFlips,
          "REALISTIC FLIPS",
          "Momentum rotation from arms and webs. FLIPS also enables left-stick steering.",
@@ -793,6 +804,9 @@ bool choose(Item item, int index, Values& v) {
         break;
     case Item::dodgeTumble:
         v.dodgeTumble = s[index];
+        break;
+    case Item::animatedHead:
+        v.animatedHead = s[index];
         break;
     case Item::earlyJump:
         v.earlyJump = s[index];
@@ -938,6 +952,7 @@ constexpr TabOnly tabOnly[] = {
     {"palm_shooters", &Values::palmShooters, nullptr},
     {"head_probe", &Values::headProbe, nullptr},
     {"animated_moves", &Values::animatedMoves, nullptr},
+    {"animated_head", nullptr, &Values::animatedHead},
 };
 } // namespace
 std::string tabOnlyText(const Values& v) {

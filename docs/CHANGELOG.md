@@ -7,6 +7,30 @@ Per-check results are in [VALIDATION.md](VALIDATION.md).
 
 Not in a build yet, newest first. The release adds these to the next build's entry.
 
+**ANIMATED HEAD: view follows the gameplay head while ANIMATED MOVES yields (opt-in Off|Level|Full, default Off).**
+
+- **Why.** Step three after ANIMATED MOVES body yield. Parkour anims play, but the
+  view stayed HMD/feet-anchored (`anchored=1`) so the head looked disconnected
+  (~1 m / ~45° typical on ground). Finishers already lock the view with
+  `anchored` 2/4 → `resolvedOnHead`; reuse that path on the **hero gameplay
+  head**, without turning on the cutscene worker (`game_fp::want`).
+- **ANIMATED HEAD** (`animated_head`, Off|Level|Full, default Off; the tab's
+  EXPERIMENTAL after ANIMATED MOVES; swing settings version 33,
+  `Settings::animatedHead`). Only active while `animated_moves::yieldsBody` is
+  true. **Level** (`anchored=4`): place follows, axes stay level (look freely;
+  stick turn as cutscenes). **Full** (`anchored=2`): turns with the anim head
+  like finishers. Off leaves today's body-only yield unchanged.
+- **Mechanism.** `game_fp::followHero` samples the hero head joint
+  (`0x37519912`, same as finishers / REFERENCE) and shrinks the head mesh
+  without pool scan / stand-ins / theatre. `stereo_probe::resolveScene` keeps
+  calling `frame` / `frameLevel`. HEAD PROBE stays usable for residual offset.
+- **Deferred.** Swing hybrid (anim drives direction+velocity only; mod keeps
+  view rotation) is a later PR — not this one.
+- **Risks.** Full can nausea on roll-heavy ground anims (summaries hit ~180°
+  roll) — prefer Level first. Enter/exit yield can pop. Shrink without
+  `want` is new; vault/mantle parkour classify was rare in the Step 2 headset
+  log (mostly ground yield).
+
 **ANIMATED MOVES: the game's parkour animation drives the body for vaults, mantles and ground parkour (opt-in, off by default).**
 
 - **Why.** Step two after HEAD PROBE. Today the mod's body IK owns the pose on

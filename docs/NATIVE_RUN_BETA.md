@@ -57,13 +57,14 @@ In the headset: pause (menu button) → **Settings** → **SPIDY VR** (the last 
 | COMBAT RESPONSIVE | OFF | In fights: no SPIDY RUN/landing carry, NATIVE RUN holds no RT, and A is the game's jump at once. |
 | HEAD PROBE | OFF | Read-only diagnostic: logs Spider-Man's head bone vs your headset per state (`head probe:` lines in the diag log). Changes nothing in play. Needed before animated-moves / head-lock work. |
 | ANIMATED MOVES | OFF | Game anim drives the body for ground parkour / vaults / mantles (with NATIVE RUN). Swing / web / zip / wall-run stay with the mod. Opt-in play-feel; needs Ilya's yes to merge upstream. |
+| ANIMATED HEAD | OFF | While ANIMATED MOVES yields: view follows the gameplay head. LEVEL = place only (comfort); FULL = turns with anim (like finishers). Off by default. |
 | RUN LOGS | OFF | Writes run/landing/take-off speeds to the diag log for bug reports. Changes nothing in play. |
 
 Full descriptions: [PLAYERS.md](PLAYERS.md) ("VR settings").
 
 ### Recommended starter settings
 
-A suggestion, not a tested optimum: **NATIVE RUN ON** (NATIVE RUN AT 70%), **STEADY STATES ON**, **COMBAT RESPONSIVE ON**, **EARLY JUMP: RUNNING**. Then try **SPIDY RUN** + **SMOOTH WEB LANDING** for swing-to-street momentum, and **RUN LOGS ON** while you're testing so your reports are useful. For the head-lock research pass, turn **HEAD PROBE ON** (and try **ANIMATED MOVES ON** with NATIVE RUN for vaults/mantles) and send `reports\game-vr-<time>-diag.log`.
+A suggestion, not a tested optimum: **NATIVE RUN ON** (NATIVE RUN AT 70%), **STEADY STATES ON**, **COMBAT RESPONSIVE ON**, **EARLY JUMP: RUNNING**. Then try **SPIDY RUN** + **SMOOTH WEB LANDING** for swing-to-street momentum, and **RUN LOGS ON** while you're testing so your reports are useful. For the head-lock research pass, turn **HEAD PROBE ON**, **ANIMATED MOVES ON**, and try **ANIMATED HEAD: LEVEL** then **FULL** with NATIVE RUN for vaults/mantles/ground parkour; send `reports\game-vr-<time>-diag.log` (look for `animated moves: head follow level|full`).
 
 ## Troubleshooting
 
