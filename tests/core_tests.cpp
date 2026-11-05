@@ -26642,6 +26642,8 @@ int main() {
         using namespace vr_settings;
         Values v;
         check(!v.animatedAir && defaultChoice(Item::animatedAir) == 0, "ANIMATED AIR on by default");
+        check(choose(Item::animatedAir, 1, v) && v.animatedAir && choice(Item::animatedAir, v) == 1,
+              "not switched on");
         check(tabOnlyText(v).find("animated_air=1\n") != std::string::npos &&
                   withTabOnly({}, "animated_air=1\n").animatedAir &&
                   !withTabOnly({}, "animated_air=0\n").animatedAir && !withTabOnly({}, "").animatedAir,
