@@ -26870,7 +26870,12 @@ int main() {
         check(!h.consumeStableExit(50'000'000, {1, 0, 0}, 200'000'000), "brief interrupt adopted");
         check(!h.pendingExit, "pending cleared on reenter");
         h.update(false);
+        check(h.exit && !h.yielding, "second exit");
         check(!h.consumeStableExit(100'000'000, {2, 0, 0}, 200'000'000), "still waiting");
+        // Game loop: next frames keep update(false) so exit edge clears; pending clock holds.
+        h.update(false);
+        check(!h.exit && h.pendingExit, "exit edge cleared, pending holds");
+        check(!h.consumeStableExit(250'000'000, {2.5f, 0, 0}, 200'000'000), "before debounce");
         check(h.consumeStableExit(400'000'000, {3, 0, 0}, 200'000'000), "stable exit fires");
         check(!h.pendingExit, "pending cleared after fire");
     });

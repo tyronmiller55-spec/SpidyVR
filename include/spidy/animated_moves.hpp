@@ -141,11 +141,12 @@ struct Handoff {
     // Call after update. Returns true once when a stable exit should resync.
     // debounceNs: ignore exits that re-enter sooner (200 ms default).
     bool consumeStableExit(int64_t nowNs, Vec3 feetNow, int64_t debounceNs = 200'000'000) {
-        if (exit) {
+        // Latch once on the exit edge; do not refresh the clock on later polls
+        // while `exit` is still true (same frame / tests calling twice).
+        if (exit && !pendingExit) {
             pendingExit = true;
             pendingExitNs = nowNs;
             pendingExitFeet = feetNow;
-            return false;
         }
         if (enter && pendingExit) {
             pendingExit = false; // brief interrupt — keep tracking origin
