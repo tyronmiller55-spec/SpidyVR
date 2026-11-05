@@ -1501,6 +1501,7 @@ DWORD WINAPI run(void*) {
             s.headProbe = values.headProbe;
             s.animatedMoves = values.animatedMoves;
             s.animatedHead = static_cast<uint32_t>(values.animatedHead);
+            s.animatedAir = values.animatedAir;
             s.webLandingImpact = static_cast<float>(values.webLandingImpact);
             s.webAngle = values.webAngle;
             s.wristShooters = values.palmShooters ? 2u : values.wristShooters ? 1u : 0u;
@@ -2203,7 +2204,7 @@ DWORD WINAPI run(void*) {
                     // frame's actor state no longer is, snap tracking over the
                     // current feet BEFORE update so the first reclaim eyes/body
                     // share the actor's place (not the pre-anim latch).
-                    if (values.animatedMoves && animatedMovesHandoff.yielding) {
+                    if ((values.animatedMoves || values.animatedAir) && animatedMovesHandoff.yielding) {
                         head_probe::StateInputs early;
                         early.playing = gameplay && !flatScreen && !calibrationInput;
                         early.fresh = swingFresh;
@@ -2216,7 +2217,13 @@ DWORD WINAPI run(void*) {
                         early.dodging = dodging;
                         early.runRt = nativeRun.held();
                         early.wall = swingState.wall;
-                        if (!animated_moves::yieldsBody(true, early) && finite(feet) &&
+                        const animated_moves::Gate earlyGate{values.animatedMoves, values.animatedAir};
+                        // Previous-frame web buttons approximate intent for the early peek.
+                        const bool earlyWebIntent =
+                            values.triggerWebs
+                                ? (frame.hands[0].squeeze > .5f || frame.hands[1].squeeze > .5f)
+                                : (frame.hands[0].trigger > .5f || frame.hands[1].trigger > .5f);
+                        if (!animated_moves::yieldsBody(earlyGate, early, earlyWebIntent) && finite(feet) &&
                             validTrackedPose(frame.head))
                             rig.adoptFeet(feet, frame.head);
                     }
@@ -4906,13 +4913,14 @@ DWORD WINAPI run(void*) {
                         // Standing on a wall or a ceiling - Spidy's own or the
                         // game's crawl - the body stands on it with the player,
                         // never in the air the swing keeps the hero in there.
-                        // ANIMATED MOVES (off by default; animated_moves.hpp): when on,
-                        // ground parkour / vaults / mantles let the game's animation
-                        // drive the body (clear bodyOn; blend back). Swing / web /
-                        // zip / wall-run stay with the mod. NATIVE RUN's RT is
-                        // untouched. VR hands follow the game's pose while yielding.
-                        // ANIMATED HEAD (Off|Level|Full, default Off): while yielding,
-                        // eyes use the finisher path on the hero's gameplay head.
+                        // ANIMATED MOVES / ANIMATED AIR (off by default; animated_moves.hpp):
+                        // pose yield clears bodyOn so the game's animation drives the
+                        // body. MOVES: ground / vault-mantle. AIR: freefall / swing /
+                        // web-hold. Zip / wall-run / combat stay with the mod. Physics
+                        // ownership (swing owned) is independent — no root-motion
+                        // extraction. Freefall web aim interrupts immediately.
+                        // ANIMATED HEAD: while yielding, finisher eye path; air clamps
+                        // Full→Level for comfort.
                         head_probe::StateInputs animState;
                         animState.playing = steering && !calibrationInput;
                         animState.fresh = swingFresh;
@@ -4924,10 +4932,16 @@ DWORD WINAPI run(void*) {
                         animState.dodging = dodging;
                         animState.runRt = nativeRun.held();
                         animState.wall = swingState.wall;
-                        yieldAnim = animated_moves::yieldsBody(values.animatedMoves, animState);
-                        animHeadMode = animated_moves::headFollow(values.animatedHead);
+                        const bool webAimIntent =
+                            values.triggerWebs
+                                ? (frame.hands[0].squeeze > .5f || frame.hands[1].squeeze > .5f)
+                                : (frame.hands[0].trigger > .5f || frame.hands[1].trigger > .5f);
+                        const animated_moves::Gate animGate{values.animatedMoves, values.animatedAir};
+                        yieldAnim = animated_moves::yieldsBody(animGate, animState, webAimIntent);
+                        animHeadMode = animated_moves::headFollowForYield(values.animatedHead, animState);
                         const bool headFollow =
-                            animated_moves::followsHead(values.animatedHead, yieldAnim) && !flatScreen;
+                            animated_moves::followsHead(values.animatedHead, yieldAnim, animState) &&
+                            !flatScreen;
                         game_fp::followHero(headFollow);
                         animatedMovesHandoff.update(yieldAnim);
                         if (animatedMovesHandoff.enter || animatedMovesHandoff.exit) {
@@ -5113,8 +5127,9 @@ DWORD WINAPI run(void*) {
                     // ANIMATED HEAD while yielding: eyes relative to the hero's gameplay
                     // head (anchored 2 Full / 4 Level), resolved on the render thread
                     // like finishers (stereo_probe::resolveScene → game_fp::frame).
+                    // animHeadMode already clamped Full→Level for air yields.
                     const bool headFollowEyes =
-                        animated_moves::followsHead(values.animatedHead, yieldAnim) && !flatScreen;
+                        yieldAnim && animHeadMode != animated_moves::HeadFollow::off && !flatScreen;
                     native_eyes::Command eyes;
                     eyes.enabled = flatScreen ? 2 : 1;
                     eyes.serial = ++serial;

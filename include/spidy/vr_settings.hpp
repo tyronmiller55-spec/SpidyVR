@@ -325,10 +325,14 @@ struct Values {
     // default (animated_moves.hpp).
     bool animatedMoves = false;
     // ANIMATED HEAD (the tab's ANIMATED HEAD; Off|Level|Full, default Off):
-    // while ANIMATED MOVES yields, attach the view to the hero's gameplay head
-    // like finishers (anchored 4 Level / 2 Full). Only active while yielding
+    // while a pose yield is active, attach the view to the hero's gameplay head
+    // like finishers (anchored 4 Level / 2 Full). Air yields clamp Full→Level
     // (animated_moves.hpp).
     int animatedHead = 0;
+    // ANIMATED AIR (the tab's ANIMATED AIR; off by default): pose yield for
+    // freefall / swing / web-hold air. Physics stays with the mod; no cutscene
+    // worker. Off leaves air body with the VR IK (animated_moves.hpp).
+    bool animatedAir = false;
     // How much speed a fast one-hand web yank adds, percent (the tab's SINGLE
     // HAND YANK STRENGTH; Swing::singleHandYankStrength): 100 as before.
     int singleHandYankPercent = 100;
@@ -469,8 +473,9 @@ enum class Item : uint8_t {
     headProbe,
     animatedMoves,
     animatedHead,
+    animatedAir,
 };
-inline constexpr Item lastItem = Item::animatedHead;
+inline constexpr Item lastItem = Item::animatedAir;
 // Where a row shows: in the tab; on the pause menu's first page instead,
 // under RESUME: VR VIEW (the user, October 15: "move the VIEW: GAME SCREEN to
 // the first menu (the one with resume)"); or only in the launcher's options:

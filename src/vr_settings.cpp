@@ -394,6 +394,8 @@ template <class V> auto switchOf(Item item, V& v) -> decltype(&v.aimMarkers) {
         return &v.headProbe;
     case Item::animatedMoves:
         return &v.animatedMoves;
+    case Item::animatedAir:
+        return &v.animatedAir;
     case Item::webLandingSmooth:
         return &v.webLandingSmooth;
     case Item::softLanding:
@@ -685,8 +687,10 @@ const std::array<Row, 96>& rows() {
         {Item::animatedMoves, "ANIMATED MOVES",
          "Game anim drives the body for ground parkour, vaults and mantles (NATIVE RUN).", {}},
         {Item::animatedHead, "ANIMATED HEAD",
-         "While ANIMATED MOVES yields: view follows the anim head. LEVEL or FULL.",
+         "While a pose yield is active: view follows the anim head. LEVEL or FULL.",
          animatedHeadChoices},
+        {Item::animatedAir, "ANIMATED AIR",
+         "Game anim drives the body in freefall/swing/web air; mod keeps physics.", {}},
         {Item::realisticFlips,
          "REALISTIC FLIPS",
          "Momentum rotation from arms and webs. FLIPS also enables left-stick steering.",
@@ -953,6 +957,7 @@ constexpr TabOnly tabOnly[] = {
     {"head_probe", &Values::headProbe, nullptr},
     {"animated_moves", &Values::animatedMoves, nullptr},
     {"animated_head", nullptr, &Values::animatedHead},
+    {"animated_air", &Values::animatedAir, nullptr},
 };
 } // namespace
 std::string tabOnlyText(const Values& v) {

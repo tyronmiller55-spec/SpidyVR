@@ -7,6 +7,27 @@ Per-check results are in [VALIDATION.md](VALIDATION.md).
 
 Not in a build yet, newest first. The release adds these to the next build's entry.
 
+**ANIMATED AIR: game anim drives the body in freefall/swing/web air (opt-in, off by default).**
+
+- **Why.** After ground ANIMATED MOVES + HEAD, unlock air traversal poses without
+  handing physics to unproven root-motion. Pose ownership ≠ movement ownership:
+  clear `bodyOn` for air/swing/web classify; swing / native movement keep
+  direction and velocity.
+- **ANIMATED AIR** (`animated_air`, off; tab after ANIMATED HEAD; swing settings
+  version 34, `Settings::animatedAir`). Yields freefall, swing, and web-hold air.
+  Zip, wall-run, combat stay with the mod body. Perch remains ground yield
+  (ANIMATED MOVES). Point-jump air uses this gate once ungrounded. Freefall web
+  aim interrupts immediately so VR can reclaim the body; attached webs keep the
+  swing pose. No cutscene worker (`game_fp::want`).
+- **Head comfort.** While air/swing/web yield, ANIMATED HEAD Full clamps to
+  Level (no forced roll). Ground Full unchanged. A Full-air opt-in is not in
+  this slice.
+- **Handoff.** Existing enter/exit resync (IK + adoptFeet) covers the new states.
+- **Not in this slice.** Right-stick whole-model steering; controller arm blend
+  while yielding. Native swing physics path unchanged (hybrid pose only).
+- **Risks.** Not headset-verified here. Game air anims vary; web visual arms stay
+  on game anim until the arms slice.
+
 **ANIMATED MOVES handoff: resync actor/IK/tracking when the body returns from game anim (opt-in path only).**
 
 - **Why.** Headset test of ANIMATED HEAD: full character anim + independent HMD

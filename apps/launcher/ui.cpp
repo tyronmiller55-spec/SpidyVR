@@ -1894,10 +1894,15 @@ void App::options(ImVec2 origin, ImVec2 size) {
                "default (play-feel change; needs a yes to merge upstream).",
                S(42), [&] { tabToggle("##animatedmoves", Item::animatedMoves); });
         option("Animated head (experimental)",
-               "While Animated moves yields: the view follows Spider-Man's gameplay head like finishers. "
-               "LEVEL keeps the place level (look freely); FULL turns with the anim (parkour flips). "
-               "Off by default. Only active when Animated moves is yielding.",
+               "While a pose yield is active: the view follows Spider-Man's gameplay head like finishers. "
+               "LEVEL keeps the place level (look freely); FULL turns with the anim on ground. "
+               "Air / swing yields stay LEVEL for comfort. Off by default.",
                S(150), [&] { tabCombo("##animatedhead", Item::animatedHead); });
+        option("Animated air (experimental)",
+               "When on: the game's animation drives Spider-Man's body in freefall, swing and web-hold air. "
+               "The mod keeps swing physics (direction and velocity). Zip, wall-run and combat stay with "
+               "the VR body. Freefall web aim reclaims the body immediately. Off by default.",
+               S(42), [&] { tabToggle("##animatedair", Item::animatedAir); });
         option("Web aim (experimental)",
                "MODEL FOREARM: your webs leave along the forearm of the Spider-Man body you see, rather than "
                "along the controller, and go back to the controller's line whenever the body cannot say "
