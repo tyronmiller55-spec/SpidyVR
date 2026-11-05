@@ -998,8 +998,9 @@ VR settings
                    ANIMATED MOVES) while a pose yield is active, the view
                    follows Spider-Man's gameplay head the way finishers do.
                    LEVEL: only his place follows, on a level frame — you look
-                   about freely (safer). FULL: turns with the anim on ground
-                   parkour. Air / swing yields stay LEVEL for comfort. Off by
+                   about freely (safer). FULL: turns with the anim head
+                   (pitch/roll included) on ground and in air. Level is only
+                   when you pick LEVEL — Full is never forced down. Off by
                    default. Leaving a yield resyncs the VR body and tracking.
   ANIMATED AIR     (off until you switch it on; EXPERIMENTAL, after ANIMATED
                    HEAD) freefall, swing and web-hold air: the game's animation

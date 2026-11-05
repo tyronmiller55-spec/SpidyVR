@@ -1895,8 +1895,8 @@ void App::options(ImVec2 origin, ImVec2 size) {
                S(42), [&] { tabToggle("##animatedmoves", Item::animatedMoves); });
         option("Animated head (experimental)",
                "While a pose yield is active: the view follows Spider-Man's gameplay head like finishers. "
-               "LEVEL keeps the place level (look freely); FULL turns with the anim on ground. "
-               "Air / swing yields stay LEVEL for comfort. Off by default.",
+               "LEVEL keeps the place level (look freely) only when you pick it; FULL turns with "
+               "the anim head including pitch/roll on ground and in air. Off by default.",
                S(150), [&] { tabCombo("##animatedhead", Item::animatedHead); });
         option("Animated air (experimental)",
                "When on: the game's animation drives Spider-Man's body in freefall, swing and web-hold air. "

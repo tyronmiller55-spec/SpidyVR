@@ -26700,14 +26700,16 @@ int main() {
         check(!animated_moves::yieldsBody(g, in, true), "freefall web aim does not interrupt");
         in.webbed = true;
         check(animated_moves::yieldsBody(g, in, true), "attached web interrupted by aim intent");
-        // Air head follow clamps Full→Level.
+        // Full is Full in air and on ground (no silent Level force). Level only if chosen.
         in = {};
         in.playing = in.fresh = true;
-        check(animated_moves::headFollowForYield(2, in) == animated_moves::HeadFollow::level,
-              "air Full not clamped to Level");
+        check(animated_moves::headFollowForYield(2, in) == animated_moves::HeadFollow::full,
+              "air Full forced to Level");
+        check(animated_moves::headFollowForYield(1, in) == animated_moves::HeadFollow::level,
+              "explicit Level not kept in air");
         in.grounded = true;
         check(animated_moves::headFollowForYield(2, in) == animated_moves::HeadFollow::full,
-              "ground Full clamped");
+              "ground Full lost");
         check(animated_moves::followsHead(2, true, in), "ground Full does not follow");
     });
     test("ANIMATED STEERING: off by default, after ANIMATED AIR, swing settings version 35", [] {

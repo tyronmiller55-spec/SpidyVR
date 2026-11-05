@@ -14,8 +14,9 @@
 // ANIMATED HEAD (vr_settings::Values::animatedHead, Off|Level|Full, default Off):
 // while yieldsBody, attach the VR view to the hero's gameplay head the way
 // finishers do (anchored 2/4 → resolvedOnHead), without turning on the cutscene
-// worker (game_fp::want). Air / swing / web yields clamp Full→Level for comfort
-// until a separate Full-air opt-in exists.
+// worker (game_fp::want). Full honors pitch/roll from the anim head in every
+// yield (ground and air); Level stays level only when the user picks Level.
+// Outside yield the SpidyVR tracking path owns the view (no silent leveling).
 //
 // Web aim interrupt: freefall web-button intent stops the air pose yield so VR
 // arms reclaim immediately; attached webs keep the swing anim (physics still
@@ -84,17 +85,12 @@ inline HeadFollow headFollow(int setting) {
     return HeadFollow::off;
 }
 
-// Effective head-follow mode while yielding: air/swing/web never take Full
-// (comfort), even if the setting is Full for ground parkour.
+// Effective head-follow mode while yielding: the user's choice as-is. Full
+// keeps anim pitch/roll in air and on ground; Level only when explicitly set.
+// `s` is kept for call-site compatibility / future per-state options.
 inline HeadFollow headFollowForYield(int headSetting, const head_probe::StateInputs& s) {
-    const HeadFollow mode = headFollow(headSetting);
-    if (mode == HeadFollow::off)
-        return HeadFollow::off;
-    const auto st = head_probe::classify(s);
-    if (st == head_probe::State::air || st == head_probe::State::swing ||
-        st == head_probe::State::web)
-        return HeadFollow::level;
-    return mode;
+    (void)s;
+    return headFollow(headSetting);
 }
 
 inline bool followsHead(int headSetting, bool yielding, const head_probe::StateInputs& s) {

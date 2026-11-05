@@ -7,6 +7,18 @@ Per-check results are in [VALIDATION.md](VALIDATION.md).
 
 Not in a build yet, newest first. The release adds these to the next build's entry.
 
+**ANIMATED HEAD: stop forcing Full→Level in air (user override).**
+
+- **Why.** Headset logs on ANIMATED AIR showed `head follow level (air|swing)`
+  while the setting was Full (`head-follow was full` on exit). User: either the
+  body anim owns the head or SpidyVR tracking does — no silent artificial level.
+- **Change.** `headFollowForYield` returns the user's Off|Level|Full choice in
+  every yield state. Full uses anchored=2 (anim pitch/roll) in air too. Level
+  only when Level is selected. Outside yield, existing VR tracking unchanged.
+- **Docs/UI.** PLAYERS, NATIVE_RUN_BETA, launcher help, tests updated. Legs
+  blend while yielding left tabled (no change this commit).
+- **Not headset-verified** in this change.
+
 **ANIMATED ARMS: per-arm controller overlay while yielding (opt-in, off by default).**
 
 - **Why.** During pose yield the game drives the whole figure; the player wants
@@ -41,7 +53,7 @@ Not in a build yet, newest first. The release adds these to the next build's ent
   double-apply).
 - **Not implemented (honest).** Right-stick whole-model yaw; midair spherical
   orientation. Do not fake with CameraLook or GameTrackingRig view yaw. Headset
-  free look and ANIMATED HEAD (ground Full / air Level) unchanged.
+  free look and ANIMATED HEAD (Full includes air; Level only if chosen) unchanged.
 - **Tests.** Remap along ±Z/±X, deadzone, NaN/vertical refuse, active gate;
   settings/ini. Not headset-verified.
 
@@ -57,9 +69,9 @@ Not in a build yet, newest first. The release adds these to the next build's ent
   (ANIMATED MOVES). Point-jump air uses this gate once ungrounded. Freefall web
   aim interrupts immediately so VR can reclaim the body; attached webs keep the
   swing pose. No cutscene worker (`game_fp::want`).
-- **Head comfort.** While air/swing/web yield, ANIMATED HEAD Full clamps to
-  Level (no forced roll). Ground Full unchanged. A Full-air opt-in is not in
-  this slice.
+- **Head follow.** ANIMATED HEAD Full is Full in air too (pitch/roll from the
+  anim head). Level only when the user picks Level — see the later Unreleased
+  correction that removed the air Full→Level force.
 - **Handoff.** Existing enter/exit resync (IK + adoptFeet) covers the new states.
 - **Not in this slice.** Right-stick whole-model steering; controller arm blend
   while yielding. Native swing physics path unchanged (hybrid pose only).

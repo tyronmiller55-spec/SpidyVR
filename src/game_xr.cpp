@@ -4959,7 +4959,7 @@ DWORD WINAPI run(void*) {
                         // ownership (swing owned) is independent — no root-motion
                         // extraction. Freefall web aim interrupts immediately.
                         // ANIMATED HEAD: while yielding, finisher eye path; air clamps
-                        // Full→Level for comfort.
+                        // Full keeps anim pitch/roll (no air Level force).
                         head_probe::StateInputs animState;
                         animState.playing = steering && !calibrationInput;
                         animState.fresh = swingFresh;
@@ -5199,7 +5199,7 @@ DWORD WINAPI run(void*) {
                     // ANIMATED HEAD while yielding: eyes relative to the hero's gameplay
                     // head (anchored 2 Full / 4 Level), resolved on the render thread
                     // like finishers (stereo_probe::resolveScene → game_fp::frame).
-                    // animHeadMode already clamped Full→Level for air yields.
+                    // animHeadMode is the user choice (Full may include air pitch/roll).
                     const bool headFollowEyes =
                         yieldAnim && animHeadMode != animated_moves::HeadFollow::off && !flatScreen;
                     native_eyes::Command eyes;
