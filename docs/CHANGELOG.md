@@ -52,7 +52,6 @@ Not in a build yet, newest first. The release adds these to the next build's ent
   character (B). Not headset-verified; floor/remap provisional.
 
 **ANIMATED MODEL YAW: R-stick turns hero via walk facing (opt-in, off).**
-**ANIMATED MODEL YAW: R-stick turns hero via walk facing (opt-in, off).**
 
 - **Why.** User wants right stick to rotate the whole character while yielding,
   with left magnitude along actor facing. No proven actor-facing RVA write

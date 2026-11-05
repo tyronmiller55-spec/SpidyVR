@@ -100,7 +100,7 @@ ARMS on during a pose yield: soft always-on arm floor and chest-frame grip
 remap so IRL arms match the model through rotations. Enable the same cumulative
 flags as the MODEL YAW zip, plus ANIMATED ARMS (and TORSO if you want upper-spine
 assist). Watch `tracking lock:` and denser `forearm aim:` lines in the diag log.
-Spherical midair and momentum bridge are still next — not in this zip.
+Superseded by feat/animated-only-sphere (ANIMATED ONLY + ANIMATED AIR SPIN) below.
 
 Community feat `feat/animated-only-sphere` (after tracking lock). ANIMATED ONLY
 keeps the game animation on the body in every gameplay state so the OG SpidyVR
