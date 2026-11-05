@@ -26700,6 +26700,9 @@ int main() {
         check(!animated_moves::yieldsBody(g, in, true), "freefall web aim does not interrupt");
         in.webbed = true;
         check(animated_moves::yieldsBody(g, in, true), "attached web interrupted by aim intent");
+        // ANIMATED ARMS: freefall web intent keeps pose yield (arms aim).
+        in.webbed = false;
+        check(animated_moves::yieldsBody(g, in, true, true), "arms mode still interrupted by freefall aim");
         // Full is Full in air and on ground (no silent Level force). Level only if chosen.
         in = {};
         in.playing = in.fresh = true;
@@ -26851,6 +26854,37 @@ int main() {
         check(t.armsOnly && !t.head, "armsOnly implies head");
         check((native_body::armsOverlay & ~0x7ffffu) == 0, "armsOverlay outside validCrawl mask");
         check((native_body::armsOverlay & native_body::bodyOn) == 0, "armsOverlay overlaps bodyOn");
+    });
+
+
+    test("ANIMATED MOVES handoff: brief exit does not adopt; stable exit does", [] {
+        animated_moves::Handoff h;
+        h.update(true);
+        check(h.enter && h.yielding && !h.exit, "enter");
+        h.update(false); // exit starts pending
+        check(h.exit && !h.yielding, "exit edge");
+        check(!h.consumeStableExit(0, {1, 0, 0}, 200'000'000), "immediate exit must wait");
+        check(h.pendingExit, "pending");
+        h.update(true); // re-enter inside window
+        check(h.enter, "reenter");
+        check(!h.consumeStableExit(50'000'000, {1, 0, 0}, 200'000'000), "brief interrupt adopted");
+        check(!h.pendingExit, "pending cleared on reenter");
+        h.update(false);
+        check(!h.consumeStableExit(100'000'000, {2, 0, 0}, 200'000'000), "still waiting");
+        check(h.consumeStableExit(400'000'000, {3, 0, 0}, 200'000'000), "stable exit fires");
+        check(!h.pendingExit, "pending cleared after fire");
+    });
+    test("WEB AIM: arms overlay and misaligned fall back to controller", [] {
+        using web_aim::Fallback;
+        check(std::strcmp(web_aim::fallbackName(Fallback::armsOverlay), "arms overlay") == 0, "arms name");
+        check(std::strcmp(web_aim::fallbackName(Fallback::misaligned), "misaligned") == 0, "mis name");
+        check(web_aim::forearmAlignDegrees == 45.f, "align threshold");
+        // Identity turn when falling back: controller line.
+        web_aim::ForearmAim a;
+        a.update(false, {}, 1.f / 90);
+        check(a.weight == 0 && !a.primed, "invalid does not prime");
+        const Quat id = web_aim::forearmTurn({0, 0, -1}, {}, {}, 180.f);
+        check(web_aim::turnAngle(id) < .01f, "aligned forearm should be near identity");
     });
 
     test("HEAD PROBE: its own diagnostics ring; every line from named fields, within a line", [] {

@@ -7,6 +7,25 @@ Per-check results are in [VALIDATION.md](VALIDATION.md).
 
 Not in a build yet, newest first. The release adds these to the next build's entry.
 
+**Animated control fixes: aim coherence + handoff debounce (opt-in paths).**
+
+- **Why (headset logs on abed22f).** With ANIMATED ARMS + MODEL FOREARM + Full
+  head: `forearm vs controller` 55–134° while wrist miss ~0 — webs steered toward
+  arm-only IK forearms. Freefall web intent tore pose yield down then back
+  (`mod body again (air)`), and early peek `adoptFeet` ran every frame on that
+  flicker — location/head felt wrong on VR↔anim switches. Wrist shooter markers
+  followed the same bad web turns.
+- **Aim.** While yielding with ANIMATED ARMS, MODEL FOREARM falls back to the
+  controller (`arms overlay`); WRIST SHOOTERS still turn that controller line.
+  Also `misaligned` if forearm vs aim &gt; 45° (provisional). Chosen
+  wrist/forearm settings preserved with documented fallback.
+- **Handoff.** Freefall web interrupt does not exit pose yield when ANIMATED ARMS
+  is on (arms handle aim). Exit `adoptFeet`/IK resync debounced (~200 ms);
+  brief re-enter cancels. Removed speculative early-peek adoptFeet while still
+  yielding. Full head stays Full (no Level force).
+- **Not in this patch.** Torso/waist IK soften; whole-model R-stick yaw (queued).
+  Legs still tabled. Not headset-verified.
+
 **ANIMATED HEAD: stop forcing Full→Level in air (user override).**
 
 - **Why.** Headset logs on ANIMATED AIR showed `head follow level (air|swing)`
