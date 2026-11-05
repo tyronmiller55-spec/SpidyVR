@@ -1913,6 +1913,11 @@ void App::options(ImVec2 origin, ImVec2 size) {
                "on the game animation; idle returns it. Torso/legs/head stay animated. Tracking loss yields "
                "to the game arm. Thresholds provisional. Off by default.",
                S(42), [&] { tabToggle("##animatedarms", Item::animatedArms); });
+        option("Animated torso (experimental)",
+               "With Animated arms: waist→chest bends toward extreme controller aims so midair pointing can "
+               "contort the upper body. Animated root/legs and head world pose stay on the game anim "
+               "(head orientation is compensated after spine turns). Off by default; limits provisional.",
+               S(42), [&] { tabToggle("##animatedtorso", Item::animatedTorso); });
         option("Web aim (experimental)",
                "MODEL FOREARM: your webs leave along the forearm of the Spider-Man body you see, rather than "
                "along the controller, and go back to the controller's line whenever the body cannot say "

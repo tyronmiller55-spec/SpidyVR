@@ -1507,6 +1507,7 @@ DWORD WINAPI run(void*) {
             s.animatedAir = values.animatedAir;
             s.animatedSteering = values.animatedSteering;
             s.animatedArms = values.animatedArms;
+            s.animatedTorso = values.animatedTorso;
             s.webLandingImpact = static_cast<float>(values.webLandingImpact);
             s.webAngle = values.webAngle;
             s.wristShooters = values.palmShooters ? 2u : values.wristShooters ? 1u : 0u;
@@ -5156,8 +5157,10 @@ DWORD WINAPI run(void*) {
                             pose.flags |= native_body::armsOverlay;
                             native_body::setArmOverlay(animatedArmsState.arms[0].weight,
                                                        animatedArmsState.arms[1].weight);
+                            native_body::setTorsoAssist(values.animatedTorso);
                         } else {
                             native_body::setArmOverlay(0.f, 0.f);
+                            native_body::setTorsoAssist(false);
                         }
                         // The player's size: HEIGHT when set, else the T-pose
                         // calibration's, else the headset's running height.

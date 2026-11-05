@@ -150,6 +150,7 @@ inline constexpr ProfileSetting profileSettings[] = {
     tabOnly("animated_air", Item::animatedAir, &Values::animatedAir),
     tabOnly("animated_steering", Item::animatedSteering, &Values::animatedSteering),
     tabOnly("animated_arms", Item::animatedArms, &Values::animatedArms),
+    tabOnly("animated_torso", Item::animatedTorso, &Values::animatedTorso),
     retired("wall_distance_cm", vr_settings::fixedWallDistance),
     tabOnly("realistic_flips", Item::realisticFlips, &Values::realisticFlips),
     tabOnly("rotation_strength", Item::automaticStrength, 25, 100, &Values::automaticStrength),

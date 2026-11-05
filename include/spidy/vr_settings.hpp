@@ -339,6 +339,9 @@ struct Values {
     bool animatedSteering = false;
     // ANIMATED ARMS: controller arm overlay while yielding (animated_arms.hpp).
     bool animatedArms = false;
+    // ANIMATED TORSO: with ANIMATED ARMS, bound waist→chest toward controller
+    // reaches (animated_torso.hpp). Off by default; provisional limits.
+    bool animatedTorso = false;
     // How much speed a fast one-hand web yank adds, percent (the tab's SINGLE
     // HAND YANK STRENGTH; Swing::singleHandYankStrength): 100 as before.
     int singleHandYankPercent = 100;
@@ -482,8 +485,9 @@ enum class Item : uint8_t {
     animatedAir,
     animatedSteering,
     animatedArms,
+    animatedTorso,
 };
-inline constexpr Item lastItem = Item::animatedArms;
+inline constexpr Item lastItem = Item::animatedTorso;
 // Where a row shows: in the tab; on the pause menu's first page instead,
 // under RESUME: VR VIEW (the user, October 15: "move the VIEW: GAME SCREEN to
 // the first menu (the one with resume)"); or only in the launcher's options:

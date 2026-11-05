@@ -400,6 +400,8 @@ template <class V> auto switchOf(Item item, V& v) -> decltype(&v.aimMarkers) {
         return &v.animatedSteering;
     case Item::animatedArms:
         return &v.animatedArms;
+    case Item::animatedTorso:
+        return &v.animatedTorso;
     case Item::webLandingSmooth:
         return &v.webLandingSmooth;
     case Item::softLanding:
@@ -699,6 +701,8 @@ const std::array<Row, 99>& rows() {
          "While yielding: stick magnitude runs Spidey along his facing (no model yaw).", {}},
         {Item::animatedArms, "ANIMATED ARMS",
          "While yielding: controller arms overlay game anim; idle returns. Provisional.", {}},
+        {Item::animatedTorso, "ANIMATED TORSO",
+         "With ANIMATED ARMS: waist→chest bends toward extreme aim. Head/legs stay anim. Provisional.", {}},
         {Item::realisticFlips,
          "REALISTIC FLIPS",
          "Momentum rotation from arms and webs. FLIPS also enables left-stick steering.",
@@ -968,6 +972,7 @@ constexpr TabOnly tabOnly[] = {
     {"animated_air", &Values::animatedAir, nullptr},
     {"animated_steering", &Values::animatedSteering, nullptr},
     {"animated_arms", &Values::animatedArms, nullptr},
+    {"animated_torso", &Values::animatedTorso, nullptr},
 };
 } // namespace
 std::string tabOnlyText(const Values& v) {
