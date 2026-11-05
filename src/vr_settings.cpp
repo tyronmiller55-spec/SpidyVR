@@ -702,7 +702,7 @@ const std::array<Row, 101>& rows() {
         {Item::animatedSteering, "ANIMATED STEERING",
          "While yielding: L-stick along actor facing. Use MODEL YAW for R-stick.", {}},
         {Item::animatedArms, "ANIMATED ARMS",
-         "While yielding: soft controller arms + chest-frame lock. Idle keeps floor. Provisional.", {}},
+         "While yielding: soft arms + chest-frame lock. Idle keeps floor.", {}},
         {Item::animatedTorso, "ANIMATED TORSO",
          "With ARMS: waist-chest leans to extreme aim. Head/legs stay anim. Provisional.", {}},
         {Item::animatedModelYaw, "ANIMATED MODEL YAW",
