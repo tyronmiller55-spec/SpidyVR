@@ -229,6 +229,23 @@ Input trackedSwingInput(const XrFrame& f, const Rig& rig, bool triggerWebs) {
     }
     return input;
 }
+void GameTrackingRig::adoptFeet(Vec3 feet, const Pose& head) {
+    if (!finite(feet))
+        return;
+    // Queue a rested-style origin snap on the next update. Directly stage the
+    // feet latch so travel does not replay the yield's path a second time.
+    lastFeet_ = feet;
+    if (validTrackedPose(head) && initialized_) {
+        rig_.origin = feet - Quat::yaw(rig_.yaw).rotate({head.position.x, 0, head.position.z});
+        lastHead_ = head;
+    }
+    standOff_ = {};
+    surfaceShift_ = {};
+    surfaceTurn_ = {};
+    headDrop_ = {};
+    runViewOffset_ = {};
+    pendingAdopt_ = true;
+}
 void GameTrackingRig::reset() {
     const float snap = snap_, smooth = smooth_, wallDistance = wallDistance_;
     const float runDistance = runCameraDistance_;
@@ -331,6 +348,10 @@ GameMotionFrame GameTrackingRig::update(const XrFrame& f, Vec3 feet, Vec3 gameFo
     const bool rested =
         resumed && lastTime_ &&
         f.predictedDisplayTime - lastTime_ > static_cast<std::int64_t>(blipSeconds * 1'000'000'000.f);
+    // ANIMATED MOVES yield exit: treat like a rested snap over the current feet
+    // without forcing a facing reset (independent HMD look preserved).
+    const bool adopt = pendingAdopt_;
+    pendingAdopt_ = false;
     // A stutter (a game frame over 100 ms closes the gameplay gate) keeps the
     // webs; after a longer break each hand squeezes again.
     const bool longBreak =
@@ -350,12 +371,13 @@ GameMotionFrame GameTrackingRig::update(const XrFrame& f, Vec3 feet, Vec3 gameFo
         // (A scene's own heading is used after any break; the camera's only after one longer than a blip: a
         // stutter of play must not turn the view.)
         const bool facing = resumed && faceGame_ && (rested || facingValid_);
-        if (rested || facing) {
+        if (rested || facing || adopt) {
             // After a break: over the feet again. After a scene the player faces where the scene left the
             // view (the heading the first-person scene last showed, sceneFacing) or, for a scene shown
             // otherwise, where the game's camera faces now, behind the character as the scene left him: not
             // the way the view faced before the scene, which was often the opposite (the player, October 31).
             // Any other break (a menu): facing as before.
+            // ANIMATED MOVES adopt: feet snap only — no facing rewrite.
             if (facing) {
                 const auto headForward = horizontal(f.head.orientation.rotate({0, 0, -1}));
                 float target{};

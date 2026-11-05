@@ -431,9 +431,11 @@ void solveHero(float* out, uintptr_t job, uintptr_t instance) {
         std::memcpy(SpidyBodyPoses.game, out, joints * 64ull);
     if (turned) {
         // The actor turned under the body since the last job: the body keeps
-        // facing the same way in the world.
+        // facing the same way in the world. While bodyOn is off (ANIMATED MOVES
+        // yield), only latch the facing — turning the IK state through parkour
+        // rotations left a stale yaw that yanked the VR body back on reclaim.
         const float facing = heading(transform);
-        if (actorHeadingSet)
+        if (on && actorHeadingSet)
             body::turnState(state, -std::remainder(facing - actorHeading, 6.2831853f));
         actorHeading = facing;
         actorHeadingSet = true;
@@ -702,6 +704,14 @@ uint32_t native_body::start(uintptr_t gameBase) {
 }
 void native_body::retarget(uintptr_t heroRecord) {
     record = heroRecord;
+}
+void native_body::resyncAfterYield() {
+    AcquireSRWLockExclusive(&solveLock);
+    state = {};
+    actorHeadingSet = trackingYawSet = false;
+    actorHeading = trackingYaw = 0;
+    outwardWeight.store(0.f, std::memory_order_relaxed);
+    ReleaseSRWLockExclusive(&solveLock);
 }
 void native_body::submit(const Command& next) {
     AcquireSRWLockExclusive(&commandLock);

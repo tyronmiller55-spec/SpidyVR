@@ -452,9 +452,16 @@ class GameTrackingRig {
     void wallRunBody(bool enabled, unsigned supports, Vec3 velocity) {
         runViewEnabled_ = enabled; runViewSupports_ = supports; runViewVelocity_ = velocity;
     }
+    // ANIMATED MOVES handoff: snap the tracking origin over the actor's current
+    // feet before the next update, keeping yaw so independent HMD look stays.
+    // Clears lean / surface / head-drop offsets built up while the view followed
+    // the anim head (those are camera/latch state, not the actor's place).
+    // Call on yield exit before the first mod-owned eyes/body frame.
+    void adoptFeet(Vec3 feet, const Pose& head);
     void reset();
 
   private:
+    bool pendingAdopt_{};
     RealisticFlipSettings autoSettings_{};
     RealisticFlight flight_{};
     RealisticFlip automatic_{};

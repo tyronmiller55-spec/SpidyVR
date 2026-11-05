@@ -10,6 +10,12 @@
 // finishers do (anchored 2/4 → resolvedOnHead), without turning on the cutscene
 // worker (game_fp::want). Only active when the body is yielding.
 //
+// Handoff: when yieldsBody ends, the VR body / tracking / in-flight prediction
+// must resync to the actor where the animation left him before the first
+// mod-owned step. Pose ownership (bodyOn) is separate from physics ownership
+// (swing owned); clearing bodyOn alone does not clear IK heading latches or
+// tracking lean built up while the view followed the anim head.
+//
 // Reuses head_probe::classify / StateInputs so the gated states match HEAD
 // PROBE's (and the headset logs that said ground anim is live).
 #pragma once
@@ -61,5 +67,24 @@ inline const char* headFollowName(HeadFollow mode) {
         return "off";
     }
 }
+
+// Edge tracker for yield enter/exit. Call update once per frame with the
+// current yieldsBody result. exit becomes true the frame ownership returns to
+// the mod — resync actor/IK/tracking before the first mod-owned step.
+struct Handoff {
+    bool yielding{};
+    bool enter{}; // true this frame: game anim just took the body
+    bool exit{};  // true this frame: mod body takes over again
+
+    void update(bool now) {
+        enter = now && !yielding;
+        exit = !now && yielding;
+        yielding = now;
+    }
+};
+
+// True when a yield exit needs a hard actor resync (always on exit). Kept as a
+// named helper so call sites and tests share the same rule.
+inline bool needsActorResync(const Handoff& h) { return h.exit; }
 
 } // namespace spidy::animated_moves

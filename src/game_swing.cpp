@@ -157,6 +157,10 @@ void relinquishMotion() {
         submitMotion(&c);
     }
     owned = false;
+    // Drop in-flight prediction so the next ownership takes the game's current
+    // position/velocity (ANIMATED MOVES can move the actor far while unowned).
+    inFlight.reset();
+    predictedDt = 0;
 }
 // The swing alone: a perched player's webs are let go, a grab keeps its target.
 // keepWall: the player stays on the wall it is on (a paused game goes on from

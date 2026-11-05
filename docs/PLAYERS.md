@@ -1000,7 +1000,9 @@ VR settings
                    do. LEVEL: only his place follows, on a level frame — you
                    look about freely (safer). FULL: the view turns with the
                    anim head (parkour flips). Off by default; only does
-                   anything while ANIMATED MOVES is yielding. Swing hybrid
+                   anything while ANIMATED MOVES is yielding. Leaving a yield
+                   resyncs the VR body and tracking to where the actor is now
+                   (not the pre-anim place). Swing hybrid
                    (anim direction+velocity, mod keeps rotation) is not this.
   DODGE TUMBLE     (OFF until you pick one) when the game dodges, your
                    view tips toward the dodge (LEAN) or turns a full roll

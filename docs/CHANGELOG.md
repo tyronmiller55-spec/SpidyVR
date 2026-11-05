@@ -7,6 +7,25 @@ Per-check results are in [VALIDATION.md](VALIDATION.md).
 
 Not in a build yet, newest first. The release adds these to the next build's entry.
 
+**ANIMATED MOVES handoff: resync actor/IK/tracking when the body returns from game anim (opt-in path only).**
+
+- **Why.** Headset test of ANIMATED HEAD: full character anim + independent HMD
+  look worked, but yield exit desynced — the VR body flipped back to the
+  pre-animation location. Cause (code + logs): while `bodyOn` was off, IK
+  `actorHeading` kept twisting residual state through parkour rotations; head
+  follow ignored tracking lean then snapped back; in-flight swing prediction
+  survived relinquish. Camera-only masking would not fix ownership.
+- **Fix.** On yield enter/exit: `native_body::resyncAfterYield` clears IK +
+  heading latches. On exit (and early peek before tracking update):
+  `GameTrackingRig::adoptFeet` snaps origin over the current actor feet,
+  keeping yaw (independent HMD). `relinquishMotion` clears `InFlightStep`.
+  Diag distinguishes actor move since yield vs head-follow latch; head-follow
+  exit logs `off` (not the setting name). Default-off behavior unchanged.
+- **Tests.** Handoff edge / rapid toggles; adoptFeet over a moved actor without
+  yaw rewrite. Not headset-verified in this change.
+- **Deferred.** Air/swing unlock, right-stick model steering, controller arms —
+  separate slices (pose ownership ≠ physics ownership).
+
 **ANIMATED HEAD: view follows the gameplay head while ANIMATED MOVES yields (opt-in Off|Level|Full, default Off).**
 
 - **Why.** Step three after ANIMATED MOVES body yield. Parkour anims play, but the

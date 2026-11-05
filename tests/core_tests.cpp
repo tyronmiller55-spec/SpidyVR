@@ -26587,6 +26587,58 @@ int main() {
         in.wall = 1;
         check(!animated_moves::followsHead(2, animated_moves::yieldsBody(true, in)), "wall-run head follow");
     });
+
+    test("ANIMATED MOVES handoff: exit edge needs actor resync; rapid toggles", [] {
+        animated_moves::Handoff h;
+        check(!animated_moves::needsActorResync(h) && !h.enter && !h.exit, "idle edge");
+        h.update(true);
+        check(h.enter && !h.exit && h.yielding && !animated_moves::needsActorResync(h), "enter is not exit");
+        h.update(true);
+        check(!h.enter && !h.exit && h.yielding, "steady yield");
+        h.update(false);
+        check(h.exit && !h.enter && !h.yielding && animated_moves::needsActorResync(h), "exit needs resync");
+        // Rapid toggles: game->VR at a moved actor, then immediately back.
+        h.update(true);
+        check(h.enter && !animated_moves::needsActorResync(h), "re-enter");
+        h.update(false);
+        check(h.exit && animated_moves::needsActorResync(h), "rapid exit resync");
+        h.update(false);
+        check(!h.exit && !h.enter, "steady mod");
+        // Head-follow Off|Level|Full naming: exit logs "off", not the setting.
+        check(std::strcmp(animated_moves::headFollowName(animated_moves::HeadFollow::off), "off") == 0,
+              "off name");
+        check(animated_moves::followsHead(1, false) == false && animated_moves::followsHead(2, false) == false,
+              "head follow while not yielding");
+        check(animated_moves::followsHead(0, true) == false, "Off never follows");
+    });
+    test("ANIMATED MOVES handoff: adoptFeet snaps tracking over a moved actor", [] {
+        GameTrackingRig rig;
+        auto f = trackedFrame();
+        const Vec3 start{10, 0, 20};
+        auto placed = playFor(rig, f, start, {0, 1, 0}, .2f);
+        check(placed.active, "tracking not active at start");
+        // Actor vaults ~4 m forward while the view would have followed anim.
+        const Vec3 after{14, 0, 20};
+        rig.adoptFeet(after, f.head);
+        ++f.predictedDisplayTime;
+        placed = rig.update(f, after, {0, 0, -1}, true);
+        check(placed.active, "tracking not active after adopt");
+        const Vec3 head = matrixRow(placed.head, 3);
+        // Head XZ sits over the new feet (not the pre-vault start).
+        check(std::abs(head.x - after.x) < .08f && std::abs(head.z - after.z) < .08f,
+              "adoptFeet did not place head over moved actor");
+        check(std::abs(head.x - start.x) > 3.f, "head still over pre-vault feet");
+        // Without adopt, travel alone also follows feet — the regression is the
+        // yield path skipping a hard snap of lean/standOff. A second adopt after
+        // rapid toggle must not yank yaw (independent HMD look).
+        const float yawBefore = std::atan2(-matrixRow(placed.head, 2).x, -matrixRow(placed.head, 2).z);
+        rig.adoptFeet(after + Vec3{1, 0, 0}, f.head);
+        ++f.predictedDisplayTime;
+        placed = rig.update(f, after + Vec3{1, 0, 0}, {0, 0, -1}, true);
+        const float yawAfter = std::atan2(-matrixRow(placed.head, 2).x, -matrixRow(placed.head, 2).z);
+        check(std::abs(std::remainder(yawAfter - yawBefore, 6.2831853f)) < .01f,
+              "adoptFeet forced a view yaw rewrite");
+    });
     test("HEAD PROBE: its own diagnostics ring; every line from named fields, within a line", [] {
         using namespace head_probe;
         check(diag_log::channelOf("head probe: ground body game move game") == diag_log::Channel::head &&

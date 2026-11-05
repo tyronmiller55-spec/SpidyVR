@@ -1028,9 +1028,10 @@ DWORD WINAPI run(void*) {
         const auto headProbe = std::make_unique<head_probe::Probe>();
         head_probe::Probe::Lines headProbeLines;
         bool headProbeWas{};
-        bool animatedMovesYieldWas{};
+        animated_moves::Handoff animatedMovesHandoff{};
         int64_t animatedMovesDiagAt{};
         bool animatedHeadFollowWas{};
+        Vec3 animatedMovesYieldFeet{}; // actor feet when yield began (diag: actor vs latch)
         Pose animHeadRef{};
         bool animHeadRefSet{};
         float animHeadTurn{};
@@ -2198,6 +2199,27 @@ DWORD WINAPI run(void*) {
                         dodgeTumble.reset();
                     tumbleStepped = false;
                     rig.viewTurn(dodgeTumble.turn());
+                    // ANIMATED MOVES handoff: if last frame was yielding and this
+                    // frame's actor state no longer is, snap tracking over the
+                    // current feet BEFORE update so the first reclaim eyes/body
+                    // share the actor's place (not the pre-anim latch).
+                    if (values.animatedMoves && animatedMovesHandoff.yielding) {
+                        head_probe::StateInputs early;
+                        early.playing = gameplay && !flatScreen && !calibrationInput;
+                        early.fresh = swingFresh;
+                        early.grounded = swingState.grounded != 0;
+                        early.owned = swingState.owned != 0;
+                        early.webbed =
+                            swingState.webs[0].attached || swingState.webs[1].attached;
+                        early.zipping = zipping;
+                        early.fighting = fightLately;
+                        early.dodging = dodging;
+                        early.runRt = nativeRun.held();
+                        early.wall = swingState.wall;
+                        if (!animated_moves::yieldsBody(true, early) && finite(feet) &&
+                            validTrackedPose(frame.head))
+                            rig.adoptFeet(feet, frame.head);
+                    }
                     motion = rig.update(seated::raised(controller, seatRaise), feet, {camera[8], camera[9], camera[10]}, gameplay,
                                         swingState.owned ? Vec3{0, 1, 0} : heroUp,
                                         game_swing::airborne(swingState, now.QuadPart, frequency.QuadPart), hold,
@@ -4907,11 +4929,35 @@ DWORD WINAPI run(void*) {
                         const bool headFollow =
                             animated_moves::followsHead(values.animatedHead, yieldAnim) && !flatScreen;
                         game_fp::followHero(headFollow);
-                        if (yieldAnim != animatedMovesYieldWas) {
-                            diag_log::writef("animated moves: %s (%s)",
-                                             yieldAnim ? "game anim drives body" : "mod body again",
-                                             animated_moves::yieldName(animState));
-                            animatedMovesYieldWas = yieldAnim;
+                        animatedMovesHandoff.update(yieldAnim);
+                        if (animatedMovesHandoff.enter || animatedMovesHandoff.exit) {
+                            const Vec3 nowFeet = finite(Vec3{body[12], body[13], body[14]})
+                                                     ? Vec3{body[12], body[13], body[14]}
+                                                     : motion.anchor;
+                            if (animatedMovesHandoff.enter) {
+                                animatedMovesYieldFeet = nowFeet;
+                                // Drop residual IK so the game anim is not fighting a fading VR body.
+                                native_body::resyncAfterYield();
+                                diag_log::writef(
+                                    "animated moves: game anim drives body (%s) actor (%.1f, %.1f, %.1f)",
+                                    animated_moves::yieldName(animState), nowFeet.x, nowFeet.y, nowFeet.z);
+                            } else {
+                                // Yield exit: resync authoritative actor place BEFORE first mod-owned
+                                // pose/eyes. Distinguishes actor reset (feet moved) from camera/latch
+                                // reset (adoptFeet clears lean; head-follow latch cleared below).
+                                const Vec3 delta = nowFeet - animatedMovesYieldFeet;
+                                const float moved = finite(delta) ? length(delta) : -1.f;
+                                native_body::resyncAfterYield();
+                                if (finite(nowFeet) && validTrackedPose(frame.head))
+                                    rig.adoptFeet(nowFeet, frame.head);
+                                diag_log::writef(
+                                    "animated moves: mod body again (%s) actor (%.1f, %.1f, %.1f) "
+                                    "moved %.2f m since yield, head-follow was %s, adopt+ik resync",
+                                    animated_moves::yieldName(animState), nowFeet.x, nowFeet.y, nowFeet.z,
+                                    moved,
+                                    animatedHeadFollowWas ? animated_moves::headFollowName(animHeadMode)
+                                                          : "off");
+                            }
                             animatedMovesDiagAt = frame.predictedDisplayTime;
                         } else if (yieldAnim &&
                                    frame.predictedDisplayTime - animatedMovesDiagAt > 2'000'000'000) {
@@ -4920,9 +4966,11 @@ DWORD WINAPI run(void*) {
                             animatedMovesDiagAt = frame.predictedDisplayTime;
                         }
                         if (headFollow != animatedHeadFollowWas) {
-                            diag_log::writef("animated moves: head follow %s (%s)",
-                                             animated_moves::headFollowName(animHeadMode),
-                                             animated_moves::yieldName(animState));
+                            // Log the active follow state: "off" on exit, not the setting name.
+                            diag_log::writef(
+                                "animated moves: head follow %s (%s)",
+                                headFollow ? animated_moves::headFollowName(animHeadMode) : "off",
+                                animated_moves::yieldName(animState));
                             animatedHeadFollowWas = headFollow;
                             if (!headFollow) {
                                 animHeadRefSet = false;

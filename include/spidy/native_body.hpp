@@ -249,6 +249,11 @@ uint32_t start(uintptr_t base);
 // The local player became another actor (zero: none).
 void retarget(uintptr_t record);
 void submit(const Command&);
+// ANIMATED MOVES handoff: drop IK state and heading latches so the next bodyOn
+// frame takes the current actor facing and headset targets. Call on yield enter
+// (so residual IK does not fight the game anim) and on yield exit (before the
+// first mod-owned pose). Does not change the live command or bodyOn flag.
+void resyncAfterYield();
 // A render frame begins (the stereo module's render setup, main thread).
 void renderFrame();
 // The body turned the hero's joints in the last moments, its head shrunk:
