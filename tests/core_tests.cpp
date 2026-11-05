@@ -84,6 +84,7 @@
 #include "spidy/animated_arms.hpp"
 #include "spidy/animated_torso.hpp"
 #include "spidy/animated_model_yaw.hpp"
+#include "spidy/animated_air_spin.hpp"
 // Stand-ins for the game's classes, by the names the target scan's rules look
 // for: MSVC lays out their type information as it did the game's.
 class Component {
@@ -23376,8 +23377,8 @@ int main() {
                                   Item::automaticHandStrength, Item::automaticFalloff,     Item::automaticHandThreshold,
                                   Item::automaticAirBrake,     Item::automaticCombat};
         // The realistic flips' rows come last, after the EXPERIMENTAL rows before them
-        // (ANIMATED MODEL YAW sits at 89 after ANIMATED TORSO at 88).
-        constexpr size_t firstRealistic = 90;
+        // (ANIMATED MODEL YAW 89, ANIMATED ONLY 90, ANIMATED AIR SPIN 91).
+        constexpr size_t firstRealistic = 92;
         check(all.size() == firstRealistic + std::size(realistic), "the realistic flips' rows are not the last");
         for (size_t i = 0; i < std::size(realistic); ++i)
             check(all[firstRealistic + i].item == realistic[i], "the realistic flips' rows out of order");
@@ -23585,7 +23586,7 @@ int main() {
                                                          : Place::tab),
                   "a row in the wrong place");
         }
-        check(std::count_if(all.begin(), all.end(), [](const Row& r) { return r.place == Place::tab; }) == 96,
+        check(std::count_if(all.begin(), all.end(), [](const Row& r) { return r.place == Place::tab; }) == 98,
               "the tab's own rows");
         check(all[1].item == Item::webStyle && std::strcmp(all[1].title, "WEB STYLE") == 0 &&
                   all[1].choices.size() == 2 && std::strcmp(all[1].choices[0], "REALISTIC") == 0 &&
@@ -23844,7 +23845,7 @@ int main() {
                   "flip_reprojection=0\nsteady_hud=0\nreel_haptics=0\nswing_haptics=0\n"
                   "pc_media=0\nsingle_hand_yank_percent=100\nweb_tie=0\nnative_run=0\nair_slingshot=0\nweb_angle_"
                   "degrees=0\nwrist_shooters=0\n"
-                  "dodge_tumble=0\nrun_curve=0\nnative_run_at_percent=70\nrun_logs=0\nrunning_leap=0\nearly_jump=0\nsoft_landing=0\nspidy_run=0\nspidy_run_from_standing=0\nweb_aim_source=0\nforearm_blend=100\nweb_landing_smooth=0\nweb_landing_impact_speed=24\nsteady_states=0\ncombat_responsive=0\nspidy_run_jump=1\nforearm_aim_limit=180\npalm_shooters=0\nhead_probe=0\nanimated_moves=0\nanimated_head=0\nanimated_air=0\nanimated_steering=0\nanimated_arms=0\nanimated_torso=0\nanimated_model_yaw=0\n",
+                  "dodge_tumble=0\nrun_curve=0\nnative_run_at_percent=70\nrun_logs=0\nrunning_leap=0\nearly_jump=0\nsoft_landing=0\nspidy_run=0\nspidy_run_from_standing=0\nweb_aim_source=0\nforearm_blend=100\nweb_landing_smooth=0\nweb_landing_impact_speed=24\nsteady_states=0\ncombat_responsive=0\nspidy_run_jump=1\nforearm_aim_limit=180\npalm_shooters=0\nhead_probe=0\nanimated_moves=0\nanimated_head=0\nanimated_air=0\nanimated_steering=0\nanimated_arms=0\nanimated_torso=0\nanimated_model_yaw=0\nanimated_only=0\nanimated_air_spin=0\n",
               "the defaults' text");
         Values changed = defaults;
         changed.recordingFov = 140;
@@ -27051,7 +27052,7 @@ int main() {
               "not switched on");
         check(tabOnlyText(v).find("animated_model_yaw=1\n") != std::string::npos &&
                   withTabOnly({}, "animated_model_yaw=1\n").animatedModelYaw &&
-                  !withTabOnly({}, "animated_model_yaw=0\n").animatedModelYaw &&
+                  !withTabOnly({}, "animated_model_yaw=0\nanimated_only=0\nanimated_air_spin=0\n").animatedModelYaw &&
                   !withTabOnly({}, "").animatedModelYaw,
               "spidy_vr.ini does not keep MODEL YAW");
         const auto& all = rows();
@@ -27059,8 +27060,8 @@ int main() {
                   std::strcmp(all[89].title, "ANIMATED MODEL YAW") == 0 && all[89].choices.empty() &&
                   all[89].place == Place::tab && all[88].item == Item::animatedTorso,
               "MODEL YAW row after TORSO");
-        check(lastItem == Item::animatedModelYaw && static_cast<unsigned>(lastItem) < 256,
-              "MODEL YAW not the last item");
+        check(all[90].item == Item::animatedOnly && static_cast<unsigned>(lastItem) < 256,
+              "ANIMATED ONLY not after MODEL YAW");
         game_swing::Settings s;
         check(s.version == 38 && s.bytes == 176 && !s.animatedModelYaw &&
                   offsetof(game_swing::Settings, animatedModelYaw) == game_swing::settingsBytesV37,
@@ -27096,6 +27097,162 @@ int main() {
         // worldToStick of actor forward is pure forward.
         auto fwd = worldToStick(actor, af, ar, 1.f);
         check(fwd.forward > .9f && std::abs(fwd.right) < .1f, "worldToStick forward");
+    });
+
+    test("ANIMATED AIR SPIN: armsOnly yieldTilt turns the whole anim body about the head", [] {
+        auto b = testBody(true);
+        auto poseData = b.rest;
+        body::Pose pose(poseData.data(), static_cast<int>(b.rig.parent.size()));
+        const Vec3 head0 = pose.position(b.rig.head);
+        const Vec3 pelvis0 = pose.position(b.rig.pelvis);
+        const Vec3 foot0 = pose.position(b.rig.legs[0].foot);
+        body::Targets t;
+        t.armsOnly = true;
+        t.up = {0, 1, 0};
+        t.eyes = head0;
+        t.armWeight = {0.f, 0.f};
+        body::Config c;
+        body::State st;
+        // Identity: the game's pose untouched (no solve without weight).
+        auto r = body::solve(pose, b.rig, t, c, st, true, 1.f / 90, 1.f, 1.f);
+        check(!r.solved && length(pose.position(b.rig.pelvis) - pelvis0) < 1e-5f, "identity spin moved the body");
+        // A quarter turn about +x: head stays, pelvis and feet swing round it.
+        const Quat spin = Quat::around({1, 0, 0}, 1.5707963f);
+        t.yieldTilt = spin;
+        poseData = b.rest;
+        body::Pose p2(poseData.data(), static_cast<int>(b.rig.parent.size()));
+        r = body::solve(p2, b.rig, t, c, st, true, 1.f / 90, 1.f, 1.f);
+        check(r.solved, "spin not reported solved");
+        check(length(p2.position(b.rig.head) - head0) < 1e-3f, "spin moved the head (pivot)");
+        const Vec3 wantPelvis = head0 + spin.rotate(pelvis0 - head0);
+        const Vec3 wantFoot = head0 + spin.rotate(foot0 - head0);
+        check(length(p2.position(b.rig.pelvis) - wantPelvis) < 1e-3f, "pelvis not turned about the head");
+        check(length(p2.position(b.rig.legs[0].foot) - wantFoot) < 1e-3f, "feet not turned with the body");
+    });
+
+    test("ANIMATED ONLY / AIR SPIN: off by default, rows after MODEL YAW, kept in spidy_vr.ini", [] {
+        using namespace vr_settings;
+        Values v;
+        check(!v.animatedOnly && v.animatedAirSpin == 0 && defaultChoice(Item::animatedOnly) == 0 &&
+                  defaultChoice(Item::animatedAirSpin) == 0,
+              "ANIMATED ONLY / AIR SPIN on by default");
+        check(choose(Item::animatedOnly, 1, v) && v.animatedOnly && choice(Item::animatedOnly, v) == 1,
+              "ANIMATED ONLY not switched on");
+        check(choose(Item::animatedAirSpin, 2, v) && v.animatedAirSpin == 2 && choice(Item::animatedAirSpin, v) == 2,
+              "AIR SPIN not set to FLIPS + MOMENTUM");
+        const auto text = tabOnlyText(v);
+        check(text.find("animated_only=1\n") != std::string::npos &&
+                  text.find("animated_air_spin=2\n") != std::string::npos,
+              "spidy_vr.ini does not keep ANIMATED ONLY / AIR SPIN");
+        check(withTabOnly({}, "animated_only=1\nanimated_air_spin=1\n").animatedOnly &&
+                  withTabOnly({}, "animated_air_spin=1\n").animatedAirSpin == 1 &&
+                  !withTabOnly({}, "").animatedOnly && withTabOnly({}, "").animatedAirSpin == 0,
+              "spidy_vr.ini read back wrong");
+        Values wild;
+        wild.animatedAirSpin = 9;
+        check(sanitized(wild).animatedAirSpin == 2, "AIR SPIN not clamped");
+        const auto& all = rows();
+        check(all[90].item == Item::animatedOnly && std::strcmp(all[90].title, "ANIMATED ONLY") == 0 &&
+                  all[90].choices.empty() && all[90].place == Place::tab,
+              "ANIMATED ONLY row");
+        check(all[91].item == Item::animatedAirSpin && std::strcmp(all[91].title, "ANIMATED AIR SPIN") == 0 &&
+                  all[91].choices.size() == 3 && std::strcmp(all[91].choices[2], "FLIPS + MOMENTUM") == 0 &&
+                  all[91].place == Place::tab,
+              "ANIMATED AIR SPIN row");
+        check(lastItem == Item::animatedAirSpin, "AIR SPIN not the last item");
+    });
+
+    test("ANIMATED ONLY: every gameplay state yields, no web interrupt, cutscene grace", [] {
+        using namespace animated_moves;
+        head_probe::StateInputs s;
+        s.playing = s.fresh = true;
+        s.owned = true;
+        const Gate plain{true, true, false}, only{true, true, true};
+        check(!stays(Gate{false, false, true}) && stays(only) && !stays(plain), "stays gate");
+        // Wall (mod's own wall): OG reclaims, ANIMATED ONLY keeps the anim.
+        s.wall = 1;
+        check(!yieldsBody(plain, s) && yieldsBody(only, s), "wall not kept");
+        s.wall = 0;
+        s.fighting = true; // combat
+        check(!yieldsBody(plain, s) && yieldsBody(only, s), "combat not kept");
+        s.fighting = false;
+        s.zipping = true;
+        check(!yieldsBody(plain, s) && yieldsBody(only, s), "zip not kept");
+        s.zipping = false;
+        // Freefall web intent without arms tears the plain yield down, not ONLY.
+        check(!yieldsBody(plain, s, true, false) && yieldsBody(only, s, true, false), "web interrupt in ONLY");
+        // Cutscene: never yields raw.
+        s.fresh = false;
+        check(!yieldsBody(only, s), "cutscene yielded raw");
+        // Nothing on: nothing yields.
+        check(!yieldsBody(Gate{false, false, true}, s), "ONLY alone yielded");
+        StayLatch latch;
+        check(latch.update(true, false, 0) && !latch.held, "raw yield");
+        check(latch.update(false, true, 100'000'000) && latch.held, "grace not held");
+        check(latch.update(false, true, 1'000'000'000) && latch.held, "grace dropped early");
+        check(latch.update(true, true, 1'100'000'000) && !latch.held, "re-entry not clean");
+        check(latch.update(false, true, 2'000'000'000), "second loss not held");
+        check(!latch.update(false, true, 2'000'000'000 + stayGraceNs) && !latch.held, "grace never ends");
+        check(!latch.update(false, false, 4'000'000'000), "not yielding held");
+    });
+
+    test("ANIMATED AIR SPIN: airborne only, flip passes through, momentum lean bounded, smooth out", [] {
+        using namespace animated_air_spin;
+        head_probe::StateInputs s;
+        s.playing = s.fresh = true;
+        s.owned = true;
+        check(airborne(s) && active(1, true, s) && !active(0, true, s) && !active(1, false, s), "air gate");
+        s.grounded = true;
+        check(!airborne(s), "ground spun");
+        s.grounded = false;
+        s.wall = 1;
+        check(!airborne(s), "wall spun");
+        s.wall = 0;
+        s.webbed = true;
+        check(airborne(s), "swing not airborne");
+        check(mode(0) == Mode::off && mode(1) == Mode::flips && mode(2) == Mode::momentum && mode(7) == Mode::momentum,
+              "modes");
+        // Diving: nose toward a falling velocity, capped.
+        const Lean dive = leanFor({0, -30, -5}, {}, {0, 0, -1});
+        check(std::abs(dive.pitch + maxDive) < 1e-3f, "dive not capped");
+        const Vec3 nose = dive.turn.rotate({0, 0, -1});
+        check(nose.y < -.8f, "dive nose not down");
+        const Lean climb = leanFor({0, 30, -5}, {}, {0, 0, -1});
+        check(std::abs(climb.pitch - maxClimb) < 1e-3f, "climb not capped");
+        // Slow: no lean.
+        check(angleOf(leanFor({0, -2, 1}, {}, {0, 0, -1}).turn) < 1e-4f, "slow leaned");
+        // Banking into a turn: up tips toward the lateral acceleration.
+        const Lean bank = leanFor({0, 0, -20}, {15, 0, 0}, {0, 0, -1});
+        const Vec3 up = bank.turn.rotate({0, 1, 0});
+        check(bank.bank > 0 && bank.bank <= maxBank + 1e-4f && up.x > .3f, "bank not into the turn");
+        check(!finiteQ(Quat{NAN, 0, 0, 1}) && angleOf(leanFor({NAN, 0, 0}, {}, {0, 0, -1}).turn) < 1e-6f,
+              "NaN velocity leaned");
+        // Flips mode: the tracker settles on the flip; momentum off leaves no lean.
+        Tracker t;
+        Inputs in;
+        in.active = true;
+        in.flipWorld = Quat::around({1, 0, 0}, 1.2f);
+        in.velocity = {0, -30, 0};
+        in.velocityFresh = true;
+        in.actorForward = {0, 0, -1};
+        in.dt = 1.f / 90;
+        Output o;
+        for (int i = 0; i < 300; ++i)
+            o = t.update(in);
+        check(std::abs(o.flipDeg - 1.2f / degree) < .5f && o.leanDeg < .01f, "flip not followed");
+        check(angleOf(Quat{o.hands.x - in.flipWorld.x, 0, 0, 1}) < 1e-3f, "hands not the raw flip");
+        in.momentum = true;
+        for (int i = 0; i < 300; ++i)
+            o = t.update(in);
+        check(o.leanDeg > 30 && o.pitchDeg < -30, "momentum lean missing");
+        // Inactive: both settle back to level without a snap on the first frame.
+        in.active = false;
+        o = t.update(in);
+        check(o.flipDeg > 10 && o.leanDeg > 10, "snapped to level on exit");
+        for (int i = 0; i < 400; ++i)
+            o = t.update(in);
+        check(o.bodyDeg < .05f && t.resting(), "never settled level");
+        check(angleOf(worldFlip(Quat{}, 1.f)) < 1e-5f, "identity flip turned");
     });
 
     test("HEAD PROBE: its own diagnostics ring; every line from named fields, within a line", [] {
