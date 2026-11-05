@@ -2205,33 +2205,10 @@ DWORD WINAPI run(void*) {
                         dodgeTumble.reset();
                     tumbleStepped = false;
                     rig.viewTurn(dodgeTumble.turn());
-                    // ANIMATED MOVES handoff: if last frame was yielding and this
-                    // frame's actor state no longer is, snap tracking over the
-                    // current feet BEFORE update so the first reclaim eyes/body
-                    // share the actor's place (not the pre-anim latch).
-                    if ((values.animatedMoves || values.animatedAir) && animatedMovesHandoff.yielding) {
-                        head_probe::StateInputs early;
-                        early.playing = gameplay && !flatScreen && !calibrationInput;
-                        early.fresh = swingFresh;
-                        early.grounded = swingState.grounded != 0;
-                        early.owned = swingState.owned != 0;
-                        early.webbed =
-                            swingState.webs[0].attached || swingState.webs[1].attached;
-                        early.zipping = zipping;
-                        early.fighting = fightLately;
-                        early.dodging = dodging;
-                        early.runRt = nativeRun.held();
-                        early.wall = swingState.wall;
-                        const animated_moves::Gate earlyGate{values.animatedMoves, values.animatedAir};
-                        // Previous-frame web buttons approximate intent for the early peek.
-                        const bool earlyWebIntent =
-                            values.triggerWebs
-                                ? (frame.hands[0].squeeze > .5f || frame.hands[1].squeeze > .5f)
-                                : (frame.hands[0].trigger > .5f || frame.hands[1].trigger > .5f);
-                        if (!animated_moves::yieldsBody(earlyGate, early, earlyWebIntent) && finite(feet) &&
-                            validTrackedPose(frame.head))
-                            rig.adoptFeet(feet, frame.head);
-                    }
+                    // ANIMATED MOVES: stable exit after the body block owns adoptFeet
+                    // (debounced). Speculative early adoptFeet on web-intent flicker
+                    // was snapping tracking every frame under Full head midair.
+
                     motion = rig.update(seated::raised(controller, seatRaise), feet, {camera[8], camera[9], camera[10]}, gameplay,
                                         swingState.owned ? Vec3{0, 1, 0} : heroUp,
                                         game_swing::airborne(swingState, now.QuadPart, frequency.QuadPart), hold,
@@ -2794,12 +2771,26 @@ DWORD WINAPI run(void*) {
                                     why = Fallback::stale;
                                 else if (!(f.handError >= 0 && f.handError <= web_aim::forearmMiss))
                                     why = Fallback::wristMiss;
+                                // ANIMATED ARMS yield: arm-only IK is not torso-anchored —
+                                // MODEL FOREARM would steer webs off the controller (logs:
+                                // forearm vs controller 55–134 deg with tiny wrist miss).
+                                else if (animatedMovesHandoff.yielding && values.animatedArms)
+                                    why = Fallback::armsOverlay;
                                 // A flip's tilt is no fallback since v6: the solve turns
                                 // the whole body back with it (body_ik step 7) and the
                                 // wrist miss check still guards the sample. V5 fell back
                                 // in 492 of 1134 forearm aim: lines for it.
                                 const Quat aimNow = input.hands[i].aim.orientation;
                                 Quat target{};
+                                if (why == Fallback::none) {
+                                    const Vec3 forearmDir = normalized(f.wrist - f.elbow);
+                                    const float align =
+                                        std::acos(std::clamp(
+                                            dot(forearmDir, aimNow.rotate({0, 0, -1})), -1.f, 1.f)) *
+                                        57.29578f;
+                                    if (std::isfinite(align) && align > web_aim::forearmAlignDegrees)
+                                        why = Fallback::misaligned;
+                                }
                                 if (why == Fallback::none) {
                                     target =
                                         web_aim::forearmTurn(web_aim::forearmInGrip(f.elbow, f.wrist, f.grip),
@@ -4260,7 +4251,8 @@ DWORD WINAPI run(void*) {
                                     : (frame.hands[0].trigger > .5f || frame.hands[1].trigger > .5f);
                             const animated_moves::Gate steerGate{values.animatedMoves, values.animatedAir};
                             if (animated_steering::active(
-                                    true, animated_moves::yieldsBody(steerGate, steerState, webAimIntent))) {
+                                    true, animated_moves::yieldsBody(steerGate, steerState, webAimIntent,
+                                                                       values.animatedArms))) {
                                 const Vec3 actorAhead{body[8], body[9], body[10]};
                                 const auto steered = animated_steering::actorRelativeForward(
                                     walk.right, walk.forward, actorAhead, motion.walkForwardAxis,
@@ -4976,44 +4968,49 @@ DWORD WINAPI run(void*) {
                                 ? (frame.hands[0].squeeze > .5f || frame.hands[1].squeeze > .5f)
                                 : (frame.hands[0].trigger > .5f || frame.hands[1].trigger > .5f);
                         const animated_moves::Gate animGate{values.animatedMoves, values.animatedAir};
-                        yieldAnim = animated_moves::yieldsBody(animGate, animState, webAimIntent);
+                        yieldAnim = animated_moves::yieldsBody(animGate, animState, webAimIntent,
+                                                               values.animatedArms);
                         animHeadMode = animated_moves::headFollowForYield(values.animatedHead, animState);
                         const bool headFollow =
                             animated_moves::followsHead(values.animatedHead, yieldAnim, animState) &&
                             !flatScreen;
                         game_fp::followHero(headFollow);
+                        const Vec3 nowFeet = finite(Vec3{body[12], body[13], body[14]})
+                                                 ? Vec3{body[12], body[13], body[14]}
+                                                 : motion.anchor;
+                        const int64_t handoffNs = frame.predictedDisplayTime > 0
+                                                      ? frame.predictedDisplayTime
+                                                      : static_cast<int64_t>(GetTickCount64()) * 1'000'000ll;
                         animatedMovesHandoff.update(yieldAnim);
                         if (animatedMovesHandoff.exit)
                             animatedArmsState = {};
-                        if (animatedMovesHandoff.enter || animatedMovesHandoff.exit) {
-                            const Vec3 nowFeet = finite(Vec3{body[12], body[13], body[14]})
-                                                     ? Vec3{body[12], body[13], body[14]}
-                                                     : motion.anchor;
-                            if (animatedMovesHandoff.enter) {
-                                animatedMovesYieldFeet = nowFeet;
-                                // Drop residual IK so the game anim is not fighting a fading VR body.
+                        const bool cancelledPending = animatedMovesHandoff.enter && animatedMovesHandoff.pendingExit;
+                        if (animatedMovesHandoff.enter) {
+                            animatedMovesYieldFeet = nowFeet;
+                            if (!cancelledPending)
                                 native_body::resyncAfterYield();
-                                diag_log::writef(
-                                    "animated moves: game anim drives body (%s) actor (%.1f, %.1f, %.1f)",
-                                    animated_moves::yieldName(animState), nowFeet.x, nowFeet.y, nowFeet.z);
-                            } else {
-                                // Yield exit: resync authoritative actor place BEFORE first mod-owned
-                                // pose/eyes. Distinguishes actor reset (feet moved) from camera/latch
-                                // reset (adoptFeet clears lean; head-follow latch cleared below).
-                                const Vec3 delta = nowFeet - animatedMovesYieldFeet;
-                                const float moved = finite(delta) ? length(delta) : -1.f;
-                                native_body::resyncAfterYield();
-                                if (finite(nowFeet) && validTrackedPose(frame.head))
-                                    rig.adoptFeet(nowFeet, frame.head);
-                                diag_log::writef(
-                                    "animated moves: mod body again (%s) actor (%.1f, %.1f, %.1f) "
-                                    "moved %.2f m since yield, head-follow was %s, adopt+ik resync",
-                                    animated_moves::yieldName(animState), nowFeet.x, nowFeet.y, nowFeet.z,
-                                    moved,
-                                    animatedHeadFollowWas ? animated_moves::headFollowName(animHeadMode)
-                                                          : "off");
-                            }
+                            diag_log::writef(
+                                "animated moves: game anim drives body (%s) actor (%.1f, %.1f, %.1f)%s",
+                                animated_moves::yieldName(animState), nowFeet.x, nowFeet.y, nowFeet.z,
+                                cancelledPending ? " (brief interrupt)" : "");
                             animatedMovesDiagAt = frame.predictedDisplayTime;
+                        }
+                        if (animatedMovesHandoff.consumeStableExit(handoffNs, nowFeet)) {
+                            const Vec3 feet =
+                                finite(nowFeet) ? nowFeet : animatedMovesHandoff.pendingExitFeet;
+                            const Vec3 delta = feet - animatedMovesYieldFeet;
+                            const float moved = finite(delta) ? length(delta) : -1.f;
+                            native_body::resyncAfterYield();
+                            if (finite(feet) && validTrackedPose(frame.head))
+                                rig.adoptFeet(feet, frame.head);
+                            diag_log::writef(
+                                "animated moves: mod body again (%s) actor (%.1f, %.1f, %.1f) "
+                                "moved %.2f m since yield, head-follow was %s, adopt+ik resync",
+                                animated_moves::yieldName(animState), feet.x, feet.y, feet.z, moved,
+                                animatedHeadFollowWas ? animated_moves::headFollowName(animHeadMode)
+                                                      : "off");
+                            animatedMovesDiagAt = frame.predictedDisplayTime;
+                        }
                         } else if (yieldAnim &&
                                    frame.predictedDisplayTime - animatedMovesDiagAt > 2'000'000'000) {
                             diag_log::writef("animated moves: still yielding (%s)",
