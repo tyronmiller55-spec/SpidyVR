@@ -83,6 +83,7 @@
 #include "spidy/animated_steering.hpp"
 #include "spidy/animated_arms.hpp"
 #include "spidy/animated_torso.hpp"
+#include "spidy/animated_model_yaw.hpp"
 // Stand-ins for the game's classes, by the names the target scan's rules look
 // for: MSVC lays out their type information as it did the game's.
 class Component {
@@ -1811,7 +1812,7 @@ int main() {
     });
     test("slingshot settings append to the old wire format and default off", [] {
         game_swing::Settings s;
-        check(s.version == 37 && s.bytes == 172 && !s.webSlingshot, "wrong slingshot defaults");
+        check(s.version == 38 && s.bytes == 176 && !s.webSlingshot, "wrong slingshot defaults");
         check(offsetof(game_swing::Settings, webSlingshot) == 48, "old settings moved");
         s.webSlingshot = 1; check(game_swing::validSettings(s), "ON refused");
         s.webSlingshot = 2; check(!game_swing::validSettings(s), "invalid switch accepted");
@@ -2474,7 +2475,7 @@ int main() {
         check(vr_settings::choose(vr_settings::Item::betterClimbing, 1, v), "ON failed");
         check(vr_settings::withTabOnly({}, vr_settings::tabOnlyText(v)).betterClimbing, "switch not saved");
         game_swing::Settings s;
-        check(s.version == 37 && s.bytes == 172 && offsetof(game_swing::Settings, betterClimbing) == 52,
+        check(s.version == 38 && s.bytes == 176 && offsetof(game_swing::Settings, betterClimbing) == 52,
               "settings moved old fields");
         s.betterClimbing = 1; check(game_swing::validSettings(s), "ON refused");
         s.betterClimbing = 2; check(!game_swing::validSettings(s), "invalid switch accepted");
@@ -3830,7 +3831,7 @@ int main() {
     test("merged settings keep phone suppression, arcade webs and hand climbing independent", [] {
         using namespace game_swing;
         Settings s;
-        check(s.version == 37 && s.bytes == 172, "updated settings did not append the climbing field");
+        check(s.version == 38 && s.bytes == 176, "updated settings did not append the climbing field");
         check(offsetof(Settings, noBlows) == 36 && offsetof(Settings, arcade) == 40 &&
               offsetof(Settings, handClimb) == 44, "upstream phone or arcade fields moved");
         s.noBlows = 3;
@@ -9920,7 +9921,7 @@ int main() {
         Swing fresh(inert());
         check(!fresh.webLandingSmoothEnabled() && !fresh.landCarrying(), "SMOOTH WEB LANDING on by default");
         game_swing::Settings packet;
-        check(packet.version == 37 && packet.bytes == 172 && !packet.webLandingSmooth &&
+        check(packet.version == 38 && packet.bytes == 176 && !packet.webLandingSmooth &&
                   packet.webLandingImpact == 24 &&
                   offsetof(game_swing::Settings, webLandingSmooth) == game_swing::settingsBytesV29,
               "SMOOTH WEB LANDING not appended, or on by default");
@@ -10074,7 +10075,7 @@ int main() {
         Swing fresh(inert());
         check(!fresh.groundRunEnabled() && !fresh.groundRunning(), "SPIDY RUN on by default");
         game_swing::Settings packet;
-        check(packet.version == 37 && packet.bytes == 172 && !packet.spidyRun &&
+        check(packet.version == 38 && packet.bytes == 176 && !packet.spidyRun &&
                   offsetof(game_swing::Settings, spidyRun) == game_swing::settingsBytesV27,
               "SPIDY RUN not appended, or on by default");
         packet.spidyRun = 2;
@@ -10212,7 +10213,7 @@ int main() {
             check(!sw.groundRunning(), "the air started a run from standing");
         }
         game_swing::Settings packet;
-        check(packet.version == 37 && packet.bytes == 172 && !packet.spidyRunStanding &&
+        check(packet.version == 38 && packet.bytes == 176 && !packet.spidyRunStanding &&
                   offsetof(game_swing::Settings, spidyRunStanding) == game_swing::settingsBytesV28,
               "SPIDY RUN FROM STANDING not appended, or on by default");
         packet.spidyRunStanding = 2;
@@ -22727,7 +22728,7 @@ int main() {
     test("free combat: settings default to called combat and preserve older packet layouts", [] {
         using namespace game_swing;
         Settings s;
-        check(s.version == 37 && s.bytes == 172 && s.combatVisuals == 1 &&
+        check(s.version == 38 && s.bytes == 176 && s.combatVisuals == 1 &&
                   offsetof(Settings, combatVisuals) == 56,
               "free combat broke the settings defaults or layout");
         s.combatVisuals = 0;
@@ -22774,7 +22775,7 @@ int main() {
         check(withTabOnly(Values{}, "single_hand_yank_percent=999\n").singleHandYankPercent == 300,
               "saved single-hand yank strength was not clamped");
         game_swing::Settings packet;
-        check(packet.version == 37 && packet.bytes == 172 && !packet.halfPunchDamage &&
+        check(packet.version == 38 && packet.bytes == 176 && !packet.halfPunchDamage &&
                   packet.singleHandYankPercent == 100 &&
                   offsetof(game_swing::Settings, halfPunchDamage) == 96 &&
                   offsetof(game_swing::Settings, singleHandYankPercent) == 100,
@@ -23375,8 +23376,8 @@ int main() {
                                   Item::automaticHandStrength, Item::automaticFalloff,     Item::automaticHandThreshold,
                                   Item::automaticAirBrake,     Item::automaticCombat};
         // The realistic flips' rows come last, after the EXPERIMENTAL rows before them
-        // (ANIMATED TORSO sits at 88 after ANIMATED ARMS at 87).
-        constexpr size_t firstRealistic = 89;
+        // (ANIMATED MODEL YAW sits at 89 after ANIMATED TORSO at 88).
+        constexpr size_t firstRealistic = 90;
         check(all.size() == firstRealistic + std::size(realistic), "the realistic flips' rows are not the last");
         for (size_t i = 0; i < std::size(realistic); ++i)
             check(all[firstRealistic + i].item == realistic[i], "the realistic flips' rows out of order");
@@ -23584,7 +23585,7 @@ int main() {
                                                          : Place::tab),
                   "a row in the wrong place");
         }
-        check(std::count_if(all.begin(), all.end(), [](const Row& r) { return r.place == Place::tab; }) == 95,
+        check(std::count_if(all.begin(), all.end(), [](const Row& r) { return r.place == Place::tab; }) == 96,
               "the tab's own rows");
         check(all[1].item == Item::webStyle && std::strcmp(all[1].title, "WEB STYLE") == 0 &&
                   all[1].choices.size() == 2 && std::strcmp(all[1].choices[0], "REALISTIC") == 0 &&
@@ -23843,7 +23844,7 @@ int main() {
                   "flip_reprojection=0\nsteady_hud=0\nreel_haptics=0\nswing_haptics=0\n"
                   "pc_media=0\nsingle_hand_yank_percent=100\nweb_tie=0\nnative_run=0\nair_slingshot=0\nweb_angle_"
                   "degrees=0\nwrist_shooters=0\n"
-                  "dodge_tumble=0\nrun_curve=0\nnative_run_at_percent=70\nrun_logs=0\nrunning_leap=0\nearly_jump=0\nsoft_landing=0\nspidy_run=0\nspidy_run_from_standing=0\nweb_aim_source=0\nforearm_blend=100\nweb_landing_smooth=0\nweb_landing_impact_speed=24\nsteady_states=0\ncombat_responsive=0\nspidy_run_jump=1\nforearm_aim_limit=180\npalm_shooters=0\nhead_probe=0\nanimated_moves=0\nanimated_head=0\nanimated_air=0\nanimated_steering=0\nanimated_arms=0\nanimated_torso=0\n",
+                  "dodge_tumble=0\nrun_curve=0\nnative_run_at_percent=70\nrun_logs=0\nrunning_leap=0\nearly_jump=0\nsoft_landing=0\nspidy_run=0\nspidy_run_from_standing=0\nweb_aim_source=0\nforearm_blend=100\nweb_landing_smooth=0\nweb_landing_impact_speed=24\nsteady_states=0\ncombat_responsive=0\nspidy_run_jump=1\nforearm_aim_limit=180\npalm_shooters=0\nhead_probe=0\nanimated_moves=0\nanimated_head=0\nanimated_air=0\nanimated_steering=0\nanimated_arms=0\nanimated_torso=0\nanimated_model_yaw=0\n",
               "the defaults' text");
         Values changed = defaults;
         changed.recordingFov = 140;
@@ -26447,7 +26448,7 @@ int main() {
               "HEAD PROBE: a switch in the tab after PALM SHOOTERS");
         check(all[83].item == Item::animatedMoves, "ANIMATED MOVES not after HEAD PROBE");
         game_swing::Settings s;
-        check(s.version == 37 && s.bytes == 172 && !s.headProbe &&
+        check(s.version == 38 && s.bytes == 176 && !s.headProbe &&
                   offsetof(game_swing::Settings, headProbe) == game_swing::settingsBytesV30,
               "HEAD PROBE not appended to the swing's settings, or on by default");
         s.headProbe = 1;
@@ -26483,7 +26484,7 @@ int main() {
               "ANIMATED MOVES: a switch in the tab after HEAD PROBE");
         check(all[84].item == Item::animatedHead, "ANIMATED HEAD not after ANIMATED MOVES");
         game_swing::Settings s;
-        check(s.version == 37 && s.bytes == 172 && !s.animatedMoves &&
+        check(s.version == 38 && s.bytes == 176 && !s.animatedMoves &&
                   offsetof(game_swing::Settings, animatedMoves) == game_swing::settingsBytesV31,
               "ANIMATED MOVES not appended to the swing's settings, or on by default");
         s.animatedMoves = 1;
@@ -26553,7 +26554,7 @@ int main() {
               "ANIMATED HEAD: Off|Level|Full in the tab after ANIMATED MOVES");
         check(all[85].item == Item::animatedAir, "ANIMATED AIR not after ANIMATED HEAD");
         game_swing::Settings s;
-        check(s.version == 37 && s.bytes == 172 && !s.animatedHead &&
+        check(s.version == 38 && s.bytes == 176 && !s.animatedHead &&
                   offsetof(game_swing::Settings, animatedHead) == game_swing::settingsBytesV32,
               "ANIMATED HEAD not at v32 offset, or on by default");
         s.animatedHead = 2;
@@ -26659,7 +26660,7 @@ int main() {
         check(all[86].item == Item::animatedSteering, "ANIMATED STEERING not after ANIMATED AIR");
         check(all[87].item == Item::animatedArms, "ANIMATED ARMS not after ANIMATED STEERING");
         game_swing::Settings s;
-        check(s.version == 37 && s.bytes == 172 && !s.animatedAir &&
+        check(s.version == 38 && s.bytes == 176 && !s.animatedAir &&
                   offsetof(game_swing::Settings, animatedAir) == game_swing::settingsBytesV33,
               "ANIMATED AIR not appended to the swing's settings, or on by default");
         s.animatedAir = 1;
@@ -26734,7 +26735,7 @@ int main() {
               "ANIMATED STEERING: a switch in the tab after ANIMATED AIR");
         check(all[87].item == Item::animatedArms, "ANIMATED ARMS not after ANIMATED STEERING");
         game_swing::Settings s;
-        check(s.version == 37 && s.bytes == 172 && !s.animatedSteering &&
+        check(s.version == 38 && s.bytes == 176 && !s.animatedSteering &&
                   offsetof(game_swing::Settings, animatedSteering) == game_swing::settingsBytesV34,
               "ANIMATED STEERING not appended, or on by default");
         s.animatedSteering = 1;
@@ -26789,7 +26790,7 @@ int main() {
               "ANIMATED ARMS: a switch in the tab after ANIMATED STEERING");
         check(all[88].item == Item::animatedTorso, "ANIMATED TORSO not after ANIMATED ARMS");
         game_swing::Settings s;
-        check(s.version == 37 && s.bytes == 172 && !s.animatedArms &&
+        check(s.version == 38 && s.bytes == 176 && !s.animatedArms &&
                   offsetof(game_swing::Settings, animatedArms) == game_swing::settingsBytesV35,
               "ANIMATED ARMS offset wrong, or on by default");
         s.animatedArms = 1;
@@ -26910,10 +26911,9 @@ int main() {
                   std::strcmp(all[88].title, "ANIMATED TORSO") == 0 && all[88].choices.empty() &&
                   all[88].place == Place::tab && all[87].item == Item::animatedArms,
               "ANIMATED TORSO: a switch in the tab after ANIMATED ARMS");
-        check(lastItem == Item::animatedTorso && static_cast<unsigned>(lastItem) < 256,
-              "ANIMATED TORSO not the last item");
+        check(all[89].item == Item::animatedModelYaw, "ANIMATED MODEL YAW not after TORSO");
         game_swing::Settings s;
-        check(s.version == 37 && s.bytes == 172 && !s.animatedTorso &&
+        check(s.version == 38 && s.bytes == 176 && !s.animatedTorso &&
                   offsetof(game_swing::Settings, animatedTorso) == game_swing::settingsBytesV36,
               "ANIMATED TORSO not appended, or on by default");
         s.animatedTorso = 1;
@@ -27027,6 +27027,62 @@ int main() {
         body::solve(p3, b.rig, t, c, st, true, 1.f / 90, 1.f, 1.f);
         check(st.overlayTorsoYaw == 0 && st.overlayTorsoPitch == 0, "assist off left residual angles");
         check(length(p3.position(b.rig.legs[0].foot) - footL0) < 1e-3f, "assist-off moved feet");
+    });
+
+    test("ANIMATED MODEL YAW: off by default, after TORSO, swing settings version 38", [] {
+        using namespace vr_settings;
+        Values v;
+        check(!v.animatedModelYaw && defaultChoice(Item::animatedModelYaw) == 0, "MODEL YAW on by default");
+        check(choose(Item::animatedModelYaw, 1, v) && v.animatedModelYaw &&
+                  choice(Item::animatedModelYaw, v) == 1,
+              "not switched on");
+        check(tabOnlyText(v).find("animated_model_yaw=1\n") != std::string::npos &&
+                  withTabOnly({}, "animated_model_yaw=1\n").animatedModelYaw &&
+                  !withTabOnly({}, "animated_model_yaw=0\n").animatedModelYaw &&
+                  !withTabOnly({}, "").animatedModelYaw,
+              "spidy_vr.ini does not keep MODEL YAW");
+        const auto& all = rows();
+        check(all[89].item == Item::animatedModelYaw &&
+                  std::strcmp(all[89].title, "ANIMATED MODEL YAW") == 0 && all[89].choices.empty() &&
+                  all[89].place == Place::tab && all[88].item == Item::animatedTorso,
+              "MODEL YAW row after TORSO");
+        check(lastItem == Item::animatedModelYaw && static_cast<unsigned>(lastItem) < 256,
+              "MODEL YAW not the last item");
+        game_swing::Settings s;
+        check(s.version == 38 && s.bytes == 176 && !s.animatedModelYaw &&
+                  offsetof(game_swing::Settings, animatedModelYaw) == game_swing::settingsBytesV37,
+              "MODEL YAW not appended, or on by default");
+        s.animatedModelYaw = 1;
+        check(game_swing::validSettings(s), "MODEL YAW refused");
+        s.animatedModelYaw = 2;
+        check(!game_swing::validSettings(s), "invalid MODEL YAW accepted");
+        s = {};
+        s.version = 37;
+        s.bytes = game_swing::settingsBytesV37;
+        check(game_swing::validSettings(s), "version 37 settings packet refused");
+    });
+
+    test("ANIMATED MODEL YAW: walk-facing stick, deadzone, no camera substitute", [] {
+        using namespace animated_model_yaw;
+        Vec3 actor{0, 0, 1}, af{0, 0, 1}, ar{1, 0, 0};
+        // Deadzone: R stick quiet leaves L stick alone.
+        auto s = apply(0.f, .8f, .1f, actor, af, ar);
+        check(std::abs(s.forward - .8f) < 1e-4f && std::abs(s.right) < 1e-4f, "deadzone moved stick");
+        // Standing yaw right: left stick asks toward +X (actor's right) in this frame.
+        s = apply(0.f, 0.f, 1.f, actor, af, ar);
+        check(s.right > .2f && std::abs(s.forward) < .35f, "standing yaw not lateral");
+        check(std::hypot(s.right, s.forward) <= turnTilt + 1e-3f, "tilt over cap");
+        // Standing yaw left.
+        s = apply(0.f, 0.f, -1.f, actor, af, ar);
+        check(s.right < -.2f, "left yaw wrong side");
+        // Active walk + yaw keeps finite stick within unit circle.
+        s = apply(0.f, 1.f, .8f, actor, af, ar);
+        check(std::hypot(s.right, s.forward) <= 1.f + 1e-4f, "composed stick over unit");
+        check(active(true, true) && !active(true, false) && !active(false, true), "active gate");
+        // Actor-relative: turning does not use view/camera axes as facing write —
+        // worldToStick of actor forward is pure forward.
+        auto fwd = worldToStick(actor, af, ar, 1.f);
+        check(fwd.forward > .9f && std::abs(fwd.right) < .1f, "worldToStick forward");
     });
 
     test("HEAD PROBE: its own diagnostics ring; every line from named fields, within a line", [] {
