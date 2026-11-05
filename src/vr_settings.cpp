@@ -467,7 +467,7 @@ Values sanitized(Values v) {
 }
 const std::array<Row, 99>& rows() {
     // The help fits the game's description column beside the rows.
-    static const std::array<Row, 98> all{{
+    static const std::array<Row, 99> all{{
         {Item::none, "WEBS", nullptr, {}},
         {Item::webStyle, "WEB STYLE",
          "Arcade: webs pass lamp posts, signs and cars, and swings stay above the street.", webStyleChoices},
