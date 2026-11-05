@@ -396,6 +396,8 @@ template <class V> auto switchOf(Item item, V& v) -> decltype(&v.aimMarkers) {
         return &v.animatedMoves;
     case Item::animatedAir:
         return &v.animatedAir;
+    case Item::animatedSteering:
+        return &v.animatedSteering;
     case Item::webLandingSmooth:
         return &v.webLandingSmooth;
     case Item::softLanding:
@@ -461,9 +463,9 @@ Values sanitized(Values v) {
     v.automaticHandThreshold = std::clamp(v.automaticHandThreshold, 50, 300);
     return v;
 }
-const std::array<Row, 97>& rows() {
+const std::array<Row, 98>& rows() {
     // The help fits the game's description column beside the rows.
-    static const std::array<Row, 97> all{{
+    static const std::array<Row, 98> all{{
         {Item::none, "WEBS", nullptr, {}},
         {Item::webStyle, "WEB STYLE",
          "Arcade: webs pass lamp posts, signs and cars, and swings stay above the street.", webStyleChoices},
@@ -691,6 +693,8 @@ const std::array<Row, 97>& rows() {
          animatedHeadChoices},
         {Item::animatedAir, "ANIMATED AIR",
          "Game anim drives the body in freefall/swing/web air; mod keeps physics.", {}},
+        {Item::animatedSteering, "ANIMATED STEERING",
+         "While yielding: stick magnitude runs Spidey along his facing (no model yaw).", {}},
         {Item::realisticFlips,
          "REALISTIC FLIPS",
          "Momentum rotation from arms and webs. FLIPS also enables left-stick steering.",
@@ -958,6 +962,7 @@ constexpr TabOnly tabOnly[] = {
     {"animated_moves", &Values::animatedMoves, nullptr},
     {"animated_head", nullptr, &Values::animatedHead},
     {"animated_air", &Values::animatedAir, nullptr},
+    {"animated_steering", &Values::animatedSteering, nullptr},
 };
 } // namespace
 std::string tabOnlyText(const Values& v) {

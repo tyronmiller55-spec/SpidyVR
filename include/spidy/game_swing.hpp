@@ -304,7 +304,7 @@ inline bool gameOwnsGround(bool fresh, const Data& d) {
 // Version 8 appends handClimb without changing the upstream phone or arcade
 // fields. Older official settings keep their original layout and meaning.
 struct Settings {
-    uint32_t magic = 0x53575354, version = 34, bytes = sizeof(Settings), grab = 1;
+    uint32_t magic = 0x53575354, version = 35, bytes = sizeof(Settings), grab = 1;
     float maxSpeed = 32;
     uint32_t airWebs = 1;
     float gravity = 6;
@@ -355,6 +355,9 @@ struct Settings {
     // for freefall / swing / web air. Physics stays with the swing; the module
     // only accepts the switch (animated_moves.hpp). Off by default.
     uint32_t animatedAir{};
+    // Version 35 (ANIMATED STEERING): while yielding, L-stick along actor
+    // facing. No model-yaw write. Off by default (animated_steering.hpp).
+    uint32_t animatedSteering{};
 };
 constexpr uint32_t settingsBytesV3 = 28, settingsBytesV4 = 32, settingsBytesV5 = 36, settingsBytesV6 = 40,
                    settingsBytesV7 = 44, settingsBytesV8 = 48, settingsBytesV9 = 52, settingsBytesV10 = 56,
@@ -365,8 +368,8 @@ constexpr uint32_t settingsBytesV3 = 28, settingsBytesV4 = 32, settingsBytesV5 =
                    settingsBytesV25 = 120, settingsBytesV26 = 124,
                    settingsBytesV27 = 128, settingsBytesV28 = 132, settingsBytesV29 = 136,
                    settingsBytesV30 = 144, settingsBytesV31 = 148, settingsBytesV32 = 152,
-                   settingsBytesV33 = 156;
-static_assert(sizeof(Settings) == 160 && offsetof(Settings, walls) == settingsBytesV3 &&
+                   settingsBytesV33 = 156, settingsBytesV34 = 160;
+static_assert(sizeof(Settings) == 164 && offsetof(Settings, walls) == settingsBytesV3 &&
               offsetof(Settings, physical) == settingsBytesV4 &&
               offsetof(Settings, noBlows) == settingsBytesV5 &&
               offsetof(Settings, arcade) == settingsBytesV6 &&
@@ -396,7 +399,8 @@ static_assert(sizeof(Settings) == 160 && offsetof(Settings, walls) == settingsBy
               offsetof(Settings, headProbe) == settingsBytesV30 &&
               offsetof(Settings, animatedMoves) == settingsBytesV31 &&
               offsetof(Settings, animatedHead) == settingsBytesV32 &&
-              offsetof(Settings, animatedAir) == settingsBytesV33);
+              offsetof(Settings, animatedAir) == settingsBytesV33 &&
+              offsetof(Settings, animatedSteering) == settingsBytesV34);
 // SpidySwingWebTurns (WEB AIM: MODEL FOREARM, web_aim::ForearmAim): the turn
 // each hand's aim pose takes before WEB ANGLE and WRIST SHOOTERS, in the aim
 // pose's own frame, sent by the VR worker each frame while the setting is on
@@ -572,7 +576,8 @@ inline bool validSettings(const Settings& s) {
          (s.version == 31 && s.bytes == settingsBytesV31) ||
          (s.version == 32 && s.bytes == settingsBytesV32) ||
          (s.version == 33 && s.bytes == settingsBytesV33) ||
-         (s.version == 34 && s.bytes == sizeof(Settings))) &&
+         (s.version == 34 && s.bytes == settingsBytesV34) ||
+         (s.version == 35 && s.bytes == sizeof(Settings))) &&
         s.grab <= 1 && std::isfinite(s.maxSpeed) && s.maxSpeed > 0 && s.maxSpeed <= motionSpeedLimit &&
         s.airWebs <= 1 && std::isfinite(s.gravity) && s.gravity >= 0 && s.gravity <= maxGravity &&
         s.walls <= 4 && s.physical <= 1 && s.noBlows <= 3 && s.arcade <= 1 && s.handClimb <= 1 &&
@@ -592,7 +597,8 @@ inline bool validSettings(const Settings& s) {
         (s.version < 31 || s.headProbe <= 1) &&
         (s.version < 32 || s.animatedMoves <= 1) &&
         (s.version < 33 || s.animatedHead <= 2) &&
-        (s.version < 34 || s.animatedAir <= 1);
+        (s.version < 34 || s.animatedAir <= 1) &&
+        (s.version < 35 || s.animatedSteering <= 1);
 }
 static_assert(sizeof(WebState) == 28 && sizeof(Data) == 272 && offsetof(Data, wall) == 240);
 // The player is in the air: Spidy's own flight, or the game's jump or fall,

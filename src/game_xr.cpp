@@ -54,6 +54,7 @@
 #include "spidy/ground_state.hpp"
 #include "spidy/head_probe.hpp"
 #include "spidy/animated_moves.hpp"
+#include "spidy/animated_steering.hpp"
 #include "spidy/frame_stats.hpp"
 #include "spidy/seated.hpp"
 #include "spidy/slow_motion.hpp"
@@ -1502,6 +1503,7 @@ DWORD WINAPI run(void*) {
             s.animatedMoves = values.animatedMoves;
             s.animatedHead = static_cast<uint32_t>(values.animatedHead);
             s.animatedAir = values.animatedAir;
+            s.animatedSteering = values.animatedSteering;
             s.webLandingImpact = static_cast<float>(values.webLandingImpact);
             s.webAngle = values.webAngle;
             s.wristShooters = values.palmShooters ? 2u : values.wristShooters ? 1u : 0u;
@@ -4228,6 +4230,40 @@ DWORD WINAPI run(void*) {
                                 gadgetFire = command.equip != 0;
                                 command.fire = gadgetFire ? 1u : 0u;
                                 wheelShooter(&command);
+                            }
+                        }
+                        // ANIMATED STEERING (off by default): while pose yield is
+                        // active, left-stick magnitude runs along the actor's
+                        // facing (read from game.player). No right-stick model
+                        // yaw write — CameraLook / tracking yaw stay as they are
+                        // so we do not fake model turn with view turn.
+                        if (values.animatedSteering && !walk.dodge && !calibrationInput &&
+                            mapping == game_pad::Mapping::gameplay) {
+                            head_probe::StateInputs steerState;
+                            steerState.playing = steering && !calibrationInput;
+                            steerState.fresh = swingFresh;
+                            steerState.grounded = swingState.grounded != 0;
+                            steerState.owned = swingState.owned != 0;
+                            steerState.webbed =
+                                swingState.webs[0].attached || swingState.webs[1].attached;
+                            steerState.zipping = zipping;
+                            steerState.fighting = fightLately;
+                            steerState.dodging = dodging;
+                            steerState.runRt = nativeRun.held();
+                            steerState.wall = swingState.wall;
+                            const bool webAimIntent =
+                                values.triggerWebs
+                                    ? (frame.hands[0].squeeze > .5f || frame.hands[1].squeeze > .5f)
+                                    : (frame.hands[0].trigger > .5f || frame.hands[1].trigger > .5f);
+                            const animated_moves::Gate steerGate{values.animatedMoves, values.animatedAir};
+                            if (animated_steering::active(
+                                    true, animated_moves::yieldsBody(steerGate, steerState, webAimIntent))) {
+                                const Vec3 actorAhead{body[8], body[9], body[10]};
+                                const auto steered = animated_steering::actorRelativeForward(
+                                    walk.right, walk.forward, actorAhead, motion.walkForwardAxis,
+                                    motion.walkRightAxis);
+                                walk.right = steered.right;
+                                walk.forward = steered.forward;
                             }
                         }
                         auto pad = game_pad::fromControllers(buttons, mapping, walk);

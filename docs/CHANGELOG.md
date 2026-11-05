@@ -7,6 +7,23 @@ Per-check results are in [VALIDATION.md](VALIDATION.md).
 
 Not in a build yet, newest first. The release adds these to the next build's entry.
 
+**ANIMATED STEERING: while yielding, left-stick magnitude runs along Spidey's facing (opt-in, off by default).**
+
+- **Why.** During pose yield the game's stick is camera-relative; the player asked
+  for tank-style "any left stick = forward relative Spidey" with right-stick
+  whole-model yaw. Actor facing is readable from `game.player`;
+  `native_movement::Command` has velocity only — no proven facing write.
+- **ANIMATED STEERING** (`animated_steering`, off; tab after ANIMATED AIR; swing
+  settings version 35). While MOVES/AIR yields: remap L-stick so magnitude
+  drives along the actor's horizontal forward (camera stick axes). Deadzone
+  0.15. Skips dodge / non-gameplay mapping. Outside yield: unchanged (no
+  double-apply).
+- **Not implemented (honest).** Right-stick whole-model yaw; midair spherical
+  orientation. Do not fake with CameraLook or GameTrackingRig view yaw. Headset
+  free look and ANIMATED HEAD (ground Full / air Level) unchanged.
+- **Tests.** Remap along ±Z/±X, deadzone, NaN/vertical refuse, active gate;
+  settings/ini. Not headset-verified.
+
 **ANIMATED AIR: game anim drives the body in freefall/swing/web air (opt-in, off by default).**
 
 - **Why.** After ground ANIMATED MOVES + HEAD, unlock air traversal poses without

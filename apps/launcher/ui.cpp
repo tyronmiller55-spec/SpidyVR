@@ -1903,6 +1903,11 @@ void App::options(ImVec2 origin, ImVec2 size) {
                "The mod keeps swing physics (direction and velocity). Zip, wall-run and combat stay with "
                "the VR body. Freefall web aim reclaims the body immediately. Off by default.",
                S(42), [&] { tabToggle("##animatedair", Item::animatedAir); });
+        option("Animated steering (experimental)",
+               "While Animated moves/air yields: left-stick magnitude runs Spidey along his current facing "
+               "(actor transform), not camera-relative. Right-stick whole-model yaw is not available yet "
+               "(no proven actor facing write). Off by default. Outside yield, sticks are unchanged.",
+               S(42), [&] { tabToggle("##animatedsteering", Item::animatedSteering); });
         option("Web aim (experimental)",
                "MODEL FOREARM: your webs leave along the forearm of the Spider-Man body you see, rather than "
                "along the controller, and go back to the controller's line whenever the body cannot say "
