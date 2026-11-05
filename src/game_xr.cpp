@@ -55,6 +55,7 @@
 #include "spidy/head_probe.hpp"
 #include "spidy/animated_moves.hpp"
 #include "spidy/animated_steering.hpp"
+#include "spidy/animated_arms.hpp"
 #include "spidy/frame_stats.hpp"
 #include "spidy/seated.hpp"
 #include "spidy/slow_motion.hpp"
@@ -1030,6 +1031,7 @@ DWORD WINAPI run(void*) {
         head_probe::Probe::Lines headProbeLines;
         bool headProbeWas{};
         animated_moves::Handoff animatedMovesHandoff{};
+        animated_arms::State animatedArmsState{};
         int64_t animatedMovesDiagAt{};
         bool animatedHeadFollowWas{};
         Vec3 animatedMovesYieldFeet{}; // actor feet when yield began (diag: actor vs latch)
@@ -1504,6 +1506,7 @@ DWORD WINAPI run(void*) {
             s.animatedHead = static_cast<uint32_t>(values.animatedHead);
             s.animatedAir = values.animatedAir;
             s.animatedSteering = values.animatedSteering;
+            s.animatedArms = values.animatedArms;
             s.webLandingImpact = static_cast<float>(values.webLandingImpact);
             s.webAngle = values.webAngle;
             s.wristShooters = values.palmShooters ? 2u : values.wristShooters ? 1u : 0u;
@@ -4980,6 +4983,8 @@ DWORD WINAPI run(void*) {
                             !flatScreen;
                         game_fp::followHero(headFollow);
                         animatedMovesHandoff.update(yieldAnim);
+                        if (animatedMovesHandoff.exit)
+                            animatedArmsState = {};
                         if (animatedMovesHandoff.enter || animatedMovesHandoff.exit) {
                             const Vec3 nowFeet = finite(Vec3{body[12], body[13], body[14]})
                                                      ? Vec3{body[12], body[13], body[14]}
@@ -5028,6 +5033,24 @@ DWORD WINAPI run(void*) {
                                 animHeadFlick = false;
                             }
                         }
+                        // ANIMATED ARMS: per-arm overlay while yielding. Full bodyOn stays
+                        // off so the game keeps torso/legs/head. Motion vs actor root;
+                        // web/aim intent interrupts immediately.
+                        animated_arms::Sample armSamples[2]{};
+                        const float armDt =
+                            std::isfinite(frame.seconds) && frame.seconds > 0 ? frame.seconds : 1.f / 90;
+                        for (unsigned i = 0; i < 2; ++i) {
+                            const auto& hand = frame.hands[i];
+                            const bool tracked = hand.valid && validTrackedPose(hand.grip);
+                            armSamples[i].grip = motion.grips[i].position;
+                            armSamples[i].tracked = tracked;
+                            armSamples[i].fist = hand.squeeze;
+                            armSamples[i].shoot = 0.f; // filled after fingers below; intent uses web too
+                            armSamples[i].webButton = motion.swing.hands[i].grip > .5f ||
+                                                      motion.swing.hands[i].trigger > .5f;
+                        }
+                        const bool armsWanted =
+                            values.animatedArms && yieldAnim && !flatScreen && values.body;
                         pose.flags = (flatScreen || !values.body || yieldAnim ? 0u : native_body::bodyOn) |
                                      native_body::hideHead |
                                      native_body::handTurn |
@@ -5124,6 +5147,19 @@ DWORD WINAPI run(void*) {
                             pose.hands[i] = {motion.grips[i].position - motion.anchor, motion.grips[i].orientation,
                                              tracked ? 1u : 0u, fingered.fist};
                             pose.shoot[i] = fingered.shoot;
+                            armSamples[i].fist = fingered.fist;
+                            armSamples[i].shoot = fingered.shoot;
+                        }
+                        animated_arms::update(animatedArmsState, armDt, armsWanted, motion.anchor,
+                                              armSamples);
+                        if (armsWanted) {
+                            // Flag while yielding so native_body can blend arm
+                            // weights out smoothly when idle; weights may be 0.
+                            pose.flags |= native_body::armsOverlay;
+                            native_body::setArmOverlay(animatedArmsState.arms[0].weight,
+                                                       animatedArmsState.arms[1].weight);
+                        } else {
+                            native_body::setArmOverlay(0.f, 0.f);
                         }
                         // The player's size: HEIGHT when set, else the T-pose
                         // calibration's, else the headset's running height.

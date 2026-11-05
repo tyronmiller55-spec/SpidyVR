@@ -7,6 +7,27 @@ Per-check results are in [VALIDATION.md](VALIDATION.md).
 
 Not in a build yet, newest first. The release adds these to the next build's entry.
 
+**ANIMATED ARMS: per-arm controller overlay while yielding (opt-in, off by default).**
+
+- **Why.** During pose yield the game drives the whole figure; the player wants
+  Assetto-style arms that follow controllers when active and return to anim when
+  idle, without destroying torso/legs/head animation.
+- **ANIMATED ARMS** (`animated_arms`, off; tab after ANIMATED STEERING; swing
+  settings version 36). While MOVES/AIR yields: `native_body::armsOverlay` +
+  `body::Targets::armsOnly` solve only clavicle→hand chains on the current game
+  pose. Per-arm weights with provisional hysteresis (speedOn 0.35 m/s, speedOff
+  0.12, hold 0.35 s, blend in/out 12/6). Grip motion is relative to the actor
+  root so travel/swing alone is not "active". Fist/shoot/web button raise weight
+  immediately. Tracking loss clears the held latch (returns to game anim, not a
+  frozen arm). Full `bodyOn` stays off.
+- **Tradeoffs.** Finger bones stay on the game anim (no `restHand` in overlay) so
+  idle return keeps authored hands; controller fist/shoot still feed web systems.
+  Thresholds are scaffolding — not headset-validated.
+- **Still unresolved.** Right-stick whole-model yaw / midair spherical (no proven
+  actor orientation write). Research target only; do not guess RVAs.
+- **Tests.** Settings/ini; motion-vs-root; per-arm; web intent; tracking loss;
+  armsOverlay flag mask. Not headset-verified.
+
 **ANIMATED STEERING: while yielding, left-stick magnitude runs along Spidey's facing (opt-in, off by default).**
 
 - **Why.** During pose yield the game's stick is camera-relative; the player asked

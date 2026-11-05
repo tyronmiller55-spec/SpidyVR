@@ -1908,6 +1908,11 @@ void App::options(ImVec2 origin, ImVec2 size) {
                "(actor transform), not camera-relative. Right-stick whole-model yaw is not available yet "
                "(no proven actor facing write). Off by default. Outside yield, sticks are unchanged.",
                S(42), [&] { tabToggle("##animatedsteering", Item::animatedSteering); });
+        option("Animated arms (experimental)",
+               "While Animated moves/air yields: moving a controller (or web/aim intent) overlays that arm "
+               "on the game animation; idle returns it. Torso/legs/head stay animated. Tracking loss yields "
+               "to the game arm. Thresholds provisional. Off by default.",
+               S(42), [&] { tabToggle("##animatedarms", Item::animatedArms); });
         option("Web aim (experimental)",
                "MODEL FOREARM: your webs leave along the forearm of the Spider-Man body you see, rather than "
                "along the controller, and go back to the controller's line whenever the body cannot say "

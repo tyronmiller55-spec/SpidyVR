@@ -337,6 +337,8 @@ struct Values {
     // left-stick magnitude runs the hero along his actor facing (read-only
     // transform). Right-stick model yaw is not implemented (no facing write).
     bool animatedSteering = false;
+    // ANIMATED ARMS: controller arm overlay while yielding (animated_arms.hpp).
+    bool animatedArms = false;
     // How much speed a fast one-hand web yank adds, percent (the tab's SINGLE
     // HAND YANK STRENGTH; Swing::singleHandYankStrength): 100 as before.
     int singleHandYankPercent = 100;
@@ -479,8 +481,9 @@ enum class Item : uint8_t {
     animatedHead,
     animatedAir,
     animatedSteering,
+    animatedArms,
 };
-inline constexpr Item lastItem = Item::animatedSteering;
+inline constexpr Item lastItem = Item::animatedArms;
 // Where a row shows: in the tab; on the pause menu's first page instead,
 // under RESUME: VR VIEW (the user, October 15: "move the VIEW: GAME SCREEN to
 // the first menu (the one with resume)"); or only in the launcher's options:
@@ -503,7 +506,7 @@ struct Row {
     std::span<const char* const> choices{};
     Place place{};
 };
-const std::array<Row, 98>& rows();
+const std::array<Row, 99>& rows();
 // The most choices a row shows (game_menu's buffers): a row with more would
 // lose its last ones.
 inline constexpr size_t maxChoices = 9;

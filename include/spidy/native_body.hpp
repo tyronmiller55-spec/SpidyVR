@@ -60,6 +60,9 @@ enum Flags : uint32_t {
     kick = 65536, // official v11: feet-first dive target
     wallRun = 131072, // version 16: travel-driven gait in crawlNormal/Ahead/Phase/Motion
     ventHands = 32768, // version 10: upper-body contact response; native vent legs stay in control
+    // ANIMATED ARMS: solve arm chains only (body::Targets::armsOnly). Mutually
+    // exclusive with bodyOn in practice — XR clears bodyOn while yielding.
+    armsOverlay = 262144,
 };
 inline uint32_t crawlHandFlags(unsigned hands) { return (hands & 3u) << 10; }
 inline unsigned crawlHandMask(uint32_t flags) { return (flags >> 10) & 3u; }
@@ -158,7 +161,7 @@ inline Vec3 runTuning(const Command& c) {
 }
 inline uint32_t runPadding(const Command& c) { return c.version == 15 ? c.kickReserved : c.runReserved; }
 inline bool validCrawl(const Command& c) {
-    if (c.flags & ~0x3ffffu) return false;
+    if (c.flags & ~0x7ffffu) return false;
     if ((c.flags & wallRun) && c.version != 16) return false;
     if ((c.flags & kick) && !legacyRunFormat(c) && !kickCommand(c)) return false;
     if (kickCommand(c) && (!finite(c.kick) || c.kickReserved)) return false;
@@ -254,6 +257,9 @@ void submit(const Command&);
 // (so residual IK does not fight the game anim) and on yield exit (before the
 // first mod-owned pose). Does not change the live command or bodyOn flag.
 void resyncAfterYield();
+// ANIMATED ARMS: per-arm overlay weights (0..1) read by the next pose job when
+// Flags::armsOverlay is set. Cleared by resyncAfterYield. No Command layout change.
+void setArmOverlay(float left, float right);
 // A render frame begins (the stereo module's render setup, main thread).
 void renderFrame();
 // The body turned the hero's joints in the last moments, its head shrunk:

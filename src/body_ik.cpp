@@ -447,6 +447,83 @@ Result solve(Pose& pose, const Rig& rig, const Targets& targets, const Config& c
              float dt, float scale, float armScale) {
     Result r;
     dt = std::isfinite(dt) ? std::clamp(dt, 0.f, .1f) : 0.f;
+    // ANIMATED ARMS overlay: arm chains only on the game's current pose. Does
+    // not yaw the torso, plant feet, or move the head. Tracking loss clears
+    // the held latch so the arm returns to the game anim (not a frozen hold).
+    if (targets.armsOnly) {
+        if (!rig.ready || pose.count() < static_cast<int>(rig.parent.size()))
+            return r;
+        const float s = std::isfinite(scale) && scale > .1f ? scale : 1.f;
+        const float arms = std::isfinite(armScale) && armScale > .1f ? armScale : 1.f;
+        Vec3 up = finite(targets.up) && length(targets.up) > .5f ? normalized(targets.up) : Vec3{0, 1, 0};
+        Vec3 look = targets.facing.rotate({0, 0, -1});
+        look = look - up * dot(look, up);
+        if (length(look) < .2f)
+            look = Vec3{0, 0, 1} - up * up.z;
+        look = length(look) > .2f ? normalized(look) : Vec3{0, 0, 1};
+        const Vec3 left = normalized(cross(up, look));
+        const Quat bodyFrame = between({0, 0, 1}, {0, 1, 0}, look, up);
+        float maxW = 0.f;
+        bool any = false;
+        for (int i = 0; i < 2; ++i) {
+            const float want = std::clamp(std::isfinite(targets.armWeight[i]) ? targets.armWeight[i] : 0.f, 0.f, 1.f);
+            state.armWeight[i] = approach(state.armWeight[i], want, c.blendSpeed * dt);
+            const float aw = state.armWeight[i];
+            maxW = std::max(maxW, aw);
+            auto hand = targets.hands[i];
+            auto& held = state.held[i];
+            if (!hand.tracked || !finite(hand.grip) || aw <= 0.f) {
+                held = {};
+                continue;
+            }
+            if (finite(hand.grip)) {
+                const Quat back = bodyFrame.conjugate();
+                held = {true, back.rotate(hand.grip - targets.eyes), back * hand.orientation};
+            }
+            if (!held.set)
+                continue;
+            any = true;
+            const auto& arm = rig.arms[i];
+            const Vec3 knuckles = normalized(hand.orientation.rotate({0, -1, 0}));
+            const Vec3 right = normalized(hand.orientation.rotate({1, 0, 0}));
+            const Vec3 offset{i == 0 ? -c.wristFromGrip.x : c.wristFromGrip.x, c.wristFromGrip.y,
+                              c.wristFromGrip.z};
+            const Vec3 wrist = hand.grip + hand.orientation.rotate(offset);
+            const float length2 = (rig.upperArm[i] + rig.forearm[i]) * s * arms;
+            if (arm.clavicle >= 0) {
+                const Vec3 base = pose.position(arm.clavicle), shoulder = pose.position(arm.upper);
+                const float stretch =
+                    std::clamp((length(wrist - shoulder) - .8f * length2) / (.4f * length2), 0.f, 1.f);
+                if (stretch > 0)
+                    pose.turn(rig.below[arm.clavicle],
+                              partial(between(shoulder - base, wrist - base), .35f * stretch * aw), base);
+            }
+            const Vec3 side = i == 0 ? left : left * -1.f;
+            const Vec3 pole = normalized(up * -1.f + side * .6f - look * .3f);
+            limb(pose, rig, arm.upper, arm.lower, arm.hand, wrist, pole, aw);
+            r.handError[i] = length(pose.position(arm.hand) - wrist);
+            if (c.handOrientation) {
+                const Quat pitch = axisAngle(right, c.fingerPitch);
+                const Vec3 fingers = pitch.rotate(knuckles);
+                const Vec3 palm = pitch.rotate(i == 0 ? right : right * -1.f);
+                const auto handTurn = [&] {
+                    return between(pose.direction(arm.hand, rig.handFingers[i]),
+                                   pose.direction(arm.hand, rig.handPalm[i]), fingers, palm);
+                };
+                const Vec3 elbow = pose.position(arm.lower);
+                const Vec3 forearm = normalized(pose.position(arm.hand) - elbow);
+                pose.turn(rig.below[arm.lower], partial(twistAbout(handTurn(), forearm), c.forearmRoll * aw),
+                          elbow);
+                pose.turn(rig.below[arm.hand], partial(handTurn(), aw), pose.position(arm.hand));
+            }
+            // Leave finger bones to the game anim (no restHand): idle return
+            // keeps authored hand poses; fist/shoot still drive web systems
+            // outside this overlay.
+        }
+        r.weight = maxW;
+        r.solved = any || maxW > .001f;
+        return r;
+    }
     state.weight = approach(state.weight, wanted ? 1.f : 0.f, c.blendSpeed * dt);
     r.weight = state.weight;
     const float w = state.weight;

@@ -156,6 +156,12 @@ bool prepare(Rig& rig, std::span<const float> restPose);
 // What the player's body should do, in model space (model units).
 struct Targets {
     bool head{};
+    // ANIMATED ARMS overlay: solve only the arm chains on top of the game's
+    // pose (torso/legs/root/head untouched). Requires armWeight; ignores the
+    // full-body yaw/plant/crawl paths. Not the same as bodyOn.
+    bool armsOnly{};
+    // Wanted per-arm blend 0..1 while armsOnly (native_body fills from XR).
+    std::array<float, 2> armWeight{};
     // In the air (swinging, falling): the legs keep the game's pose instead
     // of standing on the ground.
     bool airborne{};
@@ -325,6 +331,8 @@ struct State {
     CrawlFeet outwardFeet;
     CrawlTurn crawlTurn;
     float weight{}, yaw{};
+    // Per-arm overlay blend while Targets::armsOnly (separate from weight).
+    std::array<float, 2> armWeight{};
     float crawlWeight{};
     float crawlTwist{};
     float crawlOutwardMotion{};

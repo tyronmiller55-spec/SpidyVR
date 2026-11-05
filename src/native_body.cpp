@@ -388,6 +388,8 @@ void solveHero(float* out, uintptr_t job, uintptr_t instance) {
     const bool live = GetTickCount64() < commandDeadline;
     ReleaseSRWLockShared(&commandLock);
     const bool on = live && (wanted.flags & native_body::bodyOn);
+    // ANIMATED ARMS: arm-only overlay while bodyOn is clear (pose yield).
+    const bool arms = live && !on && (wanted.flags & native_body::armsOverlay);
     uint32_t problem = cache.problem;
     const bool turned = read(instance, transform, sizeof(transform)) && instanceTurn(transform, toWorld);
     if (!problem && !turned)
@@ -447,7 +449,8 @@ void solveHero(float* out, uintptr_t job, uintptr_t instance) {
         trackingYaw = wanted.trackingYaw;
         trackingYawSet = true;
     }
-    if (!problem && (on || state.weight > 0)) {
+    const bool armsBlend = !on && !arms && (state.armWeight[0] > .001f || state.armWeight[1] > .001f);
+    if (!problem && (on || arms || armsBlend || state.weight > 0)) {
         if (on) {
             // World axes relative to the feet into the hero's model space.
             const Quat toModel = toWorld.conjugate();
@@ -521,6 +524,25 @@ void solveHero(float* out, uintptr_t job, uintptr_t instance) {
                               wanted.shoot[i]};
             }
             lastTargets = t;
+        } else if (arms || armsBlend) {
+            body::Targets t;
+            t.armsOnly = true;
+            t.armWeight = arms ? std::array<float, 2>{overlayArmWeight[0], overlayArmWeight[1]}
+                               : std::array<float, 2>{};
+            const Quat toModel = toWorld.conjugate();
+            t.up = toModel.rotate(Vec3{0, 1, 0});
+            t.eyes = toModel.rotate(wanted.eyes);
+            t.facing = toModel * wanted.facing;
+            for (int i = 0; i < 2; ++i) {
+                const auto& h = wanted.hands[i];
+                // Untracked hands get weight 0 from XR; still pass grip when
+                // tracked so the overlay can place the wrist.
+                t.hands[i] = {h.tracked != 0, toModel.rotate(h.grip), toModel * h.orientation, h.fist,
+                              wanted.shoot[i]};
+                if (!h.tracked)
+                    t.armWeight[i] = 0.f;
+            }
+            lastTargets = t;
         }
         body::Config config;
         config.hideHead = wanted.flags & native_body::hideHead;
@@ -538,13 +560,13 @@ void solveHero(float* out, uintptr_t job, uintptr_t instance) {
                                             : 0.f;
         lastSolve = now;
         body::Pose pose(out, static_cast<int>(joints));
-        result = body::solve(pose, cache.ik, lastTargets, config, state, on, dt, scale, armScale);
+        result = body::solve(pose, cache.ik, lastTargets, config, state, on || arms || armsBlend, dt, scale, armScale);
         // MODEL FOREARM: each arm as this solve left it, in world axes.
         native_body::Forearms arms;
         for (int i = 0; i < 2; ++i) {
             const auto& a = cache.ik.arms[i];
             auto& f = arms.arms[i];
-            if (!result.solved || !on || a.lower < 0 || a.hand < 0 || a.lower >= static_cast<int>(joints) ||
+            if (!result.solved || !(on || arms || armsBlend) || a.lower < 0 || a.hand < 0 || a.lower >= static_cast<int>(joints) ||
                 a.hand >= static_cast<int>(joints))
                 continue;
             f.elbow = toWorld.rotate(pose.position(a.lower));
@@ -587,12 +609,12 @@ void solveHero(float* out, uintptr_t job, uintptr_t instance) {
                 jobRows[r * 3 + c] = transform[r * 4 + c];
         jobRowsSet = true;
     }
-    if (result.solved && on)
+    if (result.solved && (on || arms || armsBlend))
         lastDrawn = GetTickCount64();
     outwardWeight = lastTargets.crawl && lastTargets.crawlTurnAway && state.crawlTurn.ready()
                         ? state.crawlTurn.outwardWeight(state.crawlTurn.angle())
                         : 0.f;
-    latestSolved = result.solved && on;
+    latestSolved = result.solved && (on || arms || armsBlend);
     if (probing) {
         // And as the body left it, then published (its own lock, a copy).
         probe.solved = result.solved && on;
@@ -708,9 +730,19 @@ void native_body::retarget(uintptr_t heroRecord) {
 void native_body::resyncAfterYield() {
     AcquireSRWLockExclusive(&solveLock);
     state = {};
+    overlayArmWeight = {};
     actorHeadingSet = trackingYawSet = false;
     actorHeading = trackingYaw = 0;
     outwardWeight.store(0.f, std::memory_order_relaxed);
+    ReleaseSRWLockExclusive(&solveLock);
+}
+void native_body::setArmOverlay(float left, float right) {
+    auto clamp01 = [](float v) {
+        return std::isfinite(v) ? std::clamp(v, 0.f, 1.f) : 0.f;
+    };
+    AcquireSRWLockExclusive(&solveLock);
+    overlayArmWeight[0] = clamp01(left);
+    overlayArmWeight[1] = clamp01(right);
     ReleaseSRWLockExclusive(&solveLock);
 }
 void native_body::submit(const Command& next) {

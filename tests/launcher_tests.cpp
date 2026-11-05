@@ -723,6 +723,7 @@ int main() {
         t.animatedHead = 2;
         t.animatedAir = true;
         t.animatedSteering = true;
+        t.animatedArms = true;
         t.webAimSource = 1;
         t.forearmBlend = 50;
         t.webSlingshot = true;

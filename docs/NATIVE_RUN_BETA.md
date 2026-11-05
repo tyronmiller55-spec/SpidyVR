@@ -60,6 +60,7 @@ In the headset: pause (menu button) → **Settings** → **SPIDY VR** (the last 
 | ANIMATED HEAD | OFF | While a pose yield is active: view follows the gameplay head. LEVEL = place only (comfort); FULL = turns with anim on ground. Air yields stay LEVEL. Off by default. Yield exit resyncs VR body/tracking (handoff). |
 | ANIMATED AIR | OFF | Game anim drives the body in freefall / swing / web air; mod keeps swing physics. Zip/wall/combat stay VR body. Freefall web aim interrupts. Off by default. |
 | ANIMATED STEERING | OFF | While yielding: L-stick magnitude runs along Spidey's facing (actor read). R-stick model yaw not implemented (no facing write). Off by default. |
+| ANIMATED ARMS | OFF | While yielding: controller arms overlay game torso/legs/head anim; idle returns. Motion vs actor root; web/aim interrupts. Thresholds provisional. Off by default. |
 | RUN LOGS | OFF | Writes run/landing/take-off speeds to the diag log for bug reports. Changes nothing in play. |
 
 Full descriptions: [PLAYERS.md](PLAYERS.md) ("VR settings").
