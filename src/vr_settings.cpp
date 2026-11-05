@@ -467,9 +467,9 @@ Values sanitized(Values v) {
     v.automaticHandThreshold = std::clamp(v.automaticHandThreshold, 50, 300);
     return v;
 }
-const std::array<Row, 99>& rows() {
+const std::array<Row, 100>& rows() {
     // The help fits the game's description column beside the rows.
-    static const std::array<Row, 99> all{{
+    static const std::array<Row, 100> all{{
         {Item::none, "WEBS", nullptr, {}},
         {Item::webStyle, "WEB STYLE",
          "Arcade: webs pass lamp posts, signs and cars, and swings stay above the street.", webStyleChoices},
