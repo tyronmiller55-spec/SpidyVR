@@ -304,7 +304,7 @@ inline bool gameOwnsGround(bool fresh, const Data& d) {
 // Version 8 appends handClimb without changing the upstream phone or arcade
 // fields. Older official settings keep their original layout and meaning.
 struct Settings {
-    uint32_t magic = 0x53575354, version = 30, bytes = sizeof(Settings), grab = 1;
+    uint32_t magic = 0x53575354, version = 31, bytes = sizeof(Settings), grab = 1;
     float maxSpeed = 32;
     uint32_t airWebs = 1;
     float gravity = 6;
@@ -337,6 +337,10 @@ struct Settings {
     uint32_t spidyRunStanding{};
     uint32_t webLandingSmooth{};
     float webLandingImpact = 24;
+    // Version 31 (HEAD PROBE, vr_settings::Values::headProbe): the read-only
+    // head-bone diagnostic is on. The swing module only accepts it; nothing in
+    // the swing reads or changes the body for it (head_probe.hpp).
+    uint32_t headProbe{};
 };
 constexpr uint32_t settingsBytesV3 = 28, settingsBytesV4 = 32, settingsBytesV5 = 36, settingsBytesV6 = 40,
                    settingsBytesV7 = 44, settingsBytesV8 = 48, settingsBytesV9 = 52, settingsBytesV10 = 56,
@@ -345,8 +349,9 @@ constexpr uint32_t settingsBytesV3 = 28, settingsBytesV4 = 32, settingsBytesV5 =
                    settingsBytesV18 = 88, settingsBytesV19 = 92, settingsBytesV20 = 96,
                    settingsBytesV21 = 100, settingsBytesV22 = 104, settingsBytesV23 = 108, settingsBytesV24 = 112,
                    settingsBytesV25 = 120, settingsBytesV26 = 124,
-                   settingsBytesV27 = 128, settingsBytesV28 = 132, settingsBytesV29 = 136;
-static_assert(sizeof(Settings) == 144 && offsetof(Settings, walls) == settingsBytesV3 &&
+                   settingsBytesV27 = 128, settingsBytesV28 = 132, settingsBytesV29 = 136,
+                   settingsBytesV30 = 144;
+static_assert(sizeof(Settings) == 148 && offsetof(Settings, walls) == settingsBytesV3 &&
               offsetof(Settings, physical) == settingsBytesV4 &&
               offsetof(Settings, noBlows) == settingsBytesV5 &&
               offsetof(Settings, arcade) == settingsBytesV6 &&
@@ -372,7 +377,8 @@ static_assert(sizeof(Settings) == 144 && offsetof(Settings, walls) == settingsBy
               offsetof(Settings, softLanding) == settingsBytesV26 &&
               offsetof(Settings, spidyRun) == settingsBytesV27 &&
               offsetof(Settings, spidyRunStanding) == settingsBytesV28 &&
-              offsetof(Settings, webLandingSmooth) == settingsBytesV29);
+              offsetof(Settings, webLandingSmooth) == settingsBytesV29 &&
+              offsetof(Settings, headProbe) == settingsBytesV30);
 // SpidySwingWebTurns (WEB AIM: MODEL FOREARM, web_aim::ForearmAim): the turn
 // each hand's aim pose takes before WEB ANGLE and WRIST SHOOTERS, in the aim
 // pose's own frame, sent by the VR worker each frame while the setting is on
@@ -544,7 +550,8 @@ inline bool validSettings(const Settings& s) {
          (s.version == 27 && s.bytes == settingsBytesV27) ||
          (s.version == 28 && s.bytes == settingsBytesV28) ||
          (s.version == 29 && s.bytes == settingsBytesV29) ||
-         (s.version == 30 && s.bytes == sizeof(Settings))) &&
+         (s.version == 30 && s.bytes == settingsBytesV30) ||
+         (s.version == 31 && s.bytes == sizeof(Settings))) &&
         s.grab <= 1 && std::isfinite(s.maxSpeed) && s.maxSpeed > 0 && s.maxSpeed <= motionSpeedLimit &&
         s.airWebs <= 1 && std::isfinite(s.gravity) && s.gravity >= 0 && s.gravity <= maxGravity &&
         s.walls <= 4 && s.physical <= 1 && s.noBlows <= 3 && s.arcade <= 1 && s.handClimb <= 1 &&
@@ -560,7 +567,8 @@ inline bool validSettings(const Settings& s) {
         (s.version < 26 || s.momentumLeap <= 1) && (s.version < 27 || s.softLanding <= 1) &&
         (s.version < 28 || s.spidyRun <= 1) && (s.version < 29 || s.spidyRunStanding <= 1) &&
         (s.version < 30 || (s.webLandingSmooth <= 1 && std::isfinite(s.webLandingImpact) &&
-                            s.webLandingImpact >= 5 && s.webLandingImpact <= 100));
+                            s.webLandingImpact >= 5 && s.webLandingImpact <= 100)) &&
+        (s.version < 31 || s.headProbe <= 1);
 }
 static_assert(sizeof(WebState) == 28 && sizeof(Data) == 272 && offsetof(Data, wall) == 240);
 // The player is in the air: Spidy's own flight, or the game's jump or fall,

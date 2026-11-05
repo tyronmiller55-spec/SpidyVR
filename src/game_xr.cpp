@@ -52,6 +52,7 @@
 #include "spidy/run_update.hpp"
 #include "spidy/diag_log.hpp"
 #include "spidy/ground_state.hpp"
+#include "spidy/head_probe.hpp"
 #include "spidy/frame_stats.hpp"
 #include "spidy/seated.hpp"
 #include "spidy/slow_motion.hpp"
@@ -67,6 +68,7 @@
 #include <cstdio>
 #include <cstring>
 #include <limits>
+#include <memory>
 #include <mutex>
 #include <stdexcept>
 #include <string>
@@ -1020,6 +1022,11 @@ DWORD WINAPI run(void*) {
         ground_state::StateLog stateLog;
         // perf: lines (frame_stats.hpp).
         frame_stats::FrameStats frameStats;
+        // HEAD PROBE (off by default; head_probe.hpp): read only. Its numbers
+        // (some 15 KB) on the heap once, its lines in a buffer reused each frame.
+        const auto headProbe = std::make_unique<head_probe::Probe>();
+        head_probe::Probe::Lines headProbeLines;
+        bool headProbeWas{};
         std::array<float, 2> forearmJitter{};
         game_pad::TemplePress templePress;
         uint32_t chargesBefore{}, leapsBefore{}, scansBefore{};
@@ -1482,6 +1489,7 @@ DWORD WINAPI run(void*) {
             // SPIDY RUN FROM STANDING: only with SPIDY RUN itself.
             s.spidyRunStanding = values.spidyRun && values.spidyRunFromStanding;
             s.webLandingSmooth = values.webLandingSmooth;
+            s.headProbe = values.headProbe;
             s.webLandingImpact = static_cast<float>(values.webLandingImpact);
             s.webAngle = values.webAngle;
             s.wristShooters = values.palmShooters ? 2u : values.wristShooters ? 1u : 0u;
@@ -4044,6 +4052,33 @@ DWORD WINAPI run(void*) {
                                 state.velocity = swingState.velocity;
                                 if (const char* line = stateLog.update(frame.seconds, state))
                                     diag_log::write(line);
+                                // HEAD PROBE (off by default; head_probe.hpp): the hero's
+                                // head bone against the headset, per state, to the
+                                // diagnostics' own "head probe:" ring. Read only: it
+                                // changes nothing in play.
+                                native_body::setHeadProbe(values.headProbe);
+                                if (values.headProbe) {
+                                    if (!headProbeWas)
+                                        diag_log::write("head probe: on (read only; changes nothing in play)");
+                                    head_probe::StateInputs probeState;
+                                    probeState.playing = steering && !calibrationInput;
+                                    probeState.fresh = swingFresh;
+                                    probeState.grounded = state.grounded;
+                                    probeState.owned = state.owned;
+                                    probeState.webbed = state.webbed;
+                                    probeState.zipping = walk.zip;
+                                    probeState.fighting = state.fighting;
+                                    probeState.dodging = state.dodging;
+                                    probeState.runRt = state.runRt;
+                                    probeState.wall = state.wall;
+                                    headProbe->update(frame.seconds, head_probe::classify(probeState), state.owned,
+                                                      native_body::headSample(), headProbeLines);
+                                    for (unsigned i = 0; i < headProbeLines.count; ++i)
+                                        diag_log::write(headProbeLines.text[i]);
+                                } else if (headProbeWas) {
+                                    diag_log::write("head probe: off");
+                                }
+                                headProbeWas = values.headProbe;
                                 // perf: lines (always; changes nothing): the VR loop's
                                 // frames and the mod's own work in them so far this frame.
                                 LARGE_INTEGER workEnd{};
@@ -5760,6 +5795,19 @@ DWORD WINAPI run(void*) {
             }
             if (!active)
                 break;
+        }
+        // HEAD PROBE: the session's numbers, one line per state, before VR stops.
+        if (headProbeWas) {
+            char session[head_probe::stateCount][head_probe::lineChars];
+            const unsigned n = headProbe->session(session, head_probe::stateCount);
+            for (unsigned i = 0; i < n; ++i) {
+                diag_log::write(session[i]);
+                game_prompts::note(session[i], false);
+            }
+            if (!n)
+                diag_log::write("head probe: session: no samples (the body never posed the hero's head)");
+            native_body::setHeadProbe(false);
+            publishDiag();
         }
         message(6, 0, "Stopping VR and restoring game hooks");
     } catch (const std::exception& e) {

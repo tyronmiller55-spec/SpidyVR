@@ -17,6 +17,7 @@ namespace {
 SRWLOCK lock = SRWLOCK_INIT;
 diag_log::Ring<diag_log::mainLines> mainRing;
 diag_log::Ring<diag_log::aimLines> aimRing;
+diag_log::Ring<diag_log::headLines> headRing;
 ULONGLONG firstTick{};
 } // namespace
 
@@ -30,8 +31,10 @@ void diag_log::write(const char* text) {
         firstTick = now;
     const double seconds = static_cast<double>(now - firstTick) / 1000.0;
     _snprintf_s(line, sizeof(line), _TRUNCATE, "[%8.3f] %s", seconds, text);
-    if (channelOf(text) == Channel::aim)
+    if (const auto channel = channelOf(text); channel == Channel::aim)
         aimRing.push(line);
+    else if (channel == Channel::head)
+        headRing.push(line);
     else
         mainRing.push(line);
     ReleaseSRWLockExclusive(&lock);
@@ -52,6 +55,8 @@ void diag_log::copyOut(Data& out) {
         out.main = mainRing;
     if (out.aim.written != aimRing.written)
         out.aim = aimRing;
+    if (out.head.written != headRing.written)
+        out.head = headRing;
     ReleaseSRWLockShared(&lock);
 }
 

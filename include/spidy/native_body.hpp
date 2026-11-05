@@ -1,5 +1,6 @@
 #pragma once
 #include "body_calibration.hpp"
+#include "head_probe.hpp"
 #include "math.hpp"
 #include <cstddef>
 #include <cstdint>
@@ -288,6 +289,12 @@ struct Forearms {
 static_assert(sizeof(Forearm) == 60 && sizeof(Forearms) == 160);
 // The latest Forearms (a copy); `job` 0 before any.
 Forearms forearms();
+// HEAD PROBE (head_probe.hpp; off by default): while on, each hero pose job
+// also notes the head bone as the game's animation wrote it and as the body
+// left it - read only, nothing written to the pose. The latest (a copy; job
+// 0 before any). Off, the writer does nothing more than before.
+void setHeadProbe(bool on);
+head_probe::Sample headSample();
 
 // Wire formats of the probe exports (SpidyBodyStart, SpidyBodySubmit,
 // SpidyBodyCapture), which drive the body without the OpenXR worker.

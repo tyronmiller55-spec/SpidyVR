@@ -78,6 +78,7 @@
 #include "spidy/game_targets.hpp"
 #include "spidy/diag_log.hpp"
 #include "spidy/ground_state.hpp"
+#include "spidy/head_probe.hpp"
 // Stand-ins for the game's classes, by the names the target scan's rules look
 // for: MSVC lays out their type information as it did the game's.
 class Component {
@@ -1806,7 +1807,7 @@ int main() {
     });
     test("slingshot settings append to the old wire format and default off", [] {
         game_swing::Settings s;
-        check(s.version == 30 && s.bytes == 144 && !s.webSlingshot, "wrong slingshot defaults");
+        check(s.version == 31 && s.bytes == 148 && !s.webSlingshot, "wrong slingshot defaults");
         check(offsetof(game_swing::Settings, webSlingshot) == 48, "old settings moved");
         s.webSlingshot = 1; check(game_swing::validSettings(s), "ON refused");
         s.webSlingshot = 2; check(!game_swing::validSettings(s), "invalid switch accepted");
@@ -2469,7 +2470,7 @@ int main() {
         check(vr_settings::choose(vr_settings::Item::betterClimbing, 1, v), "ON failed");
         check(vr_settings::withTabOnly({}, vr_settings::tabOnlyText(v)).betterClimbing, "switch not saved");
         game_swing::Settings s;
-        check(s.version == 30 && s.bytes == 144 && offsetof(game_swing::Settings, betterClimbing) == 52,
+        check(s.version == 31 && s.bytes == 148 && offsetof(game_swing::Settings, betterClimbing) == 52,
               "settings moved old fields");
         s.betterClimbing = 1; check(game_swing::validSettings(s), "ON refused");
         s.betterClimbing = 2; check(!game_swing::validSettings(s), "invalid switch accepted");
@@ -3825,7 +3826,7 @@ int main() {
     test("merged settings keep phone suppression, arcade webs and hand climbing independent", [] {
         using namespace game_swing;
         Settings s;
-        check(s.version == 30 && s.bytes == 144, "updated settings did not append the climbing field");
+        check(s.version == 31 && s.bytes == 148, "updated settings did not append the climbing field");
         check(offsetof(Settings, noBlows) == 36 && offsetof(Settings, arcade) == 40 &&
               offsetof(Settings, handClimb) == 44, "upstream phone or arcade fields moved");
         s.noBlows = 3;
@@ -9915,7 +9916,7 @@ int main() {
         Swing fresh(inert());
         check(!fresh.webLandingSmoothEnabled() && !fresh.landCarrying(), "SMOOTH WEB LANDING on by default");
         game_swing::Settings packet;
-        check(packet.version == 30 && packet.bytes == 144 && !packet.webLandingSmooth &&
+        check(packet.version == 31 && packet.bytes == 148 && !packet.webLandingSmooth &&
                   packet.webLandingImpact == 24 &&
                   offsetof(game_swing::Settings, webLandingSmooth) == game_swing::settingsBytesV29,
               "SMOOTH WEB LANDING not appended, or on by default");
@@ -10069,7 +10070,7 @@ int main() {
         Swing fresh(inert());
         check(!fresh.groundRunEnabled() && !fresh.groundRunning(), "SPIDY RUN on by default");
         game_swing::Settings packet;
-        check(packet.version == 30 && packet.bytes == 144 && !packet.spidyRun &&
+        check(packet.version == 31 && packet.bytes == 148 && !packet.spidyRun &&
                   offsetof(game_swing::Settings, spidyRun) == game_swing::settingsBytesV27,
               "SPIDY RUN not appended, or on by default");
         packet.spidyRun = 2;
@@ -10207,7 +10208,7 @@ int main() {
             check(!sw.groundRunning(), "the air started a run from standing");
         }
         game_swing::Settings packet;
-        check(packet.version == 30 && packet.bytes == 144 && !packet.spidyRunStanding &&
+        check(packet.version == 31 && packet.bytes == 148 && !packet.spidyRunStanding &&
                   offsetof(game_swing::Settings, spidyRunStanding) == game_swing::settingsBytesV28,
               "SPIDY RUN FROM STANDING not appended, or on by default");
         packet.spidyRunStanding = 2;
@@ -22722,7 +22723,7 @@ int main() {
     test("free combat: settings default to called combat and preserve older packet layouts", [] {
         using namespace game_swing;
         Settings s;
-        check(s.version == 30 && s.bytes == 144 && s.combatVisuals == 1 &&
+        check(s.version == 31 && s.bytes == 148 && s.combatVisuals == 1 &&
                   offsetof(Settings, combatVisuals) == 56,
               "free combat broke the settings defaults or layout");
         s.combatVisuals = 0;
@@ -22769,7 +22770,7 @@ int main() {
         check(withTabOnly(Values{}, "single_hand_yank_percent=999\n").singleHandYankPercent == 300,
               "saved single-hand yank strength was not clamped");
         game_swing::Settings packet;
-        check(packet.version == 30 && packet.bytes == 144 && !packet.halfPunchDamage &&
+        check(packet.version == 31 && packet.bytes == 148 && !packet.halfPunchDamage &&
                   packet.singleHandYankPercent == 100 &&
                   offsetof(game_swing::Settings, halfPunchDamage) == 96 &&
                   offsetof(game_swing::Settings, singleHandYankPercent) == 100,
@@ -23370,7 +23371,7 @@ int main() {
                                   Item::automaticHandStrength, Item::automaticFalloff,     Item::automaticHandThreshold,
                                   Item::automaticAirBrake,     Item::automaticCombat};
         // The realistic flips' rows come last, after the EXPERIMENTAL rows before them.
-        constexpr size_t firstRealistic = 82;
+        constexpr size_t firstRealistic = 83;
         check(all.size() == firstRealistic + std::size(realistic), "the realistic flips' rows are not the last");
         for (size_t i = 0; i < std::size(realistic); ++i)
             check(all[firstRealistic + i].item == realistic[i], "the realistic flips' rows out of order");
@@ -23837,7 +23838,7 @@ int main() {
                   "flip_reprojection=0\nsteady_hud=0\nreel_haptics=0\nswing_haptics=0\n"
                   "pc_media=0\nsingle_hand_yank_percent=100\nweb_tie=0\nnative_run=0\nair_slingshot=0\nweb_angle_"
                   "degrees=0\nwrist_shooters=0\n"
-                  "dodge_tumble=0\nrun_curve=0\nnative_run_at_percent=70\nrun_logs=0\nrunning_leap=0\nearly_jump=0\nsoft_landing=0\nspidy_run=0\nspidy_run_from_standing=0\nweb_aim_source=0\nforearm_blend=100\nweb_landing_smooth=0\nweb_landing_impact_speed=24\nsteady_states=0\ncombat_responsive=0\nspidy_run_jump=1\nforearm_aim_limit=180\npalm_shooters=0\n",
+                  "dodge_tumble=0\nrun_curve=0\nnative_run_at_percent=70\nrun_logs=0\nrunning_leap=0\nearly_jump=0\nsoft_landing=0\nspidy_run=0\nspidy_run_from_standing=0\nweb_aim_source=0\nforearm_blend=100\nweb_landing_smooth=0\nweb_landing_impact_speed=24\nsteady_states=0\ncombat_responsive=0\nspidy_run_jump=1\nforearm_aim_limit=180\npalm_shooters=0\nhead_probe=0\n",
               "the defaults' text");
         Values changed = defaults;
         changed.recordingFov = 140;
@@ -26425,6 +26426,221 @@ int main() {
         grab.claim(1 / 90.f, in, lab, world, Body{{0, 1, 0}, {}, true});
         check(grab.grabs()[0].phase == GrabPhase::None, "a held grip caught again");
         check(grab.forSwing(in).hands[0].grip == 0, "a held grip went to the swing");
+    });
+    test("HEAD PROBE: off by default, a switch kept as head_probe after PALM SHOOTERS, swing settings version 31", [] {
+        using namespace vr_settings;
+        Values v;
+        check(!v.headProbe && defaultChoice(Item::headProbe) == 0, "HEAD PROBE on by default");
+        check(choose(Item::headProbe, 1, v) && v.headProbe && choice(Item::headProbe, v) == 1, "not switched on");
+        check(tabOnlyText(v).find("head_probe=1\n") != std::string::npos &&
+                  withTabOnly({}, "head_probe=1\n").headProbe && !withTabOnly({}, "head_probe=0\n").headProbe &&
+                  !withTabOnly({}, "").headProbe,
+              "spidy_vr.ini does not keep HEAD PROBE as head_probe");
+        const auto& all = rows();
+        check(all[82].item == Item::headProbe && std::strcmp(all[82].title, "HEAD PROBE") == 0 &&
+                  all[82].choices.empty() && all[82].place == Place::tab && all[81].item == Item::palmShooters,
+              "HEAD PROBE: a switch in the tab after PALM SHOOTERS");
+        check(lastItem == Item::headProbe && static_cast<unsigned>(lastItem) < 256, "HEAD PROBE not the last item");
+        game_swing::Settings s;
+        check(s.version == 31 && s.bytes == 148 && !s.headProbe &&
+                  offsetof(game_swing::Settings, headProbe) == game_swing::settingsBytesV30,
+              "HEAD PROBE not appended to the swing's settings, or on by default");
+        s.headProbe = 1;
+        check(game_swing::validSettings(s), "HEAD PROBE's switch refused");
+        s.headProbe = 2;
+        check(!game_swing::validSettings(s), "an invalid HEAD PROBE switch accepted");
+        s = {};
+        s.version = 30;
+        s.bytes = game_swing::settingsBytesV30;
+        check(game_swing::validSettings(s), "version 30 settings packet refused");
+    });
+    test("HEAD PROBE: its own diagnostics ring; every line from named fields, within a line", [] {
+        using namespace head_probe;
+        check(diag_log::channelOf("head probe: ground body game move game") == diag_log::Channel::head &&
+                  diag_log::channelOf("head probe") == diag_log::Channel::main &&
+                  diag_log::channelOf("forearm aim: L none") == diag_log::Channel::aim,
+              "head probe: lines in the wrong ring");
+        auto data = std::make_unique<diag_log::Data>();
+        data->main.push("run log: touchdown");
+        for (int i = 0; i < 300; ++i)
+            data->head.push("head probe: ground");
+        check(data->version == 2 && data->main.written == 1 && data->aim.written == 0 && data->head.written == 300 &&
+                  data->head.at(299) && !data->head.at(235) && data->head.at(236),
+              "the head ring does not keep its newest 64 apart from the others");
+        // The widest values each line can hold, and none past the diagnostics' line.
+        char line[512];
+        SampleLine l;
+        l.state = "cutscene";
+        l.modBody = l.swingMoves = l.headset = true;
+        l.head = {-2999.99f, -2999.99f, -2999.99f};
+        l.headAngles = l.headsetAngles = {-179, -89, -179};
+        l.offset = {-99.99f, -99.99f, -99.99f};
+        l.offsetAngle = 180;
+        l.speed = l.localSpeed = 999.99f;
+        l.angularSpeed = 99999;
+        l.rollMax = 180;
+        l.pitchMax = 90;
+        l.chain = 12;
+        l.anim = "unknown";
+        int n = formatSampleLine(line, sizeof line, l);
+        check(n > 0 && static_cast<std::size_t>(n) <= textChars && std::strncmp(line, "head probe: cutscene body mod "
+                  "move swing head -2999.99", 52) == 0 && std::strstr(line, " anim unknown"),
+              "the sample line's fields, or too long");
+        l.headset = false;
+        formatSampleLine(line, sizeof line, l);
+        check(std::strstr(line, "hmd ypr n/a off") != nullptr, "no headset not said");
+        BoneLine bone;
+        bone.joints = 999;
+        bone.problem = 7002;
+        bone.candidates = (1u << candidateCount) - 1;
+        n = formatBoneLine(line, sizeof line, bone);
+        check(n > 0 && static_cast<std::size_t>(n) <= textChars &&
+                  std::strncmp(line, "head probe: head bone: not found (rig 999 joints, problem 7002; candidates "
+                                     "found: head,neck,",
+                               88) == 0,
+              "head bone: not found, with the candidates");
+        bone = {};
+        bone.found = true;
+        bone.head = 57;
+        bone.neck = 56;
+        bone.chain = 7;
+        bone.joints = 210;
+        bone.candidates = 1u | 2u;
+        formatBoneLine(line, sizeof line, bone);
+        check(std::strcmp(line, "head probe: head bone 57, neck 56, parent chain 7, rig 210 joints (names: head,neck)") ==
+                  0,
+              line);
+        StateStats stats;
+        stats.samples = 4000000000u;
+        stats.bad = stats.jumps = 4000000000u;
+        n = formatSummaryLine(line, sizeof line, {"session", "cutscene", &stats});
+        check(n > 0 && static_cast<std::size_t>(n) <= textChars && std::strstr(line, "stable no"), line);
+        AnimLine anim;
+        anim.state = "parkour";
+        anim.anim = "yes";
+        anim.gameMoved = 999;
+        anim.rootMoved = 99999;
+        n = formatAnimLine(line, sizeof line, anim);
+        check(n > 0 && static_cast<std::size_t>(n) <= textChars &&
+                  std::strncmp(line, "head probe: anim live: yes in parkour (body game)", 49) == 0,
+              line);
+        n = formatEdgeLine(line, sizeof line, {"ground", "parkour", false, false});
+        check(std::strcmp(line, "head probe: state ground -> parkour (body game, move game)") == 0, line);
+        check(formatLine(nullptr, 0, "%d", 1) == 0, "no buffer written");
+    });
+    test("HEAD PROBE: the states, the head's angles and speeds, anim live, summaries; nothing written back", [] {
+        using namespace head_probe;
+        StateInputs in;
+        check(classify(in) == State::cutscene, "no play not a cutscene");
+        in.playing = in.fresh = in.grounded = true;
+        check(classify(in) == State::ground, "ground");
+        in.runRt = true;
+        check(classify(in) == State::ground, "NATIVE RUN on the ground is not parkour");
+        in.grounded = false;
+        check(classify(in) == State::parkour, "the game's vault under NATIVE RUN");
+        in.runRt = false;
+        check(classify(in) == State::air, "air");
+        in.webbed = in.owned = true;
+        check(classify(in) == State::swing, "swing");
+        in.owned = false;
+        check(classify(in) == State::web, "web");
+        in.zipping = true;
+        check(classify(in) == State::zip, "zip");
+        in = {};
+        in.playing = in.fresh = true;
+        in.wall = 1;
+        check(classify(in) == State::wall, "wall");
+        in.dodging = true;
+        check(classify(in) == State::combat, "a dodge not combat");
+        for (unsigned i = 0; i < stateCount; ++i)
+            check(std::strcmp(stateName(static_cast<State>(i)), "?") != 0, "a state without a name");
+        // Angles: level ahead, pitched up 30, rolled.
+        Angles a = anglesOf({0, 0, 1}, {0, 1, 0});
+        check(std::abs(a.yaw) < .01f && std::abs(a.pitch) < .01f && std::abs(a.roll) < .01f, "level not level");
+        a = anglesOf({0, .5f, .8660254f}, {0, .8660254f, -.5f});
+        check(std::abs(a.pitch - 30) < .01f && std::abs(a.roll) < .01f, "pitch");
+        a = anglesOf({0, 0, 1}, {.5f, .8660254f, 0});
+        check(std::abs(std::abs(a.roll) - 30) < .01f, "roll");
+        a = anglesOf({1, 0, 0}, {0, 1, 0});
+        check(std::abs(a.yaw - 90) < .01f, "yaw");
+        check(std::isnan(anglesOf({NAN, 0, 0}, {0, 1, 0}).yaw), "a NaN frame given angles");
+        check(std::abs(frameAngle({0, 0, 1}, {0, 1, 0}, {1, 0, 0}, {0, 1, 0}) - 90) < .01f, "a quarter turn");
+        Histogram<10> h(10);
+        for (int i = 0; i < 100; ++i)
+            h.add(i < 90 ? .5f : 9.5f);
+        h.add(NAN);
+        check(h.total == 100 && h.quantile(.5f) == 1 && h.quantile(.95f) == 9.5f && h.max == 9.5f, "quantiles");
+        // A head moving 1 m/s and turning 90 deg/s in model space, the root still: anim live yes;
+        // then frozen: no. The sample is const: the probe writes nothing back.
+        auto probe = std::make_unique<Probe>();
+        Probe::Lines lines;
+        Sample s;
+        s.joints = 210;
+        s.head = 57;
+        s.neck = 56;
+        s.chain = 7;
+        s.turned = s.headset = 1;
+        s.eyes = {0, 1.7f, 0};
+        s.facing = {};
+        s.gameUp = {0, 1, 0};
+        const float dt = 1.f / 90;
+        bool bone = false, live = false, still = false, edge = false;
+        unsigned sampleLines = 0, summaries = 0;
+        float maxSpeed = 0;
+        for (int i = 0; i < 360; ++i) {
+            const bool moving = i < 180;
+            const float t = i * dt;
+            s.job = i + 1;
+            if (moving) {
+                s.gameHead = {0, 1.6f, t};
+                s.gameForward = {std::sin(t * 1.5707963f), 0, std::cos(t * 1.5707963f)};
+            }
+            s.shownHead = s.gameHead;
+            const State st = i < 270 ? State::ground : State::parkour;
+            probe->update(dt, st, false, s, lines);
+            check(lines.count <= Probe::maxLines, "too many lines in a frame");
+            for (unsigned k = 0; k < lines.count; ++k) {
+                const char* text = lines.text[k];
+                check(std::strlen(text) <= textChars, text);
+                bone |= std::strncmp(text, "head probe: head bone 57, neck 56, parent chain 7", 49) == 0;
+                live |= std::strstr(text, "anim live: yes in ground") != nullptr;
+                still |= std::strstr(text, "anim live: no in ground") != nullptr;
+                edge |= std::strcmp(text, "head probe: state ground -> parkour (body game, move game)") == 0;
+                sampleLines += std::strncmp(text, "head probe: ground body", 23) == 0;
+                summaries += std::strncmp(text, "head probe: summary ground", 26) == 0;
+                if (const char* v = std::strstr(text, " v "))
+                    maxSpeed = std::max(maxSpeed, std::strtof(v + 3, nullptr));
+            }
+        }
+        check(bone && live && still && edge, "the bone, anim live yes then no, and the state edge");
+        check(sampleLines >= 27 && sampleLines <= 33, "not about 10 sample lines a second");
+        check(summaries == 1, "not a summary every 2 s");
+        check(maxSpeed > .9f && maxSpeed < 1.1f, "the head's speed not 1 m/s");
+        const auto& ground = probe->stats(State::ground);
+        check(ground.samples == 270 && !ground.bad && !ground.jumps && ground.angular.max > 80 &&
+                  ground.angular.max < 100 && ground.speed.quantile(.5f) <= 1.1f,
+              "the ground's numbers");
+        char session[stateCount][lineChars];
+        check(probe->session(session, stateCount) == 2 && std::strncmp(session[0], "head probe: session ground n 270", 32) == 0 &&
+                  std::strncmp(session[1], "head probe: session parkour n 90", 32) == 0,
+              "the session's lines");
+        // A NaN head: counted bad, never stable; a rig with no head: said once, with its candidates.
+        s.gameHead = {NAN, 0, 0};
+        s.job = 1000;
+        probe->update(dt, State::parkour, false, s, lines);
+        check(probe->stats(State::parkour).bad == 1, "a NaN head not counted");
+        probe->reset();
+        Sample none;
+        none.job = 1;
+        none.joints = 40;
+        none.candidates = 2;
+        probe->update(dt, State::ground, false, none, lines);
+        check(lines.count == 1 && std::strcmp(lines.text[0], "head probe: head bone: not found (rig 40 joints, problem "
+                                                             "0; candidates found: neck)") == 0,
+              "head bone: not found");
+        none.job = 2;
+        probe->update(dt, State::ground, false, none, lines);
+        check(lines.count == 0 && probe->stats(State::ground).samples == 0, "not found said again, or sampled");
     });
     test("session diagnostics: forearm aim in its own ring, the rest kept, the build named", [] {
         using namespace diag_log;

@@ -34,7 +34,7 @@ void* writerHook{};
 bool hooked{};
 std::atomic<bool> enabled{};
 SRWLOCK lifecycle = SRWLOCK_INIT, commandLock = SRWLOCK_INIT, solveLock = SRWLOCK_INIT,
-        statusLock = SRWLOCK_INIT, forearmLock = SRWLOCK_INIT;
+        statusLock = SRWLOCK_INIT, forearmLock = SRWLOCK_INIT, headLock = SRWLOCK_INIT;
 Command command{};
 uint64_t commandDeadline{};
 // The probe's joint roles for a rig of `overrideJoints` joints (0: none).
@@ -62,6 +62,10 @@ struct Cache {
     body::Rig ik;
     std::vector<float> rest; // for the probe's capture
     uint32_t problem = native_body::noRig;
+    // HEAD PROBE: the head and neck by name, the head's parent chain, and
+    // which of head_probe::candidateNames the rig has (read with the rig).
+    int head = -1, neck = -1;
+    uint32_t chain{}, candidates{};
 };
 std::array<Cache, 4> caches;
 uint64_t cacheUses{};
@@ -99,6 +103,10 @@ std::atomic<uint32_t> heroJobsThisFrame{};
 // head, whatever an earlier job of the frame did.
 std::atomic<uint64_t> lastDrawn{};
 std::atomic<bool> latestSolved{};
+// HEAD PROBE (head_probe.hpp): on, and the latest sample (headLock).
+std::atomic<bool> headProbeOn{};
+head_probe::Sample headProbeSample{};
+uint64_t headProbeJobs{};
 
 bool read(uintptr_t p, void* out, size_t n) {
     __try {
@@ -336,6 +344,17 @@ Cache& rigEntry(uintptr_t rig) {
     } else {
         entry.joints = static_cast<uint32_t>(data.parent.size());
         entry.problem = identify(data, entry.ik);
+        // HEAD PROBE: found by name as identify() does, whether or not the
+        // body can use the rig.
+        entry.head = byName(data, {"head"});
+        entry.neck = byName(data, {"neck", "neck_A", "neck_01", "neck1"});
+        if (entry.neck < 0 && entry.head >= 0)
+            entry.neck = data.parent[entry.head];
+        for (int j = entry.head; j >= 0 && entry.chain <= data.parent.size(); j = data.parent[j])
+            ++entry.chain;
+        for (unsigned i = 0; i < head_probe::candidateCount; ++i)
+            if (byName(data, {head_probe::candidateNames[i]}) >= 0)
+                entry.candidates |= 1u << i;
         if (!entry.problem && !body::prepare(entry.ik, data.rest))
             entry.problem = native_body::badRest;
         entry.rest = data.rest;
@@ -373,6 +392,37 @@ void solveHero(float* out, uintptr_t job, uintptr_t instance) {
     const bool turned = read(instance, transform, sizeof(transform)) && instanceTurn(transform, toWorld);
     if (!problem && !turned)
         problem = native_body::badInstance;
+    // HEAD PROBE: the head as the game's animation wrote it, before the body's
+    // solve. Read only.
+    const bool probing = headProbeOn.load(std::memory_order_relaxed);
+    head_probe::Sample probe{};
+    const int probeHead = cache.ik.head >= 0 && !cache.problem ? cache.ik.head : cache.head;
+    const bool probeReady = cache.ik.ready && !cache.problem;
+    const Vec3 probeForward = probeReady ? cache.ik.headForward : Vec3{0, 0, 1},
+               probeUp = probeReady ? cache.ik.headUp : Vec3{0, 1, 0};
+    if (probing) {
+        probe.joints = cache.joints;
+        probe.problem = problem;
+        probe.head = probeHead;
+        probe.neck = cache.neck;
+        probe.chain = cache.chain;
+        probe.candidates = cache.candidates;
+        probe.turned = turned;
+        probe.toWorld = toWorld;
+        probe.root = {transform[12], transform[13], transform[14]};
+        probe.bodyOn = on;
+        probe.headset = live;
+        probe.eyes = wanted.eyes;
+        probe.facing = wanted.facing;
+        if (probeHead >= 0 && probeHead < static_cast<int>(cache.joints)) {
+            const body::Pose game(out, static_cast<int>(cache.joints));
+            probe.gameHead = probe.shownHead = game.position(probeHead);
+            probe.gameForward = game.direction(probeHead, probeForward);
+            probe.gameUp = game.direction(probeHead, probeUp);
+        } else {
+            probe.head = -1;
+        }
+    }
     body::Result result;
     float scale = 1, armScale = 1;
     const bool capture = captureWanted.exchange(false);
@@ -541,6 +591,16 @@ void solveHero(float* out, uintptr_t job, uintptr_t instance) {
                         ? state.crawlTurn.outwardWeight(state.crawlTurn.angle())
                         : 0.f;
     latestSolved = result.solved && on;
+    if (probing) {
+        // And as the body left it, then published (its own lock, a copy).
+        probe.solved = result.solved && on;
+        if (probe.solved && probe.head >= 0)
+            probe.shownHead = body::Pose(out, static_cast<int>(cache.joints)).position(probe.head);
+        AcquireSRWLockExclusive(&headLock);
+        probe.job = ++headProbeJobs;
+        headProbeSample = probe;
+        ReleaseSRWLockExclusive(&headLock);
+    }
     const uint32_t switches = rigSwitches;
     LARGE_INTEGER finished{};
     QueryPerformanceCounter(&finished);
@@ -687,6 +747,15 @@ native_body::Forearms native_body::forearms() {
     AcquireSRWLockShared(&forearmLock);
     auto out = SpidyForearms;
     ReleaseSRWLockShared(&forearmLock);
+    return out;
+}
+void native_body::setHeadProbe(bool on) {
+    headProbeOn = on;
+}
+head_probe::Sample native_body::headSample() {
+    AcquireSRWLockShared(&headLock);
+    auto out = headProbeSample;
+    ReleaseSRWLockShared(&headLock);
     return out;
 }
 native_body::Status native_body::status() {

@@ -2045,12 +2045,15 @@ class ProtocolTests(unittest.TestCase):
         """SpidyDiagData (diag_log.hpp): every new line goes to the console and reports/<session>-diag.log,
         the build first; a reader that fell behind says how many it lost; forearm aim has its own ring.
         November 2: four sessions' consoles had not one feature line, all of them in the report's timeline."""
-        from run_game_vr import diag_snapshot, DiagLog, diag_path, DIAG_BYTES, DIAG_MAIN_AT, DIAG_AIM_AT, DIAG_CHARS
-        self.assertEqual(DIAG_BYTES, 34696)
+        from run_game_vr import (diag_snapshot, DiagLog, diag_path, DIAG_BYTES, DIAG_MAIN_AT, DIAG_AIM_AT,
+                                 DIAG_HEAD_AT, DIAG_CHARS)
+        # Version 2 (HEAD PROBE): a third ring of 64 for "head probe:" lines, after the others.
+        self.assertEqual(DIAG_BYTES, 50064)
+        self.assertEqual(DIAG_HEAD_AT, 34696)
         self.assertEqual(diag_path(pathlib.Path('reports/game-vr-20261103-101500.json')).name,
                          'game-vr-20261103-101500-diag.log')
         raw = bytearray(DIAG_BYTES)
-        struct.pack_into('<3I', raw, 0, 0x47414944, 1, DIAG_BYTES)
+        struct.pack_into('<3I', raw, 0, 0x47414944, 2, DIAG_BYTES)
         raw[24:24+len(b'Spidy 0.7.0 (commit abc1234)')] = b'Spidy 0.7.0 (commit abc1234)'
 
         def put(at, count, lines):
@@ -2061,6 +2064,7 @@ class ProtocolTests(unittest.TestCase):
                 raw[slot:slot+len(line)] = line.encode()
         put(DIAG_MAIN_AT, 128, ['[   1.000] run log: touchdown at 12.0 m/s across'])
         put(DIAG_AIM_AT, 16, [f'[   {i}.000] forearm aim: L none' for i in range(20)])
+        put(DIAG_HEAD_AT, 64, [f'[   {i}.100] head probe: ground body game move game' for i in range(3)])
         game = Mock()
         game.read = lambda address, size: bytes(raw[address-0x1000:address-0x1000+size])
         printed = []
@@ -2071,12 +2075,13 @@ class ProtocolTests(unittest.TestCase):
             self.assertIn('diag [   1.000] run log: touchdown at 12.0 m/s across', printed)
             self.assertTrue(any('4 aim lines lost' in line for line in printed), printed)
             self.assertEqual(sum('forearm aim' in line for line in printed), 16)
+            self.assertEqual(sum('head probe: ground' in line for line in printed), 3)
             log.take(diag_snapshot(game, 0x1000))  # nothing new: nothing again
             self.assertEqual(len(printed), log.lines)
             written = (pathlib.Path(folder)/'game-vr-x-diag.log').read_text(encoding='utf-8').splitlines()
             self.assertEqual(written, printed)
         # A layout of another version is reported, never raised.
-        struct.pack_into('<I', raw, 4, 2)
+        struct.pack_into('<I', raw, 4, 1)
         self.assertIn('protocol_mismatch', diag_snapshot(game, 0x1000))
 
     def test_a_crashed_game_says_so_with_its_last_stage(self):

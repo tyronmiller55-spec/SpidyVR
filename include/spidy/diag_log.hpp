@@ -8,8 +8,9 @@
 // reads with the rest of a session, prints to the console and appends to
 // reports/<session>-diag.log. The report's timeline is as before.
 //
-// Two rings, so the frequent lines cannot push out the rare ones: `main` for
-// everything, `aim` for "forearm aim:" alone. Each line is numbered by the
+// Three rings, so the frequent lines cannot push out the rare ones: `main` for
+// everything, `aim` for "forearm aim:" alone, `head` for HEAD PROBE's "head
+// probe:" alone (about 10 a second while it is on; version 2). Each line is numbered by the
 // ring's count of lines ever written, so a reader that falls behind knows how
 // many it lost.
 #pragma once
@@ -22,11 +23,13 @@
 #include <string_view>
 
 namespace spidy::diag_log {
-inline constexpr unsigned mainLines = 128, aimLines = 16, lineChars = 240, buildChars = 96;
-enum class Channel : uint8_t { main, aim };
+inline constexpr unsigned mainLines = 128, aimLines = 16, headLines = 64, lineChars = 240, buildChars = 96;
+enum class Channel : uint8_t { main, aim, head };
 // Which ring a line belongs in: "forearm aim:" lines in their own.
 inline Channel channelOf(std::string_view text) {
-    return text.substr(0, 12) == "forearm aim:" ? Channel::aim : Channel::main;
+    if (text.substr(0, 12) == "forearm aim:")
+        return Channel::aim;
+    return text.substr(0, 11) == "head probe:" ? Channel::head : Channel::main;
 }
 template <unsigned N> struct Ring {
     uint64_t written{};
@@ -42,17 +45,19 @@ template <unsigned N> struct Ring {
     }
 };
 // SpidyDiagData (the stereo module's export, run_game_vr.py diag_snapshot):
-// sequence odd while it is being written, the build's id, then both rings.
+// sequence odd while it is being written, the build's id, then the rings.
 struct Data {
-    uint32_t magic = 0x47414944 /* DIAG */, version = 1, bytes = sizeof(Data), reserved{};
+    uint32_t magic = 0x47414944 /* DIAG */, version = 2, bytes = sizeof(Data), reserved{};
     volatile int64_t sequence{};
     char build[buildChars]{};
     Ring<mainLines> main{};
     Ring<aimLines> aim{};
+    Ring<headLines> head{}; // version 2
 };
 static_assert(offsetof(Data, sequence) == 16 && offsetof(Data, build) == 24 && offsetof(Data, main) == 120 &&
               offsetof(Data, aim) == 120 + 8 + mainLines * lineChars &&
-              sizeof(Data) == 120 + 2 * 8 + (mainLines + aimLines) * lineChars);
+              offsetof(Data, head) == 120 + 2 * 8 + (mainLines + aimLines) * lineChars &&
+              sizeof(Data) == 120 + 3 * 8 + (mainLines + aimLines + headLines) * lineChars);
 // The build's id: the version, and the git commit it was built from where the
 // build knew it (CMake, at configure), else when it was built.
 inline std::string buildId(const char* version, const char* commit, const char* stamp) {

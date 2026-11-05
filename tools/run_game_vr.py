@@ -1898,15 +1898,16 @@ def controller_buttons(bits):
 # SESSION DIAGNOSTICS (diag_log.hpp, SpidyDiagData): the build, the feature settings and the features' own lines
 # (RUN LOGS' "run log:", WEB AIM's "forearm aim:", DODGE TUMBLE's, the state changes on and off the ground).
 # Until v4 they reached only the report's timeline; now the console and reports/<session>-diag.log get them.
-DIAG_MAGIC, DIAG_VERSION = 0x47414944, 1
-DIAG_MAIN, DIAG_AIM, DIAG_CHARS, DIAG_BUILD = 128, 16, 240, 96
+DIAG_MAGIC, DIAG_VERSION = 0x47414944, 2
+DIAG_MAIN, DIAG_AIM, DIAG_HEAD, DIAG_CHARS, DIAG_BUILD = 128, 16, 64, 240, 96
 DIAG_MAIN_AT = 120
 DIAG_AIM_AT = DIAG_MAIN_AT + 8 + DIAG_MAIN*DIAG_CHARS
-DIAG_BYTES = DIAG_AIM_AT + 8 + DIAG_AIM*DIAG_CHARS
+DIAG_HEAD_AT = DIAG_AIM_AT + 8 + DIAG_AIM*DIAG_CHARS  # version 2: HEAD PROBE's "head probe:" lines
+DIAG_BYTES = DIAG_HEAD_AT + 8 + DIAG_HEAD*DIAG_CHARS
 
 
 def diag_snapshot(game, address):
-    """The diagnostics' two rings as they stand: {'build', 'main': (written, slots), 'aim': (written, slots)},
+    """The diagnostics' rings as they stand: {'build', 'main', 'aim', 'head': (written, slots)},
     a protocol mismatch reported (never raised: these are diagnostics), or None while it is being written."""
     for _ in range(8):
         raw = game.read(address, DIAG_BYTES)
@@ -1919,7 +1920,8 @@ def diag_snapshot(game, address):
             continue
         text = lambda at, size: raw[at:at+size].split(b'\0', 1)[0].decode('utf-8', 'replace')
         rings = {}
-        for name, at, count in (('main', DIAG_MAIN_AT, DIAG_MAIN), ('aim', DIAG_AIM_AT, DIAG_AIM)):
+        for name, at, count in (('main', DIAG_MAIN_AT, DIAG_MAIN), ('aim', DIAG_AIM_AT, DIAG_AIM),
+                                ('head', DIAG_HEAD_AT, DIAG_HEAD)):
             written = struct.unpack_from('<Q', raw, at)[0]
             rings[name] = (written, [text(at+8+i*DIAG_CHARS, DIAG_CHARS) for i in range(count)])
         return dict(build=text(24, DIAG_BUILD), **rings)
@@ -1929,11 +1931,11 @@ def diag_snapshot(game, address):
 class DiagLog:
     """What diag_snapshot adds since the last look: each new line printed to the console (where the launcher
     shows it) and appended to the diagnostics file beside the session report, with the build first."""
-    SIZES = dict(main=DIAG_MAIN, aim=DIAG_AIM)
+    SIZES = dict(main=DIAG_MAIN, aim=DIAG_AIM, head=DIAG_HEAD)
 
     def __init__(self, path, echo=None):
         self.path, self.echo = pathlib.Path(path), echo or (lambda line: print(line, flush=True))
-        self.seen = dict(main=0, aim=0)
+        self.seen = dict(main=0, aim=0, head=0)
         self.build = None
         self.lines = 0
         self.stage = None  # the last "stage:" line (diag_log::Stages), for crash_advice
@@ -1953,7 +1955,7 @@ class DiagLog:
         if snapshot['build'] and snapshot['build'] != self.build:
             self.build = snapshot['build']
             self._out(f'Spidy diagnostics: build {self.build} (this file: {self.path})')
-        for name in ('main', 'aim'):
+        for name in ('main', 'aim', 'head'):
             written, slots = snapshot[name]
             size, seen = self.SIZES[name], self.seen[name]
             if written < seen:  # the module started again
