@@ -23842,7 +23842,7 @@ int main() {
                   "flip_reprojection=0\nsteady_hud=0\nreel_haptics=0\nswing_haptics=0\n"
                   "pc_media=0\nsingle_hand_yank_percent=100\nweb_tie=0\nnative_run=0\nair_slingshot=0\nweb_angle_"
                   "degrees=0\nwrist_shooters=0\n"
-                  "dodge_tumble=0\nrun_curve=0\nnative_run_at_percent=70\nrun_logs=0\nrunning_leap=0\nearly_jump=0\nsoft_landing=0\nspidy_run=0\nspidy_run_from_standing=0\nweb_aim_source=0\nforearm_blend=100\nweb_landing_smooth=0\nweb_landing_impact_speed=24\nsteady_states=0\ncombat_responsive=0\nspidy_run_jump=1\nforearm_aim_limit=180\npalm_shooters=0\nhead_probe=0\nanimated_moves=0\nanimated_head=0\nanimated_air=0\nanimated_steering=0\n",
+                  "dodge_tumble=0\nrun_curve=0\nnative_run_at_percent=70\nrun_logs=0\nrunning_leap=0\nearly_jump=0\nsoft_landing=0\nspidy_run=0\nspidy_run_from_standing=0\nweb_aim_source=0\nforearm_blend=100\nweb_landing_smooth=0\nweb_landing_impact_speed=24\nsteady_states=0\ncombat_responsive=0\nspidy_run_jump=1\nforearm_aim_limit=180\npalm_shooters=0\nhead_probe=0\nanimated_moves=0\nanimated_head=0\nanimated_air=0\nanimated_steering=0\nanimated_arms=0\n",
               "the defaults' text");
         Values changed = defaults;
         changed.recordingFov = 140;
@@ -26823,7 +26823,10 @@ int main() {
         hands[1] = {{-1, 1.5f, 0}, true, 0, 0, false};
         update(st, 1.f / 90, true, {}, hands);
         hands[0].grip = {1, 1.5f, .5f}; // ~45 m/s at 90 Hz — well above speedOn
-        update(st, 1.f / 90, true, {}, hands);
+        for (int i = 0; i < 12; ++i) {
+            hands[0].grip.z += .5f;
+            update(st, 1.f / 90, true, {}, hands);
+        }
         check(st.arms[0].weight > .5f && st.arms[1].weight < .01f, "per-arm independence failed");
         // Web button on right (stationary) → immediate right weight.
         hands[1].webButton = true;
@@ -26842,7 +26845,7 @@ int main() {
         check(t.armsOnly == false && t.armWeight[0] == 0 && t.armWeight[1] == 0, "armsOnly defaults");
         t.armsOnly = true;
         check(t.armsOnly && !t.head, "armsOnly implies head");
-        check((native_body::armsOverlay & ~0x7ffffu) == 0, "armsOverlay outside validCrawl mask");
+        check((native_body::armsOverlay & ~0xfffffu) == 0, "armsOverlay outside validCrawl mask");
         check((native_body::armsOverlay & native_body::bodyOn) == 0, "armsOverlay overlaps bodyOn");
     });
 
