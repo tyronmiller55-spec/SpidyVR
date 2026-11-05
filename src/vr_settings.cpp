@@ -685,7 +685,7 @@ const std::array<Row, 96>& rows() {
         {Item::animatedMoves, "ANIMATED MOVES",
          "Game anim drives the body for ground parkour, vaults and mantles (NATIVE RUN).", {}},
         {Item::animatedHead, "ANIMATED HEAD",
-         "While ANIMATED MOVES yields: view follows the anim head. LEVEL place only; FULL turns with it.",
+         "While ANIMATED MOVES yields: view follows the anim head. LEVEL or FULL.",
          animatedHeadChoices},
         {Item::realisticFlips,
          "REALISTIC FLIPS",

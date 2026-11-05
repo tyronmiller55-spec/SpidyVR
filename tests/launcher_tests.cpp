@@ -720,6 +720,7 @@ int main() {
         t.palmShooters = true;
         t.headProbe = true;
         t.animatedMoves = true;
+        t.animatedHead = 2;
         t.webAimSource = 1;
         t.forearmBlend = 50;
         t.webSlingshot = true;
