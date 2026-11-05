@@ -2100,7 +2100,7 @@ class ProtocolTests(unittest.TestCase):
             log = DiagLog(pathlib.Path(folder)/'x-diag.log', echo=lambda line: None)
             raw = {'build': 'b', 'main': (2, ['[   1.000] stage: headset active, the eye views not started',
                                               '[   2.000] stage: frames reaching the headset - the eye images']
-                                          + ['']*126), 'aim': (0, ['']*16)}
+                                          + ['']*126), 'aim': (0, ['']*16), 'head': (0, ['']*64)}
             log.take(raw)
             self.assertEqual(log.stage, 'frames reaching the headset - the eye images')
 
