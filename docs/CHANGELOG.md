@@ -7,6 +7,26 @@ Per-check results are in [VALIDATION.md](VALIDATION.md).
 
 Not in a build yet, newest first. The release adds these to the next build's entry.
 
+**ANIMATED TORSO: bounded waist→chest while ANIMATED ARMS (opt-in, off).**
+
+- **Why.** Headset feedback on the cumulative arms build: midair aim needs the
+  upper body to contort toward wild controller directions; arm-only IK left the
+  torso rigid at the shoulders. Legs redesign stays tabled; Full head stays Full.
+- **Change.** New SPIDY VR switch ANIMATED TORSO (default off). With ANIMATED
+  ARMS on a pose yield: distribute bounded spine yaw/pitch (provisional ~40° /
+  ~25°) from waist toward chest by per-arm activity, then re-solve arms from the
+  moved shoulders/clavicles. Idle weights leave the game pose exact. Head world
+  position preserved by pivoting spine turns through the head; head orientation
+  compensated after. Pelvis/feet/legs untouched. Tracking loss / zero weights
+  smooth back. Both-arm opposition cancels yaw. Starts from the game pose each
+  solve (no cumulative anim-base mutation). Web aim keeps controller fallbacks
+  from the control-fixes patch while overlay is active.
+- **Plumbing.** `animated_torso` in tab/ini; game_swing Settings v37
+  (`animatedTorso`); `native_body::setTorsoAssist` side channel (no Command
+  layout change).
+- **Not in this patch.** Whole-model R-stick yaw (queued; no proven facing
+  write). Not headset-verified. Limits provisional.
+
 **Animated control fixes: aim coherence + handoff debounce (opt-in paths).**
 
 - **Why (headset logs on abed22f).** With ANIMATED ARMS + MODEL FOREARM + Full
@@ -23,8 +43,8 @@ Not in a build yet, newest first. The release adds these to the next build's ent
   is on (arms handle aim). Exit `adoptFeet`/IK resync debounced (~200 ms);
   brief re-enter cancels. Removed speculative early-peek adoptFeet while still
   yielding. Full head stays Full (no Level force).
-- **Not in this patch.** Torso/waist IK soften; whole-model R-stick yaw (queued).
-  Legs still tabled. Not headset-verified.
+- **Not in this patch (at control-fixes).** Whole-model R-stick yaw still queued;
+  torso landed as ANIMATED TORSO above. Legs still tabled. Not headset-verified.
 
 **ANIMATED HEAD: stop forcing Full→Level in air (user override).**
 

@@ -1016,10 +1016,17 @@ VR settings
   ANIMATED ARMS    (off until you switch it on; EXPERIMENTAL, after ANIMATED
                    STEERING) while a pose yield is on, moving a controller (or
                    web/aim intent) overlays that arm on the game animation;
-                   idle returns it. Torso, legs and head stay animated.
-                   Tracking loss yields to the game arm. Motion is measured
-                   against the actor root so falling/swinging alone is not
-                   "active". Thresholds provisional. Off by default.
+                   idle returns it. Torso, legs and head stay animated
+                   unless ANIMATED TORSO is also on. Tracking loss yields to
+                   the game arm. Motion is measured against the actor root so
+                   falling/swinging alone is not "active". Thresholds
+                   provisional. Off by default.
+  ANIMATED TORSO   (off until you switch it on; EXPERIMENTAL, after ANIMATED
+                   ARMS) with ANIMATED ARMS, the waist→chest bends toward
+                   extreme controller aims so midair pointing can contort the
+                   upper body. Animated root, legs, and head world pose stay
+                   on the game anim (head orientation is compensated after
+                   spine turns). Limits provisional. Off by default.
   DODGE TUMBLE     (OFF until you pick one) when the game dodges, your
                    view tips toward the dodge (LEAN) or turns a full roll
                    (ROLL, sideways dodges) so you can tell it dodged. Your
@@ -1106,7 +1113,7 @@ VR settings
                    Off: v5's jump, the game's, up to 0.2 s later.
   Changes apply at once. The launcher starts your next session with them;
   its options show every one of them but VR VIEW too.
-  NEAR CLIP, RECORDING FOV, UI STYLE, BLOW SOUNDS, PC MEDIA, NATIVE RUN, AIR SLINGSHOT, WEB ANGLE, WRIST SHOOTERS, DODGE TUMBLE, RUN CURVE, NATIVE RUN AT, RUN LOGS, RUNNING LEAP, EARLY JUMP, SOFT LANDING, SPIDY RUN, RUN FROM STANDING, WEB AIM, FOREARM BLEND, SMOOTH WEB LANDING, WEB LANDING IMPACT, STEADY STATES, COMBAT RESPONSIVE, SPIDY RUN JUMP, FOREARM AIM LIMIT, PALM SHOOTERS, HEAD PROBE, ANIMATED MOVES, ANIMATED HEAD, ANIMATED AIR, ANIMATED STEERING, ANIMATED ARMS, HEIGHT, SEATED, EYE AIM,
+  NEAR CLIP, RECORDING FOV, UI STYLE, BLOW SOUNDS, PC MEDIA, NATIVE RUN, AIR SLINGSHOT, WEB ANGLE, WRIST SHOOTERS, DODGE TUMBLE, RUN CURVE, NATIVE RUN AT, RUN LOGS, RUNNING LEAP, EARLY JUMP, SOFT LANDING, SPIDY RUN, RUN FROM STANDING, WEB AIM, FOREARM BLEND, SMOOTH WEB LANDING, WEB LANDING IMPACT, STEADY STATES, COMBAT RESPONSIVE, SPIDY RUN JUMP, FOREARM AIM LIMIT, PALM SHOOTERS, HEAD PROBE, ANIMATED MOVES, ANIMATED HEAD, ANIMATED AIR, ANIMATED STEERING, ANIMATED ARMS, ANIMATED TORSO, HEIGHT, SEATED, EYE AIM,
   SMART ANCHOR, WEB RANGE, WEB SPEED, ELASTIC WEB, SOFT RELEASE, SWING
   ASSIST, SLINGSHOT SPEED, SINGLE HAND YANK STRENGTH, TWO HAND WEB ZIP, HAND ROPE STEERING, RECORDING
   SMOOTHING, REEL HAPTICS, SWING HAPTICS, the four body haptics switches
