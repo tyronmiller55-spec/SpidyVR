@@ -1030,6 +1030,24 @@ VR settings
                    upper body. Animated root, legs, and head world pose stay
                    on the game anim (head orientation is compensated after
                    spine turns). Limits provisional. Off by default.
+  ANIMATED ONLY    (off until you switch it on; EXPERIMENTAL, after ANIMATED
+                   MODEL YAW) with ANIMATED MOVES and/or ANIMATED AIR on, the
+                   game's animation keeps Spidey's body in every gameplay state
+                   (walls, zips, wall runs and combat too) and freefall web aim
+                   no longer tears it down, so the SpidyVR body never takes it
+                   back mid-play: no location, head, torso or hand jumps when
+                   the state changes. Only a cutscene, menu or the game's
+                   camera for longer than 1.5 s ends it (shorter blips keep
+                   it). Physics stay the mod's. Off by default.
+  ANIMATED AIR SPIN (OFF until you pick one; EXPERIMENTAL, after ANIMATED
+                   ONLY) while a pose yield is on in the air: FLIPS turns the
+                   animated Spidey with the realistic flips' pitch, roll and
+                   yaw (your hands, sticks and swing-release momentum), the
+                   way SpidyVR mode turns its own body. FLIPS + MOMENTUM also
+                   leans him along his travel (dives nose-down, climbs
+                   nose-up) and banks him into turns. Turned about his head;
+                   with ANIMATED HEAD FULL your view turns with him (never
+                   leveled). Visual and view only. Limits provisional.
   DODGE TUMBLE     (OFF until you pick one) when the game dodges, your
                    view tips toward the dodge (LEAN) or turns a full roll
                    (ROLL, sideways dodges) so you can tell it dodged. Your
@@ -1116,7 +1134,7 @@ VR settings
                    Off: v5's jump, the game's, up to 0.2 s later.
   Changes apply at once. The launcher starts your next session with them;
   its options show every one of them but VR VIEW too.
-  NEAR CLIP, RECORDING FOV, UI STYLE, BLOW SOUNDS, PC MEDIA, NATIVE RUN, AIR SLINGSHOT, WEB ANGLE, WRIST SHOOTERS, DODGE TUMBLE, RUN CURVE, NATIVE RUN AT, RUN LOGS, RUNNING LEAP, EARLY JUMP, SOFT LANDING, SPIDY RUN, RUN FROM STANDING, WEB AIM, FOREARM BLEND, SMOOTH WEB LANDING, WEB LANDING IMPACT, STEADY STATES, COMBAT RESPONSIVE, SPIDY RUN JUMP, FOREARM AIM LIMIT, PALM SHOOTERS, HEAD PROBE, ANIMATED MOVES, ANIMATED HEAD, ANIMATED AIR, ANIMATED STEERING, ANIMATED ARMS, ANIMATED TORSO, ANIMATED MODEL YAW, HEIGHT, SEATED, EYE AIM,
+  NEAR CLIP, RECORDING FOV, UI STYLE, BLOW SOUNDS, PC MEDIA, NATIVE RUN, AIR SLINGSHOT, WEB ANGLE, WRIST SHOOTERS, DODGE TUMBLE, RUN CURVE, NATIVE RUN AT, RUN LOGS, RUNNING LEAP, EARLY JUMP, SOFT LANDING, SPIDY RUN, RUN FROM STANDING, WEB AIM, FOREARM BLEND, SMOOTH WEB LANDING, WEB LANDING IMPACT, STEADY STATES, COMBAT RESPONSIVE, SPIDY RUN JUMP, FOREARM AIM LIMIT, PALM SHOOTERS, HEAD PROBE, ANIMATED MOVES, ANIMATED HEAD, ANIMATED AIR, ANIMATED STEERING, ANIMATED ARMS, ANIMATED TORSO, ANIMATED MODEL YAW, ANIMATED ONLY, ANIMATED AIR SPIN, HEIGHT, SEATED, EYE AIM,
   SMART ANCHOR, WEB RANGE, WEB SPEED, ELASTIC WEB, SOFT RELEASE, SWING
   ASSIST, SLINGSHOT SPEED, SINGLE HAND YANK STRENGTH, TWO HAND WEB ZIP, HAND ROPE STEERING, RECORDING
   SMOOTHING, REEL HAPTICS, SWING HAPTICS, the four body haptics switches

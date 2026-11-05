@@ -63,6 +63,8 @@ In the headset: pause (menu button) → **Settings** → **SPIDY VR** (the last 
 | ANIMATED ARMS | OFF | While yielding: controller arms overlay game torso/legs/head anim; idle returns. Motion vs actor root. With this on, freefall web intent keeps the pose yield (arms handle aim); MODEL FOREARM falls back to the controller so wrist-shooter markers follow live aim. Thresholds provisional. Off by default. |
 | ANIMATED TORSO | OFF | With ANIMATED ARMS: bounded waist→chest lean/twist toward extreme controller aims; head world pose compensated; legs/root stay anim. Limits provisional. Off by default. |
 | ANIMATED MODEL YAW | OFF | While yielding: R-stick X turns Spidey through the game's left-stick walk facing (VALIDATION / InteractStep), not CameraLook and not a facing RVA write. HMD free look stays XR. Provisional. Off by default. |
+| ANIMATED ONLY | OFF | With MOVES and/or AIR: every gameplay state (wall, zip, wall-run, combat) keeps the pose yield and web intent never interrupts it — the OG SpidyVR body never reclaims mid-play (no adoptFeet / head-follow re-anchor jumps). Cutscene/menu/stale blips under 1.5 s keep it. Physics unchanged. Off by default. |
+| ANIMATED AIR SPIN | OFF | OFF / FLIPS / FLIPS + MOMENTUM. While yielding airborne: the RealisticFlip tilt (full pitch/roll/yaw) turns the animated skeleton about its head; MOMENTUM adds a travel lean (dive ≤60°, climb ≤35°) and bank (≤35°). Visual/view only; physics untouched. Provisional. |
 | RUN LOGS | OFF | Writes run/landing/take-off speeds to the diag log for bug reports. Changes nothing in play. |
 
 Full descriptions: [PLAYERS.md](PLAYERS.md) ("VR settings").
@@ -99,3 +101,10 @@ remap so IRL arms match the model through rotations. Enable the same cumulative
 flags as the MODEL YAW zip, plus ANIMATED ARMS (and TORSO if you want upper-spine
 assist). Watch `tracking lock:` and denser `forearm aim:` lines in the diag log.
 Spherical midair and momentum bridge are still next — not in this zip.
+
+Community feat `feat/animated-only-sphere` (after tracking lock). ANIMATED ONLY
+keeps the game animation on the body in every gameplay state so the OG SpidyVR
+body stops reclaiming mid-parkour (the 0.8.0 tracking-lock log: 29 reclaims in
+~170 s, "moved 62.52 m since yield"). ANIMATED AIR SPIN turns the yielded
+animated body with SpidyVR's flip tilt (FLIPS) plus a travel lean/bank
+(FLIPS + MOMENTUM). Watch `animated only:` and `air spin:` diag lines.

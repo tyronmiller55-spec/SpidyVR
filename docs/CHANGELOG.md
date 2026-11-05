@@ -7,6 +7,33 @@ Per-check results are in [VALIDATION.md](VALIDATION.md).
 
 Not in a build yet, newest first. The release adds these to the next build's entry.
 
+**ANIMATED ONLY + ANIMATED AIR SPIN: no OG body reclaim; spherical + momentum midair (opt-in, off).**
+
+- **Why.** Headset logs on 1e805e1 (tracking lock): 50 yield entries and 29
+  "mod body again … adopt+ik resync" reclaims in ~170 s, every one on a wall
+  (26) or combat (3) state flip, with "moved 12–76 m since yield"; each one
+  turned head follow off (anim head → rig eyes), re-anchored the tracking rig
+  at the actor's feet and reset the arm overlay (Lw 0.17 ramp) — the user's
+  "desyncing of my location and head/torso/hand tracking when the game
+  switches to SpidyVR mode intermittently". User: keep it off, use the
+  animation system, spherical midair + momentum go.
+- **Change.** ANIMATED ONLY (tab switch, `animated_only`): with MOVES/AIR on,
+  `yieldsBody` keeps every non-cutscene state (wall, zip, parkour wall-run,
+  combat) and drops the freefall web interrupt; `StayLatch` keeps an active
+  yield (and the head follow while playing) through cutscene/stale blips for
+  1.5 s, so no bodyOn / adoptFeet mid-play. Steering/model-yaw gates are
+  unchanged (not on walls). ANIMATED AIR SPIN (`animated_air_spin` OFF / FLIPS
+  / FLIPS + MOMENTUM): while yielding airborne, the RealisticFlip tilt (the
+  quaternion the OG body takes) plus an optional velocity lean/bank turns the
+  game's animated skeleton about its head in the armsOnly pose job
+  (`native_body::setYieldTilt` → `body::Targets::yieldTilt`); ARMS targets are
+  un-tilted first so arms solve level and turn with the body. Visual/view
+  only — actor transform, physics and collision untouched. Diag:
+  `animated only: A -> B, game anim keeps body`, `animated only: kept yield
+  through …`, `air spin: … flip … lean … body … deg`.
+- **Not in this patch.** Legs redesign (tabled). Not headset-verified; lean
+  limits, grace and smoothing provisional.
+
 **ANIMATED ARMS tracking lock: soft floor + chest-frame grips (opt-in path).**
 
 - **Why.** Headset logs on 3df38b1 (MODEL YAW cumulative): IRL arms vs model
