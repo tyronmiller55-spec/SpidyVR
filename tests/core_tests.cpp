@@ -26768,7 +26768,10 @@ int main() {
         s = actorRelativeForward(NAN, 1.f, actor, camF, camR);
         check(s.right == 0 && s.forward == 0, "NaN stick accepted");
         // Entry/exit: without yield, active is false (call site leaves sticks alone).
-        check(!active(true, false), "aptest("ANIMATED ARMS: off by default, after ANIMATED STEERING, swing settings field at v36", [] {
+        check(!active(true, false), "applies outside yield");
+    });
+
+    test("ANIMATED ARMS: off by default, after ANIMATED STEERING, swing settings field at v36", [] {
         using namespace vr_settings;
         Values v;
         check(!v.animatedArms && defaultChoice(Item::animatedArms) == 0, "ANIMATED ARMS on by default");
@@ -26799,8 +26802,6 @@ int main() {
         check(game_swing::validSettings(s), "version 35 settings packet refused");
     });
 
- settings packet refused");
-    });
     test("ANIMATED ARMS: motion vs root, intent, tracking loss, per-arm independence", [] {
         using namespace animated_arms;
         State st;
