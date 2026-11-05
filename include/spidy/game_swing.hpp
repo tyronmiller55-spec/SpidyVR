@@ -586,7 +586,8 @@ inline bool validSettings(const Settings& s) {
          (s.version == 33 && s.bytes == settingsBytesV33) ||
          (s.version == 34 && s.bytes == settingsBytesV34) ||
          (s.version == 35 && s.bytes == settingsBytesV35) ||
-         (s.version == 36 && s.bytes == sizeof(Settings))) &&
+         (s.version == 36 && s.bytes == settingsBytesV36) ||
+         (s.version == 37 && s.bytes == sizeof(Settings))) &&
         s.grab <= 1 && std::isfinite(s.maxSpeed) && s.maxSpeed > 0 && s.maxSpeed <= motionSpeedLimit &&
         s.airWebs <= 1 && std::isfinite(s.gravity) && s.gravity >= 0 && s.gravity <= maxGravity &&
         s.walls <= 4 && s.physical <= 1 && s.noBlows <= 3 && s.arcade <= 1 && s.handClimb <= 1 &&

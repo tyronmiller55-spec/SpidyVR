@@ -702,7 +702,7 @@ const std::array<Row, 100>& rows() {
         {Item::animatedArms, "ANIMATED ARMS",
          "While yielding: controller arms overlay game anim; idle returns. Provisional.", {}},
         {Item::animatedTorso, "ANIMATED TORSO",
-         "With ANIMATED ARMS: waist→chest bends toward extreme aim. Head/legs stay anim. Provisional.", {}},
+         "With ARMS: waist-chest leans to extreme aim. Head/legs stay anim. Provisional.", {}},
         {Item::realisticFlips,
          "REALISTIC FLIPS",
          "Momentum rotation from arms and webs. FLIPS also enables left-stick steering.",
