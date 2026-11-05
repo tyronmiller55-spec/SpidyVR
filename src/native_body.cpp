@@ -73,6 +73,7 @@ std::atomic<uint32_t> rolesSerial{1};
 body::State state;
 std::array<float, 2> overlayArmWeight{};
 bool overlayTorsoAssist{};
+Quat yieldTiltBody{}, yieldTiltHands{}; // ANIMATED AIR SPIN (setYieldTilt), world axes
 native_body::OverlayTracking overlayTrackingSample{};
 body::Targets lastTargets;
 // The body's turn away from the wall at the last solve (crawlOutwardWeight),
@@ -393,6 +394,9 @@ void solveHero(float* out, uintptr_t job, uintptr_t instance) {
     const bool on = live && (wanted.flags & native_body::bodyOn);
     // ANIMATED ARMS: arm-only overlay while bodyOn is clear (pose yield).
     const bool armsOverlayOn = live && !on && (wanted.flags & native_body::armsOverlay);
+    // ANIMATED AIR SPIN: turn the yielded anim skeleton (armsOnly path, zero
+    // arm weight unless the overlay is on too).
+    const bool spinOn = live && !on && body::angle(body::unit(yieldTiltBody)) > 1e-3f;
     uint32_t problem = cache.problem;
     const bool turned = read(instance, transform, sizeof(transform)) && instanceTurn(transform, toWorld);
     if (!problem && !turned)
@@ -453,7 +457,7 @@ void solveHero(float* out, uintptr_t job, uintptr_t instance) {
         trackingYawSet = true;
     }
     const bool armsBlend = !on && !armsOverlayOn && (state.armWeight[0] > .001f || state.armWeight[1] > .001f);
-    if (!problem && (on || armsOverlayOn || armsBlend || state.weight > 0)) {
+    if (!problem && (on || armsOverlayOn || armsBlend || spinOn || state.weight > 0)) {
         if (on) {
             // World axes relative to the feet into the hero's model space.
             const Quat toModel = toWorld.conjugate();
@@ -527,13 +531,18 @@ void solveHero(float* out, uintptr_t job, uintptr_t instance) {
                               wanted.shoot[i]};
             }
             lastTargets = t;
-        } else if (armsOverlayOn || armsBlend) {
+        } else if (armsOverlayOn || armsBlend || spinOn) {
             body::Targets t;
             t.armsOnly = true;
             t.torsoAssist = armsOverlayOn && overlayTorsoAssist;
             t.armWeight = armsOverlayOn ? std::array<float, 2>{overlayArmWeight[0], overlayArmWeight[1]}
                                         : std::array<float, 2>{};
             const Quat toModel = toWorld.conjugate();
+            if (spinOn) {
+                t.yieldTilt = toModel * body::unit(yieldTiltBody) * toWorld;
+                if (body::angle(body::unit(yieldTiltHands)) > 1e-4f)
+                    t.tilt = toModel * body::unit(yieldTiltHands) * toWorld;
+            }
             t.up = toModel.rotate(Vec3{0, 1, 0});
             t.eyes = toModel.rotate(wanted.eyes);
             t.facing = toModel * wanted.facing;
@@ -564,13 +573,13 @@ void solveHero(float* out, uintptr_t job, uintptr_t instance) {
                                             : 0.f;
         lastSolve = now;
         body::Pose pose(out, static_cast<int>(joints));
-        result = body::solve(pose, cache.ik, lastTargets, config, state, on || armsOverlayOn || armsBlend, dt, scale, armScale);
+        result = body::solve(pose, cache.ik, lastTargets, config, state, on || armsOverlayOn || armsBlend || spinOn, dt, scale, armScale);
         // MODEL FOREARM: each arm as this solve left it, in world axes.
         native_body::Forearms forearmsOut;
         for (int i = 0; i < 2; ++i) {
             const auto& a = cache.ik.arms[i];
             auto& f = forearmsOut.arms[i];
-            if (!result.solved || !(on || armsOverlayOn || armsBlend) || a.lower < 0 || a.hand < 0 || a.lower >= static_cast<int>(joints) ||
+            if (!result.solved || !(on || armsOverlayOn || armsBlend || spinOn) || a.lower < 0 || a.hand < 0 || a.lower >= static_cast<int>(joints) ||
                 a.hand >= static_cast<int>(joints))
                 continue;
             f.elbow = toWorld.rotate(pose.position(a.lower));
@@ -613,12 +622,12 @@ void solveHero(float* out, uintptr_t job, uintptr_t instance) {
                 jobRows[r * 3 + c] = transform[r * 4 + c];
         jobRowsSet = true;
     }
-    if (result.solved && (on || armsOverlayOn || armsBlend))
+    if (result.solved && (on || armsOverlayOn || armsBlend || spinOn))
         lastDrawn = GetTickCount64();
     outwardWeight = lastTargets.crawl && lastTargets.crawlTurnAway && state.crawlTurn.ready()
                         ? state.crawlTurn.outwardWeight(state.crawlTurn.angle())
                         : 0.f;
-    latestSolved = result.solved && (on || armsOverlayOn || armsBlend);
+    latestSolved = result.solved && (on || armsOverlayOn || armsBlend || spinOn);
     if (armsOverlayOn || armsBlend) {
         overlayTrackingSample.job++;
         overlayTrackingSample.armWeight[0] = state.armWeight[0];
@@ -744,6 +753,7 @@ void native_body::resyncAfterYield() {
     state = {};
     overlayArmWeight[0] = overlayArmWeight[1] = 0.f;
     overlayTorsoAssist = false;
+    yieldTiltBody = yieldTiltHands = {};
     overlayTrackingSample = {};
     actorHeadingSet = trackingYawSet = false;
     actorHeading = trackingYaw = 0;
@@ -764,6 +774,18 @@ void native_body::setArmOverlay(float left, float right) {
 void native_body::setTorsoAssist(bool on) {
     AcquireSRWLockExclusive(&solveLock);
     overlayTorsoAssist = on;
+    ReleaseSRWLockExclusive(&solveLock);
+}
+
+void native_body::setYieldTilt(Quat bodyTilt, Quat handTilt) {
+    auto clean = [](Quat q) {
+        return std::isfinite(q.x) && std::isfinite(q.y) && std::isfinite(q.z) && std::isfinite(q.w)
+                   ? body::unit(q)
+                   : Quat{};
+    };
+    AcquireSRWLockExclusive(&solveLock);
+    yieldTiltBody = clean(bodyTilt);
+    yieldTiltHands = clean(handTilt);
     ReleaseSRWLockExclusive(&solveLock);
 }
 

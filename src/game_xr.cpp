@@ -56,6 +56,7 @@
 #include "spidy/animated_moves.hpp"
 #include "spidy/animated_steering.hpp"
 #include "spidy/animated_model_yaw.hpp"
+#include "spidy/animated_air_spin.hpp"
 #include "spidy/animated_arms.hpp"
 #include "spidy/frame_stats.hpp"
 #include "spidy/seated.hpp"
@@ -1032,6 +1033,14 @@ DWORD WINAPI run(void*) {
         head_probe::Probe::Lines headProbeLines;
         bool headProbeWas{};
         animated_moves::Handoff animatedMovesHandoff{};
+        // ANIMATED ONLY (off by default): cutscene/stale grace and state diag.
+        animated_moves::StayLatch animatedOnlyLatch{};
+        bool animatedOnlyHeldWas{};
+        int animatedOnlyStateWas = -1;
+        // ANIMATED AIR SPIN (off by default): smoothed spherical / momentum turn.
+        animated_air_spin::Tracker airSpin{};
+        int64_t airSpinDiagAt{};
+        bool airSpinWas{};
         animated_arms::State animatedArmsState{};
         int64_t trackingLockDiagAt{};
         int64_t animatedMovesDiagAt{};
@@ -4953,6 +4962,7 @@ DWORD WINAPI run(void*) {
                                           ? standingEye + (h - standingEye) * std::min(1.f, frame.seconds * 4)
                                           : standingEye - std::min(standingEye - h, frame.seconds * .01f);
                     bool yieldAnim = false;
+                    bool animHeadFollowNow = false;
                     auto animHeadMode = animated_moves::HeadFollow::off;
                     if (bodyStarted) {
                         // The hero's body follows the headset and the controllers,
@@ -4990,20 +5000,57 @@ DWORD WINAPI run(void*) {
                             values.triggerWebs
                                 ? (frame.hands[0].squeeze > .5f || frame.hands[1].squeeze > .5f)
                                 : (frame.hands[0].trigger > .5f || frame.hands[1].trigger > .5f);
-                        const animated_moves::Gate animGate{values.animatedMoves, values.animatedAir};
-                        yieldAnim = animated_moves::yieldsBody(animGate, animState, webAimIntent,
-                                                               values.animatedArms);
+                        // ANIMATED ONLY (off by default): every gameplay state keeps
+                        // the yield (wall / zip / combat too) so the OG SpidyVR body
+                        // never reclaims mid-play; a cutscene/stale classify keeps it
+                        // for StayLatch's grace before a real exit (animated_moves.hpp).
+                        const animated_moves::Gate animGate{values.animatedMoves, values.animatedAir,
+                                                            values.animatedOnly};
+                        const bool animOnly = animated_moves::stays(animGate);
+                        const int64_t handoffNs = frame.predictedDisplayTime > 0
+                                                      ? frame.predictedDisplayTime
+                                                      : static_cast<int64_t>(GetTickCount64()) * 1'000'000ll;
+                        const bool rawYield = animated_moves::yieldsBody(animGate, animState, webAimIntent,
+                                                                         values.animatedArms);
+                        yieldAnim = animOnly ? animatedOnlyLatch.update(rawYield, animatedMovesHandoff.yielding,
+                                                                        handoffNs)
+                                             : rawYield;
+                        const bool onlyHeld = animOnly && animatedOnlyLatch.held;
+                        if (!animOnly) {
+                            animatedOnlyLatch = {};
+                            animatedOnlyStateWas = -1;
+                        }
+                        if (onlyHeld != animatedOnlyHeldWas) {
+                            if (onlyHeld)
+                                diag_log::writef("animated only: kept yield through %s (grace %.1f s, no reclaim)",
+                                                 animated_moves::yieldName(animState),
+                                                 static_cast<double>(animated_moves::stayGraceNs) / 1e9);
+                            else
+                                diag_log::writef("animated only: grace ended (%s, yield %s)",
+                                                 animated_moves::yieldName(animState),
+                                                 yieldAnim ? "kept" : "released after grace");
+                            animatedOnlyHeldWas = onlyHeld;
+                        }
+                        if (animOnly && yieldAnim) {
+                            const int st = static_cast<int>(head_probe::classify(animState));
+                            if (st != animatedOnlyStateWas && animatedOnlyStateWas >= 0)
+                                diag_log::writef(
+                                    "animated only: %s -> %s, game anim keeps body (no reclaim, no adoptFeet)",
+                                    head_probe::stateName(static_cast<head_probe::State>(animatedOnlyStateWas)),
+                                    animated_moves::yieldName(animState));
+                            animatedOnlyStateWas = st;
+                        }
                         animHeadMode = animated_moves::headFollowForYield(values.animatedHead, animState);
+                        // In the grace window keep following the anim head through a
+                        // stale sample, but not over a menu / the game's camera.
                         const bool headFollow =
                             animated_moves::followsHead(values.animatedHead, yieldAnim, animState) &&
-                            !flatScreen;
+                            !flatScreen && !(onlyHeld && !animState.playing);
+                        animHeadFollowNow = headFollow;
                         game_fp::followHero(headFollow);
                         const Vec3 nowFeet = finite(Vec3{body[12], body[13], body[14]})
                                                  ? Vec3{body[12], body[13], body[14]}
                                                  : motion.anchor;
-                        const int64_t handoffNs = frame.predictedDisplayTime > 0
-                                                      ? frame.predictedDisplayTime
-                                                      : static_cast<int64_t>(GetTickCount64()) * 1'000'000ll;
                         animatedMovesHandoff.update(yieldAnim);
                         if (animatedMovesHandoff.exit)
                             animatedArmsState = {};
@@ -5262,6 +5309,43 @@ DWORD WINAPI run(void*) {
                             const Quat yaw = Quat::yaw(motion.swing.trackingYaw);
                             pose.tilt = yaw * tilt * yaw.conjugate();
                         }
+                        // ANIMATED AIR SPIN (off by default; animated_air_spin.hpp):
+                        // the flip tilt (+ momentum lean) turns the yielded anim
+                        // skeleton about its head — SpidyVR-style spherical midair on
+                        // the game's pose. Visual/view only; physics untouched.
+                        if (values.animatedAirSpin || airSpinWas) {
+                            const auto spinMode = animated_air_spin::mode(values.animatedAirSpin);
+                            const bool spinActive =
+                                animated_air_spin::active(values.animatedAirSpin, yieldAnim, animState) &&
+                                !flatScreen && values.body;
+                            const Quat flipWorld =
+                                animated_air_spin::worldFlip(motion.bodyTilt(false), motion.swing.trackingYaw);
+                            animated_air_spin::Inputs spinIn;
+                            spinIn.active = spinActive;
+                            spinIn.momentum = spinMode == animated_air_spin::Mode::momentum;
+                            spinIn.flipWorld = flipWorld;
+                            spinIn.velocity = swingState.velocity;
+                            spinIn.velocityFresh = swingFresh;
+                            spinIn.actorForward = Vec3{body[8], body[9], body[10]};
+                            spinIn.dt = armDt;
+                            if (!yieldAnim)
+                                airSpin.reset();
+                            const auto spun = airSpin.update(spinIn);
+                            native_body::setYieldTilt(yieldAnim ? spun.body : Quat{},
+                                                      yieldAnim ? flipWorld : Quat{});
+                            airSpinWas = values.animatedAirSpin != 0 || !airSpin.resting();
+                            if ((spinActive || spun.bodyDeg > .5f) &&
+                                frame.predictedDisplayTime - airSpinDiagAt > 250'000'000) {
+                                airSpinDiagAt = frame.predictedDisplayTime;
+                                diag_log::writef(
+                                    "air spin: %s %s (%s) flip %.0f lean %.0f (pitch %.0f bank %.0f) body %.0f deg "
+                                    "v %.1f m/s head %s",
+                                    animated_air_spin::modeName(spinMode), spinActive ? "on" : "settling",
+                                    animated_moves::yieldName(animState), spun.flipDeg, spun.leanDeg,
+                                    spun.pitchDeg, spun.bankDeg, spun.bodyDeg, length(swingState.velocity),
+                                    animated_moves::headFollowName(animHeadMode));
+                            }
+                        }
                         native_body::submit(pose);
                     } else {
                         game_fp::followHero(false);
@@ -5280,7 +5364,7 @@ DWORD WINAPI run(void*) {
                     // like finishers (stereo_probe::resolveScene → game_fp::frame).
                     // animHeadMode is the user choice (Full may include air pitch/roll).
                     const bool headFollowEyes =
-                        yieldAnim && animHeadMode != animated_moves::HeadFollow::off && !flatScreen;
+                        animHeadFollowNow && animHeadMode != animated_moves::HeadFollow::off && !flatScreen;
                     native_eyes::Command eyes;
                     eyes.enabled = flatScreen ? 2 : 1;
                     eyes.serial = ++serial;

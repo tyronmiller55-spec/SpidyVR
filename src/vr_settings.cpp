@@ -120,6 +120,9 @@ static_assert(std::size(dodgeTumbleChoices) == std::size(dodgeTumbles));
 constexpr int animatedHeads[] = {0, 1, 2};
 constexpr const char* animatedHeadChoices[] = {"OFF", "LEVEL", "FULL"};
 static_assert(std::size(animatedHeadChoices) == std::size(animatedHeads));
+constexpr int animatedAirSpins[] = {0, 1, 2};
+constexpr const char* animatedAirSpinChoices[] = {"OFF", "FLIPS", "FLIPS + MOMENTUM"};
+static_assert(std::size(animatedAirSpinChoices) == std::size(animatedAirSpins));
 constexpr int nativeRunPercents[] = {50, 60, 70, 80, 90};
 constexpr const char* nativeRunPercentChoices[] = {"50%", "60%", "70%", "80%", "90%"};
 static_assert(std::size(nativeRunPercentChoices) == std::size(nativeRunPercents));
@@ -180,6 +183,8 @@ std::span<const int> steps(Item item) {
         return dodgeTumbles;
     case Item::animatedHead:
         return animatedHeads;
+    case Item::animatedAirSpin:
+        return animatedAirSpins;
     case Item::earlyJump:
         return earlyJumps;
     case Item::webAimSource:
@@ -265,6 +270,8 @@ float numberOf(Item item, const Values& v) {
         return static_cast<float>(v.dodgeTumble);
     case Item::animatedHead:
         return static_cast<float>(v.animatedHead);
+    case Item::animatedAirSpin:
+        return static_cast<float>(v.animatedAirSpin);
     case Item::earlyJump:
         return static_cast<float>(v.earlyJump);
     case Item::webAimSource:
@@ -404,6 +411,8 @@ template <class V> auto switchOf(Item item, V& v) -> decltype(&v.aimMarkers) {
         return &v.animatedTorso;
     case Item::animatedModelYaw:
         return &v.animatedModelYaw;
+    case Item::animatedOnly:
+        return &v.animatedOnly;
     case Item::webLandingSmooth:
         return &v.webLandingSmooth;
     case Item::softLanding:
@@ -447,6 +456,7 @@ Values sanitized(Values v) {
     v.webAngle = std::clamp(v.webAngle, -45, 45);
     v.dodgeTumble = std::clamp(v.dodgeTumble, 0, 2);
     v.animatedHead = std::clamp(v.animatedHead, 0, 2);
+    v.animatedAirSpin = std::clamp(v.animatedAirSpin, 0, 2);
     v.earlyJump = std::clamp(v.earlyJump, 0, 2);
     v.webAimSource = std::clamp(v.webAimSource, 0, 1);
     v.forearmBlend = std::clamp(v.forearmBlend, 0, 100);
@@ -469,9 +479,9 @@ Values sanitized(Values v) {
     v.automaticHandThreshold = std::clamp(v.automaticHandThreshold, 50, 300);
     return v;
 }
-const std::array<Row, 101>& rows() {
+const std::array<Row, 103>& rows() {
     // The help fits the game's description column beside the rows.
-    static const std::array<Row, 101> all{{
+    static const std::array<Row, 103> all{{
         {Item::none, "WEBS", nullptr, {}},
         {Item::webStyle, "WEB STYLE",
          "Arcade: webs pass lamp posts, signs and cars, and swings stay above the street.", webStyleChoices},
@@ -707,6 +717,11 @@ const std::array<Row, 101>& rows() {
          "With ARMS: waist-chest leans to extreme aim. Head/legs stay anim. Provisional.", {}},
         {Item::animatedModelYaw, "ANIMATED MODEL YAW",
          "While yielding: R-stick turns Spidey via walk facing (not camera). Provisional.", {}},
+        {Item::animatedOnly, "ANIMATED ONLY",
+         "With MOVES/AIR: anim keeps body on walls/zip/combat too. No SpidyVR reclaim.", {}},
+        {Item::animatedAirSpin, "ANIMATED AIR SPIN",
+         "While yielding midair: flips (+momentum lean) turn the anim body. Provisional.",
+         animatedAirSpinChoices},
         {Item::realisticFlips,
          "REALISTIC FLIPS",
          "Momentum rotation from arms and webs. FLIPS also enables left-stick steering.",
@@ -827,6 +842,9 @@ bool choose(Item item, int index, Values& v) {
         break;
     case Item::animatedHead:
         v.animatedHead = s[index];
+        break;
+    case Item::animatedAirSpin:
+        v.animatedAirSpin = s[index];
         break;
     case Item::earlyJump:
         v.earlyJump = s[index];
@@ -978,6 +996,8 @@ constexpr TabOnly tabOnly[] = {
     {"animated_arms", &Values::animatedArms, nullptr},
     {"animated_torso", &Values::animatedTorso, nullptr},
     {"animated_model_yaw", &Values::animatedModelYaw, nullptr},
+    {"animated_only", &Values::animatedOnly, nullptr},
+    {"animated_air_spin", nullptr, &Values::animatedAirSpin},
 };
 } // namespace
 std::string tabOnlyText(const Values& v) {

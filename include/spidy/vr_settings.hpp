@@ -346,6 +346,16 @@ struct Values {
     // the game's left-stick walk-facing path (animated_model_yaw.hpp). Not a
     // facing RVA write; not CameraLook. Off by default; provisional.
     bool animatedModelYaw = false;
+    // ANIMATED ONLY: with MOVES/AIR, every gameplay state keeps the pose yield
+    // (wall / zip / combat too) — the SpidyVR body never reclaims mid-play, so
+    // no adoptFeet / head-follow re-anchor jumps (animated_moves.hpp). Off by
+    // default.
+    bool animatedOnly = false;
+    // ANIMATED AIR SPIN (Off|Flips|Flips + momentum, default Off): while
+    // yielding airborne, the flip tilt (and optionally a travel lean/bank) turns
+    // the animated skeleton about its head (animated_air_spin.hpp). Visual/view
+    // only; physics untouched.
+    int animatedAirSpin = 0;
     // How much speed a fast one-hand web yank adds, percent (the tab's SINGLE
     // HAND YANK STRENGTH; Swing::singleHandYankStrength): 100 as before.
     int singleHandYankPercent = 100;
@@ -491,8 +501,10 @@ enum class Item : uint8_t {
     animatedArms,
     animatedTorso,
     animatedModelYaw,
+    animatedOnly,
+    animatedAirSpin,
 };
-inline constexpr Item lastItem = Item::animatedModelYaw;
+inline constexpr Item lastItem = Item::animatedAirSpin;
 // Where a row shows: in the tab; on the pause menu's first page instead,
 // under RESUME: VR VIEW (the user, October 15: "move the VIEW: GAME SCREEN to
 // the first menu (the one with resume)"); or only in the launcher's options:
@@ -515,7 +527,7 @@ struct Row {
     std::span<const char* const> choices{};
     Place place{};
 };
-const std::array<Row, 101>& rows();
+const std::array<Row, 103>& rows();
 // The most choices a row shows (game_menu's buffers): a row with more would
 // lose its last ones.
 inline constexpr size_t maxChoices = 9;

@@ -24,6 +24,16 @@
 //
 // Handoff: when yieldsBody ends, resync actor/IK/tracking (animated_moves::Handoff
 // + native_body::resyncAfterYield + GameTrackingRig::adoptFeet).
+//
+// ANIMATED ONLY (vr_settings::Values::animatedOnly, off by default): with MOVES
+// and/or AIR on, the pose yield also covers wall, zip, parkour wall-run and
+// combat, and freefall web intent no longer interrupts it — the SpidyVR body
+// (bodyOn) never reclaims mid-gameplay, so there is no adoptFeet / head-follow
+// off / tracking re-anchor every time the state flips to wall or combat (the
+// 0.8.0 tracking-lock log showed 29 reclaims, up to 76 m "moved since yield",
+// each one a location/head/torso/hand jump). Only a cutscene / menu / stale
+// sample can end it, and only after StayLatch's grace (brief !fresh flicker
+// keeps the yield and the head follow). Physics ownership is unchanged.
 #pragma once
 #include "spidy/head_probe.hpp"
 #include "spidy/math.hpp"
@@ -34,7 +44,11 @@ namespace spidy::animated_moves {
 struct Gate {
     bool moves{}; // ANIMATED MOVES: ground + vault/mantle parkour
     bool air{};   // ANIMATED AIR: freefall / swing / web-hold air
+    bool only{};  // ANIMATED ONLY: every gameplay state yields (no OG body reclaim)
 };
+
+// ANIMATED ONLY is live: the setting plus at least one of MOVES / AIR.
+inline bool stays(Gate g) { return g.only && (g.moves || g.air); }
 
 // True when a freefall web/aim button press should reclaim the VR body so the
 // player can aim out of an air anim. Attached webs do not count — those keep
@@ -56,9 +70,13 @@ inline bool yieldsBody(Gate g, const head_probe::StateInputs& s, bool webAimInte
                        bool armsHandlesAim = false) {
     if (!g.moves && !g.air)
         return false;
+    const auto st = head_probe::classify(s);
+    // ANIMATED ONLY: wall / zip / parkour / combat stay with the game anim too,
+    // and web intent never tears the yield down (arms overlay or not).
+    if (stays(g))
+        return st != head_probe::State::cutscene;
     if (freefallWebInterrupt(webAimIntent, s, armsHandlesAim))
         return false;
-    const auto st = head_probe::classify(s);
     if (g.moves) {
         if (st == head_probe::State::ground)
             return true;
@@ -162,5 +180,33 @@ struct Handoff {
 };
 
 inline bool needsActorResync(const Handoff& h) { return h.exit || h.pendingExit; }
+
+// ANIMATED ONLY grace: keep an active yield through a cutscene/stale classify
+// for up to `graceNs` (the 0.8.0 log: "head follow off (cutscene)" then back
+// 150 ms later). Longer losses (a real cutscene, the pause menu) end the yield
+// normally so the mod resyncs once. Not used when ANIMATED ONLY is off.
+constexpr int64_t stayGraceNs = 1'500'000'000;
+struct StayLatch {
+    int64_t lostNs{-1};
+    bool held{}; // last update kept a yield the raw gate dropped
+    // raw: yieldsBody this frame. wasYielding: Handoff::yielding before update.
+    bool update(bool raw, bool wasYielding, int64_t nowNs, int64_t graceNs = stayGraceNs) {
+        held = false;
+        if (raw) {
+            lostNs = -1;
+            return true;
+        }
+        if (!wasYielding) {
+            lostNs = -1;
+            return false;
+        }
+        if (lostNs < 0)
+            lostNs = nowNs;
+        held = nowNs - lostNs < graceNs;
+        if (!held)
+            lostNs = -1;
+        return held;
+    }
+};
 
 } // namespace spidy::animated_moves

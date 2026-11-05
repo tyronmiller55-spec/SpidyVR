@@ -461,15 +461,36 @@ Result solve(Pose& pose, const Rig& rig, const Targets& targets, const Config& c
         const float s = std::isfinite(scale) && scale > .1f ? scale : 1.f;
         const float arms = std::isfinite(armScale) && armScale > .1f ? armScale : 1.f;
         Vec3 up = finite(targets.up) && length(targets.up) > .5f ? normalized(targets.up) : Vec3{0, 1, 0};
-        // Player/HMD frame (targets.facing): used to measure grip offsets.
-        Vec3 playerLook = targets.facing.rotate({0, 0, -1});
+        // ANIMATED AIR SPIN: the arms solve level on the game pose, then the
+        // whole skeleton turns (end of this block). The rig's flip already
+        // turned the grips about the eyes: undo it on the targets first.
+        const Quat spin = unit(targets.yieldTilt);
+        const bool spinning = angle(spin) > 1e-4f;
+        Targets untilted;
+        const Targets* tp = &targets;
+        if (spinning) {
+            const Quat handTilt = unit(targets.tilt);
+            if (angle(handTilt) > 1e-4f) {
+                untilted = targets;
+                const Quat back = handTilt.conjugate();
+                untilted.facing = back * untilted.facing;
+                for (auto& hand : untilted.hands) {
+                    hand.grip = untilted.eyes + back.rotate(hand.grip - untilted.eyes);
+                    hand.orientation = back * hand.orientation;
+                }
+                tp = &untilted;
+            }
+        }
+        const Targets& tg = *tp;
+        // Player/HMD frame (tg.facing): used to measure grip offsets.
+        Vec3 playerLook = tg.facing.rotate({0, 0, -1});
         playerLook = playerLook - up * dot(playerLook, up);
         if (length(playerLook) < .2f)
             playerLook = Vec3{0, 0, 1} - up * up.z;
         playerLook = length(playerLook) > .2f ? normalized(playerLook) : Vec3{0, 0, 1};
         // Anim chest/shoulder frame: drive arm IK through the game pose so model
         // yaw and parkour rotations keep IRL grips matched (Slice C).
-        Vec3 chestLook = playerLook, chestUp = up, animAnchor = targets.eyes;
+        Vec3 chestLook = playerLook, chestUp = up, animAnchor = tg.eyes;
         if (!rig.spine.empty() && rig.spine.back() >= 0) {
             const int chest = rig.spine.back();
             const Vec3 chestPos = pose.position(chest);
@@ -514,10 +535,10 @@ Result solve(Pose& pose, const Rig& rig, const Targets& targets, const Config& c
         float weights[2]{};
         Vec3 wrists[2]{}, shoulders[2]{};
         float armLens[2]{};
-        Targets::Hand handsRemapped[2] = {targets.hands[0], targets.hands[1]};
+        Targets::Hand handsRemapped[2] = {tg.hands[0], tg.hands[1]};
         for (int i = 0; i < 2; ++i) {
             const float want =
-                std::clamp(std::isfinite(targets.armWeight[i]) ? targets.armWeight[i] : 0.f, 0.f, 1.f);
+                std::clamp(std::isfinite(tg.armWeight[i]) ? tg.armWeight[i] : 0.f, 0.f, 1.f);
             state.armWeight[i] = approach(state.armWeight[i], want, c.blendSpeed * dt);
             weights[i] = state.armWeight[i];
             maxW = std::max(maxW, weights[i]);
@@ -526,7 +547,7 @@ Result solve(Pose& pose, const Rig& rig, const Targets& targets, const Config& c
             auto& hand = handsRemapped[i];
             if (hand.tracked && finite(hand.grip)) {
                 const auto remapped = animated_arms::remapGripToChest(
-                    hand.grip, hand.orientation, targets.eyes, playerLook, up, animAnchor, chestLook,
+                    hand.grip, hand.orientation, tg.eyes, playerLook, up, animAnchor, chestLook,
                     chestUp);
                 if (remapped.applied) {
                     hand.grip = remapped.grip;
@@ -541,7 +562,7 @@ Result solve(Pose& pose, const Rig& rig, const Targets& targets, const Config& c
         }
         // Bound upper-spine participation before the arm IK so shoulders move
         // toward extreme controller aims. Idle (maxW≈0) leaves the game pose.
-        if (targets.torsoAssist && !rig.spine.empty() && rig.head >= 0) {
+        if (tg.torsoAssist && !rig.spine.empty() && rig.head >= 0) {
             const Vec3 headAt = pose.position(rig.head);
             const Vec3 headF = pose.direction(rig.head, rig.headForward);
             const Vec3 headU = pose.direction(rig.head, rig.headUp);
@@ -606,7 +627,7 @@ Result solve(Pose& pose, const Rig& rig, const Targets& targets, const Config& c
             }
             if (finite(hand.grip)) {
                 const Quat back = bodyFrame.conjugate();
-                held = {true, back.rotate(hand.grip - targets.eyes), back * hand.orientation};
+                held = {true, back.rotate(hand.grip - tg.eyes), back * hand.orientation};
             }
             if (!held.set)
                 continue;
@@ -648,6 +669,15 @@ Result solve(Pose& pose, const Rig& rig, const Targets& targets, const Config& c
         }
         r.weight = maxW;
         r.solved = any || maxW > .001f;
+        if (spinning && rig.pelvis >= 0 && static_cast<size_t>(rig.pelvis) < rig.below.size()) {
+            Vec3 pivot = rig.head >= 0 ? pose.position(rig.head) : Vec3{};
+            if (!finite(pivot) || rig.head < 0)
+                pivot = pose.position(rig.pelvis);
+            if (finite(pivot)) {
+                pose.turn(rig.below[static_cast<size_t>(rig.pelvis)], spin, pivot);
+                r.solved = true;
+            }
+        }
         return r;
     }
     state.weight = approach(state.weight, wanted ? 1.f : 0.f, c.blendSpeed * dt);

@@ -166,6 +166,13 @@ struct Targets {
     // toward controller reaches (animated_torso.hpp). Head world pose is
     // compensated; pelvis/legs stay on the game anim. Off leaves arms-only.
     bool torsoAssist{};
+    // ANIMATED AIR SPIN (animated_air_spin.hpp), armsOnly only: turn the whole
+    // animated skeleton (pelvis subtree) by this model-space rotation about
+    // the anim head after the arm solve — SpidyVR-style spherical midair on
+    // the game's pose. Identity: untouched. With it, `tilt` below (the rig's
+    // flip on the grips) is undone on the hand targets about `eyes` first, as
+    // the full-body path does, so arms solve level and then turn with it.
+    Quat yieldTilt{};
     // In the air (swinging, falling): the legs keep the game's pose instead
     // of standing on the ground.
     bool airborne{};

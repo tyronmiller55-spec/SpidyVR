@@ -1924,6 +1924,18 @@ void App::options(ImVec2 origin, ImVec2 size) {
                "yaw. HMD free look stays on the headset. Left-stick magnitude can still run along actor facing "
                "when Animated steering is also on. Off by default; midair turn rate provisional.",
                S(42), [&] { tabToggle("##animatedmodelyaw", Item::animatedModelYaw); });
+        option("Animated only (experimental)",
+               "With Animated moves and/or Animated air on: the game's animation keeps Spidey's body in every "
+               "gameplay state (walls, zips, wall runs, combat too), so the SpidyVR body never takes it back "
+               "mid-play and your view, head, torso and hands stop jumping when the state changes. Only a "
+               "cutscene or menu longer than 1.5 s ends it. Physics stay with the mod. Off by default.",
+               S(42), [&] { tabToggle("##animatedonly", Item::animatedOnly); });
+        option("Animated air spin (experimental)",
+               "While Animated moves/air yields in the air: FLIPS turns the animated Spidey with the realistic "
+               "flips' pitch, roll and yaw (hands, sticks, swing release momentum), the way SpidyVR mode turns "
+               "its own body. FLIPS + MOMENTUM also leans him along his travel (dives, climbs) and banks him "
+               "into turns. Visual and view only; the physics stay the mod's. Off by default; provisional.",
+               S(150), [&] { tabCombo("##animatedairspin", Item::animatedAirSpin); });
         option("Web aim (experimental)",
                "MODEL FOREARM: your webs leave along the forearm of the Spider-Man body you see, rather than "
                "along the controller, and go back to the controller's line whenever the body cannot say "

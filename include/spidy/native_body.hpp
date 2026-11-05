@@ -264,6 +264,13 @@ void setArmOverlay(float left, float right);
 // waist→chest toward controller reaches. Cleared by resyncAfterYield. No
 // Command layout / version change (side channel, like setArmOverlay).
 void setTorsoAssist(bool on);
+// ANIMATED AIR SPIN (animated_air_spin.hpp): while bodyOn is clear (pose
+// yield), turn the game's animated skeleton by `body` (world axes) about its
+// head in the pose job; `hands` is the rig's flip already on the grips, undone
+// on the ARMS overlay targets before they solve. Identity `body`: off. Runs
+// the armsOnly solve with zero arm weight when ANIMATED ARMS is off. Cleared
+// by resyncAfterYield. Side channel: no Command layout / version change.
+void setYieldTilt(Quat body, Quat hands);
 // Slice C tracking-lock diag (side channel; no Command / Forearms layout change).
 // Latest armsOnly chest vs player yaw and overlay weights after a pose job.
 struct OverlayTracking {
