@@ -62,7 +62,7 @@ enum Flags : uint32_t {
     ventHands = 32768, // version 10: upper-body contact response; native vent legs stay in control
     // ANIMATED ARMS: solve arm chains only (body::Targets::armsOnly). Mutually
     // exclusive with bodyOn in practice — XR clears bodyOn while yielding.
-    armsOverlay = 524288, // bit 19; bit 18 reserved for unknown-flag tests
+    armsOverlay = 262144, // bit 18
 };
 inline uint32_t crawlHandFlags(unsigned hands) { return (hands & 3u) << 10; }
 inline unsigned crawlHandMask(uint32_t flags) { return (flags >> 10) & 3u; }
@@ -161,7 +161,7 @@ inline Vec3 runTuning(const Command& c) {
 }
 inline uint32_t runPadding(const Command& c) { return c.version == 15 ? c.kickReserved : c.runReserved; }
 inline bool validCrawl(const Command& c) {
-    if (c.flags & ~0xfffffu) return false;
+    if (c.flags & ~0x7ffffu) return false;
     if ((c.flags & wallRun) && c.version != 16) return false;
     if ((c.flags & kick) && !legacyRunFormat(c) && !kickCommand(c)) return false;
     if (kickCommand(c) && (!finite(c.kick) || c.kickReserved)) return false;

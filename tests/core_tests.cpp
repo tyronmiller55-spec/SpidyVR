@@ -20847,7 +20847,7 @@ int main() {
         }
         c.version = 12; c.bytes = 272; c.flags = bodyOn | kick | airborne;
         check(commandFormat(12, 272) && validCrawl(c), "legacy unused field acquired a new meaning");
-        c.flags = bodyOn | 0x40000u;
+        c.flags = bodyOn | 0x80000u;
         check(!validCrawl(c), "unsupported body pose flag was accepted");
     });
     test("wall-run screenshot tuning is fixed and retired profile keys cannot change it", [] {
@@ -26830,9 +26830,11 @@ int main() {
             update(st, 1.f / 90, true, {}, hands);
         }
         check(st.arms[0].weight > .5f && st.arms[1].weight < .01f, "per-arm independence failed");
-        // Web button on right (stationary) → immediate right weight.
+        // Web button on right (stationary) → raise right weight (blendIn).
         hands[1].webButton = true;
-        update(st, 1.f / 90, true, {}, hands);
+        hands[1].grip = {-1, 1.5f, 0}; // stationary relative
+        for (int i = 0; i < 12; ++i)
+            update(st, 1.f / 90, true, {}, hands);
         check(st.arms[1].weight > .5f, "web intent did not raise arm");
         // Tracking loss → clear and decay toward game anim.
         hands[0].tracked = false;
@@ -26847,7 +26849,7 @@ int main() {
         check(t.armsOnly == false && t.armWeight[0] == 0 && t.armWeight[1] == 0, "armsOnly defaults");
         t.armsOnly = true;
         check(t.armsOnly && !t.head, "armsOnly implies head");
-        check((native_body::armsOverlay & ~0xfffffu) == 0, "armsOverlay outside validCrawl mask");
+        check((native_body::armsOverlay & ~0x7ffffu) == 0, "armsOverlay outside validCrawl mask");
         check((native_body::armsOverlay & native_body::bodyOn) == 0, "armsOverlay overlaps bodyOn");
     });
 
