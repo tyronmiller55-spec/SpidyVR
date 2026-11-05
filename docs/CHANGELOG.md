@@ -7,6 +7,28 @@ Per-check results are in [VALIDATION.md](VALIDATION.md).
 
 Not in a build yet, newest first. The release adds these to the next build's entry.
 
+**ANIMATED MOVES: the game's parkour animation drives the body for vaults, mantles and ground parkour (opt-in, off by default).**
+
+- **Why.** Step two after HEAD PROBE. Today the mod's body IK owns the pose on
+  the ground too, so NATIVE RUN's vaults and mantles (and the game's ground
+  parkour) fight the IK or look wrong. An opt-in lets the game's animation
+  drive those states first; swing / web / zip / wall-run stay with the mod
+  (hybrid later). Play-feel change: keep OFF by default; upstream merge needs
+  Ilya's yes.
+- **ANIMATED MOVES** (`animated_moves`, off; the tab's EXPERIMENTAL after HEAD
+  PROBE; swing settings version 32, `Settings::animatedMoves`, accepted and
+  not read by the swing). When on, `game_xr` clears `native_body::bodyOn` for
+  `head_probe::State::ground` and for vault/mantle parkour (`State::parkour`
+  with no wall, via NATIVE RUN RT). The pose writer blends back to the game's
+  joints. Wall-run under NATIVE RUN, swing, web, zip, combat and cutscenes do
+  not yield. NATIVE RUN's RT unlock is untouched.
+- **Tradeoff.** While yielding, VR hand IK does not drive the body (the game's
+  anim hands show). Headset check: with NATIVE RUN + ANIMATED MOVES on, vault
+  a car or mantle a ledge and look for `animated moves: game anim drives body`
+  in the diag log.
+- **Reuse.** `animated_moves::yieldsBody` shares `head_probe::classify` /
+  `StateInputs` so the gated states match HEAD PROBE's.
+
 **HEAD PROBE: Spider-Man's head bone against the headset, per state, in the diagnostics (read only).**
 
 - **Why.** Step one of letting the game's own parkour and swing animations

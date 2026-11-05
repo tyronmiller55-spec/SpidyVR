@@ -1387,6 +1387,7 @@ extern "C" __declspec(dllexport) DWORD WINAPI SpidySwingSettings(void* input) {
          header[2] != settingsBytesV21 && header[2] != settingsBytesV22 && header[2] != settingsBytesV23 && header[2] != settingsBytesV24 &&
          header[2] != settingsBytesV25 && header[2] != settingsBytesV26 && header[2] != settingsBytesV27 &&
          header[2] != settingsBytesV28 && header[2] != settingsBytesV29 && header[2] != settingsBytesV30 &&
+         header[2] != settingsBytesV31 &&
          header[2] != sizeof(s)) ||
         !copy(&s, input, header[2]) || !validSettings(s))
         return 2001;

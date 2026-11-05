@@ -319,6 +319,11 @@ struct Values {
     // against the headset, per state, in the session's diagnostics
     // (head_probe.hpp). Changes nothing in play. Off by default.
     bool headProbe = false;
+    // ANIMATED MOVES (the tab's ANIMATED MOVES; v7): when on, the game's
+    // animation drives the body for ground parkour / vaults / mantles
+    // (NATIVE RUN). Swing / web / zip / wall-run stay with the mod. Off by
+    // default (animated_moves.hpp).
+    bool animatedMoves = false;
     // How much speed a fast one-hand web yank adds, percent (the tab's SINGLE
     // HAND YANK STRENGTH; Swing::singleHandYankStrength): 100 as before.
     int singleHandYankPercent = 100;
@@ -457,8 +462,9 @@ enum class Item : uint8_t {
     forearmAimLimit,
     palmShooters,
     headProbe,
+    animatedMoves,
 };
-inline constexpr Item lastItem = Item::headProbe;
+inline constexpr Item lastItem = Item::animatedMoves;
 // Where a row shows: in the tab; on the pause menu's first page instead,
 // under RESUME: VR VIEW (the user, October 15: "move the VIEW: GAME SCREEN to
 // the first menu (the one with resume)"); or only in the launcher's options:
@@ -481,7 +487,7 @@ struct Row {
     std::span<const char* const> choices{};
     Place place{};
 };
-const std::array<Row, 94>& rows();
+const std::array<Row, 95>& rows();
 // The most choices a row shows (game_menu's buffers): a row with more would
 // lose its last ones.
 inline constexpr size_t maxChoices = 9;

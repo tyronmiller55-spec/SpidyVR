@@ -53,6 +53,7 @@
 #include "spidy/diag_log.hpp"
 #include "spidy/ground_state.hpp"
 #include "spidy/head_probe.hpp"
+#include "spidy/animated_moves.hpp"
 #include "spidy/frame_stats.hpp"
 #include "spidy/seated.hpp"
 #include "spidy/slow_motion.hpp"
@@ -1027,6 +1028,8 @@ DWORD WINAPI run(void*) {
         const auto headProbe = std::make_unique<head_probe::Probe>();
         head_probe::Probe::Lines headProbeLines;
         bool headProbeWas{};
+        bool animatedMovesYieldWas{};
+        int64_t animatedMovesDiagAt{};
         std::array<float, 2> forearmJitter{};
         game_pad::TemplePress templePress;
         uint32_t chargesBefore{}, leapsBefore{}, scansBefore{};
@@ -1490,6 +1493,7 @@ DWORD WINAPI run(void*) {
             s.spidyRunStanding = values.spidyRun && values.spidyRunFromStanding;
             s.webLandingSmooth = values.webLandingSmooth;
             s.headProbe = values.headProbe;
+            s.animatedMoves = values.animatedMoves;
             s.webLandingImpact = static_cast<float>(values.webLandingImpact);
             s.webAngle = values.webAngle;
             s.wristShooters = values.palmShooters ? 2u : values.wristShooters ? 1u : 0u;
@@ -4872,7 +4876,37 @@ DWORD WINAPI run(void*) {
                         // Standing on a wall or a ceiling - Spidy's own or the
                         // game's crawl - the body stands on it with the player,
                         // never in the air the swing keeps the hero in there.
-                        pose.flags = (flatScreen || !values.body ? 0u : native_body::bodyOn) | native_body::hideHead |
+                        // ANIMATED MOVES (off by default; animated_moves.hpp): when on,
+                        // ground parkour / vaults / mantles let the game's animation
+                        // drive the body (clear bodyOn; blend back). Swing / web /
+                        // zip / wall-run stay with the mod. NATIVE RUN's RT is
+                        // untouched. VR hands follow the game's pose while yielding.
+                        head_probe::StateInputs animState;
+                        animState.playing = steering && !calibrationInput;
+                        animState.fresh = swingFresh;
+                        animState.grounded = swingState.grounded != 0;
+                        animState.owned = swingState.owned != 0;
+                        animState.webbed = swingState.webs[0].attached || swingState.webs[1].attached;
+                        animState.zipping = zipping;
+                        animState.fighting = fightLately;
+                        animState.dodging = dodging;
+                        animState.runRt = nativeRun.held();
+                        animState.wall = swingState.wall;
+                        const bool yieldAnim = animated_moves::yieldsBody(values.animatedMoves, animState);
+                        if (yieldAnim != animatedMovesYieldWas) {
+                            diag_log::writef("animated moves: %s (%s)",
+                                             yieldAnim ? "game anim drives body" : "mod body again",
+                                             animated_moves::yieldName(animState));
+                            animatedMovesYieldWas = yieldAnim;
+                            animatedMovesDiagAt = frame.predictedDisplayTime;
+                        } else if (yieldAnim &&
+                                   frame.predictedDisplayTime - animatedMovesDiagAt > 2'000'000'000) {
+                            diag_log::writef("animated moves: still yielding (%s)",
+                                             animated_moves::yieldName(animState));
+                            animatedMovesDiagAt = frame.predictedDisplayTime;
+                        }
+                        pose.flags = (flatScreen || !values.body || yieldAnim ? 0u : native_body::bodyOn) |
+                                     native_body::hideHead |
                                      native_body::handTurn |
                                      (swingState.owned && !motion.standing ? native_body::airborne : 0u) |
                                      (calibratedEye > 0 || values.heightCm ? native_body::calibrated : 0u) |

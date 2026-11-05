@@ -56,13 +56,14 @@ In the headset: pause (menu button) → **Settings** → **SPIDY VR** (the last 
 | DODGE TUMBLE | OFF | When the game dodges your view tips (LEAN) or rolls (ROLL) so you can tell. Pick LEAN if ROLL is too much. |
 | COMBAT RESPONSIVE | OFF | In fights: no SPIDY RUN/landing carry, NATIVE RUN holds no RT, and A is the game's jump at once. |
 | HEAD PROBE | OFF | Read-only diagnostic: logs Spider-Man's head bone vs your headset per state (`head probe:` lines in the diag log). Changes nothing in play. Needed before animated-moves / head-lock work. |
+| ANIMATED MOVES | OFF | Game anim drives the body for ground parkour / vaults / mantles (with NATIVE RUN). Swing / web / zip / wall-run stay with the mod. Opt-in play-feel; needs Ilya's yes to merge upstream. |
 | RUN LOGS | OFF | Writes run/landing/take-off speeds to the diag log for bug reports. Changes nothing in play. |
 
 Full descriptions: [PLAYERS.md](PLAYERS.md) ("VR settings").
 
 ### Recommended starter settings
 
-A suggestion, not a tested optimum: **NATIVE RUN ON** (NATIVE RUN AT 70%), **STEADY STATES ON**, **COMBAT RESPONSIVE ON**, **EARLY JUMP: RUNNING**. Then try **SPIDY RUN** + **SMOOTH WEB LANDING** for swing-to-street momentum, and **RUN LOGS ON** while you're testing so your reports are useful. For the head-lock research pass, also turn **HEAD PROBE ON** and send `reports\game-vr-<time>-diag.log`.
+A suggestion, not a tested optimum: **NATIVE RUN ON** (NATIVE RUN AT 70%), **STEADY STATES ON**, **COMBAT RESPONSIVE ON**, **EARLY JUMP: RUNNING**. Then try **SPIDY RUN** + **SMOOTH WEB LANDING** for swing-to-street momentum, and **RUN LOGS ON** while you're testing so your reports are useful. For the head-lock research pass, turn **HEAD PROBE ON** (and try **ANIMATED MOVES ON** with NATIVE RUN for vaults/mantles) and send `reports\game-vr-<time>-diag.log`.
 
 ## Troubleshooting
 

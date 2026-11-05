@@ -977,18 +977,23 @@ VR settings
                    that was wrong, and is now PALM SHOOTERS.)
   PALM SHOOTERS    (off until you switch it on) the old WRIST SHOOTERS:
                    webs leave square to your hand, out of the palm side.
-  HEAD PROBE       (off until you switch it on; the last row of
-                   EXPERIMENTAL, after PALM SHOOTERS) diagnostics only, for a
-                   head lock to come: about 10 times a second it writes
-                   "head probe:" lines with Spider-Man's head (as the game's
-                   animation moves it) against your headset, how fast it
-                   moves and turns, what you are doing (ground, air, swing,
-                   web, zip, wall, parkour, combat, cutscene) and whether
-                   the game's animation moves the head at all ("anim
-                   live"), with a summary per state when VR stops. Changes
-                   nothing in play. The lines go to the same
-                   game-vr-<time>-diag.log as RUN LOGS' (in their own part,
-                   so they push out nothing else).
+  HEAD PROBE       (off until you switch it on; EXPERIMENTAL, after PALM
+                   SHOOTERS) diagnostics only, for a head lock to come: about
+                   10 times a second it writes "head probe:" lines with
+                   Spider-Man's head (as the game's animation moves it)
+                   against your headset, how fast it moves and turns, what
+                   you are doing (ground, air, swing, web, zip, wall,
+                   parkour, combat, cutscene) and whether the game's
+                   animation moves the head at all ("anim live"), with a
+                   summary per state when VR stops. Changes nothing in play.
+                   The lines go to the same game-vr-<time>-diag.log as RUN
+                   LOGS' (in their own part, so they push out nothing else).
+  ANIMATED MOVES   (off until you switch it on; EXPERIMENTAL, after HEAD
+                   PROBE) when on with NATIVE RUN, the game's own animation
+                   drives Spider-Man's body for ground parkour, vaults and
+                   mantles. Swing, web, zip and wall-run stay with the mod.
+                   While it yields, your VR hands follow the game's pose.
+                   Off by default.
   DODGE TUMBLE     (OFF until you pick one) when the game dodges, your
                    view tips toward the dodge (LEAN) or turns a full roll
                    (ROLL, sideways dodges) so you can tell it dodged. Your
@@ -1075,7 +1080,7 @@ VR settings
                    Off: v5's jump, the game's, up to 0.2 s later.
   Changes apply at once. The launcher starts your next session with them;
   its options show every one of them but VR VIEW too.
-  NEAR CLIP, RECORDING FOV, UI STYLE, BLOW SOUNDS, PC MEDIA, NATIVE RUN, AIR SLINGSHOT, WEB ANGLE, WRIST SHOOTERS, DODGE TUMBLE, RUN CURVE, NATIVE RUN AT, RUN LOGS, RUNNING LEAP, EARLY JUMP, SOFT LANDING, SPIDY RUN, RUN FROM STANDING, WEB AIM, FOREARM BLEND, SMOOTH WEB LANDING, WEB LANDING IMPACT, STEADY STATES, COMBAT RESPONSIVE, SPIDY RUN JUMP, FOREARM AIM LIMIT, PALM SHOOTERS, HEAD PROBE, HEIGHT, SEATED, EYE AIM,
+  NEAR CLIP, RECORDING FOV, UI STYLE, BLOW SOUNDS, PC MEDIA, NATIVE RUN, AIR SLINGSHOT, WEB ANGLE, WRIST SHOOTERS, DODGE TUMBLE, RUN CURVE, NATIVE RUN AT, RUN LOGS, RUNNING LEAP, EARLY JUMP, SOFT LANDING, SPIDY RUN, RUN FROM STANDING, WEB AIM, FOREARM BLEND, SMOOTH WEB LANDING, WEB LANDING IMPACT, STEADY STATES, COMBAT RESPONSIVE, SPIDY RUN JUMP, FOREARM AIM LIMIT, PALM SHOOTERS, HEAD PROBE, ANIMATED MOVES, HEIGHT, SEATED, EYE AIM,
   SMART ANCHOR, WEB RANGE, WEB SPEED, ELASTIC WEB, SOFT RELEASE, SWING
   ASSIST, SLINGSHOT SPEED, SINGLE HAND YANK STRENGTH, TWO HAND WEB ZIP, HAND ROPE STEERING, RECORDING
   SMOOTHING, REEL HAPTICS, SWING HAPTICS, the four body haptics switches

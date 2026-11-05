@@ -79,6 +79,7 @@
 #include "spidy/diag_log.hpp"
 #include "spidy/ground_state.hpp"
 #include "spidy/head_probe.hpp"
+#include "spidy/animated_moves.hpp"
 // Stand-ins for the game's classes, by the names the target scan's rules look
 // for: MSVC lays out their type information as it did the game's.
 class Component {
@@ -1807,7 +1808,7 @@ int main() {
     });
     test("slingshot settings append to the old wire format and default off", [] {
         game_swing::Settings s;
-        check(s.version == 31 && s.bytes == 148 && !s.webSlingshot, "wrong slingshot defaults");
+        check(s.version == 32 && s.bytes == 152 && !s.webSlingshot, "wrong slingshot defaults");
         check(offsetof(game_swing::Settings, webSlingshot) == 48, "old settings moved");
         s.webSlingshot = 1; check(game_swing::validSettings(s), "ON refused");
         s.webSlingshot = 2; check(!game_swing::validSettings(s), "invalid switch accepted");
@@ -2470,7 +2471,7 @@ int main() {
         check(vr_settings::choose(vr_settings::Item::betterClimbing, 1, v), "ON failed");
         check(vr_settings::withTabOnly({}, vr_settings::tabOnlyText(v)).betterClimbing, "switch not saved");
         game_swing::Settings s;
-        check(s.version == 31 && s.bytes == 148 && offsetof(game_swing::Settings, betterClimbing) == 52,
+        check(s.version == 32 && s.bytes == 152 && offsetof(game_swing::Settings, betterClimbing) == 52,
               "settings moved old fields");
         s.betterClimbing = 1; check(game_swing::validSettings(s), "ON refused");
         s.betterClimbing = 2; check(!game_swing::validSettings(s), "invalid switch accepted");
@@ -3826,7 +3827,7 @@ int main() {
     test("merged settings keep phone suppression, arcade webs and hand climbing independent", [] {
         using namespace game_swing;
         Settings s;
-        check(s.version == 31 && s.bytes == 148, "updated settings did not append the climbing field");
+        check(s.version == 32 && s.bytes == 152, "updated settings did not append the climbing field");
         check(offsetof(Settings, noBlows) == 36 && offsetof(Settings, arcade) == 40 &&
               offsetof(Settings, handClimb) == 44, "upstream phone or arcade fields moved");
         s.noBlows = 3;
@@ -9916,7 +9917,7 @@ int main() {
         Swing fresh(inert());
         check(!fresh.webLandingSmoothEnabled() && !fresh.landCarrying(), "SMOOTH WEB LANDING on by default");
         game_swing::Settings packet;
-        check(packet.version == 31 && packet.bytes == 148 && !packet.webLandingSmooth &&
+        check(packet.version == 32 && packet.bytes == 152 && !packet.webLandingSmooth &&
                   packet.webLandingImpact == 24 &&
                   offsetof(game_swing::Settings, webLandingSmooth) == game_swing::settingsBytesV29,
               "SMOOTH WEB LANDING not appended, or on by default");
@@ -10070,7 +10071,7 @@ int main() {
         Swing fresh(inert());
         check(!fresh.groundRunEnabled() && !fresh.groundRunning(), "SPIDY RUN on by default");
         game_swing::Settings packet;
-        check(packet.version == 31 && packet.bytes == 148 && !packet.spidyRun &&
+        check(packet.version == 32 && packet.bytes == 152 && !packet.spidyRun &&
                   offsetof(game_swing::Settings, spidyRun) == game_swing::settingsBytesV27,
               "SPIDY RUN not appended, or on by default");
         packet.spidyRun = 2;
@@ -10208,7 +10209,7 @@ int main() {
             check(!sw.groundRunning(), "the air started a run from standing");
         }
         game_swing::Settings packet;
-        check(packet.version == 31 && packet.bytes == 148 && !packet.spidyRunStanding &&
+        check(packet.version == 32 && packet.bytes == 152 && !packet.spidyRunStanding &&
                   offsetof(game_swing::Settings, spidyRunStanding) == game_swing::settingsBytesV28,
               "SPIDY RUN FROM STANDING not appended, or on by default");
         packet.spidyRunStanding = 2;
@@ -22723,7 +22724,7 @@ int main() {
     test("free combat: settings default to called combat and preserve older packet layouts", [] {
         using namespace game_swing;
         Settings s;
-        check(s.version == 31 && s.bytes == 148 && s.combatVisuals == 1 &&
+        check(s.version == 32 && s.bytes == 152 && s.combatVisuals == 1 &&
                   offsetof(Settings, combatVisuals) == 56,
               "free combat broke the settings defaults or layout");
         s.combatVisuals = 0;
@@ -22770,7 +22771,7 @@ int main() {
         check(withTabOnly(Values{}, "single_hand_yank_percent=999\n").singleHandYankPercent == 300,
               "saved single-hand yank strength was not clamped");
         game_swing::Settings packet;
-        check(packet.version == 31 && packet.bytes == 148 && !packet.halfPunchDamage &&
+        check(packet.version == 32 && packet.bytes == 152 && !packet.halfPunchDamage &&
                   packet.singleHandYankPercent == 100 &&
                   offsetof(game_swing::Settings, halfPunchDamage) == 96 &&
                   offsetof(game_swing::Settings, singleHandYankPercent) == 100,
@@ -23579,7 +23580,7 @@ int main() {
                                                          : Place::tab),
                   "a row in the wrong place");
         }
-        check(std::count_if(all.begin(), all.end(), [](const Row& r) { return r.place == Place::tab; }) == 89,
+        check(std::count_if(all.begin(), all.end(), [](const Row& r) { return r.place == Place::tab; }) == 90,
               "the tab's own rows");
         check(all[1].item == Item::webStyle && std::strcmp(all[1].title, "WEB STYLE") == 0 &&
                   all[1].choices.size() == 2 && std::strcmp(all[1].choices[0], "REALISTIC") == 0 &&
@@ -23838,7 +23839,7 @@ int main() {
                   "flip_reprojection=0\nsteady_hud=0\nreel_haptics=0\nswing_haptics=0\n"
                   "pc_media=0\nsingle_hand_yank_percent=100\nweb_tie=0\nnative_run=0\nair_slingshot=0\nweb_angle_"
                   "degrees=0\nwrist_shooters=0\n"
-                  "dodge_tumble=0\nrun_curve=0\nnative_run_at_percent=70\nrun_logs=0\nrunning_leap=0\nearly_jump=0\nsoft_landing=0\nspidy_run=0\nspidy_run_from_standing=0\nweb_aim_source=0\nforearm_blend=100\nweb_landing_smooth=0\nweb_landing_impact_speed=24\nsteady_states=0\ncombat_responsive=0\nspidy_run_jump=1\nforearm_aim_limit=180\npalm_shooters=0\nhead_probe=0\n",
+                  "dodge_tumble=0\nrun_curve=0\nnative_run_at_percent=70\nrun_logs=0\nrunning_leap=0\nearly_jump=0\nsoft_landing=0\nspidy_run=0\nspidy_run_from_standing=0\nweb_aim_source=0\nforearm_blend=100\nweb_landing_smooth=0\nweb_landing_impact_speed=24\nsteady_states=0\ncombat_responsive=0\nspidy_run_jump=1\nforearm_aim_limit=180\npalm_shooters=0\nhead_probe=0\nanimated_moves=0\n",
               "the defaults' text");
         Values changed = defaults;
         changed.recordingFov = 140;
@@ -26427,7 +26428,7 @@ int main() {
         check(grab.grabs()[0].phase == GrabPhase::None, "a held grip caught again");
         check(grab.forSwing(in).hands[0].grip == 0, "a held grip went to the swing");
     });
-    test("HEAD PROBE: off by default, a switch kept as head_probe after PALM SHOOTERS, swing settings version 31", [] {
+    test("HEAD PROBE: off by default, a switch kept as head_probe after PALM SHOOTERS, swing settings field at v30", [] {
         using namespace vr_settings;
         Values v;
         check(!v.headProbe && defaultChoice(Item::headProbe) == 0, "HEAD PROBE on by default");
@@ -26440,9 +26441,9 @@ int main() {
         check(all[82].item == Item::headProbe && std::strcmp(all[82].title, "HEAD PROBE") == 0 &&
                   all[82].choices.empty() && all[82].place == Place::tab && all[81].item == Item::palmShooters,
               "HEAD PROBE: a switch in the tab after PALM SHOOTERS");
-        check(lastItem == Item::headProbe && static_cast<unsigned>(lastItem) < 256, "HEAD PROBE not the last item");
+        check(all[83].item == Item::animatedMoves, "ANIMATED MOVES not after HEAD PROBE");
         game_swing::Settings s;
-        check(s.version == 31 && s.bytes == 148 && !s.headProbe &&
+        check(s.version == 32 && s.bytes == 152 && !s.headProbe &&
                   offsetof(game_swing::Settings, headProbe) == game_swing::settingsBytesV30,
               "HEAD PROBE not appended to the swing's settings, or on by default");
         s.headProbe = 1;
@@ -26453,6 +26454,71 @@ int main() {
         s.version = 30;
         s.bytes = game_swing::settingsBytesV30;
         check(game_swing::validSettings(s), "version 30 settings packet refused");
+        s = {};
+        s.version = 31;
+        s.bytes = game_swing::settingsBytesV31;
+        check(game_swing::validSettings(s), "version 31 settings packet refused");
+    });
+    test("ANIMATED MOVES: off by default, a switch kept as animated_moves after HEAD PROBE, swing settings version 32", [] {
+        using namespace vr_settings;
+        Values v;
+        check(!v.animatedMoves && defaultChoice(Item::animatedMoves) == 0, "ANIMATED MOVES on by default");
+        check(choose(Item::animatedMoves, 1, v) && v.animatedMoves && choice(Item::animatedMoves, v) == 1,
+              "not switched on");
+        check(tabOnlyText(v).find("animated_moves=1\n") != std::string::npos &&
+                  withTabOnly({}, "animated_moves=1\n").animatedMoves &&
+                  !withTabOnly({}, "animated_moves=0\n").animatedMoves && !withTabOnly({}, "").animatedMoves,
+              "spidy_vr.ini does not keep ANIMATED MOVES as animated_moves");
+        const auto& all = rows();
+        check(all[83].item == Item::animatedMoves && std::strcmp(all[83].title, "ANIMATED MOVES") == 0 &&
+                  all[83].choices.empty() && all[83].place == Place::tab && all[82].item == Item::headProbe,
+              "ANIMATED MOVES: a switch in the tab after HEAD PROBE");
+        check(lastItem == Item::animatedMoves && static_cast<unsigned>(lastItem) < 256,
+              "ANIMATED MOVES not the last item");
+        game_swing::Settings s;
+        check(s.version == 32 && s.bytes == 152 && !s.animatedMoves &&
+                  offsetof(game_swing::Settings, animatedMoves) == game_swing::settingsBytesV31,
+              "ANIMATED MOVES not appended to the swing's settings, or on by default");
+        s.animatedMoves = 1;
+        check(game_swing::validSettings(s), "ANIMATED MOVES's switch refused");
+        s.animatedMoves = 2;
+        check(!game_swing::validSettings(s), "an invalid ANIMATED MOVES switch accepted");
+        s = {};
+        s.version = 31;
+        s.bytes = game_swing::settingsBytesV31;
+        check(game_swing::validSettings(s), "version 31 settings packet refused");
+    });
+    test("ANIMATED MOVES: yields the body on ground and vault/mantle parkour only", [] {
+        using namespace head_probe;
+        StateInputs in;
+        check(!animated_moves::yieldsBody(false, in), "off yields");
+        check(!animated_moves::yieldsBody(true, in), "cutscene yields");
+        in.playing = in.fresh = in.grounded = true;
+        check(animated_moves::yieldsBody(true, in), "ground does not yield");
+        check(!animated_moves::yieldsBody(false, in), "ground yields while off");
+        in.runRt = true;
+        check(animated_moves::yieldsBody(true, in), "NATIVE RUN on ground does not yield");
+        in.grounded = false;
+        check(animated_moves::yieldsBody(true, in), "vault/mantle parkour does not yield");
+        in.wall = 1;
+        check(!animated_moves::yieldsBody(true, in), "wall-run parkour yields");
+        in = {};
+        in.playing = in.fresh = in.webbed = in.owned = true;
+        check(!animated_moves::yieldsBody(true, in), "swing yields");
+        in.owned = false;
+        check(!animated_moves::yieldsBody(true, in), "web yields");
+        in = {};
+        in.playing = in.fresh = in.zipping = true;
+        check(!animated_moves::yieldsBody(true, in), "zip yields");
+        in = {};
+        in.playing = in.fresh = true;
+        in.wall = 1;
+        check(!animated_moves::yieldsBody(true, in), "wall yields");
+        in.dodging = true;
+        check(!animated_moves::yieldsBody(true, in), "combat yields");
+        StateInputs named;
+        named.playing = named.fresh = named.grounded = true;
+        check(std::strcmp(animated_moves::yieldName(named), "ground") == 0, "yield name");
     });
     test("HEAD PROBE: its own diagnostics ring; every line from named fields, within a line", [] {
         using namespace head_probe;

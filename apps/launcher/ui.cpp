@@ -1888,6 +1888,11 @@ void App::options(ImVec2 origin, ImVec2 size) {
                "Read-only: logs Spidey's head bone against your headset (head probe: lines in the diagnostics) "
                "in each state, for the head lock to come. Changes nothing in play. Off by default.",
                S(42), [&] { tabToggle("##headprobe", Item::headProbe); });
+        option("Animated moves (experimental)",
+               "When on with NATIVE RUN: the game's own animation drives Spider-Man's body for ground "
+               "parkour, vaults and mantles. Swing, web, zip and wall-run stay with the mod. Off by "
+               "default (play-feel change; needs a yes to merge upstream).",
+               S(42), [&] { tabToggle("##animatedmoves", Item::animatedMoves); });
         option("Web aim (experimental)",
                "MODEL FOREARM: your webs leave along the forearm of the Spider-Man body you see, rather than "
                "along the controller, and go back to the controller's line whenever the body cannot say "

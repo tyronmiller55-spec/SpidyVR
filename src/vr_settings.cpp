@@ -385,6 +385,8 @@ template <class V> auto switchOf(Item item, V& v) -> decltype(&v.aimMarkers) {
         return &v.palmShooters;
     case Item::headProbe:
         return &v.headProbe;
+    case Item::animatedMoves:
+        return &v.animatedMoves;
     case Item::webLandingSmooth:
         return &v.webLandingSmooth;
     case Item::softLanding:
@@ -449,9 +451,9 @@ Values sanitized(Values v) {
     v.automaticHandThreshold = std::clamp(v.automaticHandThreshold, 50, 300);
     return v;
 }
-const std::array<Row, 94>& rows() {
+const std::array<Row, 95>& rows() {
     // The help fits the game's description column beside the rows.
-    static const std::array<Row, 94> all{{
+    static const std::array<Row, 95> all{{
         {Item::none, "WEBS", nullptr, {}},
         {Item::webStyle, "WEB STYLE",
          "Arcade: webs pass lamp posts, signs and cars, and swings stay above the street.", webStyleChoices},
@@ -672,6 +674,8 @@ const std::array<Row, 94>& rows() {
          "The old WRIST SHOOTERS: webs out of the palm side, square to the hand.", {}},
         {Item::headProbe, "HEAD PROBE",
          "Diagnostics only: logs Spidey's head against the headset. Changes nothing.", {}},
+        {Item::animatedMoves, "ANIMATED MOVES",
+         "Game anim drives the body for ground parkour, vaults and mantles (NATIVE RUN).", {}},
         {Item::realisticFlips,
          "REALISTIC FLIPS",
          "Momentum rotation from arms and webs. FLIPS also enables left-stick steering.",
@@ -933,6 +937,7 @@ constexpr TabOnly tabOnly[] = {
     {"forearm_aim_limit", nullptr, &Values::forearmAimLimit},
     {"palm_shooters", &Values::palmShooters, nullptr},
     {"head_probe", &Values::headProbe, nullptr},
+    {"animated_moves", &Values::animatedMoves, nullptr},
 };
 } // namespace
 std::string tabOnlyText(const Values& v) {
