@@ -72,6 +72,7 @@ uint64_t cacheUses{};
 std::atomic<uint32_t> rolesSerial{1};
 body::State state;
 std::array<float, 2> overlayArmWeight{};
+bool overlayTorsoAssist{};
 body::Targets lastTargets;
 // The body's turn away from the wall at the last solve (crawlOutwardWeight),
 // for the XR thread, which must not wait out a solve for it.
@@ -528,6 +529,7 @@ void solveHero(float* out, uintptr_t job, uintptr_t instance) {
         } else if (armsOverlayOn || armsBlend) {
             body::Targets t;
             t.armsOnly = true;
+            t.torsoAssist = armsOverlayOn && overlayTorsoAssist;
             t.armWeight = armsOverlayOn ? std::array<float, 2>{overlayArmWeight[0], overlayArmWeight[1]}
                                         : std::array<float, 2>{};
             const Quat toModel = toWorld.conjugate();
@@ -732,6 +734,7 @@ void native_body::resyncAfterYield() {
     AcquireSRWLockExclusive(&solveLock);
     state = {};
     overlayArmWeight[0] = overlayArmWeight[1] = 0.f;
+    overlayTorsoAssist = false;
     actorHeadingSet = trackingYawSet = false;
     actorHeading = trackingYaw = 0;
     outwardWeight.store(0.f, std::memory_order_relaxed);
@@ -746,6 +749,13 @@ void native_body::setArmOverlay(float left, float right) {
     overlayArmWeight[1] = clamp01(right);
     ReleaseSRWLockExclusive(&solveLock);
 }
+
+void native_body::setTorsoAssist(bool on) {
+    AcquireSRWLockExclusive(&solveLock);
+    overlayTorsoAssist = on;
+    ReleaseSRWLockExclusive(&solveLock);
+}
+
 void native_body::submit(const Command& next) {
     AcquireSRWLockExclusive(&commandLock);
     command = next;

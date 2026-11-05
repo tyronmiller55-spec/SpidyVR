@@ -260,6 +260,10 @@ void resyncAfterYield();
 // ANIMATED ARMS: per-arm overlay weights (0..1) read by the next pose job when
 // Flags::armsOverlay is set. Cleared by resyncAfterYield. No Command layout change.
 void setArmOverlay(float left, float right);
+// ANIMATED TORSO: when true with armsOverlay, body::Targets::torsoAssist bounds
+// waist→chest toward controller reaches. Cleared by resyncAfterYield. No
+// Command layout / version change (side channel, like setArmOverlay).
+void setTorsoAssist(bool on);
 // A render frame begins (the stereo module's render setup, main thread).
 void renderFrame();
 // The body turned the hero's joints in the last moments, its head shrunk:
