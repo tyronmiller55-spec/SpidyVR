@@ -7,6 +7,37 @@ Per-check results are in [VALIDATION.md](VALIDATION.md).
 
 Not in a build yet, newest first. The release adds these to the next build's entry.
 
+**HEAD PROBE: Spider-Man's head bone against the headset, per state, in the diagnostics (read only).**
+
+- **Why.** Step one of letting the game's own parkour and swing animations
+  play in VR with the view locked to Spider-Man's head: before any lock, the
+  numbers that say whether it would be comfortable and whether the game's
+  animation even moves the head in those states.
+- **HEAD PROBE** (`head_probe`, off; the tab's EXPERIMENTAL after PALM
+  SHOOTERS; swing settings version 31, `Settings::headProbe`, accepted and
+  not read by the swing). While on, the pose writer's hook (native_body)
+  notes the `head` bone (found by name as the body's own, with its neck and
+  parent chain) as the game's animation wrote it and as the body left it,
+  the hero's root and the headset the body was given - read only, nothing
+  written to the pose, the camera or the movement; no allocation in the
+  pose job, its own small lock (a copy, as MODEL FOREARM's).
+- **Its lines** (`head_probe::Probe`, every one from named fields with a
+  compiler-checked format, tested at their widest): `head probe:` about 10 a
+  second (state, who owns the body and its movement, the head's position and
+  yaw/pitch/roll, the headset's, the offset between them, head speed, speed
+  against the root, angular speed, roll and pitch over the last second, the
+  parent chain, `anim live`), a line at once on each state or owner change,
+  `anim live: yes/no/unknown` when it changes (the game's head in model space
+  against the body's root), a summary of the current state every 2 s
+  (p50/p95/max speed and angular speed, max roll and pitch, stable or not),
+  and one `head probe: session` line per state when VR stops. `head bone:
+  not found` once per rig, with which of the probe's candidate names the rig
+  has.
+- **The diagnostics** (`diag_log::Data` version 2): a third ring of 64 lines
+  for `head probe:` alone, so it can push out neither the main ring nor
+  `forearm aim:`; run_game_vr.py reads it into the console and
+  `reports\game-vr-<time>-diag.log` with the rest.
+
 **No crash a second into VR with WEB AIM: MODEL FOREARM or WRIST SHOOTERS; startup stages and a watchdog in the diagnostics.**
 
 - **Before (November 3, Quest 3S over Link, commit 78a43ed4f5, three

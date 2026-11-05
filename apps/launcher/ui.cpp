@@ -1884,6 +1884,10 @@ void App::options(ImVec2 origin, ImVec2 size) {
                "The old wrist shooters (before v6): webs leave square to the hand, out of the palm side. "
                "Off by default.",
                S(42), [&] { tabToggle("##palmshooters", Item::palmShooters); });
+        option("Head probe (diagnostics)",
+               "Read-only: logs Spidey's head bone against your headset (head probe: lines in the diagnostics) "
+               "in each state, for the head lock to come. Changes nothing in play. Off by default.",
+               S(42), [&] { tabToggle("##headprobe", Item::headProbe); });
         option("Web aim (experimental)",
                "MODEL FOREARM: your webs leave along the forearm of the Spider-Man body you see, rather than "
                "along the controller, and go back to the controller's line whenever the body cannot say "

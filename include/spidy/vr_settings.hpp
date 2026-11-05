@@ -314,6 +314,11 @@ struct Values {
     // v2-v5, a quarter turn out of the palm side, square to the hand. Off by
     // default. WRIST SHOOTERS now shoots parallel to the forearm.
     bool palmShooters = false;
+    // HEAD PROBE (the tab's HEAD PROBE; v7): a read-only diagnostic for the
+    // head lock to come - "head probe:" lines with the hero's head bone
+    // against the headset, per state, in the session's diagnostics
+    // (head_probe.hpp). Changes nothing in play. Off by default.
+    bool headProbe = false;
     // How much speed a fast one-hand web yank adds, percent (the tab's SINGLE
     // HAND YANK STRENGTH; Swing::singleHandYankStrength): 100 as before.
     int singleHandYankPercent = 100;
@@ -451,8 +456,9 @@ enum class Item : uint8_t {
     spidyRunJump,
     forearmAimLimit,
     palmShooters,
+    headProbe,
 };
-inline constexpr Item lastItem = Item::palmShooters;
+inline constexpr Item lastItem = Item::headProbe;
 // Where a row shows: in the tab; on the pause menu's first page instead,
 // under RESUME: VR VIEW (the user, October 15: "move the VIEW: GAME SCREEN to
 // the first menu (the one with resume)"); or only in the launcher's options:
@@ -475,7 +481,7 @@ struct Row {
     std::span<const char* const> choices{};
     Place place{};
 };
-const std::array<Row, 93>& rows();
+const std::array<Row, 94>& rows();
 // The most choices a row shows (game_menu's buffers): a row with more would
 // lose its last ones.
 inline constexpr size_t maxChoices = 9;
