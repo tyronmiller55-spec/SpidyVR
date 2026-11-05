@@ -52,7 +52,7 @@ In the headset: pause (menu button) → **Settings** → **SPIDY VR** (the last 
 | WEB ANGLE | 0 | Tilts the web line up/down from the controller's, 15–45°. Aim markers follow. |
 | WRIST SHOOTERS | OFF | Webs leave parallel to your forearm, out past the wrist, like Spider-Man's shooters. |
 | PALM SHOOTERS | OFF | Webs leave square out of the palm side (the pre-v6 WRIST SHOOTERS). |
-| WEB AIM | CONTROLLER | MODEL FOREARM: webs follow the forearm of the body you see (falls back to the controller when it can't). FOREARM BLEND (100%) and FOREARM AIM LIMIT (NO LIMIT) tune it. |
+| WEB AIM | CONTROLLER | MODEL FOREARM: webs follow the forearm of the body you see (falls back to the controller when it can't — including ANIMATED ARMS overlay, and when forearm vs aim > 45°). FOREARM BLEND (100%) and FOREARM AIM LIMIT (NO LIMIT) tune it. |
 | DODGE TUMBLE | OFF | When the game dodges your view tips (LEAN) or rolls (ROLL) so you can tell. Pick LEAN if ROLL is too much. |
 | COMBAT RESPONSIVE | OFF | In fights: no SPIDY RUN/landing carry, NATIVE RUN holds no RT, and A is the game's jump at once. |
 | HEAD PROBE | OFF | Read-only diagnostic: logs Spider-Man's head bone vs your headset per state (`head probe:` lines in the diag log). Changes nothing in play. Needed before animated-moves / head-lock work. |
@@ -60,7 +60,7 @@ In the headset: pause (menu button) → **Settings** → **SPIDY VR** (the last 
 | ANIMATED HEAD | OFF | While a pose yield is active: view follows the gameplay head. LEVEL = place only (only if you pick it); FULL = turns with anim pitch/roll on ground and air. Off by default. Yield exit resyncs VR body/tracking (handoff). |
 | ANIMATED AIR | OFF | Game anim drives the body in freefall / swing / web air; mod keeps swing physics. Zip/wall/combat stay VR body. Freefall web aim interrupts. Off by default. |
 | ANIMATED STEERING | OFF | While yielding: L-stick magnitude runs along Spidey's facing (actor read). R-stick model yaw not implemented (no facing write). Off by default. |
-| ANIMATED ARMS | OFF | While yielding: controller arms overlay game torso/legs/head anim; idle returns. Motion vs actor root; web/aim interrupts. Thresholds provisional. Off by default. |
+| ANIMATED ARMS | OFF | While yielding: controller arms overlay game torso/legs/head anim; idle returns. Motion vs actor root. With this on, freefall web intent keeps the pose yield (arms handle aim); MODEL FOREARM falls back to the controller so wrist-shooter markers follow live aim. Thresholds provisional. Off by default. |
 | RUN LOGS | OFF | Writes run/landing/take-off speeds to the diag log for bug reports. Changes nothing in play. |
 
 Full descriptions: [PLAYERS.md](PLAYERS.md) ("VR settings").
