@@ -82,6 +82,7 @@
 #include "spidy/animated_moves.hpp"
 #include "spidy/animated_steering.hpp"
 #include "spidy/animated_arms.hpp"
+#include "spidy/animated_torso.hpp"
 // Stand-ins for the game's classes, by the names the target scan's rules look
 // for: MSVC lays out their type information as it did the game's.
 class Component {
@@ -1810,7 +1811,7 @@ int main() {
     });
     test("slingshot settings append to the old wire format and default off", [] {
         game_swing::Settings s;
-        check(s.version == 36 && s.bytes == 168 && !s.webSlingshot, "wrong slingshot defaults");
+        check(s.version == 37 && s.bytes == 172 && !s.webSlingshot, "wrong slingshot defaults");
         check(offsetof(game_swing::Settings, webSlingshot) == 48, "old settings moved");
         s.webSlingshot = 1; check(game_swing::validSettings(s), "ON refused");
         s.webSlingshot = 2; check(!game_swing::validSettings(s), "invalid switch accepted");
@@ -2473,7 +2474,7 @@ int main() {
         check(vr_settings::choose(vr_settings::Item::betterClimbing, 1, v), "ON failed");
         check(vr_settings::withTabOnly({}, vr_settings::tabOnlyText(v)).betterClimbing, "switch not saved");
         game_swing::Settings s;
-        check(s.version == 36 && s.bytes == 168 && offsetof(game_swing::Settings, betterClimbing) == 52,
+        check(s.version == 37 && s.bytes == 172 && offsetof(game_swing::Settings, betterClimbing) == 52,
               "settings moved old fields");
         s.betterClimbing = 1; check(game_swing::validSettings(s), "ON refused");
         s.betterClimbing = 2; check(!game_swing::validSettings(s), "invalid switch accepted");
@@ -3829,7 +3830,7 @@ int main() {
     test("merged settings keep phone suppression, arcade webs and hand climbing independent", [] {
         using namespace game_swing;
         Settings s;
-        check(s.version == 36 && s.bytes == 168, "updated settings did not append the climbing field");
+        check(s.version == 37 && s.bytes == 172, "updated settings did not append the climbing field");
         check(offsetof(Settings, noBlows) == 36 && offsetof(Settings, arcade) == 40 &&
               offsetof(Settings, handClimb) == 44, "upstream phone or arcade fields moved");
         s.noBlows = 3;
@@ -9919,7 +9920,7 @@ int main() {
         Swing fresh(inert());
         check(!fresh.webLandingSmoothEnabled() && !fresh.landCarrying(), "SMOOTH WEB LANDING on by default");
         game_swing::Settings packet;
-        check(packet.version == 36 && packet.bytes == 168 && !packet.webLandingSmooth &&
+        check(packet.version == 37 && packet.bytes == 172 && !packet.webLandingSmooth &&
                   packet.webLandingImpact == 24 &&
                   offsetof(game_swing::Settings, webLandingSmooth) == game_swing::settingsBytesV29,
               "SMOOTH WEB LANDING not appended, or on by default");
@@ -10073,7 +10074,7 @@ int main() {
         Swing fresh(inert());
         check(!fresh.groundRunEnabled() && !fresh.groundRunning(), "SPIDY RUN on by default");
         game_swing::Settings packet;
-        check(packet.version == 36 && packet.bytes == 168 && !packet.spidyRun &&
+        check(packet.version == 37 && packet.bytes == 172 && !packet.spidyRun &&
                   offsetof(game_swing::Settings, spidyRun) == game_swing::settingsBytesV27,
               "SPIDY RUN not appended, or on by default");
         packet.spidyRun = 2;
@@ -10211,7 +10212,7 @@ int main() {
             check(!sw.groundRunning(), "the air started a run from standing");
         }
         game_swing::Settings packet;
-        check(packet.version == 36 && packet.bytes == 168 && !packet.spidyRunStanding &&
+        check(packet.version == 37 && packet.bytes == 172 && !packet.spidyRunStanding &&
                   offsetof(game_swing::Settings, spidyRunStanding) == game_swing::settingsBytesV28,
               "SPIDY RUN FROM STANDING not appended, or on by default");
         packet.spidyRunStanding = 2;
@@ -22726,7 +22727,7 @@ int main() {
     test("free combat: settings default to called combat and preserve older packet layouts", [] {
         using namespace game_swing;
         Settings s;
-        check(s.version == 36 && s.bytes == 168 && s.combatVisuals == 1 &&
+        check(s.version == 37 && s.bytes == 172 && s.combatVisuals == 1 &&
                   offsetof(Settings, combatVisuals) == 56,
               "free combat broke the settings defaults or layout");
         s.combatVisuals = 0;
@@ -22773,7 +22774,7 @@ int main() {
         check(withTabOnly(Values{}, "single_hand_yank_percent=999\n").singleHandYankPercent == 300,
               "saved single-hand yank strength was not clamped");
         game_swing::Settings packet;
-        check(packet.version == 36 && packet.bytes == 168 && !packet.halfPunchDamage &&
+        check(packet.version == 37 && packet.bytes == 172 && !packet.halfPunchDamage &&
                   packet.singleHandYankPercent == 100 &&
                   offsetof(game_swing::Settings, halfPunchDamage) == 96 &&
                   offsetof(game_swing::Settings, singleHandYankPercent) == 100,
@@ -23842,7 +23843,7 @@ int main() {
                   "flip_reprojection=0\nsteady_hud=0\nreel_haptics=0\nswing_haptics=0\n"
                   "pc_media=0\nsingle_hand_yank_percent=100\nweb_tie=0\nnative_run=0\nair_slingshot=0\nweb_angle_"
                   "degrees=0\nwrist_shooters=0\n"
-                  "dodge_tumble=0\nrun_curve=0\nnative_run_at_percent=70\nrun_logs=0\nrunning_leap=0\nearly_jump=0\nsoft_landing=0\nspidy_run=0\nspidy_run_from_standing=0\nweb_aim_source=0\nforearm_blend=100\nweb_landing_smooth=0\nweb_landing_impact_speed=24\nsteady_states=0\ncombat_responsive=0\nspidy_run_jump=1\nforearm_aim_limit=180\npalm_shooters=0\nhead_probe=0\nanimated_moves=0\nanimated_head=0\nanimated_air=0\nanimated_steering=0\nanimated_arms=0\n",
+                  "dodge_tumble=0\nrun_curve=0\nnative_run_at_percent=70\nrun_logs=0\nrunning_leap=0\nearly_jump=0\nsoft_landing=0\nspidy_run=0\nspidy_run_from_standing=0\nweb_aim_source=0\nforearm_blend=100\nweb_landing_smooth=0\nweb_landing_impact_speed=24\nsteady_states=0\ncombat_responsive=0\nspidy_run_jump=1\nforearm_aim_limit=180\npalm_shooters=0\nhead_probe=0\nanimated_moves=0\nanimated_head=0\nanimated_air=0\nanimated_steering=0\nanimated_arms=0\nanimated_torso=0\n",
               "the defaults' text");
         Values changed = defaults;
         changed.recordingFov = 140;
@@ -26446,7 +26447,7 @@ int main() {
               "HEAD PROBE: a switch in the tab after PALM SHOOTERS");
         check(all[83].item == Item::animatedMoves, "ANIMATED MOVES not after HEAD PROBE");
         game_swing::Settings s;
-        check(s.version == 36 && s.bytes == 168 && !s.headProbe &&
+        check(s.version == 37 && s.bytes == 172 && !s.headProbe &&
                   offsetof(game_swing::Settings, headProbe) == game_swing::settingsBytesV30,
               "HEAD PROBE not appended to the swing's settings, or on by default");
         s.headProbe = 1;
@@ -26482,7 +26483,7 @@ int main() {
               "ANIMATED MOVES: a switch in the tab after HEAD PROBE");
         check(all[84].item == Item::animatedHead, "ANIMATED HEAD not after ANIMATED MOVES");
         game_swing::Settings s;
-        check(s.version == 36 && s.bytes == 168 && !s.animatedMoves &&
+        check(s.version == 37 && s.bytes == 172 && !s.animatedMoves &&
                   offsetof(game_swing::Settings, animatedMoves) == game_swing::settingsBytesV31,
               "ANIMATED MOVES not appended to the swing's settings, or on by default");
         s.animatedMoves = 1;
@@ -26552,7 +26553,7 @@ int main() {
               "ANIMATED HEAD: Off|Level|Full in the tab after ANIMATED MOVES");
         check(all[85].item == Item::animatedAir, "ANIMATED AIR not after ANIMATED HEAD");
         game_swing::Settings s;
-        check(s.version == 36 && s.bytes == 168 && !s.animatedHead &&
+        check(s.version == 37 && s.bytes == 172 && !s.animatedHead &&
                   offsetof(game_swing::Settings, animatedHead) == game_swing::settingsBytesV32,
               "ANIMATED HEAD not at v32 offset, or on by default");
         s.animatedHead = 2;
@@ -26658,7 +26659,7 @@ int main() {
         check(all[86].item == Item::animatedSteering, "ANIMATED STEERING not after ANIMATED AIR");
         check(all[87].item == Item::animatedArms, "ANIMATED ARMS not after ANIMATED STEERING");
         game_swing::Settings s;
-        check(s.version == 36 && s.bytes == 168 && !s.animatedAir &&
+        check(s.version == 37 && s.bytes == 172 && !s.animatedAir &&
                   offsetof(game_swing::Settings, animatedAir) == game_swing::settingsBytesV33,
               "ANIMATED AIR not appended to the swing's settings, or on by default");
         s.animatedAir = 1;
@@ -26733,7 +26734,7 @@ int main() {
               "ANIMATED STEERING: a switch in the tab after ANIMATED AIR");
         check(all[87].item == Item::animatedArms, "ANIMATED ARMS not after ANIMATED STEERING");
         game_swing::Settings s;
-        check(s.version == 36 && s.bytes == 168 && !s.animatedSteering &&
+        check(s.version == 37 && s.bytes == 172 && !s.animatedSteering &&
                   offsetof(game_swing::Settings, animatedSteering) == game_swing::settingsBytesV34,
               "ANIMATED STEERING not appended, or on by default");
         s.animatedSteering = 1;
@@ -26767,10 +26768,7 @@ int main() {
         s = actorRelativeForward(NAN, 1.f, actor, camF, camR);
         check(s.right == 0 && s.forward == 0, "NaN stick accepted");
         // Entry/exit: without yield, active is false (call site leaves sticks alone).
-        check(!active(true, false), "applies outside yield");
-    });
-
-    test("ANIMATED ARMS: off by default, after ANIMATED STEERING, swing settings version 36", [] {
+        check(!active(true, false), "aptest("ANIMATED ARMS: off by default, after ANIMATED STEERING, swing settings field at v36", [] {
         using namespace vr_settings;
         Values v;
         check(!v.animatedArms && defaultChoice(Item::animatedArms) == 0, "ANIMATED ARMS on by default");
@@ -26786,12 +26784,11 @@ int main() {
                   std::strcmp(all[87].title, "ANIMATED ARMS") == 0 && all[87].choices.empty() &&
                   all[87].place == Place::tab && all[86].item == Item::animatedSteering,
               "ANIMATED ARMS: a switch in the tab after ANIMATED STEERING");
-        check(lastItem == Item::animatedArms && static_cast<unsigned>(lastItem) < 256,
-              "ANIMATED ARMS not the last item");
+        check(all[88].item == Item::animatedTorso, "ANIMATED TORSO not after ANIMATED ARMS");
         game_swing::Settings s;
-        check(s.version == 36 && s.bytes == 168 && !s.animatedArms &&
+        check(s.version == 37 && s.bytes == 172 && !s.animatedArms &&
                   offsetof(game_swing::Settings, animatedArms) == game_swing::settingsBytesV35,
-              "ANIMATED ARMS not appended, or on by default");
+              "ANIMATED ARMS offset wrong, or on by default");
         s.animatedArms = 1;
         check(game_swing::validSettings(s), "ANIMATED ARMS refused");
         s.animatedArms = 2;
@@ -26800,6 +26797,9 @@ int main() {
         s.version = 35;
         s.bytes = game_swing::settingsBytesV35;
         check(game_swing::validSettings(s), "version 35 settings packet refused");
+    });
+
+ settings packet refused");
     });
     test("ANIMATED ARMS: motion vs root, intent, tracking loss, per-arm independence", [] {
         using namespace animated_arms;
@@ -26849,9 +26849,10 @@ int main() {
         check(st.arms[0].weight == 0 && st.arms[1].weight == 0, "disabled did not clear");
         // body::Targets armsOnly does not set head — torso path requires head.
         body::Targets t;
-        check(t.armsOnly == false && t.armWeight[0] == 0 && t.armWeight[1] == 0, "armsOnly defaults");
+        check(t.armsOnly == false && t.armWeight[0] == 0 && t.armWeight[1] == 0 && !t.torsoAssist,
+              "armsOnly defaults");
         t.armsOnly = true;
-        check(t.armsOnly && !t.head, "armsOnly implies head");
+        check(t.armsOnly && !t.head && !t.torsoAssist, "armsOnly implies head/torso");
         check((native_body::armsOverlay & ~0x7ffffu) == 0, "armsOverlay outside validCrawl mask");
         check((native_body::armsOverlay & native_body::bodyOn) == 0, "armsOverlay overlaps bodyOn");
     });
@@ -26890,6 +26891,141 @@ int main() {
         check(a.weight == 0 && !a.primed, "invalid does not prime");
         const Quat id = web_aim::forearmTurn({0, 0, -1}, {}, {}, 180.f);
         check(web_aim::turnAngle(id) < .01f, "aligned forearm should be near identity");
+    });
+
+    test("ANIMATED TORSO: off by default, after ANIMATED ARMS, swing settings version 37", [] {
+        using namespace vr_settings;
+        Values v;
+        check(!v.animatedTorso && defaultChoice(Item::animatedTorso) == 0, "ANIMATED TORSO on by default");
+        check(choose(Item::animatedTorso, 1, v) && v.animatedTorso && choice(Item::animatedTorso, v) == 1,
+              "not switched on");
+        check(tabOnlyText(v).find("animated_torso=1\n") != std::string::npos &&
+                  withTabOnly({}, "animated_torso=1\n").animatedTorso &&
+                  !withTabOnly({}, "animated_torso=0\n").animatedTorso &&
+                  !withTabOnly({}, "").animatedTorso,
+              "spidy_vr.ini does not keep ANIMATED TORSO as animated_torso");
+        const auto& all = rows();
+        check(all[88].item == Item::animatedTorso &&
+                  std::strcmp(all[88].title, "ANIMATED TORSO") == 0 && all[88].choices.empty() &&
+                  all[88].place == Place::tab && all[87].item == Item::animatedArms,
+              "ANIMATED TORSO: a switch in the tab after ANIMATED ARMS");
+        check(lastItem == Item::animatedTorso && static_cast<unsigned>(lastItem) < 256,
+              "ANIMATED TORSO not the last item");
+        game_swing::Settings s;
+        check(s.version == 37 && s.bytes == 172 && !s.animatedTorso &&
+                  offsetof(game_swing::Settings, animatedTorso) == game_swing::settingsBytesV36,
+              "ANIMATED TORSO not appended, or on by default");
+        s.animatedTorso = 1;
+        check(game_swing::validSettings(s), "ANIMATED TORSO refused");
+        s.animatedTorso = 2;
+        check(!game_swing::validSettings(s), "invalid ANIMATED TORSO accepted");
+        s = {};
+        s.version = 36;
+        s.bytes = game_swing::settingsBytesV36;
+        check(game_swing::validSettings(s), "version 36 settings packet refused");
+        body::Targets tg;
+        check(!tg.torsoAssist, "torsoAssist on by default");
+    });
+
+    test("ANIMATED TORSO: demand clamps, opposition cancels yaw, spine shares", [] {
+        using namespace animated_torso;
+        Vec3 up{0, 1, 0}, forward{0, 0, 1}, left{1, 0, 0};
+        Vec3 shoulders[2]{{.2f, 1.5f, 0}, {-.2f, 1.5f, 0}};
+        Vec3 wrists[2]{{.2f, 1.5f, 0}, {-.2f, 1.5f, 0}};
+        float weights[2]{1.f, 1.f};
+        float armLen[2]{.6f, .6f};
+        // Idle wrists at shoulders → near-zero demand.
+        auto d = reachDemand({0, 1.4f, 0}, up, forward, left, shoulders, wrists, weights, armLen);
+        check(std::abs(d.yaw) < .05f && std::abs(d.pitch) < .05f, "idle wrists demanded torso");
+        // Both arms extreme left and right equally → yaw cancels.
+        wrists[0] = {1.2f, 1.5f, .2f};
+        wrists[1] = {-1.2f, 1.5f, .2f};
+        d = reachDemand({0, 1.4f, 0}, up, forward, left, shoulders, wrists, weights, armLen);
+        check(std::abs(d.yaw) < .15f, "oppositional reaches did not cancel yaw");
+        check(std::abs(d.yaw) <= yawMax + 1e-4f && std::abs(d.pitch) <= pitchMax + 1e-4f, "limits");
+        // One arm high forward-left → positive yaw and pitch, clamped.
+        weights[1] = 0;
+        wrists[0] = {1.5f, 2.4f, 1.5f};
+        d = reachDemand({0, 1.4f, 0}, up, forward, left, shoulders, wrists, weights, armLen);
+        check(d.yaw > .1f && d.pitch > .1f, "extreme reach produced no demand");
+        check(d.yaw <= yawMax + 1e-4f && d.pitch <= pitchMax + 1e-4f, "uncapped");
+        // Zero weight → no demand even with extreme wrist.
+        weights[0] = 0;
+        d = reachDemand({0, 1.4f, 0}, up, forward, left, shoulders, wrists, weights, armLen);
+        check(d.yaw == 0 && d.pitch == 0, "zero weight still demanded");
+        float sum = 0;
+        for (size_t i = 0; i < 3; ++i)
+            sum += spineShare(i, 3);
+        check(std::abs(sum - 1.f) < 1e-4f && spineShare(0, 3) < spineShare(2, 3), "spine shares");
+    });
+
+    test("ANIMATED TORSO: armsOnly+torsoAssist preserves head/pelvis/legs; idle exact; limits", [] {
+        auto b = testBody(true);
+        auto poseData = b.rest;
+        body::Pose pose(poseData.data(), static_cast<int>(b.rig.parent.size()));
+        const Vec3 head0 = pose.position(b.rig.head);
+        const Vec3 headF0 = pose.direction(b.rig.head, b.rig.headForward);
+        const Vec3 headU0 = pose.direction(b.rig.head, b.rig.headUp);
+        const Vec3 pelvis0 = pose.position(b.rig.pelvis);
+        const Vec3 footL0 = pose.position(b.rig.legs[0].foot);
+        const Vec3 footR0 = pose.position(b.rig.legs[1].foot);
+        body::Targets t;
+        t.armsOnly = true;
+        t.torsoAssist = true;
+        t.up = {0, 1, 0};
+        t.eyes = pose.position(b.rig.head);
+        t.facing = {};
+        t.armWeight = {0.f, 0.f};
+        t.hands[0] = {true, pose.position(b.rig.arms[0].hand), {}, 0, 0};
+        t.hands[1] = {true, pose.position(b.rig.arms[1].hand), {}, 0, 0};
+        body::Config c;
+        body::State st;
+        auto r = body::solve(pose, b.rig, t, c, st, true, 1.f / 90, 1.f, 1.f);
+        check(length(pose.position(b.rig.head) - head0) < 1e-4f, "idle moved head");
+        check(length(pose.position(b.rig.pelvis) - pelvis0) < 1e-4f, "idle moved pelvis");
+        check(length(pose.position(b.rig.legs[0].foot) - footL0) < 1e-4f, "idle moved left foot");
+        check(length(pose.position(b.rig.legs[1].foot) - footR0) < 1e-4f, "idle moved right foot");
+        // Extreme left reach with full weight — torso may turn; head world pose restored.
+        t.armWeight = {1.f, 0.f};
+        t.hands[0].grip = head0 + Vec3{1.2f, .8f, 1.2f};
+        t.hands[0].orientation = {};
+        // Drive several frames so smoothed angles settle.
+        for (int i = 0; i < 45; ++i) {
+            poseData = b.rest; // fresh game pose each solve (no cumulative base)
+            body::Pose p2(poseData.data(), static_cast<int>(b.rig.parent.size()));
+            r = body::solve(p2, b.rig, t, c, st, true, 1.f / 90, 1.f, 1.f);
+            check(length(p2.position(b.rig.pelvis) - pelvis0) < 1e-3f, "torso moved pelvis");
+            check(length(p2.position(b.rig.legs[0].foot) - footL0) < 1e-3f, "torso moved left foot");
+            check(length(p2.position(b.rig.legs[1].foot) - footR0) < 1e-3f, "torso moved right foot");
+            check(length(p2.position(b.rig.head) - head0) < .02f, "torso moved head position");
+            const Vec3 hf = p2.direction(b.rig.head, b.rig.headForward);
+            const Vec3 hu = p2.direction(b.rig.head, b.rig.headUp);
+            check(dot(hf, headF0) > .98f && dot(hu, headU0) > .98f, "head orientation not restored");
+            check(std::abs(st.overlayTorsoYaw) <= c.overlayTorsoYawMax + .01f, "yaw over limit");
+            check(std::abs(st.overlayTorsoPitch) <= c.overlayTorsoPitchMax + .01f, "pitch over limit");
+        }
+        check(std::abs(st.overlayTorsoYaw) > .05f || std::abs(st.overlayTorsoPitch) > .05f,
+              "extreme reach produced no torso angle");
+        // Independent right arm only (left weight 0) after clearing state.
+        st = {};
+        t.armWeight = {0.f, 1.f};
+        t.hands[0].tracked = false;
+        t.hands[1] = {true, head0 + Vec3{-1.2f, .8f, 1.2f}, {}, 0, 0};
+        for (int i = 0; i < 45; ++i) {
+            poseData = b.rest;
+            body::Pose p2(poseData.data(), static_cast<int>(b.rig.parent.size()));
+            body::solve(p2, b.rig, t, c, st, true, 1.f / 90, 1.f, 1.f);
+            check(length(p2.position(b.rig.pelvis) - pelvis0) < 1e-3f, "right-only moved pelvis");
+            check(dot(p2.direction(b.rig.head, b.rig.headForward), headF0) > .98f, "right-only head");
+        }
+        // Transition continuity: disable torsoAssist mid-stream — angles clear, no pop of feet.
+        t.torsoAssist = false;
+        t.armWeight = {1.f, 1.f};
+        poseData = b.rest;
+        body::Pose p3(poseData.data(), static_cast<int>(b.rig.parent.size()));
+        body::solve(p3, b.rig, t, c, st, true, 1.f / 90, 1.f, 1.f);
+        check(st.overlayTorsoYaw == 0 && st.overlayTorsoPitch == 0, "assist off left residual angles");
+        check(length(p3.position(b.rig.legs[0].foot) - footL0) < 1e-3f, "assist-off moved feet");
     });
 
     test("HEAD PROBE: its own diagnostics ring; every line from named fields, within a line", [] {
