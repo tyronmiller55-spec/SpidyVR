@@ -71,6 +71,7 @@ std::array<Cache, 4> caches;
 uint64_t cacheUses{};
 std::atomic<uint32_t> rolesSerial{1};
 body::State state;
+std::array<float, 2> overlayArmWeight{};
 body::Targets lastTargets;
 // The body's turn away from the wall at the last solve (crawlOutwardWeight),
 // for the XR thread, which must not wait out a solve for it.
@@ -389,7 +390,7 @@ void solveHero(float* out, uintptr_t job, uintptr_t instance) {
     ReleaseSRWLockShared(&commandLock);
     const bool on = live && (wanted.flags & native_body::bodyOn);
     // ANIMATED ARMS: arm-only overlay while bodyOn is clear (pose yield).
-    const bool arms = live && !on && (wanted.flags & native_body::armsOverlay);
+    const bool armsOverlayOn = live && !on && (wanted.flags & native_body::armsOverlay);
     uint32_t problem = cache.problem;
     const bool turned = read(instance, transform, sizeof(transform)) && instanceTurn(transform, toWorld);
     if (!problem && !turned)
@@ -449,8 +450,8 @@ void solveHero(float* out, uintptr_t job, uintptr_t instance) {
         trackingYaw = wanted.trackingYaw;
         trackingYawSet = true;
     }
-    const bool armsBlend = !on && !arms && (state.armWeight[0] > .001f || state.armWeight[1] > .001f);
-    if (!problem && (on || arms || armsBlend || state.weight > 0)) {
+    const bool armsBlend = !on && !armsOverlayOn && (state.armWeight[0] > .001f || state.armWeight[1] > .001f);
+    if (!problem && (on || armsOverlayOn || armsBlend || state.weight > 0)) {
         if (on) {
             // World axes relative to the feet into the hero's model space.
             const Quat toModel = toWorld.conjugate();
@@ -524,11 +525,11 @@ void solveHero(float* out, uintptr_t job, uintptr_t instance) {
                               wanted.shoot[i]};
             }
             lastTargets = t;
-        } else if (arms || armsBlend) {
+        } else if (armsOverlayOn || armsBlend) {
             body::Targets t;
             t.armsOnly = true;
-            t.armWeight = arms ? std::array<float, 2>{overlayArmWeight[0], overlayArmWeight[1]}
-                               : std::array<float, 2>{};
+            t.armWeight = armsOverlayOn ? std::array<float, 2>{overlayArmWeight[0], overlayArmWeight[1]}
+                                        : std::array<float, 2>{};
             const Quat toModel = toWorld.conjugate();
             t.up = toModel.rotate(Vec3{0, 1, 0});
             t.eyes = toModel.rotate(wanted.eyes);
@@ -560,13 +561,13 @@ void solveHero(float* out, uintptr_t job, uintptr_t instance) {
                                             : 0.f;
         lastSolve = now;
         body::Pose pose(out, static_cast<int>(joints));
-        result = body::solve(pose, cache.ik, lastTargets, config, state, on || arms || armsBlend, dt, scale, armScale);
+        result = body::solve(pose, cache.ik, lastTargets, config, state, on || armsOverlayOn || armsBlend, dt, scale, armScale);
         // MODEL FOREARM: each arm as this solve left it, in world axes.
-        native_body::Forearms arms;
+        native_body::Forearms forearmsOut;
         for (int i = 0; i < 2; ++i) {
             const auto& a = cache.ik.arms[i];
-            auto& f = arms.arms[i];
-            if (!result.solved || !(on || arms || armsBlend) || a.lower < 0 || a.hand < 0 || a.lower >= static_cast<int>(joints) ||
+            auto& f = forearmsOut.arms[i];
+            if (!result.solved || !(on || armsOverlayOn || armsBlend) || a.lower < 0 || a.hand < 0 || a.lower >= static_cast<int>(joints) ||
                 a.hand >= static_cast<int>(joints))
                 continue;
             f.elbow = toWorld.rotate(pose.position(a.lower));
@@ -579,12 +580,12 @@ void solveHero(float* out, uintptr_t job, uintptr_t instance) {
                       length(f.wrist - f.elbow) > 1e-3f;
         }
         const Quat tilt = wanted.tilt;
-        arms.tilted = tilt.x != 0 || tilt.y != 0 || tilt.z != 0;
+        forearmsOut.tilted = tilt.x != 0 || tilt.y != 0 || tilt.z != 0;
         AcquireSRWLockExclusive(&forearmLock);
         InterlockedIncrement64(&SpidyForearms.sequence);
-        arms.sequence = SpidyForearms.sequence;
-        arms.job = SpidyForearms.job + 1;
-        SpidyForearms = arms;
+        forearmsOut.sequence = SpidyForearms.sequence;
+        forearmsOut.job = SpidyForearms.job + 1;
+        SpidyForearms = forearmsOut;
         InterlockedIncrement64(&SpidyForearms.sequence);
         ReleaseSRWLockExclusive(&forearmLock);
     } else {
@@ -609,12 +610,12 @@ void solveHero(float* out, uintptr_t job, uintptr_t instance) {
                 jobRows[r * 3 + c] = transform[r * 4 + c];
         jobRowsSet = true;
     }
-    if (result.solved && (on || arms || armsBlend))
+    if (result.solved && (on || armsOverlayOn || armsBlend))
         lastDrawn = GetTickCount64();
     outwardWeight = lastTargets.crawl && lastTargets.crawlTurnAway && state.crawlTurn.ready()
                         ? state.crawlTurn.outwardWeight(state.crawlTurn.angle())
                         : 0.f;
-    latestSolved = result.solved && (on || arms || armsBlend);
+    latestSolved = result.solved && (on || armsOverlayOn || armsBlend);
     if (probing) {
         // And as the body left it, then published (its own lock, a copy).
         probe.solved = result.solved && on;
@@ -730,7 +731,7 @@ void native_body::retarget(uintptr_t heroRecord) {
 void native_body::resyncAfterYield() {
     AcquireSRWLockExclusive(&solveLock);
     state = {};
-    overlayArmWeight = {};
+    overlayArmWeight[0] = overlayArmWeight[1] = 0.f;
     actorHeadingSet = trackingYawSet = false;
     actorHeading = trackingYaw = 0;
     outwardWeight.store(0.f, std::memory_order_relaxed);
