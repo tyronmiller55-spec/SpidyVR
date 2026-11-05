@@ -26,6 +26,7 @@
 // + native_body::resyncAfterYield + GameTrackingRig::adoptFeet).
 #pragma once
 #include "spidy/head_probe.hpp"
+#include "spidy/math.hpp"
 
 namespace spidy::animated_moves {
 
@@ -37,18 +38,25 @@ struct Gate {
 
 // True when a freefall web/aim button press should reclaim the VR body so the
 // player can aim out of an air anim. Attached webs do not count — those keep
-// the swing pose while the mod still owns physics.
-inline bool freefallWebInterrupt(bool webAimIntent, const head_probe::StateInputs& s) {
+// the swing pose while the mod still owns physics. When ANIMATED ARMS is on,
+// the overlay aims with the controllers — do not tear down pose yield (that
+// caused enter/exit chatter and stale adoptFeet while still midair).
+inline bool freefallWebInterrupt(bool webAimIntent, const head_probe::StateInputs& s,
+                                 bool armsHandlesAim = false) {
+    if (armsHandlesAim)
+        return false;
     return webAimIntent && !s.webbed;
 }
 
 // True when the current state should let the game's animation drive the body.
 // Wall-run under NATIVE RUN (parkour with wall != 0), zip, combat and cutscenes
 // stay with the mod. Physics ownership is independent (swing owned).
-inline bool yieldsBody(Gate g, const head_probe::StateInputs& s, bool webAimIntent = false) {
+// `armsHandlesAim`: ANIMATED ARMS on — freefall web intent keeps the yield.
+inline bool yieldsBody(Gate g, const head_probe::StateInputs& s, bool webAimIntent = false,
+                       bool armsHandlesAim = false) {
     if (!g.moves && !g.air)
         return false;
-    if (freefallWebInterrupt(webAimIntent, s))
+    if (freefallWebInterrupt(webAimIntent, s, armsHandlesAim))
         return false;
     const auto st = head_probe::classify(s);
     if (g.moves) {
@@ -118,14 +126,40 @@ struct Handoff {
     bool yielding{};
     bool enter{};
     bool exit{};
+    // Pending exit resync: wait out brief false exits (web interrupt / classify
+    // flicker) before adoptFeet. Cleared if yield re-enters inside the window.
+    bool pendingExit{};
+    int64_t pendingExitNs{};
+    Vec3 pendingExitFeet{};
 
     void update(bool now) {
         enter = now && !yielding;
         exit = !now && yielding;
         yielding = now;
     }
+
+    // Call after update. Returns true once when a stable exit should resync.
+    // debounceNs: ignore exits that re-enter sooner (200 ms default).
+    bool consumeStableExit(int64_t nowNs, Vec3 feetNow, int64_t debounceNs = 200'000'000) {
+        if (exit) {
+            pendingExit = true;
+            pendingExitNs = nowNs;
+            pendingExitFeet = feetNow;
+            return false;
+        }
+        if (enter && pendingExit) {
+            pendingExit = false; // brief interrupt — keep tracking origin
+            return false;
+        }
+        if (!pendingExit)
+            return false;
+        if (nowNs - pendingExitNs < debounceNs)
+            return false;
+        pendingExit = false;
+        return true;
+    }
 };
 
-inline bool needsActorResync(const Handoff& h) { return h.exit; }
+inline bool needsActorResync(const Handoff& h) { return h.exit || h.pendingExit; }
 
 } // namespace spidy::animated_moves
