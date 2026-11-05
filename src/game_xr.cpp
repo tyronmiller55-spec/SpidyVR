@@ -4995,7 +4995,9 @@ DWORD WINAPI run(void*) {
                                 cancelledPending ? " (brief interrupt)" : "");
                             animatedMovesDiagAt = frame.predictedDisplayTime;
                         }
-                        if (animatedMovesHandoff.consumeStableExit(handoffNs, nowFeet)) {
+                        const bool stableExit =
+                            animatedMovesHandoff.consumeStableExit(handoffNs, nowFeet);
+                        if (stableExit) {
                             const Vec3 feet =
                                 finite(nowFeet) ? nowFeet : animatedMovesHandoff.pendingExitFeet;
                             const Vec3 delta = feet - animatedMovesYieldFeet;
@@ -5010,8 +5012,7 @@ DWORD WINAPI run(void*) {
                                 animatedHeadFollowWas ? animated_moves::headFollowName(animHeadMode)
                                                       : "off");
                             animatedMovesDiagAt = frame.predictedDisplayTime;
-                        }
-                        } else if (yieldAnim &&
+                        } else if (!animatedMovesHandoff.enter && yieldAnim &&
                                    frame.predictedDisplayTime - animatedMovesDiagAt > 2'000'000'000) {
                             diag_log::writef("animated moves: still yielding (%s)",
                                              animated_moves::yieldName(animState));
