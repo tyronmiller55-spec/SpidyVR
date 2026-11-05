@@ -59,9 +59,10 @@ In the headset: pause (menu button) → **Settings** → **SPIDY VR** (the last 
 | ANIMATED MOVES | OFF | Game anim drives the body for ground parkour / vaults / mantles (with NATIVE RUN). Swing / web / zip / wall-run stay with the mod. Opt-in play-feel; needs Ilya's yes to merge upstream. |
 | ANIMATED HEAD | OFF | While a pose yield is active: view follows the gameplay head. LEVEL = place only (only if you pick it); FULL = turns with anim pitch/roll on ground and air. Off by default. Yield exit resyncs VR body/tracking (handoff). |
 | ANIMATED AIR | OFF | Game anim drives the body in freefall / swing / web air; mod keeps swing physics. Zip/wall/combat stay VR body. Freefall web aim interrupts. Off by default. |
-| ANIMATED STEERING | OFF | While yielding: L-stick magnitude runs along Spidey's facing (actor read). R-stick model yaw not implemented (no facing write). Off by default. |
+| ANIMATED STEERING | OFF | While yielding: L-stick magnitude runs along Spidey's facing (actor read). Pair with ANIMATED MODEL YAW for R-stick turn via walk facing. Off by default. |
 | ANIMATED ARMS | OFF | While yielding: controller arms overlay game torso/legs/head anim; idle returns. Motion vs actor root. With this on, freefall web intent keeps the pose yield (arms handle aim); MODEL FOREARM falls back to the controller so wrist-shooter markers follow live aim. Thresholds provisional. Off by default. |
 | ANIMATED TORSO | OFF | With ANIMATED ARMS: bounded waist→chest lean/twist toward extreme controller aims; head world pose compensated; legs/root stay anim. Limits provisional. Off by default. |
+| ANIMATED MODEL YAW | OFF | While yielding: R-stick X turns Spidey through the game's left-stick walk facing (VALIDATION / InteractStep), not CameraLook and not a facing RVA write. HMD free look stays XR. Provisional. Off by default. |
 | RUN LOGS | OFF | Writes run/landing/take-off speeds to the diag log for bug reports. Changes nothing in play. |
 
 Full descriptions: [PLAYERS.md](PLAYERS.md) ("VR settings").

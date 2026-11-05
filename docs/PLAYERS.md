@@ -1011,8 +1011,8 @@ VR settings
   ANIMATED STEERING (off until you switch it on; EXPERIMENTAL, after ANIMATED
                    AIR) while a pose yield is on, left-stick magnitude runs
                    Spidey along his current facing instead of every camera
-                   direction. Right-stick whole-model yaw is not available yet
-                   (no proven way to write actor facing). Off by default.
+                   direction. Pair with ANIMATED MODEL YAW for right-stick
+                   character turn. Off by default.
   ANIMATED ARMS    (off until you switch it on; EXPERIMENTAL, after ANIMATED
                    STEERING) while a pose yield is on, moving a controller (or
                    web/aim intent) overlays that arm on the game animation;
@@ -1113,7 +1113,7 @@ VR settings
                    Off: v5's jump, the game's, up to 0.2 s later.
   Changes apply at once. The launcher starts your next session with them;
   its options show every one of them but VR VIEW too.
-  NEAR CLIP, RECORDING FOV, UI STYLE, BLOW SOUNDS, PC MEDIA, NATIVE RUN, AIR SLINGSHOT, WEB ANGLE, WRIST SHOOTERS, DODGE TUMBLE, RUN CURVE, NATIVE RUN AT, RUN LOGS, RUNNING LEAP, EARLY JUMP, SOFT LANDING, SPIDY RUN, RUN FROM STANDING, WEB AIM, FOREARM BLEND, SMOOTH WEB LANDING, WEB LANDING IMPACT, STEADY STATES, COMBAT RESPONSIVE, SPIDY RUN JUMP, FOREARM AIM LIMIT, PALM SHOOTERS, HEAD PROBE, ANIMATED MOVES, ANIMATED HEAD, ANIMATED AIR, ANIMATED STEERING, ANIMATED ARMS, ANIMATED TORSO, HEIGHT, SEATED, EYE AIM,
+  NEAR CLIP, RECORDING FOV, UI STYLE, BLOW SOUNDS, PC MEDIA, NATIVE RUN, AIR SLINGSHOT, WEB ANGLE, WRIST SHOOTERS, DODGE TUMBLE, RUN CURVE, NATIVE RUN AT, RUN LOGS, RUNNING LEAP, EARLY JUMP, SOFT LANDING, SPIDY RUN, RUN FROM STANDING, WEB AIM, FOREARM BLEND, SMOOTH WEB LANDING, WEB LANDING IMPACT, STEADY STATES, COMBAT RESPONSIVE, SPIDY RUN JUMP, FOREARM AIM LIMIT, PALM SHOOTERS, HEAD PROBE, ANIMATED MOVES, ANIMATED HEAD, ANIMATED AIR, ANIMATED STEERING, ANIMATED ARMS, ANIMATED TORSO, ANIMATED MODEL YAW, HEIGHT, SEATED, EYE AIM,
   SMART ANCHOR, WEB RANGE, WEB SPEED, ELASTIC WEB, SOFT RELEASE, SWING
   ASSIST, SLINGSHOT SPEED, SINGLE HAND YANK STRENGTH, TWO HAND WEB ZIP, HAND ROPE STEERING, RECORDING
   SMOOTHING, REEL HAPTICS, SWING HAPTICS, the four body haptics switches

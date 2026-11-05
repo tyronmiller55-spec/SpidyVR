@@ -7,6 +7,22 @@ Per-check results are in [VALIDATION.md](VALIDATION.md).
 
 Not in a build yet, newest first. The release adds these to the next build's entry.
 
+**ANIMATED MODEL YAW: R-stick turns hero via walk facing (opt-in, off).**
+
+- **Why.** User wants right stick to rotate the whole character while yielding,
+  with left magnitude along actor facing. No proven actor-facing RVA write
+  exists (`native_movement::Command` is velocity-only). CameraLook / tracking
+  yaw turn the **view/camera**, not the model.
+- **Validated route.** docs/VALIDATION.md (hero under left stick turns player
+  matrix row-2) and InteractStep / DEVELOPMENT.md (0.15 s left stick toward look
+  turns the hero). This setting asks for that same game-native walk-facing turn
+  from right-stick X while a pose yield is active; CameraLook is cleared on that
+  stick so view yaw is not double-applied. HMD free look stays OpenXR. Full head
+  stays Full. Basic flips keep right-stick ownership.
+- **Not.** No raw actor transform write; no guessed facing RVA; midair spherical
+  aim still out of scope. Midair turn rate provisional (ground turn measured;
+  air not headset-checked). Not headset-verified.
+
 **ANIMATED TORSO: bounded waist→chest while ANIMATED ARMS (opt-in, off).**
 
 - **Why.** Headset feedback on the cumulative arms build: midair aim needs the
