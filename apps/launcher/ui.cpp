@@ -1918,6 +1918,12 @@ void App::options(ImVec2 origin, ImVec2 size) {
                "contort the upper body. Animated root/legs and head world pose stay on the game anim "
                "(head orientation is compensated after spine turns). Off by default; limits provisional.",
                S(42), [&] { tabToggle("##animatedtorso", Item::animatedTorso); });
+        option("Animated model yaw (experimental)",
+               "While Animated moves/air yields: right-stick X turns Spidey through the game's own walk-facing "
+               "(same family as the Y interact turn), not by writing actor facing and not by CameraLook view "
+               "yaw. HMD free look stays on the headset. Left-stick magnitude can still run along actor facing "
+               "when Animated steering is also on. Off by default; midair turn rate provisional.",
+               S(42), [&] { tabToggle("##animatedmodelyaw", Item::animatedModelYaw); });
         option("Web aim (experimental)",
                "MODEL FOREARM: your webs leave along the forearm of the Spider-Man body you see, rather than "
                "along the controller, and go back to the controller's line whenever the body cannot say "

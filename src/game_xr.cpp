@@ -55,6 +55,7 @@
 #include "spidy/head_probe.hpp"
 #include "spidy/animated_moves.hpp"
 #include "spidy/animated_steering.hpp"
+#include "spidy/animated_model_yaw.hpp"
 #include "spidy/animated_arms.hpp"
 #include "spidy/frame_stats.hpp"
 #include "spidy/seated.hpp"
@@ -1508,6 +1509,7 @@ DWORD WINAPI run(void*) {
             s.animatedSteering = values.animatedSteering;
             s.animatedArms = values.animatedArms;
             s.animatedTorso = values.animatedTorso;
+            s.animatedModelYaw = values.animatedModelYaw;
             s.webLandingImpact = static_cast<float>(values.webLandingImpact);
             s.webAngle = values.webAngle;
             s.wristShooters = values.palmShooters ? 2u : values.wristShooters ? 1u : 0u;
@@ -4227,13 +4229,15 @@ DWORD WINAPI run(void*) {
                                 wheelShooter(&command);
                             }
                         }
-                        // ANIMATED STEERING (off by default): while pose yield is
-                        // active, left-stick magnitude runs along the actor's
-                        // facing (read from game.player). No right-stick model
-                        // yaw write — CameraLook / tracking yaw stay as they are
-                        // so we do not fake model turn with view turn.
-                        if (values.animatedSteering && !walk.dodge && !calibrationInput &&
-                            mapping == game_pad::Mapping::gameplay) {
+                        // ANIMATED STEERING / MODEL YAW (off by default): while pose
+                        // yield is active, L-stick magnitude can run along actor
+                        // facing (read from game.player). R-stick model yaw, when
+                        // ANIMATED MODEL YAW is on, asks the game to turn the hero
+                        // through left-stick walk facing (VALIDATION / InteractStep)
+                        // — not a facing RVA write, and not CameraLook view yaw.
+                        // Basic flips that own the right stick keep that ownership.
+                        if ((values.animatedSteering || values.animatedModelYaw) && !walk.dodge &&
+                            !calibrationInput && mapping == game_pad::Mapping::gameplay) {
                             head_probe::StateInputs steerState;
                             steerState.playing = steering && !calibrationInput;
                             steerState.fresh = swingFresh;
@@ -4251,15 +4255,30 @@ DWORD WINAPI run(void*) {
                                     ? (frame.hands[0].squeeze > .5f || frame.hands[1].squeeze > .5f)
                                     : (frame.hands[0].trigger > .5f || frame.hands[1].trigger > .5f);
                             const animated_moves::Gate steerGate{values.animatedMoves, values.animatedAir};
-                            if (animated_steering::active(
-                                    true, animated_moves::yieldsBody(steerGate, steerState, webAimIntent,
-                                                                       values.animatedArms))) {
-                                const Vec3 actorAhead{body[8], body[9], body[10]};
+                            const bool yieldingPose = animated_moves::yieldsBody(
+                                steerGate, steerState, webAimIntent, values.animatedArms);
+                            const Vec3 actorAhead{body[8], body[9], body[10]};
+                            if (animated_steering::active(values.animatedSteering, yieldingPose)) {
                                 const auto steered = animated_steering::actorRelativeForward(
                                     walk.right, walk.forward, actorAhead, motion.walkForwardAxis,
                                     motion.walkRightAxis);
                                 walk.right = steered.right;
                                 walk.forward = steered.forward;
+                            }
+                            if (animated_model_yaw::active(values.animatedModelYaw, yieldingPose) &&
+                                !motion.basicFlipControls) {
+                                // Free the right stick from CameraLook so it does not
+                                // also yaw the follow camera (HMD free look stays XR).
+                                walk.look = 0;
+                                const float rStickX =
+                                    frame.hands[1].valid && std::isfinite(frame.hands[1].stickX)
+                                        ? frame.hands[1].stickX
+                                        : 0.f;
+                                const auto yawed = animated_model_yaw::apply(
+                                    walk.right, walk.forward, rStickX, actorAhead,
+                                    motion.walkForwardAxis, motion.walkRightAxis);
+                                walk.right = yawed.right;
+                                walk.forward = yawed.forward;
                             }
                         }
                         auto pad = game_pad::fromControllers(buttons, mapping, walk);

@@ -342,6 +342,10 @@ struct Values {
     // ANIMATED TORSO: with ANIMATED ARMS, bound waist→chest toward controller
     // reaches (animated_torso.hpp). Off by default; provisional limits.
     bool animatedTorso = false;
+    // ANIMATED MODEL YAW: while yielding, right-stick X turns the hero through
+    // the game's left-stick walk-facing path (animated_model_yaw.hpp). Not a
+    // facing RVA write; not CameraLook. Off by default; provisional.
+    bool animatedModelYaw = false;
     // How much speed a fast one-hand web yank adds, percent (the tab's SINGLE
     // HAND YANK STRENGTH; Swing::singleHandYankStrength): 100 as before.
     int singleHandYankPercent = 100;
@@ -486,8 +490,9 @@ enum class Item : uint8_t {
     animatedSteering,
     animatedArms,
     animatedTorso,
+    animatedModelYaw,
 };
-inline constexpr Item lastItem = Item::animatedTorso;
+inline constexpr Item lastItem = Item::animatedModelYaw;
 // Where a row shows: in the tab; on the pause menu's first page instead,
 // under RESUME: VR VIEW (the user, October 15: "move the VIEW: GAME SCREEN to
 // the first menu (the one with resume)"); or only in the launcher's options:
@@ -510,7 +515,7 @@ struct Row {
     std::span<const char* const> choices{};
     Place place{};
 };
-const std::array<Row, 100>& rows();
+const std::array<Row, 101>& rows();
 // The most choices a row shows (game_menu's buffers): a row with more would
 // lose its last ones.
 inline constexpr size_t maxChoices = 9;

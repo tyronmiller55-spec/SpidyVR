@@ -402,6 +402,8 @@ template <class V> auto switchOf(Item item, V& v) -> decltype(&v.aimMarkers) {
         return &v.animatedArms;
     case Item::animatedTorso:
         return &v.animatedTorso;
+    case Item::animatedModelYaw:
+        return &v.animatedModelYaw;
     case Item::webLandingSmooth:
         return &v.webLandingSmooth;
     case Item::softLanding:
@@ -467,9 +469,9 @@ Values sanitized(Values v) {
     v.automaticHandThreshold = std::clamp(v.automaticHandThreshold, 50, 300);
     return v;
 }
-const std::array<Row, 100>& rows() {
+const std::array<Row, 101>& rows() {
     // The help fits the game's description column beside the rows.
-    static const std::array<Row, 100> all{{
+    static const std::array<Row, 101> all{{
         {Item::none, "WEBS", nullptr, {}},
         {Item::webStyle, "WEB STYLE",
          "Arcade: webs pass lamp posts, signs and cars, and swings stay above the street.", webStyleChoices},
@@ -698,11 +700,13 @@ const std::array<Row, 100>& rows() {
         {Item::animatedAir, "ANIMATED AIR",
          "Game anim drives the body in freefall/swing/web air; mod keeps physics.", {}},
         {Item::animatedSteering, "ANIMATED STEERING",
-         "While yielding: stick magnitude runs Spidey along his facing (no model yaw).", {}},
+         "While yielding: L-stick along actor facing. Use MODEL YAW for R-stick.", {}},
         {Item::animatedArms, "ANIMATED ARMS",
          "While yielding: controller arms overlay game anim; idle returns. Provisional.", {}},
         {Item::animatedTorso, "ANIMATED TORSO",
          "With ARMS: waist-chest leans to extreme aim. Head/legs stay anim. Provisional.", {}},
+        {Item::animatedModelYaw, "ANIMATED MODEL YAW",
+         "While yielding: R-stick turns Spidey via walk facing (not camera). Provisional.", {}},
         {Item::realisticFlips,
          "REALISTIC FLIPS",
          "Momentum rotation from arms and webs. FLIPS also enables left-stick steering.",
@@ -973,6 +977,7 @@ constexpr TabOnly tabOnly[] = {
     {"animated_steering", &Values::animatedSteering, nullptr},
     {"animated_arms", &Values::animatedArms, nullptr},
     {"animated_torso", &Values::animatedTorso, nullptr},
+    {"animated_model_yaw", &Values::animatedModelYaw, nullptr},
 };
 } // namespace
 std::string tabOnlyText(const Values& v) {
