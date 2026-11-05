@@ -343,6 +343,9 @@ struct State {
     // Smoothed ANIMATED TORSO spine angles while armsOnly + torsoAssist (rad).
     float overlayTorsoYaw{};
     float overlayTorsoPitch{};
+    // Slice C tracking-lock diag: last armsOnly chest vs player look yaw (rad).
+    float overlayChestYaw{};
+    float overlayPlayerYaw{};
     float crawlWeight{};
     float crawlTwist{};
     float crawlOutwardMotion{};

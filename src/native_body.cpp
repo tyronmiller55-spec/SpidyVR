@@ -73,6 +73,7 @@ std::atomic<uint32_t> rolesSerial{1};
 body::State state;
 std::array<float, 2> overlayArmWeight{};
 bool overlayTorsoAssist{};
+native_body::OverlayTracking overlayTrackingSample{};
 body::Targets lastTargets;
 // The body's turn away from the wall at the last solve (crawlOutwardWeight),
 // for the XR thread, which must not wait out a solve for it.
@@ -618,6 +619,14 @@ void solveHero(float* out, uintptr_t job, uintptr_t instance) {
                         ? state.crawlTurn.outwardWeight(state.crawlTurn.angle())
                         : 0.f;
     latestSolved = result.solved && (on || armsOverlayOn || armsBlend);
+    if (armsOverlayOn || armsBlend) {
+        overlayTrackingSample.job++;
+        overlayTrackingSample.armWeight[0] = state.armWeight[0];
+        overlayTrackingSample.armWeight[1] = state.armWeight[1];
+        overlayTrackingSample.chestYaw = state.overlayChestYaw;
+        overlayTrackingSample.playerYaw = state.overlayPlayerYaw;
+        overlayTrackingSample.remapped = armsOverlayOn ? 1u : 0u;
+    }
     if (probing) {
         // And as the body left it, then published (its own lock, a copy).
         probe.solved = result.solved && on;
@@ -735,6 +744,7 @@ void native_body::resyncAfterYield() {
     state = {};
     overlayArmWeight[0] = overlayArmWeight[1] = 0.f;
     overlayTorsoAssist = false;
+    overlayTrackingSample = {};
     actorHeadingSet = trackingYawSet = false;
     actorHeading = trackingYaw = 0;
     outwardWeight.store(0.f, std::memory_order_relaxed);
@@ -750,10 +760,18 @@ void native_body::setArmOverlay(float left, float right) {
     ReleaseSRWLockExclusive(&solveLock);
 }
 
+
 void native_body::setTorsoAssist(bool on) {
     AcquireSRWLockExclusive(&solveLock);
     overlayTorsoAssist = on;
     ReleaseSRWLockExclusive(&solveLock);
+}
+
+native_body::OverlayTracking native_body::overlayTracking() {
+    AcquireSRWLockShared(&solveLock);
+    const OverlayTracking copy = overlayTrackingSample;
+    ReleaseSRWLockShared(&solveLock);
+    return copy;
 }
 
 void native_body::submit(const Command& next) {

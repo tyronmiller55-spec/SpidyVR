@@ -7,6 +7,24 @@ Per-check results are in [VALIDATION.md](VALIDATION.md).
 
 Not in a build yet, newest first. The release adds these to the next build's entry.
 
+**ANIMATED ARMS tracking lock: soft floor + chest-frame grips (opt-in path).**
+
+- **Why.** Headset logs on 3df38b1 (MODEL YAW cumulative): IRL arms vs model
+  mismatched through yields/rotations (`forearm vs controller` often 55–140°+
+  while overlay weight sat at 0 — idle game-anim bones). Soft floor + chest
+  frame keep controllers driving arms every frame while yielding.
+- **Change.** Behind existing ANIMATED ARMS (still off by default): tracked idle
+  arms keep a provisional soft weight floor (~0.55) instead of decaying to 0;
+  intent/motion still reach 1. `body_ik` armsOnly remaps grips from the HMD/eye
+  frame into the anim chest/shoulder frame each solve (yaw-aware). Dense
+  `tracking lock:` diag (~10 Hz) logs overlay weights, forearm vs controller,
+  actor/chest/player yaw, HMD vs anim head ypr. Forearm aim lines log every
+  0.2 s while ARMS yield (was 2 s). Full head policy unchanged (no silent
+  Level). Aim keeps controller fallback while overlay active. Legs tabled.
+- **Not in this patch.** Spherical midair (A); momentum bridge onto animated
+  character (B). Not headset-verified; floor/remap provisional.
+
+**ANIMATED MODEL YAW: R-stick turns hero via walk facing (opt-in, off).**
 **ANIMATED MODEL YAW: R-stick turns hero via walk facing (opt-in, off).**
 
 - **Why.** User wants right stick to rotate the whole character while yielding,

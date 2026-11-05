@@ -26803,41 +26803,40 @@ int main() {
         check(game_swing::validSettings(s), "version 35 settings packet refused");
     });
 
-    test("ANIMATED ARMS: motion vs root, intent, tracking loss, per-arm independence", [] {
+    test("ANIMATED ARMS: soft floor, motion, intent, tracking loss, chest remap", [] {
         using namespace animated_arms;
         State st;
         Sample hands[2]{};
-        // Idle tracked hands, stationary root → weight stays 0.
+        // Idle tracked hands → soft yieldFloor (Slice C), not game-anim-only 0.
         hands[0] = {{1, 1.5f, 0}, true, 0, 0, false};
         hands[1] = {{-1, 1.5f, 0}, true, 0, 0, false};
-        update(st, 1.f / 90, true, {0, 0, 0}, hands);
-        update(st, 1.f / 90, true, {0, 0, 0}, hands);
-        check(st.arms[0].weight < .01f && st.arms[1].weight < .01f, "idle arms active");
-        // Moving root with grips fixed in world: relative motion cancels → still idle.
-        hands[0].grip = {1, 1.5f, 0};
-        hands[1].grip = {-1, 1.5f, 0};
+        for (int i = 0; i < 40; ++i)
+            update(st, 1.f / 90, true, {0, 0, 0}, hands);
+        check(st.arms[0].weight > yieldFloor - .05f && st.arms[0].weight < yieldFloor + .05f &&
+                  st.arms[1].weight > yieldFloor - .05f && st.arms[1].weight < yieldFloor + .05f,
+              "idle soft floor missing");
+        // Moving root with grips fixed relative: still floor (not motion-active).
         for (int i = 0; i < 10; ++i) {
             const Vec3 root{0, 0, i * .2f};
-            // Grips travel with root (stationary relative).
             hands[0].grip = root + Vec3{1, 1.5f, 0};
             hands[1].grip = root + Vec3{-1, 1.5f, 0};
             update(st, 1.f / 90, true, root, hands);
         }
-        check(st.arms[0].weight < .01f && st.arms[1].weight < .01f, "moving root counted as hands");
-        // Left hand moves relative to root → left active, right idle.
+        check(st.arms[0].weight < .7f && st.arms[1].weight < .7f, "moving root raised past floor");
+        // Left hand moves relative to root → left full, right stays near floor.
         st = {};
         hands[0] = {{1, 1.5f, 0}, true, 0, 0, false};
         hands[1] = {{-1, 1.5f, 0}, true, 0, 0, false};
         update(st, 1.f / 90, true, {}, hands);
-        hands[0].grip = {1, 1.5f, .5f}; // ~45 m/s at 90 Hz — well above speedOn
+        hands[0].grip = {1, 1.5f, .5f};
         for (int i = 0; i < 12; ++i) {
             hands[0].grip.z += .5f;
             update(st, 1.f / 90, true, {}, hands);
         }
-        check(st.arms[0].weight > .5f && st.arms[1].weight < .01f, "per-arm independence failed");
+        check(st.arms[0].weight > .9f && st.arms[1].weight < .7f, "per-arm independence failed");
         // Web button on right (stationary) → raise right weight (blendIn).
         hands[1].webButton = true;
-        hands[1].grip = {-1, 1.5f, 0}; // stationary relative
+        hands[1].grip = {-1, 1.5f, 0};
         for (int i = 0; i < 12; ++i)
             update(st, 1.f / 90, true, {}, hands);
         check(st.arms[1].weight > .5f, "web intent did not raise arm");
@@ -26849,14 +26848,28 @@ int main() {
         // Setting off clears.
         update(st, 1.f / 90, false, {}, hands);
         check(st.arms[0].weight == 0 && st.arms[1].weight == 0, "disabled did not clear");
+        // Chest-frame remap: OpenXR look is -Z. 90° model yaw (+X look) carries
+        // a forward grip onto +X beside the anim anchor.
+        const Vec3 eyes{0, 1.7f, 0};
+        const Vec3 fwd{0, 0, -1};
+        const Vec3 grip = eyes + fwd * .5f;
+        const auto same = remapGripToChest(grip, {}, eyes, fwd, {0, 1, 0}, eyes, fwd, {0, 1, 0});
+        check(same.applied && length(same.grip - grip) < .01f, "identity remap drifted");
+        const auto turned =
+            remapGripToChest(grip, {}, eyes, fwd, {0, 1, 0}, eyes, {1, 0, 0}, {0, 1, 0});
+        check(turned.applied && std::abs(turned.grip.x - .5f) < .05f &&
+                  std::abs(turned.grip.z) < .05f && std::abs(turned.grip.y - eyes.y) < .05f,
+              "90 deg chest yaw remap failed");
+        check(std::abs(turned.chestYaw - lookYaw({1, 0, 0})) < .01f, "chest yaw report");
         // body::Targets armsOnly does not set head — torso path requires head.
-        body::Targets t;
-        check(t.armsOnly == false && t.armWeight[0] == 0 && t.armWeight[1] == 0 && !t.torsoAssist,
+        body::Targets tg;
+        check(tg.armsOnly == false && tg.armWeight[0] == 0 && tg.armWeight[1] == 0 && !tg.torsoAssist,
               "armsOnly defaults");
-        t.armsOnly = true;
-        check(t.armsOnly && !t.head && !t.torsoAssist, "armsOnly implies head/torso");
+        tg.armsOnly = true;
+        check(tg.armsOnly && !tg.head && !tg.torsoAssist, "armsOnly implies head/torso");
         check((native_body::armsOverlay & ~0x7ffffu) == 0, "armsOverlay outside validCrawl mask");
         check((native_body::armsOverlay & native_body::bodyOn) == 0, "armsOverlay overlaps bodyOn");
+        check(yieldFloor > .2f && yieldFloor < .9f, "yieldFloor out of range");
     });
 
 

@@ -1,5 +1,6 @@
 #include "spidy/body_ik.hpp"
 #include "spidy/animated_torso.hpp"
+#include "spidy/animated_arms.hpp"
 #include <algorithm>
 #include <cmath>
 #include <limits>
@@ -460,10 +461,51 @@ Result solve(Pose& pose, const Rig& rig, const Targets& targets, const Config& c
         const float s = std::isfinite(scale) && scale > .1f ? scale : 1.f;
         const float arms = std::isfinite(armScale) && armScale > .1f ? armScale : 1.f;
         Vec3 up = finite(targets.up) && length(targets.up) > .5f ? normalized(targets.up) : Vec3{0, 1, 0};
-        Vec3 look = targets.facing.rotate({0, 0, -1});
+        // Player/HMD frame (targets.facing): used to measure grip offsets.
+        Vec3 playerLook = targets.facing.rotate({0, 0, -1});
+        playerLook = playerLook - up * dot(playerLook, up);
+        if (length(playerLook) < .2f)
+            playerLook = Vec3{0, 0, 1} - up * up.z;
+        playerLook = length(playerLook) > .2f ? normalized(playerLook) : Vec3{0, 0, 1};
+        // Anim chest/shoulder frame: drive arm IK through the game pose so model
+        // yaw and parkour rotations keep IRL grips matched (Slice C).
+        Vec3 chestLook = playerLook, chestUp = up, animAnchor = targets.eyes;
+        if (!rig.spine.empty() && rig.spine.back() >= 0) {
+            const int chest = rig.spine.back();
+            const Vec3 chestPos = pose.position(chest);
+            if (finite(chestPos)) {
+                if (rig.head >= 0 && finite(pose.position(rig.head)))
+                    animAnchor = pose.position(rig.head);
+                else
+                    animAnchor = chestPos;
+                if (rig.spineForward.size() == rig.spine.size() &&
+                    length(rig.spineForward.back()) > .2f) {
+                    chestLook = pose.direction(chest, rig.spineForward.back());
+                } else {
+                    // Fallback: across the shoulders → forward from chest.
+                    const Vec3 shL = pose.position(rig.arms[0].upper);
+                    const Vec3 shR = pose.position(rig.arms[1].upper);
+                    if (finite(shL) && finite(shR) && length(shR - shL) > .05f) {
+                        const Vec3 across = normalized(shR - shL);
+                        Vec3 fwd = cross(across, up);
+                        if (length(fwd) < .2f)
+                            fwd = cross(across, {0, 1, 0});
+                        if (length(fwd) > .2f)
+                            chestLook = normalized(fwd);
+                    }
+                }
+                chestLook = chestLook - up * dot(chestLook, up);
+                if (length(chestLook) > .2f)
+                    chestLook = normalized(chestLook);
+                else
+                    chestLook = playerLook;
+                chestUp = up;
+            }
+        }
+        Vec3 look = chestLook;
         look = look - up * dot(look, up);
         if (length(look) < .2f)
-            look = Vec3{0, 0, 1} - up * up.z;
+            look = playerLook;
         look = length(look) > .2f ? normalized(look) : Vec3{0, 0, 1};
         const Vec3 left = normalized(cross(up, look));
         const Quat bodyFrame = between({0, 0, 1}, {0, 1, 0}, look, up);
@@ -472,6 +514,7 @@ Result solve(Pose& pose, const Rig& rig, const Targets& targets, const Config& c
         float weights[2]{};
         Vec3 wrists[2]{}, shoulders[2]{};
         float armLens[2]{};
+        Targets::Hand handsRemapped[2] = {targets.hands[0], targets.hands[1]};
         for (int i = 0; i < 2; ++i) {
             const float want =
                 std::clamp(std::isfinite(targets.armWeight[i]) ? targets.armWeight[i] : 0.f, 0.f, 1.f);
@@ -480,8 +523,15 @@ Result solve(Pose& pose, const Rig& rig, const Targets& targets, const Config& c
             maxW = std::max(maxW, weights[i]);
             armLens[i] = (rig.upperArm[i] + rig.forearm[i]) * s * arms;
             shoulders[i] = pose.position(rig.arms[i].upper);
-            const auto& hand = targets.hands[i];
+            auto& hand = handsRemapped[i];
             if (hand.tracked && finite(hand.grip)) {
+                const auto remapped = animated_arms::remapGripToChest(
+                    hand.grip, hand.orientation, targets.eyes, playerLook, up, animAnchor, chestLook,
+                    chestUp);
+                if (remapped.applied) {
+                    hand.grip = remapped.grip;
+                    hand.orientation = remapped.orientation;
+                }
                 const Vec3 offset{i == 0 ? -c.wristFromGrip.x : c.wristFromGrip.x, c.wristFromGrip.y,
                                   c.wristFromGrip.z};
                 wrists[i] = hand.grip + hand.orientation.rotate(offset);
@@ -543,9 +593,12 @@ Result solve(Pose& pose, const Rig& rig, const Targets& targets, const Config& c
             state.overlayTorsoYaw = 0;
             state.overlayTorsoPitch = 0;
         }
+        // Publish chest/player yaw for XR dense diag (side channel).
+        state.overlayChestYaw = animated_arms::lookYaw(chestLook);
+        state.overlayPlayerYaw = animated_arms::lookYaw(playerLook);
         for (int i = 0; i < 2; ++i) {
             const float aw = weights[i];
-            auto hand = targets.hands[i];
+            auto hand = handsRemapped[i];
             auto& held = state.held[i];
             if (!hand.tracked || !finite(hand.grip) || aw <= 0.f) {
                 held = {};

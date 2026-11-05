@@ -90,3 +90,12 @@ These features are proposed to Ilya as **open pull requests** (not merged): the 
 ## Credits & license
 
 Spidy is created by **Ilya Mezerowsky** — <https://github.com/IlyaMez/SpidyVR> (support him: <https://ko-fi.com/ilyamezerowsky>). This community build is a modified version distributed under the **GPL-3.0** ([LICENSE](../LICENSE)); source for exactly this build is the `community-build` branch of this fork.
+
+## Tracking lock (ANIMATED ARMS soft floor + chest frame)
+
+Community feat `feat/animated-tracking-lock` (after MODEL YAW). With ANIMATED
+ARMS on during a pose yield: soft always-on arm floor and chest-frame grip
+remap so IRL arms match the model through rotations. Enable the same cumulative
+flags as the MODEL YAW zip, plus ANIMATED ARMS (and TORSO if you want upper-spine
+assist). Watch `tracking lock:` and denser `forearm aim:` lines in the diag log.
+Spherical midair and momentum bridge are still next — not in this zip.

@@ -264,6 +264,16 @@ void setArmOverlay(float left, float right);
 // waist→chest toward controller reaches. Cleared by resyncAfterYield. No
 // Command layout / version change (side channel, like setArmOverlay).
 void setTorsoAssist(bool on);
+// Slice C tracking-lock diag (side channel; no Command / Forearms layout change).
+// Latest armsOnly chest vs player yaw and overlay weights after a pose job.
+struct OverlayTracking {
+    uint64_t job{};
+    float armWeight[2]{};
+    float chestYaw{};  // rad, anim chest look
+    float playerYaw{}; // rad, HMD/player look
+    uint32_t remapped{}; // 1 when armsOnly chest remap ran
+};
+OverlayTracking overlayTracking();
 // A render frame begins (the stereo module's render setup, main thread).
 void renderFrame();
 // The body turned the hero's joints in the last moments, its head shrunk:

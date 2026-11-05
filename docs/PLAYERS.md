@@ -1014,12 +1014,15 @@ VR settings
                    direction. Pair with ANIMATED MODEL YAW for right-stick
                    character turn. Off by default.
   ANIMATED ARMS    (off until you switch it on; EXPERIMENTAL, after ANIMATED
-                   STEERING) while a pose yield is on, moving a controller (or
-                   web/aim intent) overlays that arm on the game animation;
-                   idle returns it. Torso, legs and head stay animated
-                   unless ANIMATED TORSO is also on. Tracking loss yields to
-                   the game arm. Motion is measured against the actor root so
-                   falling/swinging alone is not "active". Thresholds
+                   STEERING) while a pose yield is on, controllers overlay the
+                   arms on the game animation with a soft always-on floor so
+                   idle IRL pose is not replaced by game-anim-only bones.
+                   Motion or web/aim intent still raises to full weight.
+                   Grips map into the anim chest/shoulder frame each solve so
+                   arms stay matched through model yaw and parkour rotations.
+                   Torso, legs and head stay animated unless ANIMATED TORSO is
+                   also on. Tracking loss yields to the game arm. Dense
+                   "tracking lock:" diag lines while yielding. Thresholds
                    provisional. Off by default.
   ANIMATED TORSO   (off until you switch it on; EXPERIMENTAL, after ANIMATED
                    ARMS) with ANIMATED ARMS, the waist→chest bends toward

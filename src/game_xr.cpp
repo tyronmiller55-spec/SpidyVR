@@ -1033,6 +1033,7 @@ DWORD WINAPI run(void*) {
         bool headProbeWas{};
         animated_moves::Handoff animatedMovesHandoff{};
         animated_arms::State animatedArmsState{};
+        int64_t trackingLockDiagAt{};
         int64_t animatedMovesDiagAt{};
         bool animatedHeadFollowWas{};
         Vec3 animatedMovesYieldFeet{}; // actor feet when yield began (diag: actor vs latch)
@@ -2756,7 +2757,9 @@ DWORD WINAPI run(void*) {
                             forearmJob = arms.job;
                             const float dt = input.sampleSeconds;
                             forearmLogSeconds += dt;
-                            const bool logNow = forearmLogSeconds >= 2;
+                            const float forearmLogEvery =
+                                animatedMovesHandoff.yielding && values.animatedArms ? .2f : 2.f;
+                            const bool logNow = forearmLogSeconds >= forearmLogEvery;
                             game_swing::WebTurns turns;
                             turns.active = 1;
                             for (unsigned i = 0; i < 2; ++i) {
@@ -5172,7 +5175,8 @@ DWORD WINAPI run(void*) {
                                               armSamples);
                         if (armsWanted) {
                             // Flag while yielding so native_body can blend arm
-                            // weights out smoothly when idle; weights may be 0.
+                            // weights out smoothly when idle; soft floor keeps
+                            // tracked arms off game-anim-only bones (Slice C).
                             pose.flags |= native_body::armsOverlay;
                             native_body::setArmOverlay(animatedArmsState.arms[0].weight,
                                                        animatedArmsState.arms[1].weight);
@@ -5180,6 +5184,61 @@ DWORD WINAPI run(void*) {
                         } else {
                             native_body::setArmOverlay(0.f, 0.f);
                             native_body::setTorsoAssist(false);
+                        }
+                        // Dense tracking-lock diag (~10 Hz) while ARMS yield:
+                        // overlay weights, forearm vs controller, actor/chest
+                        // yaw delta, HMD vs anim head. Full never silent Level.
+                        if (armsWanted &&
+                            frame.predictedDisplayTime - trackingLockDiagAt > 100'000'000) {
+                            trackingLockDiagAt = frame.predictedDisplayTime;
+                            const auto ot = native_body::overlayTracking();
+                            const auto arms = native_body::forearms();
+                            const auto hs = native_body::headSample();
+                            float offL = -1.f, offR = -1.f;
+                            for (unsigned i = 0; i < 2; ++i) {
+                                const auto& f = arms.arms[i];
+                                if (!f.valid || !frame.hands[i].valid)
+                                    continue;
+                                const Vec3 forearm = normalized(f.wrist - f.elbow);
+                                const Vec3 aim = frame.hands[i].aim.orientation.rotate({0, 0, -1});
+                                if (length(forearm) < .2f || length(aim) < .2f)
+                                    continue;
+                                const float off =
+                                    std::acos(std::clamp(dot(normalized(forearm), normalized(aim)), -1.f,
+                                                         1.f)) *
+                                    57.29578f;
+                                (i == 0 ? offL : offR) = off;
+                            }
+                            const Vec3 actorAhead{body[8], body[9], body[10]};
+                            const float actorYaw =
+                                animated_arms::lookYaw(actorAhead) * 57.29578f;
+                            const float chestYaw = ot.chestYaw * 57.29578f;
+                            const float playerYaw = ot.playerYaw * 57.29578f;
+                            float hmdY = 0, hmdP = 0, hmdR = 0;
+                            if (validTrackedPose(frame.head)) {
+                                const Vec3 look = frame.head.orientation.rotate({0, 0, -1});
+                                const Vec3 up = frame.head.orientation.rotate({0, 1, 0});
+                                hmdY = animated_arms::lookYaw(look) * 57.29578f;
+                                hmdP = std::asin(std::clamp(look.y, -1.f, 1.f)) * 57.29578f;
+                                hmdR = std::atan2(up.x, up.y) * 57.29578f;
+                            }
+                            float animY = 0, animP = 0, animR = 0;
+                            if (hs.job && hs.head >= 0 && finite(hs.gameForward) &&
+                                length(hs.gameForward) > .2f) {
+                                animY = animated_arms::lookYaw(hs.gameForward) * 57.29578f;
+                                animP =
+                                    std::asin(std::clamp(hs.gameForward.y, -1.f, 1.f)) * 57.29578f;
+                                if (finite(hs.gameUp) && length(hs.gameUp) > .2f)
+                                    animR = std::atan2(hs.gameUp.x, hs.gameUp.y) * 57.29578f;
+                            }
+                            diag_log::writef(
+                                "tracking lock: Lw %.2f Rw %.2f floor %.2f offL %.1f offR %.1f "
+                                "actorYaw %.0f chestYaw %.0f playerYaw %.0f dYaw %.0f "
+                                "hmd ypr %.0f/%.0f/%.0f anim ypr %.0f/%.0f/%.0f remap %u head %s",
+                                animatedArmsState.arms[0].weight, animatedArmsState.arms[1].weight,
+                                animated_arms::yieldFloor, offL, offR, actorYaw, chestYaw, playerYaw,
+                                chestYaw - playerYaw, hmdY, hmdP, hmdR, animY, animP, animR, ot.remapped,
+                                animated_moves::headFollowName(animHeadMode));
                         }
                         // The player's size: HEIGHT when set, else the T-pose
                         // calibration's, else the headset's running height.
