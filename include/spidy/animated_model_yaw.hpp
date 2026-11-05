@@ -75,7 +75,8 @@ inline Stick apply(float walkRight, float walkForward, float rStickX, Vec3 actor
     ahead = normalized(ahead);
     // Point the virtual left stick toward a yaw-offset of the actor facing so
     // the game's walk-facing turns him (same family as InteractStep).
-    const float yaw = std::copysign(1.5707963f, rStickX); // ±90° world yaw
+    // Positive R-stick X → turn right (clockwise from above): −90° on +Z ahead → +X.
+    const float yaw = std::copysign(1.5707963f, -rStickX);
     const float c = std::cos(yaw), s = std::sin(yaw);
     const Vec3 want{ahead.x * c - ahead.z * s, 0, ahead.x * s + ahead.z * c};
     const float amount = tilt * std::min(1.f, std::abs(rStickX));
