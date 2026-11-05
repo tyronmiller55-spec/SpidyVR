@@ -1,4 +1,5 @@
 #include "spidy/body_ik.hpp"
+#include "spidy/animated_torso.hpp"
 #include <algorithm>
 #include <cmath>
 #include <limits>
@@ -447,9 +448,12 @@ Result solve(Pose& pose, const Rig& rig, const Targets& targets, const Config& c
              float dt, float scale, float armScale) {
     Result r;
     dt = std::isfinite(dt) ? std::clamp(dt, 0.f, .1f) : 0.f;
-    // ANIMATED ARMS overlay: arm chains only on the game's current pose. Does
-    // not yaw the torso, plant feet, or move the head. Tracking loss clears
-    // the held latch so the arm returns to the game anim (not a frozen hold).
+    // ANIMATED ARMS overlay: arm chains on the game's current pose. Optional
+    // ANIMATED TORSO (targets.torsoAssist) bounds waist→chest spine + clavicles
+    // toward controller reaches; head world pose is compensated; pelvis/legs
+    // stay on the game anim. Tracking loss clears the held latch so the arm
+    // returns to the game anim (not a frozen hold). Pose is the game's frame
+    // each solve — no cumulative mutation of an animation base across frames.
     if (targets.armsOnly) {
         if (!rig.ready || pose.count() < static_cast<int>(rig.parent.size()))
             return r;
@@ -465,11 +469,82 @@ Result solve(Pose& pose, const Rig& rig, const Targets& targets, const Config& c
         const Quat bodyFrame = between({0, 0, 1}, {0, 1, 0}, look, up);
         float maxW = 0.f;
         bool any = false;
+        float weights[2]{};
+        Vec3 wrists[2]{}, shoulders[2]{};
+        float armLens[2]{};
         for (int i = 0; i < 2; ++i) {
-            const float want = std::clamp(std::isfinite(targets.armWeight[i]) ? targets.armWeight[i] : 0.f, 0.f, 1.f);
+            const float want =
+                std::clamp(std::isfinite(targets.armWeight[i]) ? targets.armWeight[i] : 0.f, 0.f, 1.f);
             state.armWeight[i] = approach(state.armWeight[i], want, c.blendSpeed * dt);
-            const float aw = state.armWeight[i];
-            maxW = std::max(maxW, aw);
+            weights[i] = state.armWeight[i];
+            maxW = std::max(maxW, weights[i]);
+            armLens[i] = (rig.upperArm[i] + rig.forearm[i]) * s * arms;
+            shoulders[i] = pose.position(rig.arms[i].upper);
+            const auto& hand = targets.hands[i];
+            if (hand.tracked && finite(hand.grip)) {
+                const Vec3 offset{i == 0 ? -c.wristFromGrip.x : c.wristFromGrip.x, c.wristFromGrip.y,
+                                  c.wristFromGrip.z};
+                wrists[i] = hand.grip + hand.orientation.rotate(offset);
+            } else {
+                wrists[i] = shoulders[i];
+            }
+        }
+        // Bound upper-spine participation before the arm IK so shoulders move
+        // toward extreme controller aims. Idle (maxW≈0) leaves the game pose.
+        if (targets.torsoAssist && !rig.spine.empty() && rig.head >= 0) {
+            const Vec3 headAt = pose.position(rig.head);
+            const Vec3 headF = pose.direction(rig.head, rig.headForward);
+            const Vec3 headU = pose.direction(rig.head, rig.headUp);
+            const Vec3 chest = pose.position(rig.spine.back());
+            const float yawCap =
+                std::isfinite(c.overlayTorsoYawMax) ? c.overlayTorsoYawMax : animated_torso::yawMax;
+            const float pitchCap =
+                std::isfinite(c.overlayTorsoPitchMax) ? c.overlayTorsoPitchMax : animated_torso::pitchMax;
+            const animated_torso::Demand demand = animated_torso::reachDemand(
+                chest, up, look, left, shoulders, wrists, weights, armLens, yawCap, pitchCap);
+            const float blend = maxW > .001f ? maxW : 0.f;
+            const float wantYaw = demand.yaw * blend;
+            const float wantPitch = demand.pitch * blend;
+            if (blend <= .001f) {
+                state.overlayTorsoYaw = approach(state.overlayTorsoYaw, 0.f, animated_torso::blendSpeed * dt);
+                state.overlayTorsoPitch =
+                    approach(state.overlayTorsoPitch, 0.f, animated_torso::blendSpeed * dt);
+            } else {
+                state.overlayTorsoYaw =
+                    approach(state.overlayTorsoYaw, wantYaw, animated_torso::blendSpeed * dt);
+                state.overlayTorsoPitch =
+                    approach(state.overlayTorsoPitch, wantPitch, animated_torso::blendSpeed * dt);
+            }
+            const float yaw = animated_torso::clampAngle(state.overlayTorsoYaw, yawCap);
+            const float pitch = animated_torso::clampAngle(state.overlayTorsoPitch, pitchCap);
+            if (std::abs(yaw) > 1e-5f || std::abs(pitch) > 1e-5f) {
+                // Pivot every spine turn through the saved head point so the
+                // head's position and the pelvis/legs (outside spine subtrees)
+                // stay put; then restore head orientation.
+                for (size_t i = 0; i < rig.spine.size(); ++i) {
+                    const int joint = rig.spine[i];
+                    const float share = animated_torso::spineShare(i, rig.spine.size());
+                    const Quat turn = unit(axisAngle(up, yaw * share) * axisAngle(left, pitch * share));
+                    pose.turn(rig.below[joint], turn, headAt);
+                }
+                // Spine turns include the head in their subtrees; restore the
+                // gameplay head's world orientation at the head joint only
+                // (neck is above in the chain — turning it would move the head
+                // again). Head position was preserved by pivoting through headAt.
+                const Quat headFix =
+                    between(pose.direction(rig.head, rig.headForward), pose.direction(rig.head, rig.headUp),
+                            headF, headU);
+                pose.turn(rig.below[rig.head], headFix, headAt);
+            }
+            // Refresh shoulders after torso so arm IK uses the new bases.
+            for (int i = 0; i < 2; ++i)
+                shoulders[i] = pose.position(rig.arms[i].upper);
+        } else {
+            state.overlayTorsoYaw = 0;
+            state.overlayTorsoPitch = 0;
+        }
+        for (int i = 0; i < 2; ++i) {
+            const float aw = weights[i];
             auto hand = targets.hands[i];
             auto& held = state.held[i];
             if (!hand.tracked || !finite(hand.grip) || aw <= 0.f) {
@@ -486,10 +561,8 @@ Result solve(Pose& pose, const Rig& rig, const Targets& targets, const Config& c
             const auto& arm = rig.arms[i];
             const Vec3 knuckles = normalized(hand.orientation.rotate({0, -1, 0}));
             const Vec3 right = normalized(hand.orientation.rotate({1, 0, 0}));
-            const Vec3 offset{i == 0 ? -c.wristFromGrip.x : c.wristFromGrip.x, c.wristFromGrip.y,
-                              c.wristFromGrip.z};
-            const Vec3 wrist = hand.grip + hand.orientation.rotate(offset);
-            const float length2 = (rig.upperArm[i] + rig.forearm[i]) * s * arms;
+            const Vec3 wrist = wrists[i];
+            const float length2 = armLens[i];
             if (arm.clavicle >= 0) {
                 const Vec3 base = pose.position(arm.clavicle), shoulder = pose.position(arm.upper);
                 const float stretch =
@@ -503,9 +576,9 @@ Result solve(Pose& pose, const Rig& rig, const Targets& targets, const Config& c
             limb(pose, rig, arm.upper, arm.lower, arm.hand, wrist, pole, aw);
             r.handError[i] = length(pose.position(arm.hand) - wrist);
             if (c.handOrientation) {
-                const Quat pitch = axisAngle(right, c.fingerPitch);
-                const Vec3 fingers = pitch.rotate(knuckles);
-                const Vec3 palm = pitch.rotate(i == 0 ? right : right * -1.f);
+                const Quat pitchQ = axisAngle(right, c.fingerPitch);
+                const Vec3 fingers = pitchQ.rotate(knuckles);
+                const Vec3 palm = pitchQ.rotate(i == 0 ? right : right * -1.f);
                 const auto handTurn = [&] {
                     return between(pose.direction(arm.hand, rig.handFingers[i]),
                                    pose.direction(arm.hand, rig.handPalm[i]), fingers, palm);

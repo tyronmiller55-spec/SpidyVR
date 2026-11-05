@@ -157,11 +157,15 @@ bool prepare(Rig& rig, std::span<const float> restPose);
 struct Targets {
     bool head{};
     // ANIMATED ARMS overlay: solve only the arm chains on top of the game's
-    // pose (torso/legs/root/head untouched). Requires armWeight; ignores the
-    // full-body yaw/plant/crawl paths. Not the same as bodyOn.
+    // pose (torso/legs/root/head untouched unless torsoAssist). Requires
+    // armWeight; ignores the full-body yaw/plant/crawl paths. Not bodyOn.
     bool armsOnly{};
     // Wanted per-arm blend 0..1 while armsOnly (native_body fills from XR).
     std::array<float, 2> armWeight{};
+    // ANIMATED TORSO: while armsOnly, bound waist→chest spine + clavicles
+    // toward controller reaches (animated_torso.hpp). Head world pose is
+    // compensated; pelvis/legs stay on the game anim. Off leaves arms-only.
+    bool torsoAssist{};
     // In the air (swinging, falling): the legs keep the game's pose instead
     // of standing on the ground.
     bool airborne{};
@@ -325,6 +329,9 @@ struct Config {
     // How fast the body takes over from the game's pose and gives it back
     // (shares per second).
     float blendSpeed = 4;
+    // ANIMATED TORSO (provisional): max spine yaw/pitch while armsOnly+torsoAssist.
+    float overlayTorsoYawMax = .6981317f;   // ~40°
+    float overlayTorsoPitchMax = .4363323f; // ~25°
 };
 struct State {
     CrawlFeet crawlFeet;
@@ -333,6 +340,9 @@ struct State {
     float weight{}, yaw{};
     // Per-arm overlay blend while Targets::armsOnly (separate from weight).
     std::array<float, 2> armWeight{};
+    // Smoothed ANIMATED TORSO spine angles while armsOnly + torsoAssist (rad).
+    float overlayTorsoYaw{};
+    float overlayTorsoPitch{};
     float crawlWeight{};
     float crawlTwist{};
     float crawlOutwardMotion{};
