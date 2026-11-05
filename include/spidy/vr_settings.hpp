@@ -326,8 +326,8 @@ struct Values {
     bool animatedMoves = false;
     // ANIMATED HEAD (the tab's ANIMATED HEAD; Off|Level|Full, default Off):
     // while a pose yield is active, attach the view to the hero's gameplay head
-    // like finishers (anchored 4 Level / 2 Full). Air yields clamp Full→Level
-    // (animated_moves.hpp).
+    // like finishers (anchored 4 Level / 2 Full). Full keeps anim pitch/roll
+    // in air too; Level only when chosen (animated_moves.hpp).
     int animatedHead = 0;
     // ANIMATED AIR (the tab's ANIMATED AIR; off by default): pose yield for
     // freefall / swing / web-hold air. Physics stays with the mod; no cutscene
