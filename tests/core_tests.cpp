@@ -23375,8 +23375,8 @@ int main() {
                                   Item::automaticHandStrength, Item::automaticFalloff,     Item::automaticHandThreshold,
                                   Item::automaticAirBrake,     Item::automaticCombat};
         // The realistic flips' rows come last, after the EXPERIMENTAL rows before them
-        // (ANIMATED ARMS sits at 87 after ANIMATED STEERING).
-        constexpr size_t firstRealistic = 88;
+        // (ANIMATED TORSO sits at 88 after ANIMATED ARMS at 87).
+        constexpr size_t firstRealistic = 89;
         check(all.size() == firstRealistic + std::size(realistic), "the realistic flips' rows are not the last");
         for (size_t i = 0; i < std::size(realistic); ++i)
             check(all[firstRealistic + i].item == realistic[i], "the realistic flips' rows out of order");
