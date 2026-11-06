@@ -728,6 +728,7 @@ int main() {
         t.animatedModelYaw = true;
         t.animatedOnly = true;
         t.animatedAirSpin = 2;
+        t.animatedHybrid = true;
         t.webAimSource = 1;
         t.forearmBlend = 50;
         t.webSlingshot = true;

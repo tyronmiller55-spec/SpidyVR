@@ -27591,16 +27591,19 @@ int main() {
         o.update(f, t0); // start ungrounded clock
         check(o.update(f, t0 + jumpHoldNs) == Domain::traversal && o.enterT && o.lastEnterT == EnterT::jump,
               "jump not taken");
-        // Back to ground, then immediate jump suppressed by rearm.
+        // Back to ground (land needs a start frame + landHoldNs), then jump
+        // suppressed by the rearm window.
         f.state.grounded = true;
         f.velocityY = 0;
-        o.update(f, t0 + jumpHoldNs + landHoldNs);
-        check(o.domain == Domain::ground, "rearm setup");
+        f.feetY = 10.f;
+        const int64_t tLandStart = t0 + jumpHoldNs + 1;
+        check(o.update(f, tLandStart) == Domain::traversal && !o.enterG, "land clock");
+        check(o.update(f, tLandStart + landHoldNs) == Domain::ground && o.enterG, "rearm setup");
         f.state.grounded = false;
         f.velocityY = 4.f;
         f.feetY = 11.f;
         const int64_t tLand = o.sinceNs;
-        o.update(f, tLand + 1);
+        o.update(f, tLand + 1); // start ungrounded clock inside rearm window
         check(o.update(f, tLand + jumpHoldNs) == Domain::ground && o.bounceSuppressed,
               "bounce not suppressed");
         // Zip immediate from ground.
