@@ -7,6 +7,24 @@ Per-check results are in [VALIDATION.md](VALIDATION.md).
 
 Not in a build yet, newest first. The release adds these to the next build's entry.
 
+**ANIMATED HYBRID: keep your run speed when you turn with the right stick.**
+
+- Head-locked ANIM composes L movement and R walk-facing once in world space,
+  preserves active L magnitude, and shares the heading with ground SPIDY RUN and
+  the vanilla pad (the pad keeps its existing run curve). Opposing requests that
+  nearly cancel retain L heading. Partial L no longer disappears in projection.
+- R response starts continuously at the existing .20 deadzone; turn-in-place is
+  still bounded by .42. View steering keeps its .3 s filter, run thresholds and
+  speeds are unchanged. Native web/wall/air physical velocities are untouched.
+- MODEL YAW owns ANIM R-turn, not a second hidden tracking-rig turn. OG rig turn
+  resumes in VR; menu/crawl/legacy paths remain unchanged. CameraLook retains
+  clear-on-active-R policy. Both actor-yaw diagnostics now use the same convention;
+  a new throttled line shows desired/native/final pad vectors and look before/after.
+- New magnitude/sign/deadzone/cancellation, shared-heading/run-curve and rig-yaw
+  regressions. Existing walk-facing evidence: [VALIDATION.md](VALIDATION.md),
+  “The hero under the left stick”; no new memory offsets. Not headset-tested.
+  Immediate Y-zip ownership and blend/view-smoothing slices remain unimplemented.
+
 **ANIMATED HYBRID: track your hands with the headset while animations play.**
 
 - HYBRID + ARMS + HEAD Full/Level resolves controllers through the same

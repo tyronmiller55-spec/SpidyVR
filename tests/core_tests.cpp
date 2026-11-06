@@ -28020,6 +28020,70 @@ int main() {
         check(!o.animOwns(true, s), "vr owned");
     });
 
+    test("HYBRID run turn: active L magnitude, sign, cancellation and deadzone continuity", [] {
+        const Vec3 actor{0, 0, -1};
+        for (float magnitude : {.2f, .3f, .6f, 1.f}) {
+            for (int deg = 0; deg < 360; deg += 15) {
+                const float a = deg * .0174532925f;
+                const Vec3 walk{std::sin(a) * magnitude, 0, -std::cos(a) * magnitude};
+                for (float r : {-1.f, -.5f, -.2f, 0.f, .2f, .5f, 1.f}) {
+                    const Vec3 out = animated_model_yaw::composeMove(walk, r, actor);
+                    check(finite(out), "nonfinite composition");
+                    near(length(out), magnitude);
+                    if (r == 0)
+                        check(length(out - walk) < 1e-6f, "zero R not identity");
+                }
+            }
+        }
+        const auto right = animated_model_yaw::composeMove({0, 0, -1}, 1, actor);
+        const auto left = animated_model_yaw::composeMove({0, 0, -1}, -1, actor);
+        check(right.x > 0 && left.x < 0 && right.z < 0 && left.z < 0, "turn sign or forward lost");
+        const Vec3 cancel{-.55f * .42f / .45f, 0, 0};
+        check(length(animated_model_yaw::composeMove(cancel, 1, actor) - cancel) < 1e-4f,
+              "near-cancel did not retain L heading");
+        check(length(animated_model_yaw::composeMove({0, 0, -1}, .201f, actor) - Vec3{0, 0, -1}) < .01f,
+              "deadzone heading discontinuity");
+        near(length(animated_model_yaw::composeMove({}, 1, actor)), .42f);
+        near(length(animated_model_yaw::composeMove({}, .2f, actor)), 0.f);
+    });
+    test("HYBRID run turn: native and curved pad share heading, including partial L", [] {
+        for (float yaw : {-2.f, 0.f, 1.3f}) {
+            for (float magnitude : {.25f, .6f, 1.f}) {
+                const Vec3 native = animated_model_yaw::composeMove(hybrid_steer::viewMove(0, magnitude, yaw),
+                                                                    .85f, {0, 0, -1});
+                float right = 0, forward = magnitude;
+                run_update::curveStick(right, forward, true);
+                const float curved = std::hypot(right, forward);
+                const Vec3 af = Quat::yaw(.9f).rotate({0, 0, -1});
+                const Vec3 ar = Quat::yaw(.9f).rotate({1, 0, 0});
+                const auto pad = animated_model_yaw::worldToStick(normalized(native), af, ar, curved);
+                const Vec3 fromPad = af * pad.forward + ar * pad.right;
+                near(std::hypot(pad.right, pad.forward), curved);
+                check(dot(normalized(fromPad), normalized(native)) > .9999f, "native/pad heading diverged");
+            }
+        }
+        const auto partial = hybrid_steer::viewRelativeStick(0, .25f, 0, {0, 0, -1}, {1, 0, 0});
+        near(partial.forward, .25f);
+        check(hybrid_steer::ownsYaw(true, true, false), "anim yaw gate");
+        check(!hybrid_steer::ownsYaw(false, true, false) && !hybrid_steer::ownsYaw(true, false, false) &&
+                  !hybrid_steer::ownsYaw(true, true, true),
+              "VR/menu/crawl owns animated yaw");
+    });
+    test("HYBRID run turn: hidden rig does not turn in ANIM, OG turn resumes in VR", [] {
+        GameTrackingRig rig;
+        auto f = trackedFrame();
+        rig.smoothTurn(1.f);
+        auto out = playFor(rig, f, {}, {0, 1, 0}, .2f);
+        const Vec3 before = matrixRow(out.head, 2);
+        rig.animatedYawOwner(true);
+        f.hands[1].stickX = 1.f;
+        out = playFor(rig, f, {}, {0, 1, 0}, .5f);
+        check(dot(before, matrixRow(out.head, 2)) > .9999f, "hidden rig turned behind ANIM view");
+        rig.animatedYawOwner(false);
+        out = playFor(rig, f, {}, {0, 1, 0}, .5f);
+        check(dot(before, matrixRow(out.head, 2)) < .98f, "OG turn did not resume on VR owner");
+    });
+
     test("HYBRID steer: push right/left/back maps to view right/left/back in camera axes", [] {
         using namespace hybrid_steer;
         // Game camera facing -Z (walk axes forward -Z, right +X); view turned 90 deg left

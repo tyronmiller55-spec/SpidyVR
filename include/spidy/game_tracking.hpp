@@ -294,6 +294,11 @@ class GameTrackingRig {
     // player's actor, the world's while it stands. airborne: the player is in
     // the air, so the basic flip can use the right stick. surface: the
     // wall or ceiling that holds the player.
+    // HYBRID's animated walk-facing owns R-stick yaw. Do not rotate a hidden
+    // tracking rig behind its head-locked view; VR resumes the ordinary turn path.
+    void animatedYawOwner(bool on) {
+        animatedYawOwner_ = on;
+    }
     GameMotionFrame update(const XrFrame&, Vec3 playerFeet, Vec3 gameForward, bool gameplay,
                            Vec3 surfaceUp = {0, 1, 0}, bool airborne = false, const SurfaceHold& surface = {},
                            Vec3 gameUp = {0, 1, 0});
@@ -478,6 +483,7 @@ class GameTrackingRig {
     Pose lastHead_{};
     Vec3 lastFeet_{}, standOff_{}, lastGameForward_{0, 0, -1};
     std::int64_t lastTime_{};
+    bool animatedYawOwner_{};
     bool initialized_{}, wasActive_{}, turnHeld_{}, pendingRecenter_{}, onSurface_{}, flips_{}, faceGame_{},
         sceneRuns_{}, facingValid_{};
     float facing_{}, activeFor_{};

@@ -1045,6 +1045,10 @@ VR settings
                    TORSO) while a pose yield is on on the ground / perch / wall,
                    right-stick X turns Spidey through the game's walk-facing
                    path (+R turns right, same feel as SpidyVR snap/smooth).
+                   HYBRID + HEAD Full/Level keeps your active left-stick run
+                   magnitude when turning. Ground SPIDY RUN and the game pad
+                   share that desired heading; R does not also turn a hidden
+                   tracking rig. Idle-L turn-in-place is still bounded (.42).
                    Midair with ANIMATED AIR SPIN on, this stays idle: AIR SPIN
                    owns the stick for 6DOF. Off by default.
   ANIMATED ONLY    (off until you switch it on; EXPERIMENTAL, after ANIMATED

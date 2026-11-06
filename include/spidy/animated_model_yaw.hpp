@@ -61,6 +61,30 @@ inline Stick worldToStick(Vec3 worldDir, Vec3 axisForward, Vec3 axisRight, float
     return out;
 }
 
+// HYBRID: compose once in world space, then project for both native run and
+// the pad. The turn request changes heading, NEVER the active L-stick speed.
+inline Vec3 composeMove(Vec3 walk, float rStickX, Vec3 actorForward, float zone = deadzone,
+                        float tilt = turnTilt) {
+    if (!finite(walk))
+        return {};
+    if (!std::isfinite(rStickX) || std::abs(rStickX) <= zone || !finite(actorForward))
+        return walk;
+    Vec3 ahead{actorForward.x, 0, actorForward.z};
+    if (length(ahead) < .5f)
+        return walk;
+    ahead = normalized(ahead);
+    const float response = std::clamp((std::abs(rStickX) - zone) / (1.f - zone), 0.f, 1.f);
+    const float sign = std::copysign(1.f, rStickX);
+    const Vec3 turn{-ahead.z * sign * tilt * response, 0, ahead.x * sign * tilt * response};
+    const float magnitude = length(walk);
+    if (magnitude < zone)
+        return turn; // idle L: bounded walk-facing request only (not native run)
+    const Vec3 mixed = walk * .45f + turn * .55f;
+    const float n = length(mixed);
+    // Opposing vectors can cancel: retain the player's L heading, never zero/NaN.
+    return n <= 1e-4f * magnitude ? walk : mixed * (magnitude / n);
+}
+
 // Compose left-stick locomotion with a right-stick model-yaw request.
 // walk*: current left stick (already actor-relative if ANIMATED STEERING ran).
 // rStickX: raw right-stick X (-1..1). actorForward: game.player matrix row 2.

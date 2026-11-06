@@ -2260,10 +2260,82 @@ DWORD WINAPI run(void*) {
                     // (debounced). Speculative early adoptFeet on web-intent flicker
                     // was snapping tracking every frame under Full head midair.
 
+                    head_probe::StateInputs hybridInputState;
+                    hybridInputState.playing = gesturesPlay && !padLayer.latched() && !phone.open() &&
+                                               !gadgetWheel.open() && !dodging;
+                    hybridInputState.fresh = swingFresh;
+                    const bool hybridInputAnim =
+                        values.animatedHybrid && hybridOwner.animOwns(values.animatedMoves, hybridInputState);
+                    const bool hybridInputLocked = hybridInputAnim && values.animatedHead != 0 && !flatScreen;
+                    const bool hybridInputCrawl =
+                        swingState.wall == static_cast<uint32_t>(game_swing::Surface::game) ||
+                        swingState.wall == static_cast<uint32_t>(game_swing::Surface::wall);
+                    rig.animatedYawOwner(
+                        hybrid_steer::ownsYaw(hybridInputLocked, values.animatedModelYaw, hybridInputCrawl));
                     motion = rig.update(seated::raised(controller, seatRaise), feet, {camera[8], camera[9], camera[10]}, gameplay,
                                         swingState.owned ? Vec3{0, 1, 0} : heroUp,
                                         game_swing::airborne(swingState, now.QuadPart, frequency.QuadPart), hold,
                                         {camera[4], camera[5], camera[6]});
+                    bool hybridInputViewOk = false;
+                    float hybridInputViewYaw = 0.f;
+                    Vec3 hybridInputMove{};
+                    const float hybridInputL =
+                        frame.hands[0].valid ? std::hypot(frame.hands[0].stickX, frame.hands[0].stickY) : 0.f;
+                    const int64_t hybridInputNs = frame.predictedDisplayTime > 0
+                                                      ? frame.predictedDisplayTime
+                                                      : static_cast<int64_t>(GetTickCount64()) * 1'000'000ll;
+                    const bool hybridInputYawHold =
+                        hybridBlend.active && !hybridBlend.toTraversal && hybridBlend.delayModelYaw &&
+                        !hybrid_handoff::blendDone(hybridInputNs - hybridBlend.startNs);
+                    const float hybridInputR = values.animatedModelYaw && !motion.basicFlipControls &&
+                                                       !hybridInputYawHold && frame.hands[1].valid
+                                                   ? frame.hands[1].stickX
+                                                   : 0.f;
+                    if (hybridInputLocked && !hybridInputCrawl && !motion.ventCrawl && !motion.onSurface &&
+                        motion.active) {
+                        Mat4 headMat{};
+                        const bool levelHead = animated_moves::headFollow(values.animatedHead) ==
+                                               animated_moves::HeadFollow::level;
+                        if (levelHead ? game_fp::frameLevel(headMat) : game_fp::frame(headMat)) {
+                            const Vec3 ahead{headMat[8], headMat[9], headMat[10]};
+                            if (finite(ahead) && std::hypot(ahead.x, ahead.z) > .2f) {
+                                float trackedYaw = 0.f, refYaw = 0.f;
+                                if (animHeadRefSet && validTrackedPose(frame.head)) {
+                                    trackedYaw = hybrid_handoff::lookYaw(
+                                        screenAhead(frame.head, 0).orientation.rotate({0, 0, -1}));
+                                    refYaw =
+                                        hybrid_handoff::lookYaw(animHeadRef.orientation.rotate({0, 0, -1}));
+                                }
+                                const float target =
+                                    hybrid_steer::viewYaw(hybrid_handoff::lookYaw(ahead), trackedYaw, refYaw,
+                                                          animHeadRefSet ? animHeadTurn : 0.f);
+                                hybridInputViewYaw = hybridViewYaw.update(target, frame.seconds);
+                                hybridInputViewOk = true;
+                            }
+                        }
+                        if (!hybridInputViewOk && hybridViewYaw.set) {
+                            hybridInputViewYaw = hybridViewYaw.yaw;
+                            hybridInputViewOk = true;
+                        }
+                        if (hybridInputViewOk) {
+                            const Vec3 walk =
+                                frame.hands[0].valid
+                                    ? hybrid_steer::viewMove(frame.hands[0].stickX, frame.hands[0].stickY,
+                                                             hybridInputViewYaw)
+                                    : Vec3{};
+                            hybridInputMove = animated_model_yaw::composeMove(walk, hybridInputR,
+                                                                              {body[8], body[9], body[10]});
+                            // Only ground locomotion consumes the shared vector. Never
+                            // renormalize or redirect web/wall/air physical velocities.
+                            if (swingFresh && swingState.grounded && !hybridInputCrawl &&
+                                !swingState.webs[0].attached && !swingState.webs[1].attached &&
+                                hybridInputL >= animated_model_yaw::deadzone) {
+                                motion.swing.move = hybridInputMove;
+                            }
+                        }
+                    } else {
+                        hybridViewYaw.reset();
+                    }
                     if (values.eyeAim && motion.active && !flatScreen) {
                         ++eyeAimFrames;
                         gazeFrames += motion.gazeValid ? 1u : 0u;
@@ -4341,35 +4413,9 @@ DWORD WINAPI run(void*) {
                                                                animated_moves::HeadFollow::off &&
                                                            !flatScreen) &&
                                 !motion.onSurface;
-                            bool hybridViewOk = false;
-                            float hybridViewYawNow = 0.f;
+                            const bool hybridViewOk = hybridViewSteer && hybridInputViewOk;
+                            const float hybridViewYawNow = hybridInputViewYaw;
                             if (hybridViewSteer) {
-                                Mat4 headMat{};
-                                const bool levelHead = animated_moves::headFollow(values.animatedHead) ==
-                                                       animated_moves::HeadFollow::level;
-                                if (levelHead ? game_fp::frameLevel(headMat) : game_fp::frame(headMat)) {
-                                    const Vec3 headAhead{headMat[8], headMat[9], headMat[10]};
-                                    if (finite(headAhead) && std::hypot(headAhead.x, headAhead.z) > .2f) {
-                                        float trackedYaw = 0.f, refYaw = 0.f;
-                                        if (animHeadRefSet && validTrackedPose(frame.head)) {
-                                            trackedYaw = hybrid_handoff::lookYaw(
-                                                screenAhead(frame.head, 0).orientation.rotate({0, 0, -1}));
-                                            refYaw = hybrid_handoff::lookYaw(
-                                                animHeadRef.orientation.rotate({0, 0, -1}));
-                                        }
-                                        const float target = hybrid_steer::viewYaw(
-                                            hybrid_handoff::lookYaw(headAhead), trackedYaw, refYaw,
-                                            animHeadRefSet ? animHeadTurn : 0.f);
-                                        hybridViewYawNow = hybridViewYaw.update(
-                                            target, std::isfinite(frame.seconds) ? frame.seconds : 0.f);
-                                        hybridViewOk = true;
-                                    }
-                                }
-                                if (!hybridViewOk && hybridViewYaw.set) {
-                                    // No head sample this frame: keep the last view yaw.
-                                    hybridViewYawNow = hybridViewYaw.yaw;
-                                    hybridViewOk = true;
-                                }
                                 const auto& moveHand = frame.hands[0];
                                 const float walkMag = std::hypot(walk.right, walk.forward);
                                 if (hybridViewOk && moveHand.valid && walkMag > 1e-3f) {
@@ -4424,6 +4470,7 @@ DWORD WINAPI run(void*) {
                             // HYBRID view steering: MODEL YAW frees CameraLook only while
                             // the R-stick turns; otherwise the game camera follows the
                             // view so its parkour assists see a sensible camera.
+                            const float hybridLookBefore = walk.look;
                             const bool modelYawClears =
                                 hybridViewSteer && hybridViewOk
                                     ? hybrid_steer::clearsLook(
@@ -4459,20 +4506,38 @@ DWORD WINAPI run(void*) {
                                     frame.hands[1].valid && std::isfinite(frame.hands[1].stickX)
                                         ? frame.hands[1].stickX
                                         : 0.f;
-                                const auto yawed = animated_model_yaw::apply(
-                                    walk.right, walk.forward, rStickX, actorAhead,
-                                    motion.walkForwardAxis, motion.walkRightAxis);
+                                auto yawed =
+                                    animated_model_yaw::apply(walk.right, walk.forward, rStickX, actorAhead,
+                                                              motion.walkForwardAxis, motion.walkRightAxis);
+                                if (hybridViewOk &&
+                                    (hybridInputL >= animated_model_yaw::deadzone ||
+                                     std::abs(hybridInputR) >= animated_model_yaw::deadzone)) {
+                                    const float magnitude = hybridInputL >= animated_model_yaw::deadzone
+                                                                ? std::hypot(walk.right, walk.forward)
+                                                                : length(hybridInputMove);
+                                    yawed = animated_model_yaw::worldToStick(normalized(hybridInputMove),
+                                                                             motion.walkForwardAxis,
+                                                                             motion.walkRightAxis, magnitude);
+                                }
                                 walk.right = yawed.right;
                                 walk.forward = yawed.forward;
                                 if (frame.predictedDisplayTime - modelYawDiagAt > 250'000'000) {
                                     modelYawDiagAt = frame.predictedDisplayTime;
-                                    const float actorYaw = std::isfinite(actorAhead.x) && std::isfinite(actorAhead.z)
-                                                               ? std::atan2(actorAhead.x, actorAhead.z) * (180.f / 3.14159265f)
-                                                               : -1.f;
+                                    const float actorYaw =
+                                        std::isfinite(actorAhead.x) && std::isfinite(actorAhead.z)
+                                            ? hybrid_handoff::actorLookYaw(actorAhead) * (180.f / 3.14159265f)
+                                            : -1.f;
                                     diag_log::writef(
                                         "model yaw: stickX %.2f → L(%.2f,%.2f) actorYaw %.0f state %s",
                                         rStickX, yawed.right, yawed.forward, actorYaw,
                                         animated_moves::yieldName(steerState));
+                                    if (hybridViewOk)
+                                        diag_log::writef(
+                                            "hybrid run turn: owner anim rawL %.2f R %.2f desired %.2f/%.2f "
+                                            "native %.2f/%.2f finalL %.2f/%.2f look %.2f->%.2f",
+                                            hybridInputL, rStickX, hybridInputMove.x, hybridInputMove.z,
+                                            motion.swing.move.x, motion.swing.move.z, walk.right,
+                                            walk.forward, hybridLookBefore, walk.look);
                                 }
                             } else if (airSpinOwnsStick && values.animatedModelYaw &&
                                        frame.predictedDisplayTime - modelYawDiagAt > 1'000'000'000) {

@@ -454,7 +454,9 @@ GameMotionFrame GameTrackingRig::update(const XrFrame& f, Vec3 feet, Vec3 gameFo
     // on through a stutter.
     if (resumed)
         turnHeld_ = std::abs(turn) > .3f && (smooth_ <= 0 || longBreak);
-    if (basicFlipAir) {
+    if (animatedYawOwner_) {
+        turnHeld_ = false; // a fresh VR owner may use the held stick immediately
+    } else if (basicFlipAir) {
         // A side push consumed by a flip must not become a snap on landing.
         turnHeld_ = true;
     } else if (smooth_ > 0) {

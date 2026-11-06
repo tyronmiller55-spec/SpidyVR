@@ -38,6 +38,7 @@ MOVES on, HYBRID on, AIR / ONLY / AIR SPIN off, HEAD Full, ARMS/TORSO/MODEL YAW 
 
 - H: HYBRID hands share the resolved animated eye frame, continuous tracked
   overlay with existing ramps, same-solve diagnostics/tests. Not headset-tested.
-- S next: preserve run magnitude while turning; unify pad/native heading.
+- S: preserve run magnitude while turning; share pad/native ground heading and
+  gate hidden rig yaw. Not headset-tested.
 - Z (Y-zip immediate animation ownership) and C (exact blend endpoints / slight
   view smoothing) remain separate and unimplemented. Legs remain tabled.

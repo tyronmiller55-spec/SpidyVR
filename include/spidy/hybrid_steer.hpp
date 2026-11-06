@@ -27,6 +27,10 @@ inline bool usesView(bool hybridOn, bool animOwns, bool headLocked) {
     return hybridOn && animOwns && headLocked;
 }
 
+inline bool ownsYaw(bool animLocked, bool modelYaw, bool crawling) {
+    return animLocked && modelYaw && !crawling;
+}
+
 // ANIMATED STEERING applies only when view steering does not.
 inline bool steeringApplies(bool steeringOn, bool yielding, bool viewSteer) {
     return steeringOn && yielding && !viewSteer;
@@ -47,6 +51,17 @@ inline Vec3 viewRight(float viewYaw) {
     return Quat::yaw(viewYaw).rotate({1, 0, 0});
 }
 
+// Raw view-relative movement in world space. Shared by the ground-run input
+// and pad heading; the pad may separately retain its existing run-curve magnitude.
+inline Vec3 viewMove(float x, float y, float yaw, float zone = deadzone) {
+    if (!std::isfinite(x) || !std::isfinite(y) || !std::isfinite(yaw))
+        return {};
+    const float n = std::hypot(x, y);
+    if (n < zone)
+        return {};
+    return (viewRight(yaw) * x + viewForward(yaw) * y) / std::max(n, 1.f);
+}
+
 // Stick (x right, y forward) relative to the view yaw → walk stick in the game
 // camera's axes (axisForward / axisRight: walkForwardAxis / walkRightAxis), same
 // convention as animated_model_yaw::worldToStick. magnitude < 0: the stick's own
@@ -62,7 +77,7 @@ inline Stick viewRelativeStick(float stickX, float stickY, float viewYaw, Vec3 a
         return out;
     const float amount = magnitude < 0.f ? std::min(tilt, 1.f) : std::clamp(magnitude, 0.f, 1.f);
     const Vec3 want = viewRight(viewYaw) * stickX + viewForward(viewYaw) * stickY;
-    return animated_model_yaw::worldToStick(want, axisForward, axisRight, amount);
+    return animated_model_yaw::worldToStick(normalized(want), axisForward, axisRight, amount);
 }
 
 // Yaw the head-locked view shows: the hero's head yaw plus the headset's turn
