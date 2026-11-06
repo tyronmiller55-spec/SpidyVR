@@ -8,10 +8,10 @@
 // view yaw (that turns the follow camera / would fake model turn). HMD free
 // look stays on OpenXR tracking; Full head follow is unchanged.
 //
-// native_movement::Command stays velocity-only. Midair response is the same
-// pad path the game already takes; whether freefall anim root yaws as hard as
-// ground turn-in-place is PROVISIONAL (ground measurements validated; air not
-// headset-checked). Spherical air aim is out of scope.
+// native_movement::Command stays velocity-only. Midair with ANIMATED AIR SPIN
+// on: AIR SPIN owns the right stick for 6DOF (RealisticFlip / worldFlip); this
+// path stays idle so walk-facing yaw does not fight spherical tilt. Ground /
+// wall / perched yields keep MODEL YAW when the setting is on.
 #pragma once
 #include "spidy/math.hpp"
 #include <algorithm>
@@ -30,6 +30,12 @@ struct Stick {
 };
 
 inline bool active(bool settingOn, bool yielding) { return settingOn && yielding; }
+
+// True when MODEL YAW should drive the pad this frame. airSpinOwnsStick is set
+// when ANIMATED AIR SPIN is active midair (see animated_air_spin::ownsRightStick).
+inline bool ownsStick(bool settingOn, bool yielding, bool airSpinOwnsStick) {
+    return active(settingOn, yielding) && !airSpinOwnsStick;
+}
 
 // World direction → walk stick in the pad's axis frame (same convention as
 // animated_steering::actorRelativeForward).
@@ -76,6 +82,7 @@ inline Stick apply(float walkRight, float walkForward, float rStickX, Vec3 actor
     // Point the virtual left stick toward a yaw-offset of the actor facing so
     // the game's walk-facing turns him (same family as InteractStep).
     // Positive R-stick X → turn right (clockwise from above): −90° on +Z ahead → +X.
+    // Sign matches SpidyVR snap/smooth turn (copysign(..., -stickX)).
     const float yaw = std::copysign(1.5707963f, -rStickX);
     const float c = std::cos(yaw), s = std::sin(yaw);
     const Vec3 want{ahead.x * c - ahead.z * s, 0, ahead.x * s + ahead.z * c};

@@ -7,6 +7,20 @@ Per-check results are in [VALIDATION.md](VALIDATION.md).
 
 Not in a build yet, newest first. The release adds these to the next build's entry.
 
+**ANIMATED MODEL YAW / AIR SPIN: dedicated yaw ownership (opt-in paths).**
+
+- **Why.** With REALISTIC FLIPS, `basicFlipControls` is false midair, so MODEL YAW
+  kept eating R-stick X while AIR SPIN applied `worldFlip(bodyTilt, trackingYaw)`.
+  Dual ownership made yaw feel opposite / fought SpidyVR takeHeading yaw.
+- **Change.** `animated_air_spin::ownsRightStick` while yielding airborne with AIR
+  SPIN on; `animated_model_yaw::ownsStick` idles MODEL YAW then. CameraLook cleared
+  while either owns the stick. Ground / wall / perch MODEL YAW unchanged (sign
+  already matches SpidyVR `copysign(..., -stickX)` → +R turns right). Diag:
+  `model yaw: stickX … → L(…) actorYaw … state …` and
+  `model yaw: idle (air spin owns R-stick, …)`.
+- **Not in this patch.** Midair torso softlock; legs; headset sign re-check if
+  ground still feels mirrored after this gate.
+
 **ANIMATED ONLY + ANIMATED AIR SPIN: no OG body reclaim; spherical + momentum midair (opt-in, off).**
 
 - **Why.** Headset logs on 1e805e1 (tracking lock): 50 yield entries and 29

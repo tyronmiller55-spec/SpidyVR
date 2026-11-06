@@ -1041,6 +1041,7 @@ DWORD WINAPI run(void*) {
         animated_air_spin::Tracker airSpin{};
         int64_t airSpinDiagAt{};
         bool airSpinWas{};
+        int64_t modelYawDiagAt{};
         animated_arms::State animatedArmsState{};
         int64_t trackingLockDiagAt{};
         int64_t animatedMovesDiagAt{};
@@ -4277,11 +4278,22 @@ DWORD WINAPI run(void*) {
                                 walk.right = steered.right;
                                 walk.forward = steered.forward;
                             }
-                            if (animated_model_yaw::active(values.animatedModelYaw, yieldingPose) &&
-                                !motion.basicFlipControls) {
+                            // AIR SPIN midair owns R-stick for SpidyVR-like 6DOF
+                            // (RealisticFlip / takeHeading → trackingYaw + worldFlip).
+                            // Gate MODEL YAW off so walk-facing cannot fight that yaw.
+                            const bool airSpinOwnsStick = animated_air_spin::ownsRightStick(
+                                values.animatedAirSpin, yieldingPose, steerState);
+                            const bool modelYawOwns =
+                                animated_model_yaw::ownsStick(values.animatedModelYaw, yieldingPose,
+                                                              airSpinOwnsStick) &&
+                                !motion.basicFlipControls;
+                            if (modelYawOwns || airSpinOwnsStick) {
                                 // Free the right stick from CameraLook so it does not
-                                // also yaw the follow camera (HMD free look stays XR).
+                                // also yaw the follow camera (HMD free look stays XR;
+                                // tracking yaw / AIR SPIN keep the stick).
                                 walk.look = 0;
+                            }
+                            if (modelYawOwns) {
                                 const float rStickX =
                                     frame.hands[1].valid && std::isfinite(frame.hands[1].stickX)
                                         ? frame.hands[1].stickX
@@ -4291,6 +4303,23 @@ DWORD WINAPI run(void*) {
                                     motion.walkForwardAxis, motion.walkRightAxis);
                                 walk.right = yawed.right;
                                 walk.forward = yawed.forward;
+                                if (frame.predictedDisplayTime - modelYawDiagAt > 250'000'000) {
+                                    modelYawDiagAt = frame.predictedDisplayTime;
+                                    const float actorYaw = std::isfinite(actorAhead.x) && std::isfinite(actorAhead.z)
+                                                               ? std::atan2(actorAhead.x, actorAhead.z) * (180.f / 3.14159265f)
+                                                               : -1.f;
+                                    diag_log::writef(
+                                        "model yaw: stickX %.2f → L(%.2f,%.2f) actorYaw %.0f state %s",
+                                        rStickX, yawed.right, yawed.forward, actorYaw,
+                                        animated_moves::yieldName(steerState));
+                                }
+                            } else if (airSpinOwnsStick && values.animatedModelYaw &&
+                                       frame.predictedDisplayTime - modelYawDiagAt > 1'000'000'000) {
+                                // Assert midair: model-yaw path idle while AIR SPIN owns stick.
+                                modelYawDiagAt = frame.predictedDisplayTime;
+                                diag_log::writef(
+                                    "model yaw: idle (air spin owns R-stick, state %s)",
+                                    animated_moves::yieldName(steerState));
                             }
                         }
                         auto pad = game_pad::fromControllers(buttons, mapping, walk);

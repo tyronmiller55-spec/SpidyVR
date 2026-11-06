@@ -27093,10 +27093,31 @@ int main() {
         s = apply(0.f, 1.f, .8f, actor, af, ar);
         check(std::hypot(s.right, s.forward) <= 1.f + 1e-4f, "composed stick over unit");
         check(active(true, true) && !active(true, false) && !active(false, true), "active gate");
+        // Midair AIR SPIN owns the stick: MODEL YAW must idle (no dual ownership).
+        check(ownsStick(true, true, false) && !ownsStick(true, true, true) && !ownsStick(false, true, false),
+              "ownsStick air-spin gate");
         // Actor-relative: turning does not use view/camera axes as facing write —
         // worldToStick of actor forward is pure forward.
         auto fwd = worldToStick(actor, af, ar, 1.f);
         check(fwd.forward > .9f && std::abs(fwd.right) < .1f, "worldToStick forward");
+    });
+
+    test("ANIMATED AIR SPIN: ownsRightStick only while airborne yield", [] {
+        using namespace animated_air_spin;
+        head_probe::StateInputs air{};
+        air.playing = true;
+        air.fresh = true;
+        air.grounded = false;
+        air.owned = true;
+        check(ownsRightStick(1, true, air) && ownsRightStick(2, true, air), "air spin should own midair");
+        check(!ownsRightStick(0, true, air), "off must not own");
+        check(!ownsRightStick(2, false, air), "non-yield must not own");
+        head_probe::StateInputs ground = air;
+        ground.grounded = true;
+        check(!ownsRightStick(2, true, ground), "grounded must not own");
+        head_probe::StateInputs wall = air;
+        wall.wall = 1;
+        check(!ownsRightStick(2, true, wall), "wall must not own");
     });
 
     test("ANIMATED AIR SPIN: armsOnly yieldTilt turns the whole anim body about the head", [] {

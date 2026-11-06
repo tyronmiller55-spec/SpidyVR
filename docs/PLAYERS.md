@@ -1030,6 +1030,12 @@ VR settings
                    upper body. Animated root, legs, and head world pose stay
                    on the game anim (head orientation is compensated after
                    spine turns). Limits provisional. Off by default.
+  ANIMATED MODEL YAW (off until you switch it on; EXPERIMENTAL, after ANIMATED
+                   TORSO) while a pose yield is on on the ground / perch / wall,
+                   right-stick X turns Spidey through the game's walk-facing
+                   path (+R turns right, same feel as SpidyVR snap/smooth).
+                   Midair with ANIMATED AIR SPIN on, this stays idle: AIR SPIN
+                   owns the stick for 6DOF. Off by default.
   ANIMATED ONLY    (off until you switch it on; EXPERIMENTAL, after ANIMATED
                    MODEL YAW) with ANIMATED MOVES and/or ANIMATED AIR on, the
                    game's animation keeps Spidey's body in every gameplay state
@@ -1043,11 +1049,12 @@ VR settings
                    ONLY) while a pose yield is on in the air: FLIPS turns the
                    animated Spidey with the realistic flips' pitch, roll and
                    yaw (your hands, sticks and swing-release momentum), the
-                   way SpidyVR mode turns its own body. FLIPS + MOMENTUM also
-                   leans him along his travel (dives nose-down, climbs
-                   nose-up) and banks him into turns. Turned about his head;
-                   with ANIMATED HEAD FULL your view turns with him (never
-                   leveled). Visual and view only. Limits provisional.
+                   way SpidyVR mode turns its own body — R-stick yaw matches
+                   SpidyVR takeHeading (MODEL YAW does not also drive midair).
+                   FLIPS + MOMENTUM also leans him along his travel (dives
+                   nose-down, climbs nose-up) and banks him into turns. Turned
+                   about his head; with ANIMATED HEAD FULL your view turns with
+                   him (never leveled). Visual and view only. Limits provisional.
   DODGE TUMBLE     (OFF until you pick one) when the game dodges, your
                    view tips toward the dodge (LEAN) or turns a full roll
                    (ROLL, sideways dodges) so you can tell it dodged. Your

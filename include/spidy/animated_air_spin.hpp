@@ -63,6 +63,13 @@ inline bool active(int setting, bool yielding, const head_probe::StateInputs& s)
     return mode(setting) != Mode::off && yielding && airborne(s);
 }
 
+// Midair AIR SPIN owns the right stick for 6DOF (RealisticFlip tilt → worldFlip).
+// MODEL YAW and CameraLook must idle while this is true so walk-facing yaw cannot
+// fight spherical pitch/roll/yaw (SpidyVR takeHeading / bodyTilt parity).
+inline bool ownsRightStick(int setting, bool yielding, const head_probe::StateInputs& s) {
+    return active(setting, yielding, s);
+}
+
 inline Quat unitQ(Quat q) {
     const float n = std::sqrt(q.x * q.x + q.y * q.y + q.z * q.z + q.w * q.w);
     if (!(n > 1e-6f) || !std::isfinite(n))
