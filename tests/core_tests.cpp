@@ -23378,8 +23378,8 @@ int main() {
                                   Item::automaticHandStrength, Item::automaticFalloff,     Item::automaticHandThreshold,
                                   Item::automaticAirBrake,     Item::automaticCombat};
         // The realistic flips' rows come last, after the EXPERIMENTAL rows before them
-        // (ANIMATED MODEL YAW 89, ANIMATED ONLY 90, ANIMATED AIR SPIN 91).
-        constexpr size_t firstRealistic = 92;
+        // (ANIMATED MODEL YAW 89, ANIMATED ONLY 90, ANIMATED AIR SPIN 91, ANIMATED HYBRID 92).
+        constexpr size_t firstRealistic = 93;
         check(all.size() == firstRealistic + std::size(realistic), "the realistic flips' rows are not the last");
         for (size_t i = 0; i < std::size(realistic); ++i)
             check(all[firstRealistic + i].item == realistic[i], "the realistic flips' rows out of order");
