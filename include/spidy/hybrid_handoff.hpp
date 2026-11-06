@@ -123,4 +123,64 @@ inline Mat4 blendEyeMat(Vec3 fromPos, Quat fromOri, Vec3 toPos, Quat toOri, floa
     return eyeMatFromPose(lerpVec(fromPos, toPos, a), slerpQuat(fromOri, toOri, a));
 }
 
+// Blend endpoints. The source is the view the headset last showed (both eyes in
+// the world, whichever owner placed them: tracking, the head lock, or a blend
+// still under way), so an edge - even one during another blend - starts exactly
+// where the player was looking. It travels with the player from the frame it was
+// shown (native_eyes::Command::anchor), so at swing speed the view does not lag
+// behind the hero and catch up. The destination is what the new owner will show
+// once the blend is over. Same 180 ms smoothstep; nothing lengthened.
+struct Shown {
+    Pose eyes[2]{};
+    Vec3 anchor{}; // the player position the eyes were placed from
+    int64_t ns{};  // its frame's display time
+    bool valid{};
+};
+// A shown view older than this (a menu, a scene, a pause between) is no source.
+constexpr int64_t shownMaxAgeNs = 100'000'000;
+
+// native_eyes::reanchorOffset's teleport limit: farther is a respawn or a bad read.
+constexpr float carryLimit = 20.f;
+
+// The player's travel from `from` to `now`; none for a teleport or a bad read.
+inline Vec3 travel(Vec3 from, Vec3 now) {
+    if (!finite(from) || !finite(now))
+        return {};
+    const Vec3 d = now - from;
+    return length(d) <= carryLimit ? d : Vec3{};
+}
+
+inline bool validShown(const Shown& s, int64_t nowNs) {
+    if (!s.valid || !finite(s.anchor) || nowNs < s.ns || nowNs - s.ns > shownMaxAgeNs)
+        return false;
+    for (const auto& e : s.eyes) {
+        const Quat& q = e.orientation;
+        const float n = q.x * q.x + q.y * q.y + q.z * q.z + q.w * q.w;
+        if (!finite(e.position) || !std::isfinite(n) || std::abs(n - 1.f) > .01f)
+            return false;
+    }
+    return true;
+}
+
+inline Vec3 shownCentre(const Shown& s) {
+    return (s.eyes[0].position + s.eyes[1].position) * .5f;
+}
+
+// The shown view's look yaw (tracking-rig convention), false when it looks too
+// nearly straight up or down to have one.
+inline bool shownYaw(const Shown& s, float& yaw) {
+    const Vec3 f = s.eyes[0].orientation.rotate({0, 0, -1}) + s.eyes[1].orientation.rotate({0, 0, -1});
+    if (!finite(f) || std::hypot(f.x, f.z) < .4f) // under ~78 degrees of pitch (both eyes summed)
+        return false;
+    yaw = lookYaw(f);
+    return true;
+}
+
+// One eye of the blend: the shown eye carried by the player's travel since it was
+// shown, toward the new owner's eye. a = blendAlpha: 0 is exactly the source, 1
+// exactly the destination.
+inline Pose blendEye(Pose from, Vec3 carry, Pose to, float a) {
+    return {lerpVec(from.position + carry, to.position, a), slerpQuat(from.orientation, to.orientation, a)};
+}
+
 } // namespace spidy::hybrid_handoff

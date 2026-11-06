@@ -3,6 +3,28 @@
 Every build, newest first, with what changed, why, and what was measured.
 Per-check results are in [VALIDATION.md](VALIDATION.md).
 
+## Native Animation: smoother swing blends
+
+**Smooth the view between SpidyVR swings and the animation, with no cuts.**
+
+- HYBRID handoffs keep the existing 180 ms smoothstep (nothing lengthened) and fix
+  its endpoints. The blend starts from the view the headset last showed (a blend
+  still under way included, so a quick land-then-web no longer restarts from a
+  different place) and ends on the view the new owner shows next: into the
+  animation, the head-locked eyes as the render thread puts them on the head, with
+  the head reference latched at the blend's first frame instead of after it (the
+  old end swapped tracked orientation for the head's in one frame).
+- The source travels with the player (native_eyes anchor travel, the same 20 m
+  teleport limit), so at swing speed the view no longer trails the hero and
+  catches up.
+- Taking a swing over, tracking adopts the shown view's place and look yaw rather
+  than the actor's facing: no yaw swing in the blend (logs had a 63 degree median),
+  and the tracked head and hands continue from the head-locked frame they were in.
+  Only the head lock's pitch/roll eases out. Combat, parkour and finisher head lock
+  unchanged; no new setting.
+- New blend endpoint, travel, re-edge continuity and adoption regressions. Not
+  headset-tested.
+
 ## Native Animation: web zips stay on the animation from the press
 
 **Keep Y-button web zips on the animation from the frame you press them.**

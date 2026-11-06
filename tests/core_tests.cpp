@@ -28658,6 +28658,122 @@ int main() {
         check(std::abs(std::remainder(yaw - wantYaw, 6.2831853f)) < .05f, "adoptEyes yaw miss");
     });
 
+    test("ANIMATED HYBRID blend: endpoints are exactly the shown view and the new owner's view", [] {
+        using namespace hybrid_handoff;
+        auto angleBetween = [](Quat a, Quat b) {
+            const float d = std::abs(a.x * b.x + a.y * b.y + a.z * b.z + a.w * b.w);
+            return 2.f * std::acos(std::clamp(d, 0.f, 1.f));
+        };
+        // Eye matrices round-trip through the world-pose layout the eyes go out in.
+        const Quat tilted = Quat::yaw(.7f) * Quat::around({1, 0, 0}, -.4f) * Quat::around({0, 0, 1}, .2f);
+        const Pose back = animated_view::fromNative(eyeMatFromPose({1, 2, 3}, tilted));
+        check(length(back.position - Vec3{1, 2, 3}) < 1e-5f && angleBetween(back.orientation, tilted) < 1e-3f,
+              "eye matrix round trip");
+        // a = 0 is the shown eye (moved with the player), a = 1 the destination.
+        const Pose from{{4, 1.7f, -2}, Quat::yaw(1.2f)}, to{{5, 1.6f, -2.5f}, tilted};
+        const Vec3 carry{.3f, 0, -.2f};
+        const Pose a0 = blendEye(from, carry, to, blendAlpha(0));
+        const Pose a1 = blendEye(from, carry, to, blendAlpha(handoffNs));
+        check(length(a0.position - (from.position + carry)) < 1e-6f &&
+                  angleBetween(a0.orientation, from.orientation) < 1e-3f,
+              "blend does not start on the shown view");
+        check(length(a1.position - to.position) < 1e-6f &&
+                  angleBetween(a1.orientation, to.orientation) < 1e-3f,
+              "blend does not end on the new owner's view");
+        // Into the head lock: the destination is the head-locked eye as the render
+        // thread puts it on the head (onHead), so the blend's last frame is the
+        // first head-locked frame's matrix.
+        Mat4 head{};
+        check(animated_view::headFrame({3, 1.8f, 7}, normalized(Vec3{.3f, -.2f, .9f}),
+                                       normalized(Vec3{.1f, 1, .2f}), {.08f, .05f, 0}, head),
+              "head frame");
+        const Pose ref{{.1f, 1.6f, .2f}, Quat::yaw(.3f)};
+        const Pose raw{{.13f, 1.62f, .18f}, Quat::yaw(.45f) * Quat::around({1, 0, 0}, .1f)};
+        const Mat4 axes = {1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1};
+        const Mat4 relative = native_view::relativePose(axes, animated_view::relative(raw, ref, 0));
+        const Mat4 shownLater = native_eyes::onHead(relative, head);
+        const Pose dest = animated_view::fromNative(shownLater);
+        const Pose last = blendEye(from, carry, dest, 1.f);
+        const Mat4 lastMat = eyeMatFromPose(last.position, last.orientation);
+        float worst = 0;
+        for (int i = 0; i < 16; ++i)
+            worst = std::max(worst, std::abs(lastMat[i] - shownLater[i]));
+        check(worst < 1e-3f, "blend end is not the head-locked matrix");
+    });
+
+    test("ANIMATED HYBRID blend: source travels with the player; a re-edge mid-blend does not jump", [] {
+        using namespace hybrid_handoff;
+        // At 25 m/s, a view already where the new owner's is stays there every frame
+        // (a frozen source would trail the hero by ~4.5 m over the blend).
+        const Vec3 velocity{25, -3, 4};
+        const Vec3 anchor0{100, 30, -50};
+        const Pose eyeRel{{0, 1.7f, 0}, Quat::yaw(.5f)};
+        const Pose from{anchor0 + eyeRel.position, eyeRel.orientation};
+        float worst = 0;
+        for (int k = 0; k <= 20; ++k) {
+            const int64_t t = k * 9'000'000ll;
+            const Vec3 anchor = anchor0 + velocity * (static_cast<float>(t) * 1e-9f);
+            const Pose to{anchor + eyeRel.position, eyeRel.orientation};
+            const Pose b = blendEye(from, travel(anchor0, anchor), to, blendAlpha(t));
+            worst = std::max(worst, length(b.position - to.position));
+        }
+        check(worst < 1e-3f, "the blend swam behind a moving hero");
+        check(length(travel(anchor0, anchor0 + Vec3{30, 0, 0})) == 0 &&
+                  length(travel(anchor0, Vec3{NAN, 0, 0})) == 0 &&
+                  length(travel(anchor0, anchor0 + Vec3{3, 0, 0}) - Vec3{3, 0, 0}) < 1e-6f,
+              "travel: teleport / bad read / plain move");
+        // Per-frame continuity at 90 Hz over a 0.9 m / 60 degree gap: no frame-to-frame step
+        // much over the smoothstep's peak rate (1.5 x gap / frames).
+        const Pose src{{0, 1.7f, 0}, Quat::yaw(0)}, dst{{.9f, 1.7f, 0}, Quat::yaw(1.047f)};
+        Pose prev = blendEye(src, {}, dst, 0);
+        float worstStep = 0;
+        constexpr int64_t frameNs = 11'111'111;
+        for (int64_t t = frameNs; t <= handoffNs + frameNs; t += frameNs) {
+            const Pose b = blendEye(src, {}, dst, blendAlpha(t));
+            worstStep = std::max(worstStep, length(b.position - prev.position));
+            prev = b;
+        }
+        const float frames = static_cast<float>(handoffNs) / static_cast<float>(frameNs);
+        check(worstStep < 1.5f * .9f / frames * 1.2f, "a blend frame stepped like a cut");
+        // A new edge during a blend starts from the blended view the player saw.
+        Shown shown;
+        shown.valid = true;
+        shown.ns = 1'000;
+        shown.anchor = {};
+        for (auto& e : shown.eyes)
+            e = blendEye(src, {}, dst, blendAlpha(handoffNs / 3));
+        check(validShown(shown, 1'000 + shownMaxAgeNs) && !validShown(shown, 1'000 + shownMaxAgeNs + 1) &&
+                  !validShown(shown, 999),
+              "shown view age");
+        const Pose again = blendEye(shown.eyes[0], {}, src, 0);
+        check(length(again.position - shown.eyes[0].position) < 1e-6f, "re-edge jumped from the shown view");
+        Shown bad = shown;
+        bad.eyes[1].orientation = {0, 0, 0, 2};
+        check(!validShown(bad, 1'000), "a non-unit eye accepted");
+    });
+
+    test("ANIMATED HYBRID blend: takeover adopts the shown view's place and look yaw", [] {
+        using namespace hybrid_handoff;
+        Shown shown;
+        shown.valid = true;
+        const Quat look = Quat::yaw(-2.4f) * Quat::around({1, 0, 0}, -.3f); // looking down a little
+        shown.eyes[0] = {{10.03f, 1.7f, -4}, look};
+        shown.eyes[1] = {{9.97f, 1.7f, -4}, look};
+        float yaw = 0;
+        check(shownYaw(shown, yaw) && std::abs(wrapPi(yaw + 2.4f)) < 1e-3f, "shown look yaw");
+        const Vec3 trackedHead{.02f, 1.65f, -.03f};
+        const Vec3 trackedLook = Quat::yaw(.8f).rotate({0, 0, -1});
+        const float rigYaw = adoptEyesRigYaw(yaw, trackedLook);
+        const Vec3 origin = adoptEyesOrigin(shownCentre(shown), yaw, rigYaw, trackedHead, {}, {}, {});
+        check(length(predictedEyes(origin, rigYaw, trackedHead, {}, {}) - shownCentre(shown)) < 1e-3f,
+              "tracking not placed on the shown eyes");
+        check(std::abs(wrapPi(rigYaw + lookYaw(trackedLook) - yaw)) < 1e-3f,
+              "tracking does not look where the player looked");
+        // Straight up or down has no yaw to adopt: the old capture is kept.
+        Shown up = shown;
+        up.eyes[0].orientation = up.eyes[1].orientation = Quat::around({1, 0, 0}, 1.55f);
+        check(!shownYaw(up, yaw), "a vertical view gave a yaw");
+    });
 
     test("STEADY STATES: RT comes back after a moment, goes at once, never in a fight; off as before", [] {
         using namespace ground_state;

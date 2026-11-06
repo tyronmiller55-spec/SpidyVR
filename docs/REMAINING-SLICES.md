@@ -3,8 +3,10 @@
 Packaged on upstream main `bdd4c9150f` as 0.8.1 with a Native Animation launcher
 tab/headset block and recommended fresh defaults. H and S retained. Z (Y-zip
 ownership), C (swing-blend polish), legs and known 0xC0000409 crash investigation
-were out of scope for the package. Z is now on `feat/native-animation` (web zips
-are ANIM from the press frame, held for the zip; not headset-tested). No custom offsets; docs/REFERENCE.md and VALIDATION.md remain
+were out of scope for the package. Z and C are now on `feat/native-animation` (web zips
+are ANIM from the press frame, held for the zip; swing blends start on the shown
+view and end on the new owner's, travelling with the player, 180 ms kept; not
+headset-tested). Next approved: J (jump-adopt), then L/T/P. No custom offsets; docs/REFERENCE.md and VALIDATION.md remain
 the executable evidence. Packaging merge has not been headset-tested.
 
 ---
@@ -28,7 +30,7 @@ the executable evidence. Packaging merge has not been headset-tested.
    follows the view unless the R-stick turns.
 
 ## Next
-- **Slice C:** blend window 180 → ~250 ms once headset confirms the owner stopped chattering
+- **Slice C:** done as endpoint/travel polish at 180 ms (no longer window); retune only after a headset check
 - **Slice 4+:** OG air immersion (momentum lean, swing-arc legs, web-arm tension)
 
 ## Headset check for Hybrid handoff

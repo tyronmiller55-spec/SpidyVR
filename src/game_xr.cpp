@@ -1085,7 +1085,11 @@ DWORD WINAPI run(void*) {
             float enterEyeDYaw{};
             float landSpeed{};
             bool clearLook{};
+            // Slice C: the source eyes' player position; they travel with him from it.
+            Vec3 fromAnchor{};
         } hybridBlend{};
+        // Slice C: the view the headset showed last frame (blend source on an edge).
+        hybrid_handoff::Shown hybridShown{};
         int64_t modelYawDiagAt{};
         animated_arms::State animatedArmsState{};
         Pose animatedLastGrip[2]{}, animatedLastAim[2]{};
@@ -5660,6 +5664,24 @@ DWORD WINAPI run(void*) {
                                 if (finite(actorAhead) &&
                                     length(Vec3{actorAhead.x, 0, actorAhead.z}) > .2f)
                                     worldYaw = hybrid_handoff::actorLookYaw(actorAhead);
+                                // Slice C: what the headset last showed, carried with the
+                                // player since, is both the blend's source and the view
+                                // tracking adopts (place and look yaw): the takeover starts
+                                // where the player was looking, and the tracked head and
+                                // hands go on from the head-locked frame they were in. Only
+                                // the head lock's pitch/roll is left for the blend.
+                                const bool shownOk = hybrid_handoff::validShown(hybridShown, handoffNs);
+                                float shownLook = 0.f;
+                                if (shownOk && hybrid_handoff::shownYaw(hybridShown, shownLook)) {
+                                    const Vec3 shownEyes =
+                                        hybrid_handoff::shownCentre(hybridShown) +
+                                        hybrid_handoff::travel(hybridShown.anchor, motion.anchor);
+                                    if (finite(shownEyes)) {
+                                        worldEyes = shownEyes;
+                                        worldYaw = shownLook;
+                                        eyesOk = true;
+                                    }
+                                }
                                 float dPos = 0.f, dYaw = 0.f;
                                 if (eyesOk) {
                                     const Vec3 before =
@@ -5727,6 +5749,15 @@ DWORD WINAPI run(void*) {
                                     hybridBlend.fromEyePos[0] = hybridBlend.fromEyePos[1] = worldEyes;
                                     hybridBlend.fromEyeOri[0] = hybridBlend.fromEyeOri[1] = animOri;
                                 }
+                                hybridBlend.fromAnchor = motion.anchor;
+                                if (shownOk) {
+                                    for (unsigned i = 0; i < 2; ++i) {
+                                        hybridBlend.fromEyePos[i] = hybridShown.eyes[i].position;
+                                        hybridBlend.fromEyeOri[i] = hybridShown.eyes[i].orientation;
+                                    }
+                                    hybridBlend.fromAnchor = hybridShown.anchor;
+                                    hybridBlend.fromValid = true;
+                                }
                                 hybridBlend.delayArmsClear = true;
                                 hybridBlend.delayModelYaw = false; // OG stick from frame 0
                                 hybridBlend.enterEyeDPos = dPos >= 0.f ? dPos : 0.f;
@@ -5789,6 +5820,17 @@ DWORD WINAPI run(void*) {
                                                                      motion.eyes[i][14]};
                                         hybridBlend.fromEyeOri[i] = motion.headPose.orientation;
                                     }
+                                }
+                                // Slice C: from exactly what the headset last showed (a blend
+                                // still under way included), travelling with the player.
+                                hybridBlend.fromAnchor = motion.anchor;
+                                if (hybrid_handoff::validShown(hybridShown, handoffNs)) {
+                                    for (unsigned i = 0; i < 2; ++i) {
+                                        hybridBlend.fromEyePos[i] = hybridShown.eyes[i].position;
+                                        hybridBlend.fromEyeOri[i] = hybridShown.eyes[i].orientation;
+                                    }
+                                    hybridBlend.fromAnchor = hybridShown.anchor;
+                                    hybridBlend.fromValid = true;
                                 }
                                 hybridBlend.delayArmsClear = false;
                                 hybridBlend.delayModelYaw = true; // MODEL YAW after H
@@ -6264,7 +6306,10 @@ DWORD WINAPI run(void*) {
                     eyes.serial = ++serial;
                     eyes.leaseMs = 250;
                     eyes.anchor = motion.anchor;
-                    if (headFollowEyes && !hybridEyeBlend) {
+                    // Slice C: during a blend into the head lock, the head-locked eyes
+                    // are built (reference latched at its first frame) as the blend's
+                    // destination, so the blend ends on exactly the view that follows.
+                    if (headFollowEyes) {
                         if (!animHeadRefSet) {
                             animHeadRef = {frame.head.position, screenAhead(frame.head, 0).orientation};
                             animHeadRefSet = validTrackedPose(frame.head);
@@ -6326,39 +6371,63 @@ DWORD WINAPI run(void*) {
                     // the rig on G→T; this covers residual gap and pitch/roll
                     // settle so reclaim is not a hard cut.
                     if (hybridEyeBlend) {
-                        Vec3 landDelta{};
-                        bool landDeltaOk = false;
-                        if (!hybridBlend.toTraversal) {
+                        // Slice C destination: what the new owner shows once the blend is
+                        // over. Into the head lock: the head-locked eyes just built, put on
+                        // the head as the render thread will (native_eyes::onHead).
+                        Pose to[2]{};
+                        bool toHead = false;
+                        if (headFollowEyes && (eyes.anchored == 2 || eyes.anchored == 4)) {
                             Mat4 hb{};
-                            if (game_fp::frame(hb) && motion.active) {
-                                const Vec3 hbPos{hb[12], hb[13], hb[14]};
-                                const Vec3 centre{(motion.eyes[0][12] + motion.eyes[1][12]) * .5f,
-                                                  (motion.eyes[0][13] + motion.eyes[1][13]) * .5f,
-                                                  (motion.eyes[0][14] + motion.eyes[1][14]) * .5f};
-                                landDelta = hbPos - centre;
-                                landDeltaOk = finite(landDelta);
+                            if (eyes.anchored == 4 ? game_fp::frameLevel(hb) : game_fp::frame(hb)) {
+                                toHead = true;
+                                for (unsigned i = 0; i < 2; ++i) {
+                                    to[i] = animated_view::fromNative(
+                                        native_eyes::onHead(eyes.eyes[i].world, hb));
+                                    toHead = toHead && finite(to[i].position);
+                                }
                             }
                         }
-                        for (unsigned i = 0; i < 2; ++i) {
-                            Vec3 toPos = motion.active ? Vec3{motion.eyes[i][12], motion.eyes[i][13],
-                                                              motion.eyes[i][14]}
-                                                       : hybridBlend.fromEyePos[i];
-                            Quat toOri = motion.active ? motion.headPose.orientation
-                                                       : hybridBlend.fromEyeOri[i];
-                            if (!hybridBlend.toTraversal && landDeltaOk) {
-                                toPos = toPos + landDelta;
+                        if (!toHead) {
+                            // Tracking (G→T), or no head this frame: the tracked eyes, on
+                            // T→G moved onto the headbone as before.
+                            Vec3 landDelta{};
+                            bool landDeltaOk = false;
+                            if (!hybridBlend.toTraversal) {
+                                Mat4 hb{};
+                                if (game_fp::frame(hb) && motion.active) {
+                                    const Vec3 hbPos{hb[12], hb[13], hb[14]};
+                                    const Vec3 centre{(motion.eyes[0][12] + motion.eyes[1][12]) * .5f,
+                                                      (motion.eyes[0][13] + motion.eyes[1][13]) * .5f,
+                                                      (motion.eyes[0][14] + motion.eyes[1][14]) * .5f};
+                                    landDelta = hbPos - centre;
+                                    landDeltaOk = finite(landDelta);
+                                }
                             }
-                            eyes.eyes[i].world = hybrid_handoff::blendEyeMat(
-                                hybridBlend.fromEyePos[i], hybridBlend.fromEyeOri[i], toPos, toOri,
+                            for (unsigned i = 0; i < 2; ++i) {
+                                if (motion.active) {
+                                    to[i] = animated_view::fromNative(motion.eyes[i]);
+                                    if (!hybridBlend.toTraversal && landDeltaOk)
+                                        to[i].position = to[i].position + landDelta;
+                                } else {
+                                    to[i] = {hybridBlend.fromEyePos[i], hybridBlend.fromEyeOri[i]};
+                                }
+                                eyes.eyes[i].fov[0] = motion.fovs[i].left;
+                                eyes.eyes[i].fov[1] = motion.fovs[i].right;
+                                eyes.eyes[i].fov[2] = motion.fovs[i].down;
+                                eyes.eyes[i].fov[3] = motion.fovs[i].up;
+                            }
+                            // The head lock latches afresh after this blend.
+                            animHeadRefSet = false;
+                        }
+                        const Vec3 carry = hybrid_handoff::travel(hybridBlend.fromAnchor, motion.anchor);
+                        for (unsigned i = 0; i < 2; ++i) {
+                            const Pose blended = hybrid_handoff::blendEye(
+                                {hybridBlend.fromEyePos[i], hybridBlend.fromEyeOri[i]}, carry, to[i],
                                 eyeBlendW);
-                            const auto& f = motion.fovs[i];
-                            eyes.eyes[i].fov[0] = f.left;
-                            eyes.eyes[i].fov[1] = f.right;
-                            eyes.eyes[i].fov[2] = f.down;
-                            eyes.eyes[i].fov[3] = f.up;
+                            eyes.eyes[i].world =
+                                hybrid_handoff::eyeMatFromPose(blended.position, blended.orientation);
                         }
                         eyes.anchored = 1;
-                        animHeadRefSet = false;
                     }
                     if (hybridBlend.active && hybrid_handoff::blendDone(eyeBlendElapsed)) {
                         if (hybridBlend.delayArmsClear)
@@ -6366,6 +6435,24 @@ DWORD WINAPI run(void*) {
                         hybridBlend.delayArmsClear = false;
                         hybridBlend.delayModelYaw = false;
                         hybridBlend.active = false;
+                    }
+                    // Slice C: keep what this command shows, in the world, as the next
+                    // edge's blend source (head-locked eyes put on this frame's head).
+                    hybridShown.valid = false;
+                    if (values.animatedHybrid && values.animatedMoves && !flatScreen && eyes.enabled == 1) {
+                        const bool onHeadEyes = eyes.anchored == 2 || eyes.anchored == 4;
+                        Mat4 hb{};
+                        if (!onHeadEyes ||
+                            (eyes.anchored == 4 ? game_fp::frameLevel(hb) : game_fp::frame(hb))) {
+                            for (unsigned i = 0; i < 2; ++i)
+                                hybridShown.eyes[i] = animated_view::fromNative(
+                                    onHeadEyes ? native_eyes::onHead(eyes.eyes[i].world, hb)
+                                               : eyes.eyes[i].world);
+                            hybridShown.anchor = eyes.anchor;
+                            hybridShown.ns = eyeBlendNow;
+                            hybridShown.valid = true;
+                            hybridShown.valid = hybrid_handoff::validShown(hybridShown, eyeBlendNow);
+                        }
                     }
                     // HYBRID hands use the very same reference/turn as the eyes.
                     // Publish with the body command under commandLock; the pose job

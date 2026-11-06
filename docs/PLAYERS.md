@@ -38,9 +38,12 @@ the air (a web strike, a car in a chase) and the game's zip to a point (right st
 up), from a swing or Spidy's wall too. Nothing hands that zip to SpidyVR until it
 ends (you land, or the game gives you back to your webs). A press the game does
 not take (nothing to strike or zip to) gives the swing back after 0.4 s. Y on the
-ground or on a wall is still interact. The existing 180 ms handoff blend is
-unchanged; new swing-blend endpoint/view-smoothing polish is **not** included.
-Legs remain tabled.
+ground or on a wall is still interact. Switching between SpidyVR and the
+animation (starting or ending a swing, a zip, landing) keeps the same 180 ms
+blend, now from exactly the view you were seeing to exactly the view that
+follows, moving with you at swing speed, so the view does not pop at either end or
+lag behind and catch up. Taking a swing over keeps the way you were looking; only
+the animated head's tilt eases out. Legs remain tabled.
 
 The launcher's existing updater still targets official Spidy releases, not this
 fork. Installing an official update replaces the community layer; use Native
