@@ -3,6 +3,30 @@
 Every build, newest first, with what changed, why, and what was measured.
 Per-check results are in [VALIDATION.md](VALIDATION.md).
 
+## Native Animation: one system across the switches
+
+**Keep the body under your view when the animation takes it back.**
+
+- Error / state-change pass over the stacked hybrid slices (intent owner, Y zip hold,
+  swing-blend endpoints, head seat). Owner rules and every timing unchanged.
+- SpidyVR -> animation with ANIMATED ARMS on (Native Animation default): the arms
+  overlay solves on the game's own pose and never ramped the full body's weight, so the
+  OG body vanished on the first animation frame while the view still took 180 ms to
+  glide onto the head - for that glide the neck was not under the view (and the body's
+  weight stayed stuck at full for the whole lock). New `body::fadeOut`: the full body
+  now blends out over the same 180 ms (`hybrid_handoff::handoffSec`) on its last
+  targets before the overlay, the way it already did with ARMS off. The head lock
+  resolves the posed head, so view and neck travel together and arrive together.
+- A Y zip from a swing reused the landing blend's facing seed: for 180 ms an idle left
+  stick was pushed (0.42) toward your last VR look during the game's own zip. Only a
+  landing seeds the facing now (`hybrid_owner::seedsFacing`).
+- Diagnostics: `hybrid: vr->anim (land N ms)` always said 0 ms (read after the edge
+  reset its clock); it is the VR stint now. `headbone dPos` always said 0.00 m (the
+  head is not sampled yet on the edge frame); it says `n/a` then.
+- No new setting, offsets or shared-struct version (pose writer per docs/REFERENCE.md,
+  docs/VALIDATION.md). Tests: fade continuity / 180 ms end / stale weight; zip edge
+  seeds nothing; VR stint kept. Not headset-tested.
+
 ## Native Animation: head stays on the neck
 
 **Keep your view seated on the hero's neck through parkour and every switch.**

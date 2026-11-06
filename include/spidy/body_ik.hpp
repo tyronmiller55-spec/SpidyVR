@@ -408,4 +408,13 @@ struct Result {
 // the T-pose calibration). Leaves the pose as it was while the weight is 0.
 Result solve(Pose& pose, const Rig& rig, const Targets& targets, const Config& config, State& state, bool wanted,
              float dt, float scale = 1, float armScale = 1);
+// ANIMATED HYBRID: the animation takes the body back from the full-body solve
+// while another one takes over on the game's own pose (the ANIMATED ARMS
+// overlay, `armsOnly`, which never ramps `state.weight`). On its own the body
+// would leave on the first frame, while the view still glides onto the head.
+// This blends the full body out first, over `seconds`, toward `last` - its
+// final full-body targets - and never in. Leaves the pose as it was once the
+// weight is gone (and drops a weight left with no full-body targets).
+Result fadeOut(Pose& pose, const Rig& rig, const Targets& last, const Config& config, State& state, float dt,
+               float seconds, float scale = 1, float armScale = 1);
 } // namespace spidy::body

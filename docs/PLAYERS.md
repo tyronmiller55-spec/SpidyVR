@@ -50,7 +50,11 @@ change, a headset recenter) glides the view back onto his head over the same
 180 ms, so steps and leans in your room during long parkour runs no longer add up
 into a head floating off the body. Where you look stays yours, and your hands move
 with the view. A lean farther than 35 cm is also brought back without waiting for a
-switch. Legs remain tabled.
+switch. When SpidyVR hands the body back to the animation (a landing, a Y zip), the
+SpidyVR body now eases into the animation over that same 180 ms with ARMS on, so the
+neck stays under your view instead of the body jumping ahead of it. A Y zip from a
+swing no longer nudges the hero toward where you were looking during the game's zip;
+only landings do that. Legs remain tabled.
 
 The launcher's existing updater still targets official Spidy releases, not this
 fork. Installing an official update replaces the community layer; use Native

@@ -5807,10 +5807,8 @@ DWORD WINAPI run(void*) {
                                         headDAng = std::abs(hybrid_handoff::wrapPi(hbYaw - fromYaw)) *
                                                    (180.f / 3.14159265f);
                                 }
-                                const float landMs =
-                                    hybridOwner.sinceNs > 0
-                                        ? static_cast<float>(handoffNs - hybridOwner.sinceNs) / 1e6f
-                                        : 0.f;
+                                // The VR stint just ended (the owner's sinceNs is already this edge's).
+                                const float landMs = static_cast<float>(hybridOwner.lastVrNs) / 1e6f;
                                 const float landSpeed =
                                     swingFresh && finite(swingState.velocity)
                                         ? length(Vec3{swingState.velocity.x, 0, swingState.velocity.z})
@@ -5843,14 +5841,23 @@ DWORD WINAPI run(void*) {
                                 hybridBlend.delayArmsClear = false;
                                 hybridBlend.delayModelYaw = true; // MODEL YAW after H
                                 hybridBlend.seedActorYaw = fromYaw;
-                                hybridBlend.seedActorYawValid = fromOk;
+                                // Landing faces him where you looked; a web zip is the game's move.
+                                hybridBlend.seedActorYawValid =
+                                    fromOk && hybrid_owner::seedsFacing(hybridOwner.lastEnterAnim);
                                 hybridBlend.landSpeed = landSpeed;
                                 const char* why = hybrid_owner::enterAnimName(hybridOwner.lastEnterAnim);
-                                diag_log::writef("hybrid: vr->anim (%s %.0f ms), T->G (%s %.0f ms, speed "
-                                                 "%.1f) eyeBlend %.0f ms, headbone dPos %.2f m dAng %.0f",
-                                                 why, landMs, why, landMs, landSpeed,
-                                                 hybrid_handoff::handoffSec * 1000.f,
-                                                 headDPos >= 0.f ? headDPos : 0.f, headDAng);
+                                // The head is often not sampled yet on the edge frame (head follow
+                                // turns on below): say so rather than log a 0.00 m that never was.
+                                if (headDPos >= 0.f)
+                                    diag_log::writef("hybrid: vr->anim (%s %.0f ms), T->G (%s %.0f ms, speed "
+                                                     "%.1f) eyeBlend %.0f ms, headbone dPos %.2f m dAng %.0f",
+                                                     why, landMs, why, landMs, landSpeed,
+                                                     hybrid_handoff::handoffSec * 1000.f, headDPos, headDAng);
+                                else
+                                    diag_log::writef("hybrid: vr->anim (%s %.0f ms), T->G (%s %.0f ms, speed "
+                                                     "%.1f) eyeBlend %.0f ms, headbone n/a",
+                                                     why, landMs, why, landMs, landSpeed,
+                                                     hybrid_handoff::handoffSec * 1000.f);
                             }
                         } else {
                             hybridOwner = {};

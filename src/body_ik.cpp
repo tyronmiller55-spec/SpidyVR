@@ -2106,4 +2106,18 @@ Result solve(Pose& pose, const Rig& rig, const Targets& targets, const Config& c
     r.solved = true;
     return r;
 }
+Result fadeOut(Pose& pose, const Rig& rig, const Targets& last, const Config& config, State& state, float dt,
+               float seconds, float scale, float armScale) {
+    if (!std::isfinite(state.weight) || last.armsOnly) {
+        // No full-body targets to leave on: nothing to blend from.
+        state.weight = 0;
+        return {};
+    }
+    if (state.weight <= 0)
+        return {};
+    Config c = config;
+    if (std::isfinite(seconds) && seconds > 0)
+        c.blendSpeed = 1 / seconds;
+    return solve(pose, rig, last, c, state, false, dt, scale, armScale);
+}
 } // namespace spidy::body

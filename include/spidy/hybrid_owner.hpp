@@ -70,6 +70,13 @@ inline const char* enterAnimName(EnterAnim e) {
     }
 }
 
+// Whether a return to ANIM seeds the hero's facing toward where the player last
+// looked in VR (the landing blend's short stick push). A web zip is the game's
+// move from its press frame: nothing of the player's is steered into it.
+inline bool seedsFacing(EnterAnim why) {
+    return why == EnterAnim::land;
+}
+
 inline const char* domainName(Domain d) {
     return d == Domain::vr ? "vr" : "anim";
 }
@@ -147,6 +154,8 @@ struct HybridOwner {
     // Web zip hold: the last press (or zip key still going out), -1 none.
     int64_t zipNs{-1};
     int64_t zipPressNs{-1};
+    // How long the last VR stint lasted (set on each VR -> ANIM edge, for diag).
+    int64_t lastVrNs{};
     bool enterVr{};
     bool enterAnim{};
 
@@ -359,6 +368,7 @@ struct HybridOwner {
         combatIdleNs = -1;
     }
     void goAnim(int64_t nowNs, EnterAnim why) {
+        lastVrNs = nowNs - sinceNs;
         domain = Domain::anim;
         sinceNs = nowNs;
         enterAnim = true;

@@ -3,6 +3,7 @@
 #include "spidy/native_body.hpp"
 #include "spidy/body_ik.hpp"
 #include "spidy/game_fp.hpp"
+#include "spidy/hybrid_handoff.hpp"
 #include "spidy/native_appearance.hpp"
 #include <MinHook.h>
 #include <algorithm>
@@ -78,6 +79,9 @@ Quat yieldTiltBody{}, yieldTiltHands{}; // ANIMATED AIR SPIN (setYieldTilt), wor
 bool viewSoftlock{}; // midair softlock / headbone remap player frame
 native_body::OverlayTracking overlayTrackingSample{};
 body::Targets lastTargets;
+// The last full-body (bodyOn) targets: what the body fades out on when the animation takes it
+// back under the ANIMATED ARMS overlay (body::fadeOut).
+body::Targets lastBodyTargets;
 // The body's turn away from the wall at the last solve (crawlOutwardWeight),
 // for the XR thread, which must not wait out a solve for it.
 std::atomic<float> outwardWeight{};
@@ -535,6 +539,7 @@ void solveHero(float* out, uintptr_t job, uintptr_t instance) {
                               wanted.shoot[i]};
             }
             lastTargets = t;
+            lastBodyTargets = t;
         } else if (armsOverlayOn || armsBlend || spinOn) {
             body::Targets t;
             t.armsOnly = true;
@@ -617,6 +622,12 @@ void solveHero(float* out, uintptr_t job, uintptr_t instance) {
                                             : 0.f;
         lastSolve = now;
         body::Pose pose(out, static_cast<int>(joints));
+        // ANIMATED HYBRID T->G under ANIMATED ARMS: the overlay solves on the game's pose and never
+        // ramps the body's weight, so the body would leave at once while the view still glides onto
+        // the head. It fades out with that 180 ms glide first, so the neck stays under the view.
+        if (!on && lastTargets.armsOnly && state.weight > 0.f)
+            body::fadeOut(pose, cache.ik, lastBodyTargets, config, state, dt, hybrid_handoff::handoffSec,
+                          scale, armScale);
         result = body::solve(pose, cache.ik, lastTargets, config, state, on || armsOverlayOn || armsBlend || spinOn, dt, scale, armScale);
         // Internal diagnostic snapshot: all values belong to this command + pose job.
         overlayTrackingSample.serial = wanted.serial;

@@ -9,8 +9,12 @@ view and end on the new owner's, travelling with the player, 180 ms kept; not
 headset-tested). Head-neck seat (N) is on it too: every owner switch starts the head
 lock afresh and every move change, Y zip, HEAD change or recenter glides the
 reference back to the headset (180 ms, look kept; 35 cm backstop) so room drift
-cannot pile up off the neck; not headset-tested. Next approved: the error /
-state-change pass, then J (jump-adopt), L/T/P. No custom offsets; docs/REFERENCE.md and VALIDATION.md remain
+cannot pile up off the neck; not headset-tested. The error / state-change pass is on
+it as well: with ARMS the OG body now fades out over the view's 180 ms on SpidyVR ->
+animation (it vanished on the first frame while the view glided, so the neck was not
+under the view), a Y zip from a swing no longer gets the landing's facing stick, and
+the vr->anim / headbone diag values are real; owner rules and timings unchanged; not
+headset-tested. Next approved: J (jump-adopt), L/T/P. No custom offsets; docs/REFERENCE.md and VALIDATION.md remain
 the executable evidence. Packaging merge has not been headset-tested.
 
 ---

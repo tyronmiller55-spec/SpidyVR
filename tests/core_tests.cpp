@@ -28439,6 +28439,98 @@ int main() {
         check(o.zipNs < 0 && o.domain == Domain::anim, "cutscene kept the zip hold");
     });
 
+    test("ANIMATED HYBRID state pass: a zip back to anim steers nothing; landings still face your look", [] {
+        using namespace hybrid_owner;
+        check(seedsFacing(EnterAnim::land) && !seedsFacing(EnterAnim::zip) && !seedsFacing(EnterAnim::none),
+              "only a landing seeds the hero's facing");
+        // Both ways back to ANIM say which they were on the edge frame, and how long VR lasted.
+        HybridOwner o;
+        Frame f{};
+        f.state.playing = f.state.fresh = f.state.grounded = true;
+        o.update(f, 0);
+        f.state.grounded = false;
+        f.webRising = f.state.webbed = f.state.owned = true;
+        check(o.update(f, 1'000'000'000) == Domain::vr, "swing not vr");
+        f.webRising = false;
+        f.zipPress = true;
+        check(o.update(f, 1'300'000'000) == Domain::anim && o.lastEnterAnim == EnterAnim::zip &&
+                  !seedsFacing(o.lastEnterAnim) && o.lastVrNs == 300'000'000,
+              "zip edge: no facing seed, or VR stint not kept");
+        // And a landing after a later swing: seeded, its own stint.
+        o = {};
+        f = {};
+        f.state.playing = f.state.fresh = f.state.grounded = true;
+        o.update(f, 0);
+        f.state.grounded = false;
+        f.webRising = f.state.webbed = f.state.owned = true;
+        o.update(f, 2'000'000'000);
+        f = {};
+        f.state.playing = f.state.fresh = f.state.grounded = true;
+        int64_t t = 2'000'000'000;
+        while (o.update(f, t += 11'000'000) == Domain::vr && t < 4'000'000'000) {
+        }
+        check(o.enterAnim && o.lastEnterAnim == EnterAnim::land && seedsFacing(o.lastEnterAnim) &&
+                  o.lastVrNs == t - 2'000'000'000 && o.lastVrNs >= vrMinDwellNs,
+              "land edge: VR stint not the real one (was always 0 ms in the log)");
+    });
+
+    test("ANIMATED HYBRID state pass: under the arms overlay the body fades out with the view, not at once",
+         [] {
+             const auto b = testBody();
+             const int joints = static_cast<int>(b.rig.parent.size());
+             auto restData = b.rest;
+             body::Pose rest(restData.data(), joints);
+             const Vec3 gameHead = rest.position(b.rig.head);
+             // OG VR: the player leans and crouches off the animation's head; the body follows the headset.
+             const auto vr = lookingAhead(gameHead + Vec3{.22f, -.18f, .12f});
+             body::State state;
+             body::Config c;
+             auto held = solved(b, vr, state, c);
+             body::Pose heldView(held.data(), joints);
+             const Vec3 vrHead = heldView.position(b.rig.head);
+             const float gap = length(vrHead - gameHead);
+             check(state.weight > .999f && gap > .1f, "set-up: the VR body is not off the animation's head");
+             // The animation takes him back; the arms overlay solves on the game's pose from now on.
+             body::Targets overlay;
+             overlay.armsOnly = true;
+             overlay.up = {0, 1, 0};
+             overlay.eyes = gameHead;
+             overlay.armWeight = {0.f, 0.f};
+             const float dt = 1.f / 90;
+             const float seconds = hybrid_handoff::handoffSec;
+             Vec3 headWas = vrHead;
+             float weightWas = state.weight;
+             int frames = 0;
+             for (; frames < 90 && state.weight > 0.f; ++frames) {
+                 auto data = b.rest; // the game's fresh pose each job
+                 body::Pose pose(data.data(), joints);
+                 body::fadeOut(pose, b.rig, vr, c, state, dt, seconds);
+                 body::solve(pose, b.rig, overlay, c, state, true, dt);
+                 const Vec3 head = pose.position(b.rig.head);
+                 check(state.weight < weightWas, "the fade did not go down");
+                 // No frame jumps more than a smooth 180 ms share of the gap (a cut would be all of it).
+                 check(length(head - headWas) < gap * .2f,
+                       ("the neck jumped on fade frame " + std::to_string(frames)).c_str());
+                 if (frames == 0)
+                     check(length(head - vrHead) < gap * .2f, "the body left at once (the old cut)");
+                 headWas = head;
+                 weightWas = state.weight;
+             }
+             check(state.weight <= 0.f && frames <= static_cast<int>(seconds / dt) + 2,
+                   "the fade did not end with the view's 180 ms blend");
+             check(length(headWas - gameHead) < 1e-3f, "the faded body is not the animation's");
+             // Done: the overlay alone, the game's pose untouched by the body.
+             auto data = b.rest;
+             body::Pose pose(data.data(), joints);
+             check(!body::fadeOut(pose, b.rig, vr, c, state, dt, seconds).solved &&
+                       length(pose.position(b.rig.head) - gameHead) < 1e-5f,
+                   "a finished fade still moved the pose");
+             // A weight with no full-body targets to leave on is dropped, not kept for good.
+             state.weight = 1.f;
+             check(!body::fadeOut(pose, b.rig, overlay, c, state, dt, seconds).solved && state.weight == 0.f,
+                   "a stale weight stayed");
+         });
+
     test("ANIMATED HYBRID animOwns: ungrounded frame keeps yield + head follow (no classify drop)", [] {
         using namespace hybrid_owner;
         HybridOwner o;
