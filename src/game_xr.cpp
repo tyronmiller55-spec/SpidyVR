@@ -1055,6 +1055,10 @@ DWORD WINAPI run(void*) {
         // ANIMATED HYBRID (off by default): animation-default / intent-VR owner FSM.
         hybrid_owner::HybridOwner hybridOwner{};
         bool hybridWebWas{};
+        // ANIMATED HYBRID web zips (hybrid_owner::Frame::zipPress): pressed this
+        // frame, for the owner's update further down the same frame.
+        bool hybridZipPress{};
+        bool hybridYWas{};
         // Horizontal measured (feet position-delta) speed for the owner's speed intent.
         Vec3 hybridFeetWas{};
         bool hybridFeetWasSet{};
@@ -4364,6 +4368,23 @@ DWORD WINAPI run(void*) {
                         // line, it bugs").
                         askingZip = steering && swingState.owned && !calibrationInput &&
                                     (walk.zip || walk.aim || walk.interact);
+                        // ANIMATED HYBRID: a web zip asked of the game - its zip to a point
+                        // (the stick up, LT + RT) or its Y in the air (a web strike; a car's
+                        // in a chase) - is the game's animation from this press frame on
+                        // (hybrid_owner zip hold). Y on the ground or on Spidy's wall is
+                        // interact, not a zip.
+                        {
+                            const bool yDown = steering && (origins.play() & buttonY) != 0;
+                            // The floor-crawl flag lights in rooftop parkour: not a wall here.
+                            const bool yWall =
+                                swingState.wall == static_cast<uint32_t>(game_swing::Surface::wall) ||
+                                swingState.wall == static_cast<uint32_t>(game_swing::Surface::game);
+                            const bool airY = yDown && !hybridYWas && !calibrationInput && !yWall &&
+                                              (inFlight || (reaching && !swingState.grounded));
+                            hybridYWas = yDown;
+                            if ((walk.zip && !zipping) || airY)
+                                hybridZipPress = true;
+                        }
                         walk.jump = (keys & swingJumpKey) != 0;
                         // A jump on the game's own crawl - the player's, a web's
                         // takeoff, or the mount's that walks him on from it onto
@@ -5600,8 +5621,14 @@ DWORD WINAPI run(void*) {
                             hybridFrame.hmdYaw = hybrid_handoff::lookYaw(
                                 screenAhead(frame.head, 0).orientation.rotate({0, 0, -1}));
                         hybridFrame.cutscene = !animState.playing || !animState.fresh;
+                        hybridFrame.zipPress = hybridZipPress;
                         if (hybridOn) {
                             hybridOwner.update(hybridFrame, handoffNs);
+                            if (hybridFrame.zipPress)
+                                diag_log::writef("hybrid: web zip pressed, owner %s (%s), held for the zip",
+                                                 hybrid_owner::domainName(hybridOwner.domain),
+                                                 hybridOwner.enterAnim ? "vr->anim this frame"
+                                                                       : "already anim");
                             if (hybridOwner.enterVr) {
                                 // Slice 2 G→T (anim→vr): capture the view the player is seeing,
                                 // re-anchor tracking onto it, warm-reclaim IK, start
@@ -5768,9 +5795,10 @@ DWORD WINAPI run(void*) {
                                 hybridBlend.seedActorYaw = fromYaw;
                                 hybridBlend.seedActorYawValid = fromOk;
                                 hybridBlend.landSpeed = landSpeed;
-                                diag_log::writef("hybrid: vr->anim (land %.0f ms), T->G (land %.0f ms, speed "
+                                const char* why = hybrid_owner::enterAnimName(hybridOwner.lastEnterAnim);
+                                diag_log::writef("hybrid: vr->anim (%s %.0f ms), T->G (%s %.0f ms, speed "
                                                  "%.1f) eyeBlend %.0f ms, headbone dPos %.2f m dAng %.0f",
-                                                 landMs, landMs, landSpeed,
+                                                 why, landMs, why, landMs, landSpeed,
                                                  hybrid_handoff::handoffSec * 1000.f,
                                                  headDPos >= 0.f ? headDPos : 0.f, headDAng);
                             }
@@ -5778,6 +5806,7 @@ DWORD WINAPI run(void*) {
                             hybridOwner = {};
                             hybridBlend = {};
                         }
+                        hybridZipPress = false;
                         hybridWebWas = webNow;
                         // HYBRID: yield (and so head follow) changes only on an owner
                         // edge, which always runs the blend above.

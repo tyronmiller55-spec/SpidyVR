@@ -5,7 +5,9 @@
 // over only when the player asks for it: a web (attach, or trigger/grip web
 // intent in the air), a mid-air rotation (R-stick held or a ~90° body turn),
 // real speed in the air, or Spidy's own wall run. Back to ANIM after a
-// confirmed landing. Pure domain FSM — no Windows.
+// confirmed landing, or at once on the press of a web zip (Y in the air or the
+// game's zip to a point): that zip is the game's animation from its press frame
+// to its end. Pure domain FSM — no Windows.
 //
 // Diagnostics keep the old G->T / T->G spelling (G = anim, T = vr) so earlier
 // log greps still work.
@@ -28,6 +30,7 @@ enum class EnterVr : uint8_t {
     rotate,  // R-stick held or a fast body turn while airborne
     speed,   // airborne horizontal measured speed held above vrSpeed
     wallRun, // Spidy's own wall run (game_swing::Surface::wall): the mod drives it
+    swing,   // a web zip the game did not take: the swing still carries him in the air
 };
 
 inline const char* enterVrName(EnterVr e) {
@@ -42,6 +45,26 @@ inline const char* enterVrName(EnterVr e) {
         return "speed";
     case EnterVr::wallRun:
         return "wallrun";
+    case EnterVr::swing:
+        return "swing";
+    default:
+        return "none";
+    }
+}
+
+// Why the owner went back to ANIM.
+enum class EnterAnim : uint8_t {
+    none,
+    land, // grounded and clear for landHoldNs, after vrMinDwellNs
+    zip,  // the player pressed a web zip (Frame::zipPress): ANIM on that frame
+};
+
+inline const char* enterAnimName(EnterAnim e) {
+    switch (e) {
+    case EnterAnim::land:
+        return "land";
+    case EnterAnim::zip:
+        return "zip";
     default:
         return "none";
     }
@@ -68,6 +91,12 @@ constexpr int64_t rotateHoldNs = 150'000'000;  // R-stick held this long
 constexpr float spinRadians = 1.5707963f;      // 90° body/HMD turn ...
 constexpr int64_t spinWindowNs = 500'000'000;  // ... within this window
 constexpr int64_t airWebAirNs = 80'000'000;    // airborne this long before air-web counts
+// A web zip's hold on ANIM (Frame::zipPress). The game begins its move within
+// game_swing::AirYield::askMs of the press or never does (a press it refused),
+// and lets the swing have the hero back after AirYield::yieldMs at most: the
+// same 400 ms / 3 s, so no new feel number.
+constexpr int64_t zipAskNs = 400'000'000;
+constexpr int64_t zipMaxNs = 3'000'000'000;
 
 struct Frame {
     head_probe::StateInputs state{};
@@ -78,6 +107,11 @@ struct Frame {
     float hmdYaw{};     // headset yaw in tracking space, radians
     bool hmdYawValid{}; // hmdYaw is a tracked sample
     bool cutscene{};    // !playing || !fresh — freeze domain
+    // The player pressed a web zip this frame: the game's zip to a point (its LT
+    // + RT, the stick up) or its Y in the air (a web strike; a car's in a chase).
+    // Not Y on the ground or on Spidy's wall (interact). game_xr sets it on the
+    // press frame itself, before the swing or the game has moved.
+    bool zipPress{};
     // ANIMATED HYBRID SPEED: how long speed must hold before VR; 0 = speed never
     // forces a takeover (webs, mid-air turns and wall runs still do).
     int64_t speedHoldNs = hybrid_owner::speedHoldNs;
@@ -109,18 +143,24 @@ struct HybridOwner {
     bool yawLastSet{};
     float lastSpin{}; // largest yaw change (radians) in the window, this frame
     EnterVr lastEnterVr = EnterVr::none;
+    EnterAnim lastEnterAnim = EnterAnim::none;
+    // Web zip hold: the last press (or zip key still going out), -1 none.
+    int64_t zipNs{-1};
+    int64_t zipPressNs{-1};
     bool enterVr{};
     bool enterAnim{};
 
     Domain update(const Frame& f, int64_t nowNs) {
         enterVr = enterAnim = false;
         lastEnterVr = EnterVr::none;
+        lastEnterAnim = EnterAnim::none;
         lastSpin = 0;
 
         if (f.cutscene) {
             // Freeze: keep domain, clear pending clocks so a long cutscene does
             // not fire a stale edge on return.
             resetClocks();
+            zipNs = zipPressNs = -1;
             webIntentWas = f.webIntent;
             return domain;
         }
@@ -147,6 +187,39 @@ struct HybridOwner {
                 airNs = nowNs;
         } else {
             airNs = -1;
+        }
+
+        // A web zip: ANIM on its press frame, from VR too (no land confirm or VR
+        // minimum: the game's zip animation is what the player asked for), and
+        // held for that zip. No VR intent takes it over meanwhile - not the web
+        // the swing still has, its speed, a turn, the wall it leaves.
+        if (f.zipPress) {
+            if (domain == Domain::vr)
+                goAnim(nowNs, EnterAnim::zip);
+            zipNs = zipPressNs = nowNs;
+            holdForZip();
+            return domain;
+        }
+        if (zipNs >= 0) {
+            if (f.state.zipping)
+                zipNs = nowNs; // the zip's keys still go out
+            const bool asked = nowNs - zipPressNs < zipAskNs || f.state.zipping;
+            // Done: landed, the swing has him again (a press the game refused, or
+            // its move over and a web of the swing's carrying him), or the
+            // longest the game keeps him.
+            const bool done = nowNs - zipNs >= zipMaxNs || (!asked && (!air || f.state.owned));
+            if (!done) {
+                holdForZip();
+                return domain;
+            }
+            zipNs = zipPressNs = -1;
+            // The swing still carrying him in the air (the game never took the
+            // press): the swing's owner again, as before the press. Spidy's wall
+            // is its own wall run, below.
+            if (domain == Domain::anim && air && f.state.owned && f.state.wall != surfaceWall) {
+                goVr(f.state.webbed ? EnterVr::web : EnterVr::swing, nowNs);
+                return domain;
+            }
         }
 
         if (domain == Domain::anim) {
@@ -204,7 +277,8 @@ struct HybridOwner {
         }
 
         // VR -> ANIM: grounded and clear for landHoldNs, after the VR minimum.
-        // A zip while in VR stays VR until it lands (zipping is not clear). Only
+        // (A web zip pressed in VR went to ANIM above, on its press frame; zip
+        // keys still held without a press seen are not clear.) Only
         // Spidy's own wall keeps VR; the game's crawl / floor flag do not.
         const bool clear =
             f.state.grounded && !f.state.webbed && !f.state.zipping && f.state.wall != surfaceWall;
@@ -212,7 +286,7 @@ struct HybridOwner {
             if (groundedNs < 0)
                 groundedNs = nowNs;
             if (nowNs - groundedNs >= landHoldNs && nowNs - sinceNs >= vrMinDwellNs) {
-                goAnim(nowNs);
+                goAnim(nowNs, EnterAnim::land);
                 return domain;
             }
         } else {
@@ -237,6 +311,12 @@ struct HybridOwner {
   private:
     void resetClocks() {
         groundedNs = airNs = speedNs = rotateNs = -1;
+        airWebArmed = false;
+        clearSpin();
+    }
+    // While a zip holds ANIM: intent clocks start over when it ends.
+    void holdForZip() {
+        speedNs = rotateNs = groundedNs = -1;
         airWebArmed = false;
         clearSpin();
     }
@@ -278,10 +358,11 @@ struct HybridOwner {
         combatSticky = false;
         combatIdleNs = -1;
     }
-    void goAnim(int64_t nowNs) {
+    void goAnim(int64_t nowNs, EnterAnim why) {
         domain = Domain::anim;
         sinceNs = nowNs;
         enterAnim = true;
+        lastEnterAnim = why;
         resetClocks();
         combatSticky = false;
         combatIdleNs = -1;

@@ -33,9 +33,14 @@ The **Native Animation** master represents MOVES + HYBRID, not every companion:
 
 Existing ownership remains: animation default; SpidyVR on web, airborne web intent,
 mid-air rotation, sustained 15 m/s speed or real wall run. Ground parkour and hops
-stay animated. A zip already in VR stays VR until landing: immediate Y-button zip
-ownership is **not** added here. The existing 180 ms handoff blend is unchanged;
-new swing-blend endpoint/view-smoothing polish is **not** included. Legs remain tabled.
+stay animated. Web zips stay on the animation from the frame you press them: Y in
+the air (a web strike, a car in a chase) and the game's zip to a point (right stick
+up), from a swing or Spidy's wall too. Nothing hands that zip to SpidyVR until it
+ends (you land, or the game gives you back to your webs). A press the game does
+not take (nothing to strike or zip to) gives the swing back after 0.4 s. Y on the
+ground or on a wall is still interact. The existing 180 ms handoff blend is
+unchanged; new swing-blend endpoint/view-smoothing polish is **not** included.
+Legs remain tabled.
 
 The launcher's existing updater still targets official Spidy releases, not this
 fork. Installing an official update replaces the community layer; use Native

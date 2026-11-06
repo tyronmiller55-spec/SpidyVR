@@ -3,6 +3,22 @@
 Every build, newest first, with what changed, why, and what was measured.
 Per-check results are in [VALIDATION.md](VALIDATION.md).
 
+## Native Animation: web zips stay on the animation from the press
+
+**Keep Y-button web zips on the animation from the frame you press them.**
+
+- HYBRID: a web zip you ask the game for - Y in the air or in flight (its web
+  strike; a car's in a chase) and its zip to a point (right stick up, LT + RT) -
+  makes the animation the owner on the press frame itself, from a swing or Spidy's
+  wall too (no land confirm, no VR minimum, no flash to SpidyVR and back).
+- That zip keeps the animation: the swing's web, speed, a mid-air turn or the wall
+  it leaves do not take it over until it lands, the swing has the hero again, or
+  3 s pass (game_swing::AirYield's own yield limit). A press the game refuses
+  gives the swing back after AirYield's 400 ms ask window. No new setting or
+  feel number; Y on the ground or on a wall stays interact.
+- `hybrid: web zip pressed, owner …` and `hybrid: vr->anim (zip …)` lines; new
+  owner regressions. Not headset-tested.
+
 ## Native Animation 0.8.1 community package
 
 - Merge upstream main `bdd4c9150f`: 0.8.1 fixes, STEADY HUD, official #77 run
