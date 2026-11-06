@@ -23587,7 +23587,7 @@ int main() {
                                                          : Place::tab),
                   "a row in the wrong place");
         }
-        check(std::count_if(all.begin(), all.end(), [](const Row& r) { return r.place == Place::tab; }) == 98,
+        check(std::count_if(all.begin(), all.end(), [](const Row& r) { return r.place == Place::tab; }) == 99,
               "the tab's own rows");
         check(all[1].item == Item::webStyle && std::strcmp(all[1].title, "WEB STYLE") == 0 &&
                   all[1].choices.size() == 2 && std::strcmp(all[1].choices[0], "REALISTIC") == 0 &&
@@ -27603,8 +27603,11 @@ int main() {
         f.velocityY = 4.f;
         f.feetY = 11.f;
         const int64_t tLand = o.sinceNs;
-        o.update(f, tLand + 1); // start ungrounded clock inside rearm window
-        check(o.update(f, tLand + jumpHoldNs) == Domain::ground && o.bounceSuppressed,
+        const int64_t tBounce0 = tLand + 1;
+        o.update(f, tBounce0); // start ungrounded clock inside rearm window
+        // Held clock starts at tBounce0; rearm still open at tBounce0 + jumpHoldNs
+        // (120 ms into the 150 ms rearm).
+        check(o.update(f, tBounce0 + jumpHoldNs) == Domain::ground && o.bounceSuppressed,
               "bounce not suppressed");
         // Zip immediate from ground.
         o = {};
