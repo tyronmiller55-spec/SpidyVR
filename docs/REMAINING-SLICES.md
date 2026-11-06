@@ -1,3 +1,13 @@
+# Native Animation package status
+
+Packaged on upstream main `bdd4c9150f` as 0.8.1 with a Native Animation launcher
+tab/headset block and recommended fresh defaults. H and S retained. Z (Y-zip
+ownership), C (swing-blend polish), legs and known 0xC0000409 crash investigation
+remain out of scope. No custom offsets; docs/REFERENCE.md and VALIDATION.md remain
+the executable evidence. Packaging merge has not been headset-tested.
+
+---
+
 # Remaining after feat/animated-hybrid-owner
 
 ## Delivered

@@ -18,6 +18,7 @@
 #include "spidy/game_fp.hpp"
 #include "spidy/web_aim.hpp"
 #include "spidy/game_grab.hpp"
+#include "spidy/game_lines.hpp"
 #include "spidy/game_menu.hpp"
 #include "spidy/game_offers.hpp"
 #include "spidy/game_pad.hpp"
@@ -542,6 +543,8 @@ DWORD(WINAPI* soundMode)(void*){};
 BridgeCall startSwing{}, submitSwing{}, sampleSwing{}, stopSwing{}, retargetSwing{}, sampleGrab{}, sampleAim{};
 // Optional: the web tie's telemetry (game_grab::TieData; an older ray module has none).
 BridgeCall sampleTie{};
+// Optional: web lines (game_lines::LineData; an older ray module has none).
+BridgeCall sampleLine{};
 // Each web's edges (game_swing::Bends): optional, without it a web round an
 // edge is drawn to that edge.
 BridgeCall sampleBends{}, sampleWebFlight{};
@@ -586,7 +589,7 @@ void stageLine(int stage, const char* detail = nullptr) {
 DWORD WINAPI watchdog(void* handle) {
     char line[diag_log::lineChars];
     while (WaitForSingleObject(static_cast<HANDLE>(handle), 1000) == WAIT_TIMEOUT) {
-        if (startupStages.check(GetTickCount64(), line, sizeof(line))) {
+        if (diag_log::enabled() && startupStages.check(GetTickCount64(), line, sizeof(line))) {
             diag_log::write(line);
             publishDiag();
         }
@@ -813,6 +816,10 @@ DWORD WINAPI run(void*) {
         players.start(config.base);
         game_player::Player player{};
         uint64_t playerChanges{}, playersFound{};
+        // Who the player is (game_fp::otherCharacter), from the skeleton last
+        // read off his entity: Spider-Man until a body says otherwise.
+        uint64_t playerBody{};
+        bool spiderMan = true;
         // Menus are played with a virtual Xbox controller (game_pad).
         padInstalled = !game_pad::install();
         uint64_t padRetryMs = GetTickCount64() + 1000;
@@ -880,6 +887,7 @@ DWORD WINAPI run(void*) {
         // The player asked the game for a move of its own while the swing carried him
         // in the air (game_swing::AirYield), for the next swing command.
         bool askingGame{};
+        bool askingZip{};
         uint32_t interacts{}, dodges{}, heals{}, zips{};
         // The whole pad, latched by clicking both thumbsticks, for the
         // controls VR play has no room for; and the buttons the game names in
@@ -1246,6 +1254,22 @@ DWORD WINAPI run(void*) {
         game_grab::TieData tieState;
         bool tieArmedBefore{};
         uint64_t tiesMadeBefore{};
+        // Web lines: theirs, and the gesture's state and lines made before
+        // this frame (a tick in both hands when it is ready, a pulse on a line).
+        game_lines::LineData lineState;
+        // Each hung thug's strand's rope, among the ropes handed to the game
+        // this frame (0xff: none; the overlay draws it).
+        uint8_t strandRope[16]{};
+        bool lineArmedBefore{}, linesSeen{};
+        uint64_t linesMadeBefore{};
+        // A web line's zip marker came into view (the right stick's click held
+        // to aim): a tick in the right hand.
+        bool lineMarkedBefore{};
+        // The dodge's dash on a web line: B as it was, the dash's way along the
+        // line, and how long its legs still run.
+        bool lineDashDown{};
+        Vec3 lineDashWay{};
+        float lineDashLeft{};
         // A grab's event pulse plays this long before the web's tension
         // takes the hand's haptics again (predicted display time, ns).
         int64_t pulseUntil[2]{};
@@ -1550,6 +1574,7 @@ DWORD WINAPI run(void*) {
             // SPIDY RUN FROM STANDING: only with SPIDY RUN itself.
             s.spidyRunStanding = values.spidyRun && values.spidyRunFromStanding;
             s.webLandingSmooth = values.webLandingSmooth;
+            s.webLines = values.webLines;
             s.headProbe = values.headProbe;
             s.animatedMoves = values.animatedMoves;
             s.animatedHead = static_cast<uint32_t>(values.animatedHead);
@@ -1579,7 +1604,13 @@ DWORD WINAPI run(void*) {
         // settings as the session starts and whenever they change, in the
         // console and the diagnostics file, so a log says what was tested.
         std::string diagSettings;
+        // The watchdog (diag_log::Stages): started with RUN LOGS, once a session.
+        bool watchdogStarted{};
         auto logSettings = [&] {
+            if (!diag_log::enabled()) {
+                diagSettings.clear();
+                return;
+            }
             std::string text = vr_settings::tabOnlyText(values);
             for (auto& c : text)
                 if (c == '\n')
@@ -1608,6 +1639,22 @@ DWORD WINAPI run(void*) {
             }
         };
         auto applySettings = [&] {
+            // SESSION DIAGNOSTICS only with RUN LOGS on: off, no line is kept or
+            // published and no watchdog runs (the review of pull request #77).
+            diag_log::enable(values.runLogs);
+            if (values.runLogs && !watchdogStarted) {
+                // The watchdog holds its own handle to this worker and ends with it.
+                HANDLE watched{};
+                if (DuplicateHandle(GetCurrentProcess(), GetCurrentThread(), GetCurrentProcess(), &watched,
+                                    SYNCHRONIZE, FALSE, 0)) {
+                    if (HANDLE dog = CreateThread(nullptr, 0, watchdog, watched, 0, nullptr)) {
+                        CloseHandle(dog);
+                        watchdogStarted = true;
+                    } else {
+                        CloseHandle(watched);
+                    }
+                }
+            }
             logSettings();
             runtime.hapticStrength(static_cast<float>(values.haptics) / 100);
             // The eyes are read only while something aims with them.
@@ -1829,6 +1876,27 @@ DWORD WINAPI run(void*) {
                         playerChanges = changes;
                         attach(found);
                     }
+                    // Spider-Man, or a character the game gives the player in his
+                    // place (Peter out of the suit, MJ, Miles): told by the skeleton
+                    // of the player's entity, kept while there is none to read (a
+                    // load, a spawn). That character plays with the game's own
+                    // controls: no web, web ball, grab, yank, web strike, punch,
+                    // wall, leap, gadget wheel or slow motion of Spidy's (November
+                    // 5: MJ webbed up passers-by in her own mission).
+                    if (uintptr_t entity{}; player.hero && read(player.record, &entity, sizeof(entity))) {
+                        uint64_t asset{};
+                        unsigned joints{};
+                        if (game_fp::skeleton(entity, asset, joints) && asset != playerBody) {
+                            playerBody = asset;
+                            spiderMan = !game_fp::otherCharacter(asset);
+                            char line[160];
+                            std::snprintf(line, sizeof(line),
+                                          "Player character: body %016llX (%u joints), %s",
+                                          static_cast<unsigned long long>(asset), joints,
+                                          spiderMan ? "Spider-Man" : "not Spider-Man: the game's controls");
+                            message(3, 0, line);
+                        }
+                    }
                     bridge::Data game{};
                     check(sampleBridge(&game), "Gameplay sample");
                     LARGE_INTEGER now{};
@@ -1925,10 +1993,14 @@ DWORD WINAPI run(void*) {
                     }
                     // Both hands at the chest with both triggers pulled is the
                     // game's suit power (its L3 + R3, which VR play had no way
-                    // to), and those triggers shoot nothing meanwhile.
+                    // to), and those triggers shoot nothing meanwhile. A hand
+                    // whose web is out reels with its trigger instead.
                     {
                         const float triggers[2]{frame.hands[0].trigger, frame.hands[1].trigger};
-                        suitPress.update(frame.seconds, gesturesPlay, frame.head, grips, gripsTracked, triggers);
+                        const bool webs[2]{swingState.webs[0].attached != 0,
+                                           swingState.webs[1].attached != 0};
+                        suitPress.update(frame.seconds, gesturesPlay, frame.head, grips, gripsTracked,
+                                         triggers, webs);
                         for (unsigned i = 0; i < 2; ++i)
                             if (suitPress.hands() & (1u << i))
                                 controller.hands[i].trigger = 0;
@@ -2225,11 +2297,16 @@ DWORD WINAPI run(void*) {
                         frame.predictedDisplayTime > 0 ? frame.predictedDisplayTime : 0);
                     rig.wallRunBody(values.body && values.handClimb && !flatScreen && swingFresh,
                         runPalm ? climbState.hands : 0, swingState.velocity);
+                    // On a web line (standing on it or jumping off it: game_lines::LineData
+                    // phase 2 or 3) the player is not in the air for the flips: the
+                    // swing holds him over the line, and FLIPS spun him there without
+                    // end (November 3, 17:04, with a video).
+                    const bool onLine = lineState.phase == 2 || lineState.phase == 3;
+                    const bool flipAir =
+                        game_swing::airborne(swingState, now.QuadPart, frequency.QuadPart) && !onLine;
                     const bool flipZipPlay = gesturesPlay && !padLayer.latched() && !phone.open() &&
-                        !gadgetWheel.open() && values.flips && !values.controlledFlips &&
-                        !values.realisticFlips &&
-                        game_swing::airborne(swingState, now.QuadPart, frequency.QuadPart) &&
-                        length(hold.normal) < .5f;
+                                             !gadgetWheel.open() && values.flips && !values.controlledFlips &&
+                                             !values.realisticFlips && flipAir && length(hold.normal) < .5f;
                     const auto& zipHand = controller.hands[1];
                     const bool zipPriority = flipZipPriority.update(flipZipPlay, zipHand.valid,
                         zipHand.stickX, zipHand.stickY);
@@ -2272,9 +2349,9 @@ DWORD WINAPI run(void*) {
                         swingState.wall == static_cast<uint32_t>(game_swing::Surface::wall);
                     rig.animatedYawOwner(
                         hybrid_steer::ownsYaw(hybridInputLocked, values.animatedModelYaw, hybridInputCrawl));
-                    motion = rig.update(seated::raised(controller, seatRaise), feet, {camera[8], camera[9], camera[10]}, gameplay,
-                                        swingState.owned ? Vec3{0, 1, 0} : heroUp,
-                                        game_swing::airborne(swingState, now.QuadPart, frequency.QuadPart), hold,
+                    motion = rig.update(seated::raised(controller, seatRaise), feet,
+                                        {camera[8], camera[9], camera[10]}, gameplay,
+                                        swingState.owned ? Vec3{0, 1, 0} : heroUp, flipAir, hold,
                                         {camera[4], camera[5], camera[6]});
                     bool hybridInputViewOk = false;
                     float hybridInputViewYaw = 0.f;
@@ -2712,7 +2789,8 @@ DWORD WINAPI run(void*) {
                             hand.trigger = hand.grip = 0;
                     }
                     // Slow motion: the left thumbstick's click, in VR play outside the calibration.
-                    const bool slowAllowed = immersive && calibration.phase() == CalibrationPhase::idle;
+                    const bool slowAllowed =
+                        immersive && calibration.phase() == CalibrationPhase::idle && spiderMan;
                     // A click the game names (its L3, its R3) is not slow motion.
                     const uint32_t clicksNamed = namedPress.claimed();
                     const bool slowLeft =
@@ -2812,7 +2890,7 @@ DWORD WINAPI run(void*) {
                         game_swing::Command input;
                         input.wallRotate = motion.wallRotate;
                         input.serial = ++serial;
-                        input.focused = motion.active && !flatScreen && controlsVisible;
+                        input.focused = motion.active && !flatScreen && controlsVisible && spiderMan;
                         input.sampleTimeNs = frame.predictedDisplayTime > 0 ? frame.predictedDisplayTime : 1;
                         input.sampleSeconds =
                             std::isfinite(frame.seconds) && frame.seconds > 0 && frame.seconds <= .1f
@@ -2824,11 +2902,18 @@ DWORD WINAPI run(void*) {
                         input.tilt = motion.swing.tilt;
                         input.leap = input.focused ? leapOut : 0.f;
                         input.asks = input.focused && askingGame ? 1u : 0u;
-                        // The web tie's click (WEB TIE): the right stick alone, not
-                        // half of clicking both (the pad layer, the pause), not an R3
-                        // the game asks for.
-                        if (values.webTie && input.focused && frame.hands[1].stickClick &&
-                            !frame.hands[0].stickClick && !padLayer.latched() &&
+                        // WEB LINES: the game's zip from a line (bit 4) and the dodge's
+                        // button (B) for a dodge on a line (bit 5).
+                        if (values.webLines && input.focused && askingZip)
+                            input.asks |= 16u;
+                        if (values.webLines && input.focused && (frame.buttons & buttonB) &&
+                            !padLayer.latched() && !calibrationInput)
+                            input.asks |= 32u;
+                        // The click of the web tie and the web lines (WEB TIE, WEB LINES):
+                        // the right stick alone, not half of clicking both (the pad layer,
+                        // the pause), not an R3 the game asks for.
+                        if ((values.webTie || values.webLines) && input.focused &&
+                            frame.hands[1].stickClick && !frame.hands[0].stickClick && !padLayer.latched() &&
                             !(namedPress.claimed() & game_pad::NamedPress::rightClick))
                             input.asks |= 2u;
                         // COMBAT RESPONSIVE (off by default): in a fight the swing
@@ -3083,6 +3168,34 @@ DWORD WINAPI run(void*) {
                             tieArmedBefore = armedNow;
                             if (tieState.made)
                                 tiesMadeBefore = tieState.made;
+                        }
+                        {
+                            game_lines::LineData sample;
+                            const game_lines::LineData expected;
+                            if (values.webLines && sampleLine && !sampleLine(&sample) &&
+                                sample.magic == expected.magic && sample.version == expected.version &&
+                                sample.bytes == expected.bytes)
+                                lineState = sample;
+                            else
+                                lineState = {};
+                            const bool armedNow = input.focused && lineState.armed != 0;
+                            if (armedNow && !lineArmedBefore) {
+                                runtime.haptic(0, .25f);
+                                runtime.haptic(1, .25f);
+                            }
+                            if (linesSeen && lineState.made > linesMadeBefore) {
+                                runtime.haptic(0, .9f);
+                                runtime.haptic(1, .9f);
+                            }
+                            lineArmedBefore = armedNow;
+                            const bool markedNow = input.focused && lineState.targetId != 0;
+                            if (markedNow && !lineMarkedBefore)
+                                runtime.haptic(1, .2f);
+                            lineMarkedBefore = markedNow;
+                            if (lineState.status) {
+                                linesSeen = true;
+                                linesMadeBefore = lineState.made;
+                            }
                         }
                         // What each free hand's web button would do: the aim markers.
                         aims = aimed = {};
@@ -3579,6 +3692,25 @@ DWORD WINAPI run(void*) {
                                         bent[i].points[k] = edges.points[k];
                                 }
                             }
+                            // A zip to a web line: its web from the hand that shot it to
+                            // where it holds on the line, in the game's own material, on a
+                            // rope with none of the hands' own (November 4: without it a far
+                            // zip "pulled me in place to the other line").
+                            if (values.webLines && lineState.phase == 1 && lineState.zipKey &&
+                                finite(lineState.zipTo)) {
+                                const unsigned hand = lineState.zipHand > 1 ? 1u : lineState.zipHand;
+                                for (uint32_t i = 0; i < 2; ++i)
+                                    if (!webs.hands[i].attached && motion.swing.hands[hand].tracked) {
+                                        auto& rope = webs.hands[i];
+                                        rope.attached = 1;
+                                        rope.tracked = 1;
+                                        rope.attachedAt = static_cast<int64_t>(lineState.zipKey);
+                                        rope.anchor = lineState.zipTo;
+                                        rope.wrist = webShooter(motion.grips[hand], hand).position;
+                                        bent[i].count = 0;
+                                        break;
+                                    }
+                            }
                             // One web in both hands: its rope comes to the upper
                             // wrist from the lower one, in the game's own material.
                             if (const int upper = webRopes.upper(); upper >= 0) {
@@ -3602,6 +3734,66 @@ DWORD WINAPI run(void*) {
                                  k < tieState.count && tieRopeCount < native_webs::maxTieRopes; ++k)
                                 tieRopes[tieRopeCount++] = {tieState.lines[k].anchor, tieState.lines[k].end};
                             native_webs::submitTies(tieRopes, tieRopeCount, 200);
+                            // Web lines, in the game's own rope material, then the strands of
+                            // the thugs hung from them (game_grab::TieData::hangs), each its own
+                            // rope while there are ropes (native_webs::maxLineRopes).
+                            native_webs::LineRope lineRopes[native_webs::maxLineRopes]{};
+                            uint32_t lineRopeCount{};
+                            for (uint32_t k = 0;
+                                 k < lineState.count && lineRopeCount < native_webs::maxLineRopes; ++k)
+                                lineRopes[lineRopeCount++] = {lineState.lines[k].start,
+                                                              lineState.lines[k].end, lineState.lines[k].id};
+                            // Each strand its own rope while they last; past that, two
+                            // neighbours on a line share one (native_webs::LineRope::via),
+                            // as many pairs as it takes.
+                            {
+                                const uint32_t hangs = std::min<uint32_t>(tieState.hangCount, 16);
+                                for (auto& r : strandRope)
+                                    r = 0xff;
+                                uint32_t order[16]{};
+                                uint32_t lineOf[16]{};
+                                float alongOf[16]{};
+                                for (uint32_t h = 0; h < hangs; ++h) {
+                                    order[h] = h;
+                                    std::memcpy(&lineOf[h], &tieState.hangs[h].distance, sizeof(uint32_t));
+                                    alongOf[h] = 0;
+                                    for (uint32_t k = 0; k < lineState.count; ++k)
+                                        if (lineState.lines[k].id == lineOf[h]) {
+                                            const Vec3 ab = lineState.lines[k].end - lineState.lines[k].start;
+                                            alongOf[h] =
+                                                dot(tieState.hangs[h].anchor - lineState.lines[k].start, ab);
+                                        }
+                                }
+                                std::sort(order, order + hangs, [&](uint32_t a, uint32_t b) {
+                                    return lineOf[a] != lineOf[b] ? lineOf[a] < lineOf[b]
+                                                                  : alongOf[a] < alongOf[b];
+                                });
+                                const uint32_t room = native_webs::maxLineRopes - lineRopeCount;
+                                uint32_t pairs = hangs > room ? hangs - room : 0;
+                                for (uint32_t i = 0; i < hangs && lineRopeCount < native_webs::maxLineRopes;
+                                     ++i) {
+                                    const auto& first = tieState.hangs[order[i]];
+                                    auto& rope = lineRopes[lineRopeCount];
+                                    if (pairs && i + 1 < hangs && lineOf[order[i]] == lineOf[order[i + 1]]) {
+                                        const auto& second = tieState.hangs[order[i + 1]];
+                                        rope = {second.anchor,
+                                                second.end,
+                                                0x40000000u | (first.flags & 0x3fffffffu),
+                                                2,
+                                                {first.end, first.anchor}};
+                                        strandRope[order[i]] = strandRope[order[i + 1]] =
+                                            static_cast<uint8_t>(lineRopeCount);
+                                        ++i;
+                                        --pairs;
+                                    } else {
+                                        rope = {first.anchor, first.end,
+                                                0x40000000u | (first.flags & 0x3fffffffu)};
+                                        strandRope[order[i]] = static_cast<uint8_t>(lineRopeCount);
+                                    }
+                                    ++lineRopeCount;
+                                }
+                            }
+                            native_webs::submitLines(lineRopes, lineRopeCount, 200);
                         }
                     }
                     const bool steering = motion.active && !flatScreen && controlsVisible;
@@ -3613,17 +3805,25 @@ DWORD WINAPI run(void*) {
                     const bool mounting =
                         swingState.status && swingState.mount && swingState.qpc &&
                         static_cast<int64_t>(swingState.qpc) > now.QuadPart - frequency.QuadPart / 10;
-                    auto keys = swingNativeKeys(
-                        steering, swingState.owned != 0 || mounting, motion.nativeKeys,
-                        static_cast<SwingTakeoff::Phase>(swingState.takeoffPhase), swingState.takeoff != 0);
+                    // Standing on a web line, the game walks the player itself (its
+                    // own legs: game_swing's GameWalk), so it gets its walk as it
+                    // does on the ground, though the swing holds him there: until
+                    // November 4 (19:07) the stick never reached it ("now I cannot
+                    // walk at all"), the swing owning him.
+                    const bool lineFoot = values.webLines && lineState.phase == 2 && lineState.onLine;
+                    const bool swingHolds = swingState.owned != 0 && !lineFoot;
+                    auto keys = swingNativeKeys(steering, swingHolds || mounting, motion.nativeKeys,
+                                                static_cast<SwingTakeoff::Phase>(swingState.takeoffPhase),
+                                                swingState.takeoff != 0);
                     // A held on the ground charges a leap, the swing's own, let
                     // go of with A. A tap is the jump as before, made as it is
                     // let go. The swing's own jumps (a takeoff, a wall, the
                     // leap's) are the game's A as they are.
-                    const bool standing = steering && padInstalled && swingState.status && swingState.grounded &&
-                                          !swingState.owned && !mounting && !swingState.takeoff &&
-                                          !swingState.takeoffPhase && !swingState.webs[0].attached &&
-                                          !swingState.webs[1].attached && !calibrationInput;
+                    const bool standing = steering && padInstalled && swingState.status &&
+                                          swingState.grounded && !swingState.owned && !mounting &&
+                                          !swingState.takeoff && !swingState.takeoffPhase &&
+                                          !swingState.webs[0].attached && !swingState.webs[1].attached &&
+                                          !calibrationInput && spiderMan;
                     // EARLY JUMP (OFF by default): a quicker tap, and while
                     // NATIVE RUN holds RT the game's A at once.
                     chargeJump.earlyJump(values.earlyJump);
@@ -3648,13 +3848,17 @@ DWORD WINAPI run(void*) {
                     // run (Swing::jumpCancels) and the game's A waits for the game to
                     // have the body back, 0.2 s at most (game_pad::JumpRelay).
                     {
+                        // Only with SPIDY RUN or SMOOTH WEB LANDING on, the runs it is for
+                        // (the review of pull request #77): the swing can own a body on the
+                        // ground with no web for a moment after any landing it flew, and the
+                        // relay held or swallowed an A pressed then.
                         const bool swingGround =
-                            steering && swingFresh && swingState.status && swingState.owned &&
-                            swingState.grounded &&
+                            (values.spidyRun || values.webLandingSmooth) && steering && swingFresh &&
+                            swingState.status && swingState.owned && swingState.grounded &&
                             swingState.wall == static_cast<uint32_t>(game_swing::Surface::none) &&
                             !swingState.webs[0].attached && !swingState.webs[1].attached && !mounting &&
                             !swingState.takeoff && !swingState.takeoffPhase;
-                        // SPIDY RUN JUMP (v6, on by default): with no web the swing jumps
+                        // SPIDY RUN JUMP (on by default): with no web the swing jumps
                         // at once, the run's speed kept; the game gets no A for that press.
                         const bool runJumpNow = values.spidyRunJump && swingGround;
                         const uint32_t swallowedBefore = jumpRelay.swallowed();
@@ -3742,12 +3946,13 @@ DWORD WINAPI run(void*) {
                     }
                     controls(keys);
                     askingGame = false;
+                    askingZip = false;
                     if (padInstalled) {
                         // The same walking and jumping on the virtual Xbox
                         // controller: after the VR menus, the game plays the
                         // player with it and ignores the bridge's keys.
                         game_pad::Walk walk;
-                        const bool playing = steering && !swingState.owned;
+                        const bool playing = steering && !swingHolds;
                         // Reaching for a thing is not walking: a player standing on a
                         // wall does it as much as one on the ground. The swing owns
                         // him there (it has taken the walls since October 10), so
@@ -4025,6 +4230,43 @@ DWORD WINAPI run(void*) {
                                 walk.right = stepIn * dot(look, cross(ahead, {0, 1, 0}));
                             }
                         }
+                        // On a web line the game walks him itself (its own legs:
+                        // game_swing's GameWalk), so its stick goes along the line:
+                        // the stick's part along it, none across.
+                        if (values.webLines && lineState.phase == 2 && lineState.onLine) {
+                            for (uint32_t k = 0; k < lineState.count && k < std::size(lineState.lines); ++k) {
+                                if (lineState.lines[k].id != lineState.onLine)
+                                    continue;
+                                Vec3 along = lineState.lines[k].end - lineState.lines[k].start;
+                                along.y = 0;
+                                const Vec3 ahead = motion.walkForwardAxis, side = motion.walkRightAxis;
+                                if (length(along) > .1f && finite(ahead) && finite(side)) {
+                                    along = normalized(along);
+                                    const Vec3 meant = ahead * walk.forward + side * walk.right;
+                                    Vec3 kept = along * dot(meant, along);
+                                    // And back toward the line's middle as he walks: the
+                                    // game walked him beside it, on air, and the line's
+                                    // holds took him back with a jolt (November 4, 19:35).
+                                    const Vec3 a = lineState.lines[k].start, b = lineState.lines[k].end;
+                                    const Vec3 ab = b - a;
+                                    const Vec3 at = swingState.position;
+                                    if (length(kept) > .05f && finite(at) && dot(ab, ab) > 1e-4f) {
+                                        const Vec3 on =
+                                            a + ab * std::clamp(dot(at - a, ab) / dot(ab, ab), 0.f, 1.f);
+                                        Vec3 off = on - at;
+                                        off.y = 0;
+                                        off = off - along * dot(off, along);
+                                        // 4 a metre, 0.8 of the stick at most: at 2.5 and 0.6 he
+                                        // still walked off its middle on some lines (20:37).
+                                        const float pull = std::min(length(off) * 4.f, .8f);
+                                        if (length(off) > .02f)
+                                            kept = kept + normalized(off) * pull;
+                                    }
+                                    walk.forward = std::clamp(dot(kept, ahead), -1.f, 1.f);
+                                    walk.right = std::clamp(dot(kept, side), -1.f, 1.f);
+                                }
+                            }
+                        }
                         // While a use is under way the game's crawl is where the
                         // offer was checked: the stick does not walk him off it.
                         if (offerUse.busy())
@@ -4115,6 +4357,13 @@ DWORD WINAPI run(void*) {
                         askingGame = steering && swingState.owned && !calibrationInput &&
                                      (walk.zip ||
                                       (inFlight && (walk.interact || walk.demand.any() || named != 0)));
+                        // Of those, the game's zip to a point (Command::asks bit 4), and
+                        // its aim mode held on into from one: only it takes the player off
+                        // a web line, which holds him till the game's move begins.
+                        // Its web strike (Y) too, from a line (20:37: "no web strike from the
+                        // line, it bugs").
+                        askingZip = steering && swingState.owned && !calibrationInput &&
+                                    (walk.zip || walk.aim || walk.interact);
                         walk.jump = (keys & swingJumpKey) != 0;
                         // A jump on the game's own crawl - the player's, a web's
                         // takeoff, or the mount's that walks him on from it onto
@@ -4148,35 +4397,39 @@ DWORD WINAPI run(void*) {
                             // grip or trigger is in use (webs, web balls, grabs) nor
                             // with the game's A, Y, zip, aim, pull or a prompt's
                             // buttons, which RT would turn into something else.
-                            game_pad::NativeRunGate gate;
-                            gate.setting = values.nativeRun;
-                            gate.playing = playing;
-                            gate.calibrating = calibrationInput;
-                            gate.padLayer = layerOn;
-                            gate.mounting = mounting;
-                            gate.ventCrawl = motion.ventCrawl;
-                            gate.onSurface = motion.onSurface;
-                            gate.onCrawl = onCrawl;
-                            gate.gameOwnsGround = game_swing::gameOwnsGround(swingFresh, swingState);
-                            gate.grabbing = grabPhases[0] || grabPhases[1];
+                            // MJ, Miles and Peter out of the suit play with the game's own
+                            // controls (spiderMan): no RT for them, nor RUN CURVE.
+                            game_pad::NativeRunGate runGate;
+                            runGate.setting = values.nativeRun;
+                            runGate.playing = playing && spiderMan;
+                            runGate.calibrating = calibrationInput;
+                            runGate.padLayer = layerOn;
+                            runGate.mounting = mounting;
+                            runGate.ventCrawl = motion.ventCrawl;
+                            runGate.onSurface = motion.onSurface;
+                            runGate.onCrawl = onCrawl;
+                            runGate.gameOwnsGround = game_swing::gameOwnsGround(swingFresh, swingState);
+                            runGate.grabbing = grabPhases[0] || grabPhases[1];
                             // STEADY STATES (off by default): no RT in a fight.
                             // COMBAT RESPONSIVE (off by default): none either.
-                            gate.steady = values.steadyStates || values.combatResponsive;
-                            gate.fighting = fightLately || moverTable == config.base + bridge::combatCamera;
+                            runGate.steady = values.steadyStates || values.combatResponsive;
+                            runGate.fighting =
+                                fightLately || moverTable == config.base + bridge::combatCamera;
                             for (unsigned i = 0; i < 2; ++i) {
-                                gate.grips[i] = frame.hands[i].squeeze;
-                                gate.triggers[i] = frame.hands[i].trigger;
+                                runGate.grips[i] = frame.hands[i].squeeze;
+                                runGate.triggers[i] = frame.hands[i].trigger;
                             }
                             // RUN CURVE (off by default): on the game's own ground the
                             // stick reaches the full run sooner (run_update::curveStick);
                             // NATIVE RUN AT moves where its RT holds. Off and 70%: as before.
                             const float stickTilt = std::hypot(walk.right, walk.forward);
-                            if (gate.playing && !gate.calibrating && !gate.padLayer && !gate.mounting &&
-                                !gate.ventCrawl && !gate.onSurface && !gate.onCrawl && gate.gameOwnsGround)
+                            if (runGate.playing && !runGate.calibrating && !runGate.padLayer &&
+                                !runGate.mounting && !runGate.ventCrawl && !runGate.onSurface &&
+                                !runGate.onCrawl && runGate.gameOwnsGround)
                                 run_update::curveStick(walk.right, walk.forward, values.runCurve);
                             const auto runAt = run_update::nativeRunThresholds(values.nativeRunPercent);
                             nativeRun.thresholds(runAt.onAbove, runAt.offBelow);
-                            bool runAllowed = game_pad::nativeRunAllowed(gate, walk);
+                            bool runAllowed = game_pad::nativeRunAllowed(runGate, walk);
                             // STEADY STATES (off by default): RT comes back only once
                             // everything has allowed it for a moment (ground_state::
                             // RiseDelay); it still goes at once.
@@ -4208,8 +4461,8 @@ DWORD WINAPI run(void*) {
                             }
                             // The state changes on and off the ground, in and out of a
                             // fight, to the session's diagnostics only (ground_state::
-                            // StateLog). Changes nothing.
-                            {
+                            // StateLog), with RUN LOGS on. Changes nothing.
+                            if (diag_log::enabled()) {
                                 ground_state::Sample state;
                                 state.fresh = swingFresh && steering && !calibrationInput;
                                 state.grounded = swingState.grounded != 0;
@@ -4218,9 +4471,9 @@ DWORD WINAPI run(void*) {
                                 state.wall = swingState.wall;
                                 state.mount = swingState.mount;
                                 state.takeoff = swingState.takeoffPhase;
-                                state.gameGround = gate.gameOwnsGround;
+                                state.gameGround = runGate.gameOwnsGround;
                                 state.runRt = nativeRun.held();
-                                state.fighting = gate.fighting;
+                                state.fighting = runGate.fighting;
                                 state.dodging = walk.dodge;
                                 state.velocity = swingState.velocity;
                                 if (const char* line = stateLog.update(frame.seconds, state))
@@ -4258,7 +4511,8 @@ DWORD WINAPI run(void*) {
                                 QueryPerformanceCounter(&workEnd);
                                 const float work = static_cast<float>(workEnd.QuadPart - workStart.QuadPart) /
                                                    static_cast<float>(frequency.QuadPart);
-                                if (const char* line = frameStats.update(frame.seconds, work, gate.fighting))
+                                if (const char* line =
+                                        frameStats.update(frame.seconds, work, runGate.fighting))
                                     diag_log::write(line);
                             }
                         }
@@ -4337,7 +4591,7 @@ DWORD WINAPI run(void*) {
                                 if (listed.gadgets[g].place < gadgetPlaces)
                                     places |= static_cast<uint8_t>(1u << listed.gadgets[g].place);
                             const bool offered = wheelShooter && shooterStarted && !listed.gadgetError &&
-                                                 mapping == game_pad::Mapping::gameplay;
+                                                 mapping == game_pad::Mapping::gameplay && spiderMan;
                             const bool x = (buttons.buttons & buttonX) != 0;
                             if (offered)
                                 buttons.buttons &= ~static_cast<uint32_t>(buttonX);
@@ -4548,6 +4802,45 @@ DWORD WINAPI run(void*) {
                                     animated_moves::yieldName(steerState));
                             }
                         }
+                        // A dodge on a web line is the line's dash (game_swing's LineZip::dash):
+                        // the game's own dodge left his feet in the air in its pose after it
+                        // (20:14, 20:37). The game gets no B there; for the dash its stick
+                        // goes all the way along the line, the dash's way, so its legs run.
+                        if (values.webLines && lineState.phase == 2 && lineState.onLine) {
+                            const bool dodgeDown = (frame.buttons & buttonB) != 0;
+                            for (uint32_t k = 0; k < lineState.count && k < std::size(lineState.lines); ++k) {
+                                if (lineState.lines[k].id != lineState.onLine)
+                                    continue;
+                                Vec3 along = lineState.lines[k].end - lineState.lines[k].start;
+                                along.y = 0;
+                                if (length(along) < .1f)
+                                    break;
+                                along = normalized(along);
+                                if (dodgeDown && !lineDashDown) {
+                                    const Vec3 stick = motion.walkForwardAxis * motion.walkForward +
+                                                       motion.walkRightAxis * motion.walkRight;
+                                    Vec3 look = motion.headPose.orientation.rotate({0, 0, -1});
+                                    look.y = 0;
+                                    const Vec3 way = length(stick) > .3f ? stick : look;
+                                    lineDashWay = along * (dot(way, along) >= 0 ? 1.f : -1.f);
+                                    lineDashLeft = .3f;
+                                }
+                                if (lineDashLeft > 0) {
+                                    walk.forward =
+                                        std::clamp(dot(lineDashWay, motion.walkForwardAxis), -1.f, 1.f);
+                                    walk.right =
+                                        std::clamp(dot(lineDashWay, motion.walkRightAxis), -1.f, 1.f);
+                                }
+                            }
+                            walk.dodge = false;
+                            lineDashDown = dodgeDown;
+                        } else {
+                            lineDashDown = false;
+                            lineDashLeft = 0;
+                        }
+                        if (lineDashLeft > 0)
+                            lineDashLeft -=
+                                std::isfinite(frame.seconds) ? std::clamp(frame.seconds, 0.f, .1f) : .1f;
                         auto pad = game_pad::fromControllers(buttons, mapping, walk);
                         // What the controls of the names the game shows send it.
                         if (mapping == game_pad::Mapping::gameplay) {
@@ -4641,9 +4934,9 @@ DWORD WINAPI run(void*) {
                                 if (starts != tumbleStartsSeen) {
                                     tumbleStartsSeen = starts;
                                     if (style != Style::off) {
-                                        const bool asked = tumbleAskWaiting && tumbleAskAge <= .5f;
+                                        const bool tumbleAsked = tumbleAskWaiting && tumbleAskAge <= .5f;
                                         const bool tumbles =
-                                            allowed && asked && dodge_tumble::tumbles(kind) && !ours;
+                                            allowed && tumbleAsked && dodge_tumble::tumbles(kind) && !ours;
                                         if (tumbles)
                                             dodgeTumble.start(
                                                 tumbleWay.pitch && style == Style::roll ? Style::lean : style,
@@ -4653,8 +4946,8 @@ DWORD WINAPI run(void*) {
                                             "dodge tumble: the game's dodge began (kind %u%s), %d ms after "
                                             "the ask%s -> %s",
                                             kind, ours ? ", Spidy's web dodge" : "",
-                                            asked ? static_cast<int>(tumbleAskAge * 1000) : -1,
-                                            asked ? "" : " (none asked)",
+                                            tumbleAsked ? static_cast<int>(tumbleAskAge * 1000) : -1,
+                                            tumbleAsked ? "" : " (none asked)",
                                             tumbles ? (tumbleWay.pitch ? "a flip's lean" : "a roll's tumble")
                                                     : "no tumble");
                                         game_prompts::note(line);
@@ -4917,8 +5210,9 @@ DWORD WINAPI run(void*) {
 
                         d.vrButtons = trackedFrame.buttons;
                         d.vrButtonsPlayed = vrButtonsPlayed;
-                        // The session's diagnostics, as they come (diag_log.hpp).
-                        publishDiag();
+                        // The session's diagnostics, as they come (diag_log.hpp), with RUN LOGS on.
+                        if (diag_log::enabled())
+                            publishDiag();
                         auto& p = SpidyPromptData;
                         InterlockedIncrement64(&p.sequence);
                         p.invokes = prompts.invokes;
@@ -6194,6 +6488,23 @@ DWORD WINAPI run(void*) {
                     saved.webSlots = {webRopes.slot(0), webRopes.slot(1)};
                     saved.strandUpper = webRopes.upper();
                     saved.tiesByGame = native_webs::tiesDrawn();
+                    saved.linesByGame = native_webs::linesDrawn();
+                    saved.lineTarget = lineState.target;
+                    saved.lineTargetId = lineState.targetId;
+                    saved.lineCount = 0;
+                    for (uint32_t i = 0; i < lineState.count && saved.lineCount < saved.lines.size(); ++i)
+                        saved.lines[saved.lineCount++] = {lineState.lines[i].start, lineState.lines[i].end};
+                    // Hung thugs' strands, each with its rope's place in what was handed
+                    // to the game (strandRope; 0xff: none, the overlay draws it).
+                    saved.strandCount = 0;
+                    for (uint32_t h = 0; h < tieState.hangCount && h < std::size(tieState.hangs) &&
+                                         saved.strandCount < saved.strands.size();
+                         ++h) {
+                        saved.strandLine[saved.strandCount] =
+                            h < std::size(strandRope) ? strandRope[h] : uint8_t{0xff};
+                        saved.strands[saved.strandCount++] = {tieState.hangs[h].anchor,
+                                                              tieState.hangs[h].end};
+                    }
                     saved.tieCount =
                         std::min<uint32_t>(tieState.count, static_cast<uint32_t>(saved.ties.size()));
                     for (uint32_t i = 0; i < saved.tieCount; ++i)
@@ -6508,6 +6819,11 @@ DWORD WINAPI run(void*) {
                             line.seed = 3.1f + static_cast<float>(i) * .9f + strand.anchor.x * .23f;
                             appendWeb(vertices, line, viewer, pixelAngle, tieLook);
                         }
+                        // Web lines and the strands of thugs hung from them: only ever
+                        // in the game's own rope (native_webs). The overlay drew a thin white
+                        // strand for one the game had not drawn yet - each new line's first
+                        // frame or two, the first line's longest ("only clean web, never that
+                        // white thread", November 5) - and draws none for them now.
                         // Aim markers: where each free hand's web button would send its
                         // web, on the line that hand points along in this image, that
                         // line steadied from image to image. Translucent, the farthest
@@ -6532,11 +6848,12 @@ DWORD WINAPI run(void*) {
                             // Along the line its webs leave (WEB ANGLE, WRIST
                             // SHOOTERS; web_aim.hpp), as the swing's aim previews.
                             // WEB AIM: MODEL FOREARM: the turn the swing was sent.
-                            const web_aim::Shooters shooters{values.webAngle, values.palmShooters};
+                            const web_aim::Shooters webShooters{values.webAngle, values.palmShooters};
                             const Pose webLine =
-                                webTurnsOn ? web_aim::shooterAim(input.aim, static_cast<int>(hand), shooters,
-                                                                 webTurnsNow[hand])
-                                           : web_aim::shooterAim(input.aim, static_cast<int>(hand), shooters);
+                                webTurnsOn
+                                    ? web_aim::shooterAim(input.aim, static_cast<int>(hand), webShooters,
+                                                          webTurnsNow[hand])
+                                    : web_aim::shooterAim(input.aim, static_cast<int>(hand), webShooters);
                             const Vec3 direction =
                                 steady.aim(normalized(webLine.orientation.rotate({0, 0, -1})),
                                            trackingTurn(rendered.swing));
@@ -6587,6 +6904,18 @@ DWORD WINAPI run(void*) {
                                                 !saved->webs[hand].attached && away >= nearest;
                             steady.markers(wanted ? &marker : nullptr, origin, direction, marks);
                             markersDrawn += wanted;
+                        }
+                        // A web line's zip marker: a turning ring where the right stick up
+                        // would zip to.
+                        if (!saved->flatScreen && saved->lineTargetId && finite(saved->lineTarget)) {
+                            AimMarker marker;
+                            marker.kind = AimMark::target;
+                            marker.point = saved->lineTarget;
+                            marker.radius = .3f;
+                            marker.hand = 1;
+                            marker.spin =
+                                static_cast<float>(std::fmod(static_cast<double>(shown) * 1e-9, 6.283185307));
+                            marks.push_back(marker);
                         }
                         std::sort(marks.begin(), marks.end(), [&](const AimMarker& a, const AimMarker& b) {
                             return length(a.point - viewer) > length(b.point - viewer);
@@ -7020,6 +7349,7 @@ extern "C" __declspec(dllexport) DWORD WINAPI SpidyXrStart(void* input) {
     // Optional: an older ray module has no web grab, nor punching, nor aim previews.
     sampleGrab = reinterpret_cast<BridgeCall>(GetProcAddress(rays, "SpidyGrabSample"));
     sampleTie = reinterpret_cast<BridgeCall>(GetProcAddress(rays, "SpidyTieSample"));
+    sampleLine = reinterpret_cast<BridgeCall>(GetProcAddress(rays, "SpidyLineSample"));
     sampleAim = reinterpret_cast<BridgeCall>(GetProcAddress(rays, "SpidyAimSample"));
     startPunch = reinterpret_cast<BridgeCall>(GetProcAddress(rays, "SpidyPunchStart"));
     samplePunch = reinterpret_cast<BridgeCall>(GetProcAddress(rays, "SpidyPunchSample"));
@@ -7065,6 +7395,8 @@ extern "C" __declspec(dllexport) DWORD WINAPI SpidyXrStart(void* input) {
     native_appearance::setPlayerRecord(0);
     keepAliveDeadline = GetTickCount64() + 10000;
     message(1, 0, "Starting OpenXR");
+    // The startup stages anew; the worker starts the watchdog with RUN LOGS on.
+    startupStages.reset();
     worker = CreateThread(nullptr, 0, run, nullptr, 0, nullptr);
     if (worker) {
         // The watchdog holds its own handle to the worker and ends with it.

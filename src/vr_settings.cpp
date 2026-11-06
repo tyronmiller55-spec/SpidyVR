@@ -364,6 +364,8 @@ template <class V> auto switchOf(Item item, V& v) -> decltype(&v.aimMarkers) {
         return &v.halfPunchDamage;
     case Item::webTie:
         return &v.webTie;
+    case Item::webLines:
+        return &v.webLines;
     case Item::view:
         return &v.flatScreen;
     case Item::realisticFlips:
@@ -491,9 +493,9 @@ Values sanitized(Values v) {
     v.automaticHandThreshold = std::clamp(v.automaticHandThreshold, 50, 300);
     return v;
 }
-const std::array<Row, 105>& rows() {
+const std::array<Row, 108>& rows() {
     // The help fits the game's description column beside the rows.
-    static const std::array<Row, 105> all{{
+    static const std::array<Row, 108> all{{
         {Item::none, "WEBS", nullptr, {}},
         {Item::webStyle, "WEB STYLE",
          "Arcade: webs pass lamp posts, signs and cars, and swings stay above the street.", webStyleChoices},
@@ -643,6 +645,10 @@ const std::array<Row, 105>& rows() {
          "WEB TIE",
          "Web an enemy up, web a wall: hands together, click the right stick. He sticks.",
          {}},
+        {Item::webLines,
+         "WEB LINES",
+         "Webs on two walls, hands together, click right stick: a line. Hold it to zip.",
+         {}},
         {Item::eyeAim, "EYE AIM",
          "Web balls and zips go where your eyes look. Needs a headset with eye tracking.", eyeAimChoices},
         {Item::flipReprojection,
@@ -652,10 +658,6 @@ const std::array<Row, 105>& rows() {
         {Item::steadyHud,
          "STEADY HUD",
          "The HUD shown by the headset itself: it holds still when the game falls behind.",
-         {}},
-        {Item::nativeRun,
-         "NATIVE RUN",
-         "Ground only: stick past 70% holds the game's RT: sprint, vaults, wall runs.",
          {}},
         {Item::airSlingshot,
          "AIR SLINGSHOT",
@@ -675,7 +677,10 @@ const std::array<Row, 105>& rows() {
          {}},
         {Item::nativeRunAt, "NATIVE RUN AT", "The stick's tilt past which NATIVE RUN sprints. 70% as before.",
          nativeRunPercentChoices},
-        {Item::runLogs, "RUN LOGS", "Writes run speeds and landings to the session log, to send back.", {}},
+        {Item::runLogs,
+         "RUN LOGS",
+         "Run, jump and frame logs, in the console and a -diag.log file, to send back.",
+         {}},
         {Item::momentumLeap,
          "RUNNING LEAP",
          "A charged leap keeps your run's speed and adds to it. Off as before.",
@@ -686,10 +691,6 @@ const std::array<Row, 105>& rows() {
          "SOFT LANDING",
          "A fall with no web eases to 9 m/s down just before the ground. Off as before.",
          {}},
-        {Item::spidyRun,
-         "SPIDY RUN",
-         "Land fast and keep running at that speed, steering, until it eases off.",
-         {}},
         {Item::spidyRunFromStanding,
          "RUN FROM STANDING",
          "With SPIDY RUN: hold the stick fully to start it from a stand. Off as before.",
@@ -698,47 +699,81 @@ const std::array<Row, 105>& rows() {
          "MODEL FOREARM: webs follow the body's forearm. CONTROLLER as before.", webAimSourceChoices},
         {Item::forearmBlend, "FOREARM BLEND",
          "How much MODEL FOREARM follows the forearm, from the controller's line.", forearmBlendChoices},
-        {Item::webLandingSmooth, "SMOOTH WEB LANDING",
-         "Holding a web, a landing under WEB LANDING IMPACT is soft and keeps its speed.", {}},
+        {Item::webLandingSmooth,
+         "SMOOTH WEB LANDING",
+         "Holding a web, a landing under WEB LANDING IMPACT is soft and keeps its speed.",
+         {}},
         {Item::webLandingImpact, "WEB LANDING IMPACT",
-         "SMOOTH WEB LANDING: at or over this speed a landing is the game's heavy one.", webLandingImpactChoices},
-        {Item::steadyStates, "STEADY STATES",
-         "NATIVE RUN's RT waits out flickers and stays off in fights. Off as before.", {}},
-        {Item::combatResponsive, "COMBAT RESPONSIVE",
-         "In a fight: no SPIDY RUN or carry, no RT, A jumps at once. Off as before.", {}},
-        {Item::spidyRunJump, "SPIDY RUN JUMP",
-         "A in SPIDY RUN or the landing carry jumps at once, keeping the speed. Off: v5's.", {}},
+         "SMOOTH WEB LANDING: at or over this speed a landing is the game's heavy one.",
+         webLandingImpactChoices},
+        {Item::steadyStates,
+         "STEADY STATES",
+         "NATIVE RUN's RT waits out flickers and stays off in fights. Off as before.",
+         {}},
+        {Item::combatResponsive,
+         "COMBAT RESPONSIVE",
+         "In a fight: no SPIDY RUN or carry, no RT, A jumps at once. Off as before.",
+         {}},
+        {Item::spidyRunJump,
+         "SPIDY RUN JUMP",
+         "A in SPIDY RUN or the landing carry jumps at once, keeping the speed. Off: v5's.",
+         {}},
         {Item::forearmAimLimit, "FOREARM AIM LIMIT",
          "How far MODEL FOREARM and WRIST SHOOTERS turn off the controller's line.", forearmAimLimitChoices},
-        {Item::palmShooters, "PALM SHOOTERS",
-         "The old WRIST SHOOTERS: webs out of the palm side, square to the hand.", {}},
-        {Item::headProbe, "HEAD PROBE",
-         "Diagnostics only: logs Spidey's head against the headset. Changes nothing.", {}},
-        {Item::animatedMoves, "ANIMATED MOVES",
-         "Game anim drives the body for ground parkour, vaults and mantles (NATIVE RUN).", {}},
-        {Item::animatedHead, "ANIMATED HEAD",
-         "While a pose yield is active: view follows the anim head. LEVEL or FULL.",
+        {Item::palmShooters,
+         "PALM SHOOTERS",
+         "The old WRIST SHOOTERS: webs out of the palm side, square to the hand.",
+         {}},
+        {Item::headProbe,
+         "HEAD PROBE",
+         "Diagnostics only: logs Spidey's head against the headset. Changes nothing.",
+         {}},
+        {Item::none, "NATIVE ANIMATION", nullptr, {}},
+        {Item::nativeAnimation,
+         "NATIVE ANIMATION",
+         "On: animations + tracked arms. Off: classic body; run options stay independent.",
+         {}},
+        {Item::animatedHead, "HEAD", "FULL follows the animated head; LEVEL keeps the horizon level.",
          animatedHeadChoices},
-        {Item::animatedAir, "ANIMATED AIR",
-         "Game anim drives the body in freefall/swing/web air; mod keeps physics.", {}},
-        {Item::animatedSteering, "ANIMATED STEERING",
-         "While yielding: L-stick along actor facing. Use MODEL YAW for R-stick.", {}},
-        {Item::animatedArms, "ANIMATED ARMS",
-         "While yielding: soft arms + chest-frame lock. Idle keeps floor.", {}},
-        {Item::animatedTorso, "ANIMATED TORSO",
-         "With ARMS: waist-chest leans to extreme aim. Head/legs stay anim. Provisional.", {}},
-        {Item::animatedModelYaw, "ANIMATED MODEL YAW",
-         "While yielding: R-stick turns Spidey via walk facing (not camera). Provisional.", {}},
-        {Item::animatedOnly, "ANIMATED ONLY",
-         "With MOVES/AIR: anim keeps body on walls/zip/combat too. No SpidyVR reclaim.", {}},
-        {Item::animatedAirSpin, "ANIMATED AIR SPIN",
-         "While yielding midair: flips (+momentum lean) turn the anim body. Provisional.",
-         animatedAirSpinChoices},
-        {Item::animatedHybrid, "ANIMATED HYBRID",
-         "Anims by default, view on his head. SpidyVR on web, mid-air turn or speed.", {}},
-        {Item::animatedHybridSpeed, "ANIMATED HYBRID SPEED",
-         "With HYBRID: how long 15 m/s in the air must last before SpidyVR takes over.",
+        {Item::animatedArms,
+         "ARMS",
+         "Your tracked controllers and headset share the animated head's frame.",
+         {}},
+        {Item::animatedTorso,
+         "TORSO",
+         "Upper-body reach assist; head, root and legs keep their animation.",
+         {}},
+        {Item::animatedModelYaw, "MODEL YAW", "Turn with the right stick while running with the left.", {}},
+        {Item::animatedHybridSpeed, "HYBRID SPEED",
+         "Time at 15 m/s in air before SpidyVR takes over. OFF disables speed takeover.",
          animatedHybridSpeedChoices},
+        {Item::nativeRun,
+         "NATIVE RUN",
+         "Ground only: stick past 70% holds the game's RT: sprint, vaults, wall runs.",
+         {}},
+        {Item::spidyRun,
+         "SPIDY RUN",
+         "Land fast and keep running at that speed, steering, until it eases off.",
+         {}},
+        {Item::animatedMoves,
+         "ANIMATION MOVES (ADVANCED)",
+         "Game-driven body animation; the master also enables Hybrid.",
+         {}},
+        {Item::animatedHybrid,
+         "HYBRID OWNER (ADVANCED)",
+         "Animations by default; SpidyVR on web, mid-air turn, speed or wall run.",
+         {}},
+        {Item::animatedAir, "AIR (ADVANCED)", "Legacy animation in air. Ignored while Hybrid is on.", {}},
+        {Item::animatedOnly,
+         "ONLY (ADVANCED)",
+         "Legacy animation-only ownership. Ignored while Hybrid is on.",
+         {}},
+        {Item::animatedSteering,
+         "STEERING (ADVANCED)",
+         "Legacy actor-relative steering. Ignored while Hybrid is on.",
+         {}},
+        {Item::animatedAirSpin, "AIR SPIN (ADVANCED)", "Legacy animated flips. Ignored while Hybrid is on.",
+         animatedAirSpinChoices},
         {Item::realisticFlips,
          "REALISTIC FLIPS",
          "Momentum rotation from arms and webs. FLIPS also enables left-stick steering.",
@@ -775,6 +810,8 @@ const std::array<Row, 105>& rows() {
     return all;
 }
 int choice(Item item, const Values& v) {
+    if (item == Item::nativeAnimation)
+        return v.animatedMoves && v.animatedHybrid ? 1 : 0;
     if (const bool* on = switchOf(item, v))
         return *on ? 1 : 0;
     const auto s = steps(item);
@@ -788,6 +825,23 @@ int choice(Item item, const Values& v) {
     return best;
 }
 bool choose(Item item, int index, Values& v) {
+    if (item == Item::nativeAnimation) {
+        if (index != 0 && index != 1)
+            return false;
+        const Values before = v;
+        const bool on = index == 1;
+        v.animatedMoves = v.animatedHybrid = on;
+        v.animatedHead = on ? 2 : 0;
+        v.animatedArms = v.animatedTorso = v.animatedModelYaw = on;
+        if (on) {
+            v.nativeRun = v.spidyRun = true;
+        } else {
+            // Legacy animation paths must not keep yielding when the mode is off.
+            v.animatedAir = v.animatedOnly = v.animatedSteering = false;
+            v.animatedAirSpin = 0;
+        }
+        return !(v == before);
+    }
     if (bool* on = switchOf(item, v)) {
         if (index != 0 && index != 1)
             return false;
@@ -1020,6 +1074,7 @@ constexpr TabOnly tabOnly[] = {
     {"animated_air_spin", nullptr, &Values::animatedAirSpin},
     {"animated_hybrid", &Values::animatedHybrid, nullptr},
     {"animated_hybrid_speed_ms", nullptr, &Values::animatedHybridSpeedMs},
+    {"web_lines", &Values::webLines, nullptr},
 };
 } // namespace
 std::string tabOnlyText(const Values& v) {

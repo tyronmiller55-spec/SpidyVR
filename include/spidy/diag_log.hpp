@@ -135,6 +135,13 @@ class Stages {
     void beat(uint64_t now) {
         beat_ = now;
     }
+    // A new session: nothing reached yet (SpidyXrStart; the game may start VR
+    // again in the same process).
+    void reset() {
+        stage_ = none;
+        beat_ = headsetAt_ = lastFrame_ = frames_ = 0;
+        warned_ = 0;
+    }
     // A frame OpenXR accepted; the stage for its count, or none.
     int submitted(uint64_t now) {
         lastFrame_ = now;
@@ -174,9 +181,14 @@ class Stages {
     std::atomic<uint64_t> beat_{}, headsetAt_{}, lastFrame_{}, frames_{};
     uint64_t warned_{}; // the watchdog thread's own
 };
+// Whether lines are kept (RUN LOGS; the VR worker sets it with the settings).
+// Off by default: write() keeps nothing.
+void enable(bool on);
+bool enabled();
 // A line for the diagnostics (and only there: the report's timeline is
-// game_prompts::note's, which calls this too). Stamped with the seconds since
-// the session's first line. Thread-safe. In the stereo module (diag_log.cpp).
+// game_prompts::note's, which calls this too), while enabled. Stamped with the
+// seconds since the session's first line. Thread-safe. In the stereo module
+// (diag_log.cpp).
 void write(const char* text);
 // Formatted, as printf.
 void writef(const char* format, ...);

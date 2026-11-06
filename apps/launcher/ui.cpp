@@ -758,6 +758,9 @@ void App::frame(float scale) {
         switch (tab_) {
         case Tab::play: play(origin, size); break;
         case Tab::options: options(origin, size); break;
+        case Tab::nativeAnimation:
+            nativeAnimation(origin, size);
+            break;
         case Tab::controls: controls(origin, size); break;
         case Tab::about: about(origin, size); break;
         }
@@ -842,8 +845,11 @@ void App::tabs() {
     const float width = ImGui::GetWindowWidth(), y = window.y + S(kHeaderHeight), height = S(kTabsHeight);
     draw->AddLine(ImVec2(window.x, y + height - 1), ImVec2(window.x + width, y + height - 1), col(kLine), 1);
     float x = window.x + S(12);
-    const std::pair<Tab, const char*> items[] = {
-        {Tab::play, "Play"}, {Tab::options, "Options"}, {Tab::controls, "Controls"}, {Tab::about, "About"}};
+    const std::pair<Tab, const char*> items[] = {{Tab::play, "Play"},
+                                                 {Tab::options, "Options"},
+                                                 {Tab::nativeAnimation, "Native Animation"},
+                                                 {Tab::controls, "Controls"},
+                                                 {Tab::about, "About"}};
     const float size = S(19), spacing = 0.06f;
     for (const auto& [tab, label] : items) {
         const std::string text = upper(label);
@@ -1731,6 +1737,119 @@ void App::option(const char* title, const char* help, float controlWidth, const 
     ImGui::Dummy(ImVec2(width, 0));
 }
 
+void App::nativeAnimation(ImVec2 origin, ImVec2 size) {
+    ImGui::SetCursorScreenPos(origin);
+    ImGui::BeginChild("##nativeAnimationScroll", size, ImGuiChildFlags_None, ImGuiWindowFlags_NoBackground);
+    const ImVec2 base = ImGui::GetCursorScreenPos();
+    const float width = ImGui::GetContentRegionAvail().x - ImGui::GetStyle().ScrollbarSize - S(6);
+    const float gap = S(18);
+    float top = base.y;
+    top +=
+        captionBox(
+            ImGui::GetWindowDrawList(), ImVec2(base.x, top + S(4)), width - S(8),
+            "SpidyVR Native Animation: Insomniac's animations with SpidyVR controls and your tracked arms. "
+            "Changes apply when VR starts; during play use Settings > SPIDY VR > Native Animation.",
+            Caption::narrator) +
+        S(4) + gap;
+    ImGui::BeginDisabled(session_.running());
+    using spidy::vr_settings::Item;
+    bool tabChanged = false;
+    const auto tabCombo = [&](const char* id, Item item) {
+        std::vector<std::string> labels;
+        for (const auto& row : spidy::vr_settings::rows())
+            if (row.item == item)
+                for (const char* choice : row.choices)
+                    labels.push_back(launcherCase(choice));
+        std::vector<const char*> texts;
+        for (const auto& label : labels)
+            texts.push_back(label.c_str());
+        int index = spidy::vr_settings::choice(item, tabOnly_);
+        ImGui::PushFont(fonts_.semibold, 14);
+        if (ImGui::Combo(id, &index, texts.data(), static_cast<int>(texts.size())))
+            tabChanged |= spidy::vr_settings::choose(item, index, tabOnly_);
+        ImGui::PopFont();
+    };
+    const auto tabToggle = [&](const char* id, Item item) {
+        bool on = spidy::vr_settings::choice(item, tabOnly_) != 0;
+        if (toggle(id, &on))
+            tabChanged |= spidy::vr_settings::choose(item, on ? 1 : 0, tabOnly_);
+    };
+    const float columnWidth = (width - gap) * 0.5f;
+    float columnY[2] = {top, top};
+    // A card of options in a column: webs, moving and walls on the left; you, the picture, the screens and
+    // troubleshooting on the right.
+    const auto group = [&](int column, const char* title, const std::function<void()>& rows) {
+        ImGui::SetCursorScreenPos(ImVec2(base.x + column * (columnWidth + gap), columnY[column]));
+        if (beginCard(title, ImVec2(columnWidth, 0), ImGuiChildFlags_AutoResizeY)) {
+            ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing, ImVec2(S(10), 0));
+            cardTitle(title);
+            ImGui::Dummy(ImVec2(0, S(8)));
+            rows();
+            ImGui::PopStyleVar();
+        }
+        endCard();
+        columnY[column] = ImGui::GetItemRectMax().y + gap;
+    };
+    group(0, "Native Animation", [&] {
+        option("Native Animation",
+               "On applies the recommended head, hands, torso, turn and run controls. "
+               "Off returns to the classic body without changing your independent run, web or swing choices.",
+               S(42), [&] { tabToggle("##nativeanimation", Item::nativeAnimation); });
+        option(
+            "Head",
+            "Full follows the animated head, including flips. Level keeps the horizon level; Off unlocks it.",
+            S(150), [&] { tabCombo("##nativehead", Item::animatedHead); });
+        option("Arms", "Your controllers track through the same animated-head frame as your headset.", S(42),
+               [&] { tabToggle("##nativearms", Item::animatedArms); });
+        option("Torso", "Bounded upper-body reach assist. The animation keeps the head, root and legs.",
+               S(42), [&] { tabToggle("##nativetorso", Item::animatedTorso); });
+        option("Model yaw",
+               "Run with the left stick and turn with the right without losing running strength.", S(42),
+               [&] { tabToggle("##nativemodelyaw", Item::animatedModelYaw); });
+        option("Hybrid speed",
+               "How long 15 m/s in the air takes to switch to SpidyVR. Off disables speed takeover; "
+               "webs, mid-air turns and wall runs still take over. Default: 200 ms.",
+               S(150), [&] {
+                   int ms = tabOnly_.animatedHybridSpeedMs;
+                   ImGui::PushFont(fonts_.semibold, 14);
+                   if (slider("##nativehybridspeed", &ms, 0, 500, ms <= 0 ? "Off" : "%d ms")) {
+                       ms = ms < 3 ? 0 : std::clamp((ms + 2) / 5 * 5, 5, 500);
+                       if (ms != tabOnly_.animatedHybridSpeedMs) {
+                           tabOnly_.animatedHybridSpeedMs = ms;
+                           tabChanged = true;
+                       }
+                   }
+                   ImGui::PopFont();
+               });
+    });
+    group(1, "Run controls", [&] {
+        option("Native run",
+               "Hold the left stick far enough to use the game's own run and parkour. "
+               "Independent of the Native Animation switch.",
+               S(42), [&] { tabToggle("##nativerun", Item::nativeRun); });
+        option("Spidy run",
+               "Keep SpidyVR's ground run and speed carry where it owns movement. "
+               "Independent of the Native Animation switch.",
+               S(42), [&] { tabToggle("##spidyrun", Item::spidyRun); });
+    });
+    group(1, "Advanced", [&] {
+        option("Air", "Legacy animation in the air. Hybrid ignores this setting.", S(42),
+               [&] { tabToggle("##nativeair", Item::animatedAir); });
+        option("Only", "Legacy animation-only ownership. Hybrid ignores this setting.", S(42),
+               [&] { tabToggle("##nativeonly", Item::animatedOnly); });
+        option("Steering", "Legacy actor-relative steering. Hybrid ignores this setting.", S(42),
+               [&] { tabToggle("##nativesteering", Item::animatedSteering); });
+        option("Air spin", "Legacy animated flips and momentum lean. Hybrid ignores this setting.", S(150),
+               [&] { tabCombo("##nativeairspin", Item::animatedAirSpin); });
+    });
+    ImGui::EndDisabled();
+    ImGui::SetCursorScreenPos(ImVec2(base.x, std::max(columnY[0], columnY[1]) - gap));
+    ImGui::Dummy(ImVec2(width, S(6)));
+    ImGui::EndChild();
+    if (tabChanged && !saveTabOnly(tabOnly_))
+        profileStatus("Could not save Native Animation settings.", true);
+}
+
 void App::options(ImVec2 origin, ImVec2 size) {
     ImGui::SetCursorScreenPos(origin);
     ImGui::BeginChild("##optionsScroll", size, ImGuiChildFlags_None, ImGuiWindowFlags_NoBackground);
@@ -1845,6 +1964,12 @@ void App::options(ImVec2 origin, ImVec2 size) {
                "and click the right stick: he is stuck to the wall. On, a webbed enemy comes to you only "
                "when you yank him.",
                S(42), [&] { tabToggle("##webtie", Item::webTie); });
+        option("Web lines (experimental)",
+               "Put one web on a wall and the other on another, bring your hands together and click the "
+               "right stick: a taut line of web between them. Hold the right stick's click to aim at a line "
+               "and let go to zip onto it; walk, jump and dodge on it. With Web tie on too, enemies hang "
+               "under it.",
+               S(42), [&] { tabToggle("##weblines", Item::webLines); });
     });
     group(0, "Moving", [&] {
         option("Swing speed limit", "How fast a swing can carry you.", S(150), [&] {
@@ -1888,79 +2013,6 @@ void App::options(ImVec2 origin, ImVec2 size) {
                "Read-only: logs Spidey's head bone against your headset (head probe: lines in the diagnostics) "
                "in each state, for the head lock to come. Changes nothing in play. Off by default.",
                S(42), [&] { tabToggle("##headprobe", Item::headProbe); });
-        option("Animated moves (experimental)",
-               "When on with NATIVE RUN: the game's own animation drives Spider-Man's body for ground "
-               "parkour, vaults and mantles. Swing, web, zip and wall-run stay with the mod. Off by "
-               "default (play-feel change; needs a yes to merge upstream).",
-               S(42), [&] { tabToggle("##animatedmoves", Item::animatedMoves); });
-        option("Animated head (experimental)",
-               "While a pose yield is active: the view follows Spider-Man's gameplay head like finishers. "
-               "LEVEL keeps the place level (look freely) only when you pick it; FULL turns with "
-               "the anim head including pitch/roll on ground and in air. Off by default.",
-               S(150), [&] { tabCombo("##animatedhead", Item::animatedHead); });
-        option("Animated air (experimental)",
-               "When on: the game's animation drives Spider-Man's body in freefall, swing and web-hold air. "
-               "The mod keeps swing physics (direction and velocity). Zip, wall-run and combat stay with "
-               "the VR body. Freefall web aim reclaims the body immediately. Off by default.",
-               S(42), [&] { tabToggle("##animatedair", Item::animatedAir); });
-        option("Animated steering (experimental)",
-               "While Animated moves/air yields: left-stick magnitude runs Spidey along his current facing "
-               "(actor transform), not camera-relative. Right-stick whole-model yaw is not available yet "
-               "(no proven actor facing write). Off by default. Outside yield, sticks are unchanged.",
-               S(42), [&] { tabToggle("##animatedsteering", Item::animatedSteering); });
-        option("Animated arms (experimental)",
-               "While Animated moves/air yields: moving a controller (or web/aim intent) overlays that arm "
-               "on the game animation; idle returns it. Torso/legs/head stay animated. Tracking loss yields "
-               "to the game arm. Thresholds provisional. Off by default.",
-               S(42), [&] { tabToggle("##animatedarms", Item::animatedArms); });
-        option("Animated torso (experimental)",
-               "With Animated arms: waist→chest bends toward extreme controller aims so midair pointing can "
-               "contort the upper body. Animated root/legs and head world pose stay on the game anim "
-               "(head orientation is compensated after spine turns). Off by default; limits provisional.",
-               S(42), [&] { tabToggle("##animatedtorso", Item::animatedTorso); });
-        option("Animated model yaw (experimental)",
-               "While Animated moves/air yields: right-stick X turns Spidey through the game's own walk-facing "
-               "(same family as the Y interact turn), not by writing actor facing and not by CameraLook view "
-               "yaw. HMD free look stays on the headset. Left-stick magnitude can still run along actor facing "
-               "when Animated steering is also on. Off by default; midair turn rate provisional.",
-               S(42), [&] { tabToggle("##animatedmodelyaw", Item::animatedModelYaw); });
-        option("Animated only (experimental)",
-               "With Animated moves and/or Animated air on: the game's animation keeps Spidey's body in every "
-               "gameplay state (walls, zips, wall runs, combat too), so the SpidyVR body never takes it back "
-               "mid-play and your view, head, torso and hands stop jumping when the state changes. Only a "
-               "cutscene or menu longer than 1.5 s ends it. Physics stay with the mod. Off by default.",
-               S(42), [&] { tabToggle("##animatedonly", Item::animatedOnly); });
-        option("Animated air spin (experimental)",
-               "While Animated moves/air yields in the air: FLIPS turns the animated Spidey with the realistic "
-               "flips' pitch, roll and yaw (hands, sticks, swing release momentum), the way SpidyVR mode turns "
-               "its own body. FLIPS + MOMENTUM also leans him along his travel (dives, climbs) and banks him "
-               "into turns. Visual and view only; the physics stay the mod's. Off by default; provisional.",
-               S(150), [&] { tabCombo("##animatedairspin", Item::animatedAirSpin); });
-        option("Animated hybrid (experimental)",
-               "With Animated moves: the game's animations play by default (running, fighting, parkour, hops, "
-               "jumps, the game's zips and crawls) and your view stays on Spidey's head, the way finishers "
-               "show it. OG SpidyVR takes over only when you web, turn in mid-air (right stick held or a fast "
-               "body turn) or pick up real speed in the air, and landing hands back with a blend. The left stick "
-               "steers toward your view. Animated Air, Only, Air Spin and Steering are ignored while Hybrid is "
-               "on. Off by default.",
-               S(42), [&] { tabToggle("##animatedhybrid", Item::animatedHybrid); });
-        option("Hybrid speed takeover",
-               "With Animated hybrid: how long you must keep 15 m/s or more in the air before OG SpidyVR takes "
-               "over, from 5 ms (snaps at once) to 500 ms (ignores short bursts). Off: speed never takes over; "
-               "webs, mid-air turns and wall runs still do. 200 ms by default.",
-               S(150), [&] {
-                   int ms = tabOnly_.animatedHybridSpeedMs;
-                   ImGui::PushFont(fonts_.semibold, 14);
-                   if (slider("##animatedhybridspeed", &ms, 0, 500, ms <= 0 ? "Off" : "%d ms")) {
-                       // 5 ms steps; the far left is Off.
-                       ms = ms < 3 ? 0 : std::clamp((ms + 2) / 5 * 5, 5, 500);
-                       if (ms != tabOnly_.animatedHybridSpeedMs) {
-                           tabOnly_.animatedHybridSpeedMs = ms;
-                           tabChanged = true;
-                       }
-                   }
-                   ImGui::PopFont();
-               });
         option("Web aim (experimental)",
                "MODEL FOREARM: your webs leave along the forearm of the Spider-Man body you see, rather than "
                "along the controller, and go back to the controller's line whenever the body cannot say "
@@ -1971,11 +2023,11 @@ void App::options(ImVec2 origin, ImVec2 size) {
                "With web aim MODEL FOREARM: how much of the forearm's line the webs take, from 0% (the "
                "controller's) to 100% (the forearm's). 100% by default.",
                S(150), [&] { tabCombo("##forearmblend", Item::forearmBlend); });
-        option("Forearm aim limit",
-               "How far web aim MODEL FOREARM and wrist shooters may turn your webs off the controller's line "
-               "onto the forearm. NO LIMIT by default (v5 had 35 degrees, which kept the webs near the "
-               "controller).",
-               S(150), [&] { tabCombo("##forearmaimlimit", Item::forearmAimLimit); });
+        option(
+            "Forearm aim limit",
+            "How far web aim MODEL FOREARM and wrist shooters may turn your webs off the controller's line "
+            "onto the forearm. NO LIMIT by default; 35 degrees keeps the webs near the controller.",
+            S(150), [&] { tabCombo("##forearmaimlimit", Item::forearmAimLimit); });
         option(
             "Dodge tumble (experimental)",
             "When the game takes your dodge, the view leans (LEAN, 24 degrees, under half a second) or rolls "
@@ -2011,11 +2063,7 @@ void App::options(ImVec2 origin, ImVec2 size) {
                S(42), [&] { tabToggle("##joystickruncamera", Item::joystickRunCamera); });
         option("Wall Run Camera Tilt", "Gently bank with the body on horizontal momentum wall runs.", S(42),
                [&] { tabToggle("##wallruncameratilt", Item::wallRunCameraTilt); });
-        option(
-            "Native run (experimental)",
-            "On the ground, the left stick past 70% holds the game's RT: its sprint, vaults and wall runs. "
-            "Under 50% it jogs again. Never in the air, on webs or on walls. Off: the stick jogs, as before.",
-            S(42), [&] { tabToggle("##nativerun", Item::nativeRun); });
+
         option("Run curve (experimental)",
                "On the ground the left stick reaches the game's full run at 80% of its tilt, with more of "
                "its speed early. Off: the stick as it is, as before.",
@@ -2025,8 +2073,9 @@ void App::options(ImVec2 origin, ImVec2 size) {
                "go 20 points under it. 70%, as before.",
                S(150), [&] { tabCombo("##nativerunatpercent", Item::nativeRunAt); });
         option("Run logs",
-               "Writes how fast you run, land and leap to the session's log, for sending back. Changes "
-               "nothing in play.",
+               "Writes how you run, land, leap and jump, the frame rate and how far VR got to the "
+               "console (diag lines) and a -diag.log file beside the session report, for sending back. "
+               "Off, none of it is written. Changes nothing in play.",
                S(42), [&] { tabToggle("##runlogs", Item::runLogs); });
         option("Running leap (experimental)",
                "A charged leap (hold A on the ground) keeps the speed you run at along its way and adds its "
@@ -2043,12 +2092,7 @@ void App::options(ImVec2 origin, ImVec2 size) {
                "ground, so the game lands you lightly; your speed across is kept. Off: you land as fast as "
                "you fall, as before.",
                S(42), [&] { tabToggle("##softlanding", Item::softLanding); });
-        option("Spidy run (experimental)",
-               "Land faster than the game's sprint (a swing let go of near the street) and the mod runs you "
-               "on at that speed, as its wall run does on walls: the stick steers without losing speed, "
-               "which eases to a sprint in a few seconds, and the game's run (NATIVE RUN) takes over. A wall "
-               "ahead is the usual wall run. Off: the game takes every landing, as before.",
-               S(42), [&] { tabToggle("##spidyrun", Item::spidyRun); });
+
         option("Spidy run from standing (experimental)",
                "With Spidy run on: hold the stick all the way for a moment on the ground and the mod's run "
                "starts from a stand or a walk, building past the game's sprint while you hold it; ease off "
@@ -2077,8 +2121,8 @@ void App::options(ImVec2 origin, ImVec2 size) {
                S(42), [&] { tabToggle("##combatresponsive", Item::combatResponsive); });
         option("Spidy run jump",
                "A during Spidy run or the web-landing carry is a jump at once that keeps your speed, made by "
-               "the mod rather than waiting for the game to take the body back. On by default; off: v5's "
-               "jump (up to 0.2 s later).",
+               "the mod rather than waiting for the game to take the body back. On by default; off: the "
+               "game's own jump once it has you back (up to 0.2 s later).",
                S(42), [&] { tabToggle("##spidyrunjump", Item::spidyRunJump); });
     });
     group(0, "Flips", [&] {
@@ -2969,6 +3013,16 @@ void App::about(ImVec2 origin, ImVec2 size) {
         ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing, ImVec2(S(10), S(10)));
         ImGui::PushStyleColor(ImGuiCol_Text, vec(kLogText));
         ImGui::PushTextWrapPos(0);
+        ImGui::TextUnformatted(
+            "This build includes SpidyVR Native Animation: a community layer on Ilya "
+            "Mezerowsky's SpidyVR. Insomniac's animation keeps playing while SpidyVR controls "
+            "and your tracked arms sit on top. Inspired by vrfloofy's first-person mod.");
+        ImGui::TextUnformatted(
+            "Modified community build, GPL-3.0. Not an official Marvel or Insomniac product. "
+            "For Native Animation support, use the tyronmiller55-spec/SpidyVR fork, "
+            "not upstream Spidy's bug tracker.");
+        ImGui::TextUnformatted("The existing updater installs official Spidy, replacing this community layer. "
+                               "Use Native Animation packages from the fork to keep this mode.");
         ImGui::TextUnformatted("Spidy puts you inside Marvel's Spider-Man Remastered: your head is the camera, each hand "
                                "shoots its own web, and you swing, zip and throw with your own arms.");
         ImGui::TextUnformatted("Spidy changes nothing in the game's folder. It attaches to the game while it runs and "

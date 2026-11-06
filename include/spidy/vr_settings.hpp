@@ -89,6 +89,10 @@ struct Values {
     // and a webbed enemy who comes to the player only on the yank
     // (GrabConfig::yankOnlyCharacters). Off by default: both as before.
     bool webTie = false;
+    // Web lines (the tab's WEB LINES; web_line.hpp, docs/WEB-LINE.md): a taut
+    // web between two surfaces by the hands together and the right stick's
+    // click, zipped to, walked on, thugs tied under it. Off by default.
+    bool webLines = false;
     // The wall-floor camera transition during HAND WALL CLIMBING's joystick
     // runs (the tab's JOYSTICK WALL RUN CAMERA), as before pull request #38;
     // off, the left stick drives the momentum wall run's view and gait.
@@ -209,7 +213,7 @@ struct Values {
     // the left stick past 70% holds the game's RT, its parkour run - sprint,
     // vaults, wall runs - until it falls under 50%. Off by default: the stick
     // jogs as before. Never in the air, on a web or on a wall.
-    bool nativeRun = false;
+    bool nativeRun = true;
     // AIR SLINGSHOT (the tab's AIR SLINGSHOT; Swing::allowAirSlingshot): the
     // slingshot's draw in the air too - both webs under tension, both grips
     // held and both arms drawn until the hands buzz, then let go: a launch
@@ -270,7 +274,7 @@ struct Values {
     // ground run, the wall run's momentum on the ground - its speed kept, the
     // stick steering it - easing to the sprint and handed back to the game.
     // Off by default: the game takes every landing, as before.
-    bool spidyRun = false;
+    bool spidyRun = true;
     // SPIDY RUN FROM STANDING (the tab's RUN FROM STANDING; Swing::
     // allowGroundRunFromStanding, run_update::standRunStep): with SPIDY RUN
     // on, the stick held fully on the ground for 0.3 s starts the mod's run
@@ -319,33 +323,34 @@ struct Values {
     // against the headset, per state, in the session's diagnostics
     // (head_probe.hpp). Changes nothing in play. Off by default.
     bool headProbe = false;
-    // ANIMATED MOVES (the tab's ANIMATED MOVES; v7): when on, the game's
+    // Native Animation community defaults (saved values always take precedence).
+    // ANIMATED MOVES: when on, the game's
     // animation drives the body for ground parkour / vaults / mantles
-    // (NATIVE RUN). Swing / web / zip / wall-run stay with the mod. Off by
-    // default (animated_moves.hpp).
-    bool animatedMoves = false;
-    // ANIMATED HEAD (the tab's ANIMATED HEAD; Off|Level|Full, default Off):
+    // (NATIVE RUN). Swing / web / zip / wall-run stay with the mod. On in this package
+    // (animated_moves.hpp).
+    bool animatedMoves = true;
+    // ANIMATED HEAD (the tab's ANIMATED HEAD; Off|Level|Full, default Full):
     // while a pose yield is active, attach the view to the hero's gameplay head
     // like finishers (anchored 4 Level / 2 Full). Full keeps anim pitch/roll
     // in air too; Level only when chosen (animated_moves.hpp).
-    int animatedHead = 0;
+    int animatedHead = 2;
     // ANIMATED AIR (the tab's ANIMATED AIR; off by default): pose yield for
     // freefall / swing / web-hold air. Physics stays with the mod; no cutscene
     // worker. Off leaves air body with the VR IK (animated_moves.hpp).
     bool animatedAir = false;
     // ANIMATED STEERING (tab; off by default): while a pose yield is active,
     // left-stick magnitude runs the hero along his actor facing (read-only
-    // transform). Right-stick model yaw is not implemented (no facing write).
+    // transform). MODEL YAW uses the separate existing walk-facing path.
     bool animatedSteering = false;
     // ANIMATED ARMS: controller arm overlay while yielding (animated_arms.hpp).
-    bool animatedArms = false;
+    bool animatedArms = true;
     // ANIMATED TORSO: with ANIMATED ARMS, bound waist→chest toward controller
-    // reaches (animated_torso.hpp). Off by default; provisional limits.
-    bool animatedTorso = false;
+    // reaches (animated_torso.hpp). On by default; bounded limits.
+    bool animatedTorso = true;
     // ANIMATED MODEL YAW: while yielding, right-stick X turns the hero through
     // the game's left-stick walk-facing path (animated_model_yaw.hpp). Not a
-    // facing RVA write; not CameraLook. Off by default; provisional.
-    bool animatedModelYaw = false;
+    // facing RVA write; not CameraLook. On by default.
+    bool animatedModelYaw = true;
     // ANIMATED ONLY: with MOVES/AIR, every gameplay state keeps the pose yield
     // (wall / zip / combat too) — the SpidyVR body never reclaims mid-play, so
     // no adoptFeet / head-follow re-anchor jumps (animated_moves.hpp). Off by
@@ -356,11 +361,11 @@ struct Values {
     // the animated skeleton about its head (animated_air_spin.hpp). Visual/view
     // only; physics untouched.
     int animatedAirSpin = 0;
-    // ANIMATED HYBRID (off by default): game anims own the body by default
+    // ANIMATED HYBRID (on by default): game anims own the body by default
     // (MOVES), head locked to the hero; OG SpidyVR only on player intent (web,
     // mid-air turn, airborne speed, Spidy wall run). Forces AIR / ONLY / AIR SPIN
-    // / midair softlock inactive (hybrid_owner.hpp). Experimental.
-    bool animatedHybrid = false;
+    // / midair softlock inactive (hybrid_owner.hpp).
+    bool animatedHybrid = true;
     // ANIMATED HYBRID SPEED (with HYBRID; unused without it): how long airborne
     // measured horizontal speed must stay at or above the takeover speed
     // (hybrid_owner::vrSpeed) before OG SpidyVR takes over, ms; 0 = off (speed
@@ -516,8 +521,10 @@ enum class Item : uint8_t {
     animatedAirSpin,
     animatedHybrid,
     animatedHybridSpeed,
+    nativeAnimation,
+    webLines,
 };
-inline constexpr Item lastItem = Item::animatedHybridSpeed;
+inline constexpr Item lastItem = Item::webLines;
 // Where a row shows: in the tab; on the pause menu's first page instead,
 // under RESUME: VR VIEW (the user, October 15: "move the VIEW: GAME SCREEN to
 // the first menu (the one with resume)"); or only in the launcher's options:
@@ -540,7 +547,7 @@ struct Row {
     std::span<const char* const> choices{};
     Place place{};
 };
-const std::array<Row, 105>& rows();
+const std::array<Row, 108>& rows();
 // The most choices a row shows (game_menu's buffers): a row with more would
 // lose its last ones.
 inline constexpr size_t maxChoices = 9;

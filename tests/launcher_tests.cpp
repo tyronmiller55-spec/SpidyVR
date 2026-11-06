@@ -578,8 +578,8 @@ int main() {
             const bool leftOut = row.item == Item::view || row.item == Item::calibrate ||
                                  row.item == Item::height || row.item == Item::recordingFov ||
                                  row.item == Item::eyeAim || row.item == Item::recordingSmoothing ||
-                                 row.item == Item::flipReprojection ||
-                                 row.item == Item::steadyHud;
+                                 row.item == Item::flipReprojection || row.item == Item::steadyHud ||
+                                 row.item == Item::nativeAnimation;
             check(std::count_if(begin, end, [&](const ProfileSetting& s) { return s.item == row.item; }) ==
                       (leftOut ? 0 : 1),
                   row.title);
@@ -693,12 +693,13 @@ int main() {
         t.joystickRunCamera = false;
         t.halfPunchDamage = true;
         t.webTie = true;
+        t.webLines = true;
         t.singleHandYankPercent = 200;
         t.uiStyle = 1;
         t.combatVisuals = false;
         t.blowSounds = 1;
         t.pcMedia = true;
-        t.nativeRun = true;
+        t.nativeRun = false;
         t.airSlingshot = true;
         t.webAngle = 30;
         t.wristShooters = true;
@@ -709,7 +710,7 @@ int main() {
         t.momentumLeap = true;
         t.earlyJump = 2;
         t.softLanding = true;
-        t.spidyRun = true;
+        t.spidyRun = false;
         t.spidyRunFromStanding = true;
         t.webLandingSmooth = true;
         t.webLandingImpact = 16;
@@ -719,16 +720,16 @@ int main() {
         t.forearmAimLimit = 90;
         t.palmShooters = true;
         t.headProbe = true;
-        t.animatedMoves = true;
-        t.animatedHead = 2;
+        t.animatedMoves = false;
+        t.animatedHead = 1;
         t.animatedAir = true;
         t.animatedSteering = true;
-        t.animatedArms = true;
-        t.animatedTorso = true;
-        t.animatedModelYaw = true;
+        t.animatedArms = false;
+        t.animatedTorso = false;
+        t.animatedModelYaw = false;
         t.animatedOnly = true;
         t.animatedAirSpin = 2;
-        t.animatedHybrid = true;
+        t.animatedHybrid = false;
         t.animatedHybridSpeedMs = 50;
         t.webAimSource = 1;
         t.forearmBlend = 50;
@@ -754,6 +755,23 @@ int main() {
         t.automaticFalloff = 1000;
         t.automaticHandThreshold = 200;
     }
+    test("Native Animation profiles keep stored off values and missing-key defaults", [&] {
+        PlaySettings fresh;
+        const auto old = readProfile("animated_moves=0\nanimated_hybrid=0\nanimated_head=0\n"
+                                     "animated_arms=0\nanimated_torso=0\nanimated_model_yaw=0\n"
+                                     "native_run=0\nspidy_run=0\n");
+        check(old.has_value(), "old profile refused");
+        applyProfile(*old, fresh);
+        check(!fresh.tab.animatedMoves && !fresh.tab.animatedHybrid && fresh.tab.animatedHead == 0 &&
+                  !fresh.tab.animatedArms && !fresh.tab.animatedTorso && !fresh.tab.animatedModelYaw &&
+                  !fresh.tab.nativeRun && !fresh.tab.spidyRun,
+              "explicit saved off overwritten");
+        PlaySettings partial;
+        applyProfile(*readProfile("animated_torso=0\n"), partial);
+        check(!partial.tab.animatedTorso && partial.tab.animatedMoves && partial.tab.animatedHybrid &&
+                  partial.tab.animatedHead == 2 && partial.tab.nativeRun && partial.tab.spidyRun,
+              "missing profile keys lost recommended defaults");
+    });
     test("a profile's text: what it is, its name, its Spidy, then each setting in the tab's order", [&] {
         check(profileText(profileOf(PlaySettings{}, "Spidy's own"), "0.4.1") ==
                   "# Spidy settings profile. To use it, in the Spidy launcher: Profile > Paste a profile, "
@@ -766,9 +784,10 @@ int main() {
                   "body_haptics=100\nbody_haptics_webs=1\nbody_haptics_wind=1\n"
                   "body_haptics_combat=1\nbody_haptics_movement=1\nscreen_size=1\nscreen_depth=2\nhud=2\n"
                   "ui_style=0\ncombat_visuals=1\nnear_clip_mm=20\nseated=0\nflips=0\ncontrolled_flips=0\nflip_speed=180\nhand_climb=0\n"
-                  "joystick_wall_run_camera=1\nwall_run_camera_tilt=1\nhalf_punch_damage=0\nweb_tie=0\nnative_run=0\n"
+                  "joystick_wall_run_camera=1\nwall_run_camera_tilt=1\nhalf_punch_damage=0\nweb_tie=0\nnative_run=1\n"
                   "air_slingshot=0\nweb_angle_degrees=0\nwrist_shooters=0\ndodge_tumble=0\n"
-                  "run_curve=0\nnative_run_at_percent=70\nrun_logs=0\nrunning_leap=0\nearly_jump=0\nsoft_landing=0\nspidy_run=0\nspidy_run_from_standing=0\nweb_aim_source=0\nforearm_blend=100\nweb_landing_smooth=0\nweb_landing_impact_speed=24\nsteady_states=0\ncombat_responsive=0\nspidy_run_jump=1\nforearm_aim_limit=180\npalm_shooters=0\nhead_probe=0\nanimated_moves=0\nanimated_head=0\nanimated_air=0\nanimated_steering=0\nanimated_arms=0\nanimated_torso=0\nanimated_model_yaw=0\nanimated_only=0\nanimated_air_spin=0\nanimated_hybrid=0\nanimated_hybrid_speed_ms=200\n"
+                  "run_curve=0\nnative_run_at_percent=70\nrun_logs=0\nrunning_leap=0\nearly_jump=0\nsoft_landing=0\nspidy_run=1\nspidy_run_from_standing=0\nweb_aim_source=0\nforearm_blend=100\nweb_landing_smooth=0\nweb_landing_impact_speed=24\nsteady_states=0\ncombat_responsive=0\nspidy_run_jump=1\nforearm_aim_limit=180\npalm_shooters=0\nhead_probe=0\nanimated_moves=1\nanimated_head=2\nanimated_air=0\nanimated_steering=0\nanimated_arms=1\nanimated_torso=1\nanimated_model_yaw=1\nanimated_only=0\nanimated_air_spin=0\nanimated_hybrid=1\nanimated_hybrid_speed_ms=200\n"
+                  "web_lines=0\n"
                   "wall_distance_cm=25\n"
                   "realistic_flips=0\nrotation_strength=50\nrotation_speed=240\nflight_speed_min=3\n"
                   "swing_momentum=1\nrotation_response_ms=500\nhand_momentum=100\nangular_drag_ms=3000\n"

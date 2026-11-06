@@ -51,6 +51,26 @@ class Reader:
 
 
 class ProtocolTests(unittest.TestCase):
+    def test_native_animation_settings_keep_official_web_lines_prefix(self):
+        # No Python tool sends the new pose fields; old probe writers use <=v4.
+        # Guard the C++ producer/consumer contract alongside the binary-layout C++ tests.
+        root = pathlib.Path(__file__).resolve().parents[1]
+        header = (root / 'include/spidy/game_swing.hpp').read_text(encoding='utf-8')
+        settings = header.split('struct Settings {', 1)[1].split('\n};', 1)[0]
+        self.assertRegex(settings, r'version = 39, bytes = sizeof\(Settings\)')
+        self.assertIn('sizeof(Settings) == 180', header)
+        self.assertLess(settings.index('uint32_t webLines'), settings.index('uint32_t headProbe'))
+        fields = ['headProbe', 'animatedMoves', 'animatedHead', 'animatedAir',
+                  'animatedSteering', 'animatedArms', 'animatedTorso', 'animatedModelYaw']
+        for earlier, later in zip(fields, fields[1:]):
+            self.assertLess(settings.index('uint32_t ' + earlier), settings.index('uint32_t ' + later))
+        producer = (root / 'src/game_xr.cpp').read_text(encoding='utf-8')
+        self.assertIn('s.webLines = values.webLines;', producer)
+        for field in fields:
+            self.assertRegex(producer, r's\.' + field + r' = (?:static_cast<uint32_t>\()?values\.' + field)
+        self.assertIn('(s.version == 31 && s.bytes == settingsBytesV31)', header)
+        self.assertIn('(s.version == 39 && s.bytes == sizeof(Settings))', header)
+
     def test_wall_roll_flag_uses_version_5_and_does_not_change_legacy_commands(self):
         old = swing_command(1, (0, 0, 0))
         self.assertEqual(len(old), 168)
@@ -362,7 +382,7 @@ class ProtocolTests(unittest.TestCase):
         struct.pack_into('<2Q2I', raw, 104, 300, 3, 0, 0)
         struct.pack_into('<2Q2I', raw, 128, 3, 0x40000, 256, 1)
         # STEADY HUD: copies with the pairs, into the layer, frames that showed it; the last pair's state unknown.
-        struct.pack_into('<3QI', raw, 152, 700, 690, 1400, 2)
+        struct.pack_into('<3Q2I', raw, 152, 700, 690, 1400, 2, 5)
         shot = hud_capture_snapshot(Reader(raw, struct.pack('<Q', 6)), 0)
         self.assertEqual((shot['path'], shot['found'], shot['width'], shot['format']), ('wrapped', True, 64, 87))
         self.assertEqual((shot['barriers'], shot['executed'], shot['odd'], shot['mismatched']), (900, 880, 1, 2))
@@ -370,6 +390,14 @@ class ProtocolTests(unittest.TestCase):
         self.assertEqual((shot['snapshots'], shot['row_pitch'], shot['swap']), (3, 256, True))
         self.assertEqual((shot['staged'], shot['layer_copies'], shot['layer_frames'], shot['stage_skip']),
                          (700, 690, 1400, 'unknown_state'))
+        self.assertEqual(shot['registered'], 5)
+        # The game stopped drawing into the followed texture: the copy says so.
+        struct.pack_into('<I', raw, 176, 7)
+        self.assertEqual(hud_capture_snapshot(Reader(raw, struct.pack('<Q', 6)), 0)['stage_skip'], 'stale')
+        # The followed texture is empty: the copy says so.
+        struct.pack_into('<I', raw, 176, 8)
+        self.assertEqual(hud_capture_snapshot(Reader(raw, struct.pack('<Q', 6)), 0)['stage_skip'], 'blank')
+        struct.pack_into('<I', raw, 176, 2)
         # Torn the whole time: nothing; too short: nothing.
         self.assertIsNone(hud_capture_snapshot(Reader(*([raw, struct.pack('<Q', 8)] * 8)), 0))
         self.assertIsNone(hud_capture_snapshot(Reader(raw[:40]), 0))
@@ -1055,11 +1083,13 @@ class ProtocolTests(unittest.TestCase):
 
     def test_ray_geometry_serial_and_body_generation_boundaries(self):
         raw = bytearray(784)
-        struct.pack_into('<4IQ5Q4I', raw, 0, 0x53525944, 2, 784, 2, 4, 9, 10, 100, 8, 0xabc, 1, 0, 7, 0)
+        struct.pack_into('<4IQ5Q4I', raw, 0, 0x53525944, 2, 784, 2, 4, 9, 10, 100, 8, 0xabc, 1, 0, 7, 5)
         struct.pack_into('<7fI7f7I', raw, 80, 10, 20, 30, 100, 0, -1, 0, 90,
                          10, 14, 30, .06, 0, 1, 0, 3, 0x30008f3, 1087, 1, 1, 0, 0xa0000104)
         result = ray_snapshot(Reader(raw, struct.pack('<Q', 4)), 0)
         self.assertEqual((result['serial'], result['count'], result['thread']), (9, 1, 7))
+        # Rays a visitor asked for that the world did not take as asked (cut or missed).
+        self.assertEqual(result['malformed'], 5)
         hit = result['hits'][0]
         self.assertEqual((hit['position'], hit['tag'], hit['body_id']), ((10, 14, 30), 90, 0x30008f3))
         self.assertTrue(hit['body_matches'])

@@ -397,8 +397,19 @@ void change(Item item, int index) {
         return;
     AcquireSRWLockExclusive(&lock);
     const bool changed = vr_settings::choose(item, index, shown);
-    if (changed)
-        pending.set(static_cast<size_t>(item));
+    if (changed) {
+        if (item == vr_settings::Item::nativeAnimation) {
+            // Publish the resulting concrete settings, not a late master replay that
+            // could overwrite a subsequent ARMS/TORSO edit in the same pending batch.
+            for (const auto companion :
+                 {Item::animatedMoves, Item::animatedHybrid, Item::animatedHead, Item::animatedArms,
+                  Item::animatedTorso, Item::animatedModelYaw, Item::animatedAir, Item::animatedOnly,
+                  Item::animatedSteering, Item::animatedAirSpin, Item::nativeRun, Item::spidyRun})
+                pending.set(static_cast<size_t>(companion));
+        } else {
+            pending.set(static_cast<size_t>(item));
+        }
+    }
     ReleaseSRWLockExclusive(&lock);
     if (changed)
         ++changesMade;

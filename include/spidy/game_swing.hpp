@@ -134,16 +134,22 @@ struct Command {
     // (a zip to a point), its Y (a web strike; a car's in a chase), a
     // prompt's button - and the swing lets it have the hero once it takes
     // him (AirYield). Zero until October 18, when it was `reserved`.
-    // Bit 1: the right thumbstick's click alone, in VR play with WEB TIE on,
-    // when the game does not name its R3 (game_pad::NamedPress) and the pad
-    // layer is off: the web tie's click (web_tie.hpp). No change of layout
-    // or version: an older swing module refuses such a command (asks > 1),
-    // and both come in one package.
+    // Bit 1: the right thumbstick's click alone, in VR play with WEB TIE or
+    // WEB LINES on, when the game does not name its R3 (game_pad::NamedPress)
+    // and the pad layer is off: the web tie's and a web line's click, and
+    // held, the aim of the zip to a web line (web_line.hpp). No change of
+    // layout or version: an older swing module refuses such a command (asks >
+    // 1), and both come in one package.
     // Bit 2 (COMBAT RESPONSIVE): the player fights now (Input::fighting). Bit 1
     // was this before WEB TIE took it upstream (0.8.0); an older swing module
     // refuses such a command (asks > 3), and both come in one package.
     // Bit 3 (SPIDY RUN JUMP): A out of the swing's run is its own jump
     // (Input::runJump); bit 2 before the port to 0.8.0.
+    // Bit 4 (WEB LINES): of bit 0's moves, the game's zip to a point: the one
+    // that takes the player off a web line. Bit 5 (WEB LINES): the dodge's
+    // button (B) held: on a web line, a dash along it. Bits 2 and 3 in pull
+    // request #79, after #77's since; an older swing module refuses either
+    // (asks > 15).
     uint32_t asks{};
     uint64_t sampleTimeNs = 1;
     // Version 3: a flip's tilt of the tracking space (Input::tilt). Version 2
@@ -262,6 +268,8 @@ inline bool gameOwnsGround(bool fresh, const Data& d) {
 // style as it is.
 // Version 23 appends webTie (off by default): the web tie's gesture, and a
 // webbed enemy who comes only on the yank (WEB TIE; web_tie.hpp).
+// Version 31 appends webLines (off by default): web lines (WEB LINES;
+// web_line.hpp). Version 24 in pull request #79, after #77's since.
 // Version 30 appends webLandingSmooth (off by default) and webLandingImpact
 // (m/s, 24 by default): a landing with a web held below that speed is a
 // smooth one (Swing::allowWebLandingSmooth, SMOOTH WEB LANDING).
@@ -304,7 +312,7 @@ inline bool gameOwnsGround(bool fresh, const Data& d) {
 // Version 8 appends handClimb without changing the upstream phone or arcade
 // fields. Older official settings keep their original layout and meaning.
 struct Settings {
-    uint32_t magic = 0x53575354, version = 38, bytes = sizeof(Settings), grab = 1;
+    uint32_t magic = 0x53575354, version = 39, bytes = sizeof(Settings), grab = 1;
     float maxSpeed = 32;
     uint32_t airWebs = 1;
     float gravity = 6;
@@ -337,7 +345,9 @@ struct Settings {
     uint32_t spidyRunStanding{};
     uint32_t webLandingSmooth{};
     float webLandingImpact = 24;
-    // Version 31 (HEAD PROBE, vr_settings::Values::headProbe): the read-only
+    uint32_t webLines{}; // Official version 31 prefix.
+    // Version 39 appends the community pose controls; v32-v38 fork packets are not accepted.
+    // HEAD PROBE, vr_settings::Values::headProbe): the read-only
     // head-bone diagnostic is on. The swing module only accepts it; nothing in
     // the swing reads or changes the body for it (head_probe.hpp).
     uint32_t headProbe{};
@@ -370,49 +380,46 @@ struct Settings {
 };
 constexpr uint32_t settingsBytesV3 = 28, settingsBytesV4 = 32, settingsBytesV5 = 36, settingsBytesV6 = 40,
                    settingsBytesV7 = 44, settingsBytesV8 = 48, settingsBytesV9 = 52, settingsBytesV10 = 56,
-                   settingsBytesV11 = 60, settingsBytesV12 = 64, settingsBytesV13 = 68,
-                   settingsBytesV14 = 72, settingsBytesV15 = 76, settingsBytesV16 = 80, settingsBytesV17 = 84,
-                   settingsBytesV18 = 88, settingsBytesV19 = 92, settingsBytesV20 = 96,
-                   settingsBytesV21 = 100, settingsBytesV22 = 104, settingsBytesV23 = 108, settingsBytesV24 = 112,
-                   settingsBytesV25 = 120, settingsBytesV26 = 124,
-                   settingsBytesV27 = 128, settingsBytesV28 = 132, settingsBytesV29 = 136,
-                   settingsBytesV30 = 144, settingsBytesV31 = 148, settingsBytesV32 = 152,
-                   settingsBytesV33 = 156, settingsBytesV34 = 160, settingsBytesV35 = 164, settingsBytesV36 = 168, settingsBytesV37 = 172;
-static_assert(sizeof(Settings) == 176 && offsetof(Settings, walls) == settingsBytesV3 &&
-              offsetof(Settings, physical) == settingsBytesV4 &&
-              offsetof(Settings, noBlows) == settingsBytesV5 &&
-              offsetof(Settings, arcade) == settingsBytesV6 &&
-              offsetof(Settings, handClimb) == settingsBytesV7 &&
-              offsetof(Settings, webSlingshot) == settingsBytesV8 &&
-              offsetof(Settings, betterClimbing) == settingsBytesV9 &&
-              offsetof(Settings, combatVisuals) == settingsBytesV10 &&
-              offsetof(Settings, smartAnchor) == settingsBytesV11 &&
-              offsetof(Settings, elasticWeb) == settingsBytesV12 &&
-              offsetof(Settings, softRelease) == settingsBytesV13 &&
-              offsetof(Settings, swingAssist) == settingsBytesV14 &&
-              offsetof(Settings, slingshotSpeed) == settingsBytesV15 &&
-              offsetof(Settings, twoHandZip) == settingsBytesV16 &&
-              offsetof(Settings, ropeSteering) == settingsBytesV17 &&
-              offsetof(Settings, webRange) == settingsBytesV18 &&
-              offsetof(Settings, webSpeed) == settingsBytesV19 &&
-              offsetof(Settings, halfPunchDamage) == settingsBytesV20 &&
-              offsetof(Settings, singleHandYankPercent) == settingsBytesV21 &&
-              offsetof(Settings, webTie) == settingsBytesV22 &&
-              offsetof(Settings, airSlingshot) == settingsBytesV23 &&
-              offsetof(Settings, webAngle) == settingsBytesV24 &&
-              offsetof(Settings, momentumLeap) == settingsBytesV25 &&
-              offsetof(Settings, softLanding) == settingsBytesV26 &&
-              offsetof(Settings, spidyRun) == settingsBytesV27 &&
-              offsetof(Settings, spidyRunStanding) == settingsBytesV28 &&
-              offsetof(Settings, webLandingSmooth) == settingsBytesV29 &&
-              offsetof(Settings, headProbe) == settingsBytesV30 &&
-              offsetof(Settings, animatedMoves) == settingsBytesV31 &&
-              offsetof(Settings, animatedHead) == settingsBytesV32 &&
-              offsetof(Settings, animatedAir) == settingsBytesV33 &&
-              offsetof(Settings, animatedSteering) == settingsBytesV34 &&
-              offsetof(Settings, animatedArms) == settingsBytesV35 &&
-              offsetof(Settings, animatedTorso) == settingsBytesV36 &&
-              offsetof(Settings, animatedModelYaw) == settingsBytesV37);
+                   settingsBytesV11 = 60, settingsBytesV12 = 64, settingsBytesV13 = 68, settingsBytesV14 = 72,
+                   settingsBytesV15 = 76, settingsBytesV16 = 80, settingsBytesV17 = 84, settingsBytesV18 = 88,
+                   settingsBytesV19 = 92, settingsBytesV20 = 96, settingsBytesV21 = 100,
+                   settingsBytesV22 = 104, settingsBytesV23 = 108, settingsBytesV24 = 112,
+                   settingsBytesV25 = 120, settingsBytesV26 = 124, settingsBytesV27 = 128,
+                   settingsBytesV28 = 132, settingsBytesV29 = 136, settingsBytesV30 = 144,
+                   settingsBytesV31 = 148, settingsBytesV32 = 152, settingsBytesV33 = 156,
+                   settingsBytesV34 = 160, settingsBytesV35 = 164, settingsBytesV36 = 168,
+                   settingsBytesV37 = 172, settingsBytesV38 = 176;
+static_assert(
+    sizeof(Settings) == 180 && offsetof(Settings, walls) == settingsBytesV3 &&
+    offsetof(Settings, physical) == settingsBytesV4 && offsetof(Settings, noBlows) == settingsBytesV5 &&
+    offsetof(Settings, arcade) == settingsBytesV6 && offsetof(Settings, handClimb) == settingsBytesV7 &&
+    offsetof(Settings, webSlingshot) == settingsBytesV8 &&
+    offsetof(Settings, betterClimbing) == settingsBytesV9 &&
+    offsetof(Settings, combatVisuals) == settingsBytesV10 &&
+    offsetof(Settings, smartAnchor) == settingsBytesV11 &&
+    offsetof(Settings, elasticWeb) == settingsBytesV12 &&
+    offsetof(Settings, softRelease) == settingsBytesV13 &&
+    offsetof(Settings, swingAssist) == settingsBytesV14 &&
+    offsetof(Settings, slingshotSpeed) == settingsBytesV15 &&
+    offsetof(Settings, twoHandZip) == settingsBytesV16 &&
+    offsetof(Settings, ropeSteering) == settingsBytesV17 &&
+    offsetof(Settings, webRange) == settingsBytesV18 && offsetof(Settings, webSpeed) == settingsBytesV19 &&
+    offsetof(Settings, halfPunchDamage) == settingsBytesV20 &&
+    offsetof(Settings, singleHandYankPercent) == settingsBytesV21 &&
+    offsetof(Settings, webTie) == settingsBytesV22 && offsetof(Settings, airSlingshot) == settingsBytesV23 &&
+    offsetof(Settings, webAngle) == settingsBytesV24 &&
+    offsetof(Settings, momentumLeap) == settingsBytesV25 &&
+    offsetof(Settings, softLanding) == settingsBytesV26 && offsetof(Settings, spidyRun) == settingsBytesV27 &&
+    offsetof(Settings, spidyRunStanding) == settingsBytesV28 &&
+    offsetof(Settings, webLandingSmooth) == settingsBytesV29 &&
+    offsetof(Settings, webLines) == settingsBytesV30 && offsetof(Settings, headProbe) == settingsBytesV31 &&
+    offsetof(Settings, animatedMoves) == settingsBytesV32 &&
+    offsetof(Settings, animatedHead) == settingsBytesV33 &&
+    offsetof(Settings, animatedAir) == settingsBytesV34 &&
+    offsetof(Settings, animatedSteering) == settingsBytesV35 &&
+    offsetof(Settings, animatedArms) == settingsBytesV36 &&
+    offsetof(Settings, animatedTorso) == settingsBytesV37 &&
+    offsetof(Settings, animatedModelYaw) == settingsBytesV38);
 // SpidySwingWebTurns (WEB AIM: MODEL FOREARM, web_aim::ForearmAim): the turn
 // each hand's aim pose takes before WEB ANGLE and WRIST SHOOTERS, in the aim
 // pose's own frame, sent by the VR worker each frame while the setting is on
@@ -557,66 +564,56 @@ constexpr float motionSpeedLimit = 65;
 constexpr float maxGravity = 30;
 inline bool validSettings(const Settings& s) {
     return s.magic == 0x53575354 &&
-        ((s.version == 3 && s.bytes == settingsBytesV3) ||
-         (s.version == 4 && s.bytes == settingsBytesV4) ||
-         (s.version == 5 && s.bytes == settingsBytesV5) ||
-         (s.version == 6 && s.bytes == settingsBytesV6) ||
-         (s.version == 7 && s.bytes == settingsBytesV7) ||
-         (s.version == 8 && s.bytes == settingsBytesV8) ||
-         (s.version == 9 && s.bytes == settingsBytesV9) ||
-         (s.version == 10 && s.bytes == settingsBytesV10) ||
-         (s.version == 11 && s.bytes == settingsBytesV11) ||
-         (s.version == 12 && s.bytes == settingsBytesV12) ||
-         (s.version == 13 && s.bytes == settingsBytesV13) ||
-         (s.version == 14 && s.bytes == settingsBytesV14) ||
-         (s.version == 15 && s.bytes == settingsBytesV15) ||
-         (s.version == 16 && s.bytes == settingsBytesV16) ||
-         (s.version == 17 && s.bytes == settingsBytesV17) ||
-         (s.version == 18 && s.bytes == settingsBytesV18) ||
-         (s.version == 19 && s.bytes == settingsBytesV19) ||
-         (s.version == 20 && s.bytes == settingsBytesV20) ||
-         (s.version == 21 && s.bytes == settingsBytesV21) ||
-         (s.version == 22 && s.bytes == settingsBytesV22) ||
-         (s.version == 23 && s.bytes == settingsBytesV23) ||
-         (s.version == 24 && s.bytes == settingsBytesV24) ||
-         (s.version == 25 && s.bytes == settingsBytesV25) ||
-         (s.version == 26 && s.bytes == settingsBytesV26) ||
-         (s.version == 27 && s.bytes == settingsBytesV27) ||
-         (s.version == 28 && s.bytes == settingsBytesV28) ||
-         (s.version == 29 && s.bytes == settingsBytesV29) ||
-         (s.version == 30 && s.bytes == settingsBytesV30) ||
-         (s.version == 31 && s.bytes == settingsBytesV31) ||
-         (s.version == 32 && s.bytes == settingsBytesV32) ||
-         (s.version == 33 && s.bytes == settingsBytesV33) ||
-         (s.version == 34 && s.bytes == settingsBytesV34) ||
-         (s.version == 35 && s.bytes == settingsBytesV35) ||
-         (s.version == 36 && s.bytes == settingsBytesV36) ||
-         (s.version == 37 && s.bytes == settingsBytesV37) ||
-         (s.version == 38 && s.bytes == sizeof(Settings))) &&
-        s.grab <= 1 && std::isfinite(s.maxSpeed) && s.maxSpeed > 0 && s.maxSpeed <= motionSpeedLimit &&
-        s.airWebs <= 1 && std::isfinite(s.gravity) && s.gravity >= 0 && s.gravity <= maxGravity &&
-        s.walls <= 4 && s.physical <= 1 && s.noBlows <= 3 && s.arcade <= 1 && s.handClimb <= 1 &&
-        s.webSlingshot <= 1 && s.betterClimbing <= 1 && s.combatVisuals <= 1 && s.smartAnchor <= 1 &&
-        s.elasticWeb <= 3 && s.softRelease <= 3 && s.swingAssist <= 1 && std::isfinite(s.slingshotSpeed) &&
-        (s.slingshotSpeed == 0 || (s.slingshotSpeed >= 20 && s.slingshotSpeed <= 300)) && s.twoHandZip <= 1 &&
-        s.ropeSteering <= 1 && std::isfinite(s.webRange) && s.webRange >= 10 && s.webRange <= 1000 &&
-        s.webSpeed <= 3 && s.halfPunchDamage <= 1 &&
-        (s.version < 22 || (s.singleHandYankPercent >= 50 && s.singleHandYankPercent <= 300)) &&
-        s.webTie <= 1 &&
-        (s.version < 24 || s.airSlingshot <= 1) &&
-        (s.version < 25 || (s.webAngle >= -45 && s.webAngle <= 45 && s.wristShooters <= 2)) &&
-        (s.version < 26 || s.momentumLeap <= 1) && (s.version < 27 || s.softLanding <= 1) &&
-        (s.version < 28 || s.spidyRun <= 1) && (s.version < 29 || s.spidyRunStanding <= 1) &&
-        (s.version < 30 || (s.webLandingSmooth <= 1 && std::isfinite(s.webLandingImpact) &&
-                            s.webLandingImpact >= 5 && s.webLandingImpact <= 100)) &&
-        (s.version < 31 || s.headProbe <= 1) &&
-        (s.version < 32 || s.animatedMoves <= 1) &&
-        (s.version < 33 || s.animatedHead <= 2) &&
-        (s.version < 34 || s.animatedAir <= 1) &&
-        (s.version < 35 || s.animatedSteering <= 1) &&
-        (s.version < 36 || s.animatedArms <= 1) &&
-        (s.version < 37 || s.animatedTorso <= 1) &&
-        (s.version < 38 || s.animatedModelYaw <= 1);
+           ((s.version == 3 && s.bytes == settingsBytesV3) ||
+            (s.version == 4 && s.bytes == settingsBytesV4) ||
+            (s.version == 5 && s.bytes == settingsBytesV5) ||
+            (s.version == 6 && s.bytes == settingsBytesV6) ||
+            (s.version == 7 && s.bytes == settingsBytesV7) ||
+            (s.version == 8 && s.bytes == settingsBytesV8) ||
+            (s.version == 9 && s.bytes == settingsBytesV9) ||
+            (s.version == 10 && s.bytes == settingsBytesV10) ||
+            (s.version == 11 && s.bytes == settingsBytesV11) ||
+            (s.version == 12 && s.bytes == settingsBytesV12) ||
+            (s.version == 13 && s.bytes == settingsBytesV13) ||
+            (s.version == 14 && s.bytes == settingsBytesV14) ||
+            (s.version == 15 && s.bytes == settingsBytesV15) ||
+            (s.version == 16 && s.bytes == settingsBytesV16) ||
+            (s.version == 17 && s.bytes == settingsBytesV17) ||
+            (s.version == 18 && s.bytes == settingsBytesV18) ||
+            (s.version == 19 && s.bytes == settingsBytesV19) ||
+            (s.version == 20 && s.bytes == settingsBytesV20) ||
+            (s.version == 21 && s.bytes == settingsBytesV21) ||
+            (s.version == 22 && s.bytes == settingsBytesV22) ||
+            (s.version == 23 && s.bytes == settingsBytesV23) ||
+            (s.version == 24 && s.bytes == settingsBytesV24) ||
+            (s.version == 25 && s.bytes == settingsBytesV25) ||
+            (s.version == 26 && s.bytes == settingsBytesV26) ||
+            (s.version == 27 && s.bytes == settingsBytesV27) ||
+            (s.version == 28 && s.bytes == settingsBytesV28) ||
+            (s.version == 29 && s.bytes == settingsBytesV29) ||
+            (s.version == 30 && s.bytes == settingsBytesV30) ||
+            (s.version == 31 && s.bytes == settingsBytesV31) ||
+            (s.version == 39 && s.bytes == sizeof(Settings))) &&
+           s.grab <= 1 && std::isfinite(s.maxSpeed) && s.maxSpeed > 0 && s.maxSpeed <= motionSpeedLimit &&
+           s.airWebs <= 1 && std::isfinite(s.gravity) && s.gravity >= 0 && s.gravity <= maxGravity &&
+           s.walls <= 4 && s.physical <= 1 && s.noBlows <= 3 && s.arcade <= 1 && s.handClimb <= 1 &&
+           s.webSlingshot <= 1 && s.betterClimbing <= 1 && s.combatVisuals <= 1 && s.smartAnchor <= 1 &&
+           s.elasticWeb <= 3 && s.softRelease <= 3 && s.swingAssist <= 1 && std::isfinite(s.slingshotSpeed) &&
+           (s.slingshotSpeed == 0 || (s.slingshotSpeed >= 20 && s.slingshotSpeed <= 300)) &&
+           s.twoHandZip <= 1 && s.ropeSteering <= 1 && std::isfinite(s.webRange) && s.webRange >= 10 &&
+           s.webRange <= 1000 && s.webSpeed <= 3 && s.halfPunchDamage <= 1 &&
+           (s.version < 22 || (s.singleHandYankPercent >= 50 && s.singleHandYankPercent <= 300)) &&
+           s.webTie <= 1 && (s.version < 24 || s.airSlingshot <= 1) &&
+           (s.version < 25 || (s.webAngle >= -45 && s.webAngle <= 45 && s.wristShooters <= 2)) &&
+           (s.version < 26 || s.momentumLeap <= 1) && (s.version < 27 || s.softLanding <= 1) &&
+           (s.version < 28 || s.spidyRun <= 1) && (s.version < 29 || s.spidyRunStanding <= 1) &&
+           (s.version < 30 || (s.webLandingSmooth <= 1 && std::isfinite(s.webLandingImpact) &&
+                               s.webLandingImpact >= 5 && s.webLandingImpact <= 100)) &&
+           (s.version < 39 || s.headProbe <= 1) && (s.version < 39 || s.animatedMoves <= 1) &&
+           (s.version < 39 || s.animatedHead <= 2) && (s.version < 39 || s.animatedAir <= 1) &&
+           (s.version < 39 || s.animatedSteering <= 1) && (s.version < 39 || s.animatedArms <= 1) &&
+           (s.version < 39 || s.animatedTorso <= 1) && (s.version < 39 || s.animatedModelYaw <= 1) &&
+           (s.version < 31 || s.webLines <= 1);
 }
 static_assert(sizeof(WebState) == 28 && sizeof(Data) == 272 && offsetof(Data, wall) == 240);
 // The player is in the air: Spidy's own flight, or the game's jump or fall,
@@ -670,7 +667,7 @@ inline bool valid(const Command& c) {
           (c.version == 6 && c.bytes == sizeof(c))) ||
         !std::isfinite(c.leap) || c.leap < 0 || c.leap > 1 || !finite(c.look) || length(c.look) > 1.01f ||
         !c.serial || c.focused > 1 || c.jump > 1 || c.leaseMs > 250 || (c.focused && !c.leaseMs) ||
-        !finite(c.move) || length(c.move) > 1.001f || !std::isfinite(c.trackingYaw) || c.asks > 15 ||
+        !finite(c.move) || length(c.move) > 1.001f || !std::isfinite(c.trackingYaw) || c.asks > 63 ||
         !std::isfinite(c.sampleSeconds) || c.sampleSeconds <= 0 || c.sampleSeconds > .1f ||
         (c.focused && !c.sampleTimeNs) || !std::isfinite(tilt) || tilt < .99f || tilt > 1.01f)
         return false;

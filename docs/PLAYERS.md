@@ -1,4 +1,53 @@
 SPIDY - VR for Marvel's Spider-Man Remastered
+
+## SpidyVR Native Animation community build
+
+This build is a community layer on **Ilya Mezerowsky's SpidyVR**, based on upstream
+main at `bdd4c9150f` (0.8.1 fixes, STEADY HUD, official NATIVE RUN and WEB LINES).
+Inspired by **vrfloofy's first-person mod**: keep Insomniac's animation suite while
+SpidyVR controls and your tracked arms sit on top. GPL-3.0. Not an official Marvel
+or Insomniac product. Community support/source: `tyronmiller55-spec/SpidyVR`.
+
+Use **Spidy Launcher.exe > Native Animation** (after Options), or the contiguous
+**NATIVE ANIMATION** block in the headset's SPIDY VR tab. Launcher changes apply
+on the next VR start; use the headset menu to change the running session.
+
+Fresh launch / missing keys: MOVES + HYBRID on, HEAD Full, ARMS + TORSO + MODEL YAW
+on, NATIVE RUN + SPIDY RUN on, HYBRID SPEED 200 ms. AIR, ONLY, STEERING and AIR SPIN
+start off and are ignored by Hybrid. No other personal-profile choices are copied.
+Saved `.ini` values and `.spidy` profiles win over defaults; this does not migrate
+or silently replace your stored settings. Import a previous profile to keep it.
+
+The **Native Animation** master represents MOVES + HYBRID, not every companion:
+- On applies MOVES + HYBRID, HEAD Full, ARMS, TORSO, MODEL YAW, NATIVE RUN and SPIDY RUN.
+- Off disables the animation stack, including legacy Air/Only/Steering/Air Spin,
+  but leaves your independent Native Run / Spidy Run, web and swing options alone.
+- You can turn Torso, Arms or another companion off without switching the mode off.
+- Head: Full follows animated pitch/roll; Level uses the existing level head anchor.
+- Arms: controllers share the headset's resolved animated-head frame; idle hands
+  remain tracked. Root, gait, head and legs remain authored; Torso is bounded reach assist.
+- Model Yaw: run with L and turn with R without reducing L strength.
+- Hybrid Speed: launcher 0–500 ms in 5 ms steps (0 = Off); headset nine choices
+  through 500 ms. This changes only speed takeover, not web/rotate/wall-run takeover.
+- Advanced Air/Only/Steering/Air Spin are legacy controls, inactive under Hybrid.
+
+Existing ownership remains: animation default; SpidyVR on web, airborne web intent,
+mid-air rotation, sustained 15 m/s speed or real wall run. Ground parkour and hops
+stay animated. A zip already in VR stays VR until landing: immediate Y-button zip
+ownership is **not** added here. The existing 180 ms handoff blend is unchanged;
+new swing-blend endpoint/view-smoothing polish is **not** included. Legs remain tabled.
+
+The launcher's existing updater still targets official Spidy releases, not this
+fork. Installing an official update replaces the community layer; use Native
+Animation packages from this fork when you want to keep this mode.
+
+For diagnostics enable **Options > Moving > Run logs**; off means no detailed diag
+stream, as in upstream #77. Head probe remains in Options as a read-only diagnostic.
+Use a fresh headset check after upgrading; this packaging merge is not headset-tested.
+The earlier hands/run-turn build was positively tested on Quest 3S / Meta Quest Link.
+No custom memory offsets: supported-build/rig evidence remains in
+[REFERENCE.md](REFERENCE.md) and [VALIDATION.md](VALIDATION.md).
+
 by Ilya Mezerowsky
 
 Support Spidy: https://ko-fi.com/ilyamezerowsky
@@ -233,9 +282,9 @@ Your body and fists
   Take the other hand's  that hand closes into a fist on the web
   web
   Squeeze a grip ....... otherwise closes that hand into a fist (the grip
-                         when the trigger is your web button), and so does a
-                         hand moving fast; with an enemy marked or within
-                         reach a fast hand is a fist even while it shoots
+                         when the trigger is your web button); with an enemy
+                         marked or within reach a hand moving fast is a fist
+                         too, even while it shoots
   T-pose, both triggers  calibrates your body (when the panel asks): his
                          height and arms become yours. B skips it
 
@@ -424,12 +473,15 @@ Moving
                          it holds for as long as you hold the trigger. No
                          web ball from that pull
   Both hands at your ... the game's suit power (its L3 + R3, which nothing
-  chest, both triggers   sent in VR before): both hands before your chest,
-                         pull both triggers together (within half a second
-                         or so). No web balls from those pulls. The game uses
+  chest, both triggers   sent in VR before): both hands together before your
+                         chest, a fist's width apart, pull both triggers at
+                         once. No web balls from those pulls. The game uses
                          its power when its meter is full, as in the flat game.
                          Both hands buzz as it goes out. Builds before
-                         October 23 buzzed but sent the game nothing
+                         October 23 buzzed but sent the game nothing. Builds
+                         before November 5 kept any trigger pulled near the
+                         chest for it, so webs, web balls and the reel failed
+                         with the hands at rest there
   Menu button .......... pause
   Hold both sticks in .. pause too, after a moment (both hands buzz). Under
                          SteamVR the Quest's menu button is SteamVR's own:
@@ -901,6 +953,16 @@ VR settings
                    Both controllers tick when it is ready. While it is on,
                    a webbed enemy comes to you only when you yank him; off,
                    as before.
+  WEB LINES ...... in EXPERIMENTAL after WEB TIE, off by default. Put one
+                   web on a wall (a post, a crane, another line) and the
+                   other on another, bring your hands together and click
+                   the right stick: a taut line of web between them, six at
+                   most. Hold the right stick's click to aim at a line (a
+                   ring marks the point) and let go to zip onto it; the left
+                   stick walks you along it, A jumps, B dashes along it, and
+                   a web, the game's zip (stick up) or a web strike takes
+                   you off it. With WEB TIE on too, a webbed-up enemy tied to
+                   a line hangs under it.
   EXPERIMENTAL ... FLIPS (off until you switch it on) uses the right stick
                    in the air; release holds the angle and A returns upright.
                    CONTROLLED FLIPS is a separate A-toggle mode, above.
@@ -909,7 +971,8 @@ VR settings
                    uses a fixed wall-camera clearance. EYE AIM (OFF unless
                    you pick WEB BALLS, ZIPS or BOTH; below). FLIP
                    REPROJECTION (off until you switch it on; below).
-                   WEB TIE (off until you switch it on, above).
+                   WEB TIE and WEB LINES (off until you switch them on,
+                   above).
                    REALISTIC FLIPS (off until you switch it on, above) and
                    the ten rows that tune it.
   EYE AIM ........ for a headset whose VR runtime gives games your eyes
@@ -950,7 +1013,7 @@ VR settings
                    when the headset shows a picture twice. It lies
                    over everything, your hands too. Needs the HUD on.
                    Off by default, to compare.
-  NATIVE RUN       (off until you switch it on) on the ground, the left
+  NATIVE RUN       (on in Native Animation defaults) on the ground, the left
                    stick pushed past 70% holds the game's RT, its
                    parkour run: you sprint, vault cars and rails and run
                    up walls as on a pad. Under 50% you jog again. Never
@@ -988,121 +1051,12 @@ VR settings
                    summary per state when VR stops. Changes nothing in play.
                    The lines go to the same game-vr-<time>-diag.log as RUN
                    LOGS' (in their own part, so they push out nothing else).
-  ANIMATED MOVES   (off until you switch it on; EXPERIMENTAL, after HEAD
-                   PROBE) when on with NATIVE RUN, the game's own animation
-                   drives Spider-Man's body for ground parkour, vaults and
-                   mantles. Swing, web, zip and wall-run stay with the mod.
-                   While it yields, your VR hands follow the game's pose.
-                   Off by default.
-  ANIMATED HEAD    (OFF until you pick LEVEL or FULL; EXPERIMENTAL, after
-                   ANIMATED MOVES) while a pose yield is active, the view
-                   follows Spider-Man's gameplay head the way finishers do.
-                   LEVEL: only his place follows, on a level frame — you look
-                   about freely (safer). FULL: turns with the anim head
-                   pitch/roll on the ground / perch / wall. Midair (air,
-                   swing, web, zip, airborne parkour/combat): automatic
-                   torso softlock — a perch-like level frame so the chest
-                   stays ahead of you and the HMD looks freely (not a silent
-                   Full→Level rewrite; diag says softlock). The head mesh
-                   shrinks so it is not in front of the eyes. Off by default.
-  ANIMATED AIR     (off until you switch it on; EXPERIMENTAL, after ANIMATED
-                   HEAD) freefall, swing and web-hold air: the game's animation
-                   drives the body while the mod keeps swing physics (direction
-                   and velocity). Zip, wall-run and combat stay with the VR
-                   body. Perch still uses ANIMATED MOVES on the ground.
-                   Freefall web aim reclaims the body at once. Off by default.
-  ANIMATED STEERING (off until you switch it on; EXPERIMENTAL, after ANIMATED
-                   AIR) while a pose yield is on, left-stick magnitude runs
-                   Spidey along his current facing instead of every camera
-                   direction. Pair with ANIMATED MODEL YAW for right-stick
-                   character turn. Ignored while ANIMATED HYBRID is on (Hybrid
-                   steers toward your view instead). Off by default.
-  ANIMATED ARMS    (off until you switch it on; EXPERIMENTAL, after ANIMATED
-                   STEERING) while a pose yield is on, controllers overlay the
-                   arms on the game animation with a soft always-on floor so
-                   idle IRL pose is not replaced by game-anim-only bones.
-                   Motion or web/aim intent still raises to full weight.
-                   Grips map into the anim chest/shoulder frame each solve so
-                   arms stay matched through model yaw and parkour rotations.
-                   Torso, legs and head stay animated unless ANIMATED TORSO is
-                   also on. Tracking loss yields to the game arm. Dense
-                   "tracking lock:" diag lines while yielding. Thresholds
-                   provisional. Off by default.
-                   With HYBRID + HEAD Full/Level, tracked hands instead use the
-                   same head-relative frame as your eyes, at full weight even
-                   when idle. Entry ramps in (~83 ms), tracking loss fades that
-                   hand out (~167 ms); the other hand keeps tracking. Reach is
-                   limited by the existing arm solver, not by moving the root
-                   or head. Game locomotion/legs stay animated. Non-HYBRID keeps
-                   the legacy soft-floor/chest assist above. Not headset-verified.
-  ANIMATED TORSO   (off until you switch it on; EXPERIMENTAL, after ANIMATED
-                   ARMS) with ANIMATED ARMS, the waist→chest bends toward
-                   extreme controller aims so midair pointing can contort the
-                   upper body. Animated root, legs, and head world pose stay
-                   on the game anim (head orientation is compensated after
-                   spine turns). Limits provisional. Off by default.
-  ANIMATED MODEL YAW (off until you switch it on; EXPERIMENTAL, after ANIMATED
-                   TORSO) while a pose yield is on on the ground / perch / wall,
-                   right-stick X turns Spidey through the game's walk-facing
-                   path (+R turns right, same feel as SpidyVR snap/smooth).
-                   HYBRID + HEAD Full/Level keeps your active left-stick run
-                   magnitude when turning. Ground SPIDY RUN and the game pad
-                   share that desired heading; R does not also turn a hidden
-                   tracking rig. Idle-L turn-in-place is still bounded (.42).
-                   Midair with ANIMATED AIR SPIN on, this stays idle: AIR SPIN
-                   owns the stick for 6DOF. Off by default.
-  ANIMATED ONLY    (off until you switch it on; EXPERIMENTAL, after ANIMATED
-                   MODEL YAW) with ANIMATED MOVES and/or ANIMATED AIR on, the
-                   game's animation keeps Spidey's body in every gameplay state
-                   (walls, zips, wall runs and combat too) and freefall web aim
-                   no longer tears it down, so the SpidyVR body never takes it
-                   back mid-play: no location, head, torso or hand jumps when
-                   the state changes. Only a cutscene, menu or the game's
-                   camera for longer than 1.5 s ends it (shorter blips keep
-                   it). Physics stay the mod's. Off by default.
-  ANIMATED AIR SPIN (OFF until you pick one; EXPERIMENTAL, after ANIMATED
-                   ONLY) while a pose yield is on in the air: FLIPS turns the
-                   animated Spidey with the realistic flips' pitch, roll and
-                   yaw (your hands, sticks and swing-release momentum), the
-                   way SpidyVR mode turns its own body — R-stick yaw matches
-                   SpidyVR takeHeading (MODEL YAW does not also drive midair).
-                   FLIPS + MOMENTUM also leans him along his travel (dives
-                   nose-down, climbs nose-up) and banks him into turns. Turned
-                   about his head; midair view stays torso softlock (free HMD)
-                   while the model still 6DOF-spins. Visual and view only.
-                   Limits provisional.
-  ANIMATED HYBRID  (off until you switch it on; EXPERIMENTAL, after ANIMATED
-                   AIR SPIN) with ANIMATED MOVES: the game's animations play by
-                   default - running, fighting, parkour, vaults, hops, jumps,
-                   the game's zips and crawls, falls - and your view stays on
-                   Spidey's head the whole time, the way finishers show it
-                   (your HEAD setting, Full by default, in the air too). OG
-                   SpidyVR only takes over when you do something: a web
-                   attaches or you press trigger/grip for a web in the air (on
-                   the ground grip stays a fist), you turn in mid-air (right
-                   stick held, or a fast ~90 degree body turn - looking around
-                   does not count), you pick up real speed in the air (about
-                   15 m/s held briefly), or Spidy's own wall run. A zip while
-                   you are already swinging stays in SpidyVR. Landing hands
-                   back to the animation after a short confirm (at least half
-                   a second in SpidyVR, so it does not flip back and forth).
-                   Every switch re-anchors the view and blends (~180 ms)
-                   instead of snapping. While the animation has you, the left
-                   stick steers toward where you are looking - push right and
-                   he heads to the right of your view, over rooftops too - and
-                   the game's camera follows your view (the right stick still
-                   turns him with ANIMATED MODEL YAW). Animated Air, Animated
-                   Only, Air Spin and Animated Steering are ignored while
-                   Hybrid is on. Off by default.
-  ANIMATED HYBRID SPEED (200 MS until you change it; after ANIMATED HYBRID,
-                   used only while Hybrid is on) how long you must keep 15 m/s
-                   or more in the air before OG SpidyVR takes over: OFF (speed
-                   never takes over; webs, mid-air turns and wall runs still
-                   do), or 5, 10, 25, 50, 100, 200, 300 or 500 MS in the
-                   headset. Short holds snap into SpidyVR almost at once; long
-                   ones ignore brief bursts of speed. The launcher's slider
-                   takes any value from 5 to 500 ms in 5 ms steps, slid all the
-                   way left for Off.
+  NATIVE ANIMATION See the community-build section above: the launcher tab and
+                   headset block group Head, Arms, Torso, Model Yaw, Hybrid Speed,
+                   Native Run / Spidy Run, and the legacy Advanced controls.
+                   (Square out of the palm side is PALM SHOOTERS.)
+  PALM SHOOTERS    (off until you switch it on) the old WRIST SHOOTERS:
+                   webs leave square to your hand, out of the palm side.
   DODGE TUMBLE     (OFF until you pick one) when the game dodges, your
                    view tips toward the dodge (LEAN) or turns a full roll
                    (ROLL, sideways dodges) so you can tell it dodged. Your
@@ -1113,18 +1067,19 @@ VR settings
   NATIVE RUN AT    how far the stick tilts before NATIVE RUN holds the
                    game's RT, 50% to 90%; it lets go 20 points under it.
                    70%, as before.
-  RUN LOGS         (off until you switch it on) writes how fast you run,
-                   land and take off to the session's log, for sending
-                   back. Changes nothing in play. These lines (and WEB AIM's
-                   and DODGE TUMBLE's) show in the launcher's window as
+  RUN LOGS         (off until you switch it on) writes how you run, land,
+                   leap and jump, the frame rate and how far VR got
+                   ("stage: ..."), and WEB AIM's and DODGE TUMBLE's lines,
+                   for sending back. They show in the launcher's window as
                    "diag ..." and are saved in reports\ as
                    game-vr-<time>-diag.log, which starts with the build and
-                   your settings: that file is the one to send back.
-                   It also says how far VR got ("stage: ...") and, when
-                   the game crashed, "The game crashed (exit code ...)":
-                   send that file with the game's newest log from
+                   your settings: that file is the one to send back. Off,
+                   none of it is written. Changes nothing in play.
+                   Whatever this setting, a crashed game says so in the
+                   launcher's window ("The game crashed (exit code ...)"):
+                   send that with the game's newest log from
                    Documents\Marvel's Spider-Man Remastered.
-  RUNNING LEAP    (off until you switch it on) a charged leap (hold A on
+  RUNNING LEAP     (off until you switch it on) a charged leap (hold A on
                    the ground) keeps the speed you run at and adds its
                    charge on top; a full one from a fast run is a long
                    jump, further and flatter. Off: as before.
@@ -1141,7 +1096,7 @@ VR settings
   SOFT LANDING     (off until you switch it on) falling with no web, your
                    fall eases to about 9 m/s over the last 3 m before the
                    ground; your speed across is kept. Off: as before.
-  SPIDY RUN        (off until you switch it on) land faster than a sprint
+  SPIDY RUN        (on in Native Animation defaults) land faster than a sprint
                    (let go of a swing near the street) and you run on at
                    that speed, steering with the stick without losing it;
                    it eases to a sprint in a few seconds and the game's
@@ -1157,14 +1112,13 @@ VR settings
                    say (body off, a cutscene, an arm it cannot reach) they
                    go back to the controller's line. WEB ANGLE and WRIST
                    SHOOTERS still turn on top; punches keep the controller.
-                   Since v6 the line is the forearm's own (elbow to wrist),
-                   no longer held within 35 degrees of the controller, and
-                   a flip's tilt no longer drops it.
+                   The line is the forearm's own (elbow to wrist); FOREARM
+                   AIM LIMIT can hold it nearer the controller.
   FOREARM BLEND    (100% until you change it) how much of the forearm's
                    line MODEL FOREARM takes, from 0% (the controller's).
   FOREARM AIM LIMIT (NO LIMIT until you change it) how far MODEL FOREARM
                    and WRIST SHOOTERS may turn your webs off the
-                   controller's line: 35 DEG (v5's), 60, 90 or NO LIMIT.
+                   controller's line: 35 DEG, 60, 90 or NO LIMIT.
   SMOOTH WEB LANDING (off until you switch it on) land while you hold a
                    web, slower than WEB LANDING IMPACT, and your fall eases
                    over the last metres, your speed carries on across the
@@ -1186,10 +1140,16 @@ VR settings
                    smooth web landing carries you on the ground (no web
                    held) is a jump the moment you press it, keeping your
                    run's speed; you fly on as after letting go of a web.
-                   Off: v5's jump, the game's, up to 0.2 s later.
+                   Off: the game's own jump once it has you back (up to
+                   0.2 s later).
   Changes apply at once. The launcher starts your next session with them;
   its options show every one of them but VR VIEW too.
-  NEAR CLIP, RECORDING FOV, UI STYLE, BLOW SOUNDS, PC MEDIA, NATIVE RUN, AIR SLINGSHOT, WEB ANGLE, WRIST SHOOTERS, DODGE TUMBLE, RUN CURVE, NATIVE RUN AT, RUN LOGS, RUNNING LEAP, EARLY JUMP, SOFT LANDING, SPIDY RUN, RUN FROM STANDING, WEB AIM, FOREARM BLEND, SMOOTH WEB LANDING, WEB LANDING IMPACT, STEADY STATES, COMBAT RESPONSIVE, SPIDY RUN JUMP, FOREARM AIM LIMIT, PALM SHOOTERS, HEAD PROBE, ANIMATED MOVES, ANIMATED HEAD, ANIMATED AIR, ANIMATED STEERING, ANIMATED ARMS, ANIMATED TORSO, ANIMATED MODEL YAW, ANIMATED ONLY, ANIMATED AIR SPIN, ANIMATED HYBRID, ANIMATED HYBRID SPEED, HEIGHT, SEATED, EYE AIM,
+  NEAR CLIP, RECORDING FOV, UI STYLE, BLOW SOUNDS, PC MEDIA, NATIVE RUN, AIR
+  SLINGSHOT, WEB ANGLE, WRIST SHOOTERS, DODGE TUMBLE, RUN CURVE, NATIVE RUN
+  AT, RUN LOGS, RUNNING LEAP, EARLY JUMP, SOFT LANDING, SPIDY RUN, RUN FROM
+  STANDING, WEB AIM, FOREARM BLEND, SMOOTH WEB LANDING, WEB LANDING IMPACT,
+  STEADY STATES, COMBAT RESPONSIVE, SPIDY RUN JUMP, FOREARM AIM LIMIT, PALM
+  SHOOTERS, HEIGHT, SEATED, EYE AIM,
   SMART ANCHOR, WEB RANGE, WEB SPEED, ELASTIC WEB, SOFT RELEASE, SWING
   ASSIST, SLINGSHOT SPEED, SINGLE HAND YANK STRENGTH, TWO HAND WEB ZIP, HAND ROPE STEERING, RECORDING
   SMOOTHING, REEL HAPTICS, SWING HAPTICS, the four body haptics switches
