@@ -1940,8 +1940,9 @@ void App::options(ImVec2 origin, ImVec2 size) {
                "With Animated moves: the game's animations play by default (running, fighting, parkour, hops, "
                "jumps, the game's zips and crawls) and your view stays on Spidey's head, the way finishers "
                "show it. OG SpidyVR takes over only when you web, turn in mid-air (right stick held or a fast "
-               "body turn) or pick up real speed in the air, and landing hands back with a blend. Animated "
-               "Air, Only and Air Spin are ignored while Hybrid is on. Off by default.",
+               "body turn) or pick up real speed in the air, and landing hands back with a blend. The left stick "
+               "steers toward your view. Animated Air, Only, Air Spin and Steering are ignored while Hybrid is "
+               "on. Off by default.",
                S(42), [&] { tabToggle("##animatedhybrid", Item::animatedHybrid); });
         option("Hybrid speed takeover",
                "With Animated hybrid: how long you must keep 15 m/s or more in the air before OG SpidyVR takes "

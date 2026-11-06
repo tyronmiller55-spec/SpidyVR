@@ -81,6 +81,7 @@
 #include "spidy/head_probe.hpp"
 #include "spidy/animated_moves.hpp"
 #include "spidy/hybrid_owner.hpp"
+#include "spidy/hybrid_steer.hpp"
 #include "spidy/hybrid_handoff.hpp"
 #include "spidy/animated_steering.hpp"
 #include "spidy/animated_arms.hpp"
@@ -27917,6 +27918,89 @@ int main() {
         o.domain = Domain::vr;
         s.grounded = true;
         check(!o.animOwns(true, s), "vr owned");
+    });
+
+    test("HYBRID steer: push right/left/back maps to view right/left/back in camera axes", [] {
+        using namespace hybrid_steer;
+        // Game camera facing -Z (walk axes forward -Z, right +X); view turned 90 deg left
+        // (viewYaw +pi/2: facing -X, right is -Z).
+        const Vec3 af{0, 0, -1}, ar{1, 0, 0};
+        const float left90 = 1.5707963f;
+        const auto fwd = viewRelativeStick(0, 1, left90, af, ar);
+        check(std::abs(fwd.right + 1.f) < 1e-4f && std::abs(fwd.forward) < 1e-4f,
+              "forward not view forward (-X)");
+        const auto right = viewRelativeStick(1, 0, left90, af, ar);
+        check(std::abs(right.forward - 1.f) < 1e-4f && std::abs(right.right) < 1e-4f,
+              "right not view right (-Z)");
+        const auto leftPush = viewRelativeStick(-1, 0, left90, af, ar);
+        check(std::abs(leftPush.forward + 1.f) < 1e-4f, "left not view left (+Z)");
+        const auto back = viewRelativeStick(0, -1, left90, af, ar);
+        check(std::abs(back.right - 1.f) < 1e-4f, "back not view back (+X)");
+        // View aligned with the camera: the stick passes straight through.
+        const auto same = viewRelativeStick(.6f, .8f, 0.f, af, ar);
+        check(std::abs(same.right - .6f) < 1e-4f && std::abs(same.forward - .8f) < 1e-4f,
+              "aligned view changed stick");
+        // Matches animated_model_yaw::worldToStick convention and keeps a given magnitude.
+        const auto scaled = viewRelativeStick(0, 1, 0.f, af, ar, .5f);
+        check(std::abs(scaled.forward - .5f) < 1e-4f, "magnitude not kept");
+        check(std::hypot(viewRelativeStick(.05f, .05f, 0.f, af, ar).right,
+                         viewRelativeStick(.05f, .05f, 0.f, af, ar).forward) == 0.f,
+              "deadzone stick moved");
+        // viewYaw: head yaw + HMD turn since latch + R-stick turn.
+        check(std::abs(viewYaw(.5f, .3f, .1f, .2f) - .9f) < 1e-5f, "viewYaw sum");
+        check(std::abs(std::abs(viewYaw(3.f, .5f, 0.f, 0.f)) - (6.2831853f - 3.5f)) < 1e-4f,
+              "viewYaw not wrapped");
+    });
+
+    test("HYBRID steer: view yaw low-pass converges, no spin feedback", [] {
+        using namespace hybrid_steer;
+        YawFilter f;
+        check(f.update(1.f, .011f) == 1.f, "first sample not taken");
+        // Step to -2.5 rad (across the seam the short way: +2.78 rad... wraps).
+        float y = 0;
+        for (int i = 0; i < 300; ++i)
+            y = f.update(-2.5f, .011f);
+        check(std::abs(std::remainder(y + 2.5f, 6.2831853f)) < 1e-3f, "filter did not converge in 3.3 s");
+        // After one tau it is about 63% of the way (first-order).
+        YawFilter g;
+        g.update(0.f, .011f);
+        float after = 0;
+        for (int i = 0; i < 27; ++i) // ~0.3 s
+            after = g.update(1.f, .011f);
+        check(after > .55f && after < .72f, "tau not ~0.3 s");
+        // Feedback loop: holding right while the view turns toward the hero's new
+        // heading. The hero turns at most toward the commanded way; the commanded
+        // world direction must stay bounded per frame (an arc), never jump.
+        YawFilter view;
+        float heroYaw = 0.f, lastCmd = 0.f;
+        bool smooth = true;
+        for (int i = 0; i < 600; ++i) {
+            const float v = view.update(heroYaw, .011f);
+            const Vec3 cmd = viewRight(v); // push right
+            const float cmdYaw = std::atan2(-cmd.x, -cmd.z);
+            if (i > 0 && std::abs(std::remainder(cmdYaw - lastCmd, 6.2831853f)) > .05f)
+                smooth = false;
+            lastCmd = cmdYaw;
+            // Hero turns toward the command at up to 4 rad/s.
+            heroYaw += std::clamp(std::remainder(cmdYaw - heroYaw, 6.2831853f), -.044f, .044f);
+        }
+        check(smooth, "view feedback jumped instead of arcing");
+    });
+
+    test("HYBRID steer: STEER bypassed while anim owns", [] {
+        using namespace hybrid_steer;
+        check(usesView(true, true, true), "hybrid anim head-locked not view steer");
+        check(!usesView(true, false, true), "vr owner used view steer");
+        check(!usesView(false, true, true), "non-hybrid used view steer");
+        check(!usesView(true, true, false), "HEAD off used view steer");
+        check(!steeringApplies(true, true, usesView(true, true, true)),
+              "STEER not bypassed under hybrid anim");
+        check(steeringApplies(true, true, usesView(false, true, true)), "STEER off for non-hybrid yield");
+        check(!steeringApplies(false, true, false), "STEER on with the setting off");
+        // CameraLook: cleared only while the R-stick actually turns.
+        check(!clearsLook(true, 0.f) && !clearsLook(true, .1f) && clearsLook(true, .6f) &&
+                  clearsLook(true, -.6f) && !clearsLook(false, 1.f),
+              "CameraLook clear rule");
     });
 
     test("ANIMATED HYBRID handoff: adoptEyesOrigin matches world eyes within 1 mm / 0.1 deg", [] {

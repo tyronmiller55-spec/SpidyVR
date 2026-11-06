@@ -1015,7 +1015,8 @@ VR settings
                    AIR) while a pose yield is on, left-stick magnitude runs
                    Spidey along his current facing instead of every camera
                    direction. Pair with ANIMATED MODEL YAW for right-stick
-                   character turn. Off by default.
+                   character turn. Ignored while ANIMATED HYBRID is on (Hybrid
+                   steers toward your view instead). Off by default.
   ANIMATED ARMS    (off until you switch it on; EXPERIMENTAL, after ANIMATED
                    STEERING) while a pose yield is on, controllers overlay the
                    arms on the game animation with a soft always-on floor so
@@ -1075,8 +1076,13 @@ VR settings
                    back to the animation after a short confirm (at least half
                    a second in SpidyVR, so it does not flip back and forth).
                    Every switch re-anchors the view and blends (~180 ms)
-                   instead of snapping. Animated Air, Animated Only and Air
-                   Spin are ignored while Hybrid is on. Off by default.
+                   instead of snapping. While the animation has you, the left
+                   stick steers toward where you are looking - push right and
+                   he heads to the right of your view, over rooftops too - and
+                   the game's camera follows your view (the right stick still
+                   turns him with ANIMATED MODEL YAW). Animated Air, Animated
+                   Only, Air Spin and Animated Steering are ignored while
+                   Hybrid is on. Off by default.
   ANIMATED HYBRID SPEED (200 MS until you change it; after ANIMATED HYBRID,
                    used only while Hybrid is on) how long you must keep 15 m/s
                    or more in the air before OG SpidyVR takes over: OFF (speed

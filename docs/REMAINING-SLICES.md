@@ -10,7 +10,11 @@
 4. **Intent owner (Slice A)** — animation is the default owner; OG VR only on
    web attach / airborne web press / mid-air rotate / airborne speed ≥ 15 m/s /
    Spidy wall run. 500 ms VR minimum, 250 ms land confirm. Head follow = owner
-   (`animOwns`), no per-frame classify drop.
+   (`animOwns`), no per-frame classify drop. ANIMATED HYBRID SPEED row: speed
+   hold OFF or 5–500 ms (200 default).
+5. **Parkour steering (Slice B)** — left stick view-relative while the animation
+   owns (`hybrid_steer.hpp`); ANIMATED STEERING bypassed under HYBRID; CameraLook
+   follows the view unless the R-stick turns.
 
 ## Next
 - **Slice C:** blend window 180 → ~250 ms once headset confirms the owner stopped chattering
@@ -23,6 +27,8 @@ MOVES on, HYBRID on, AIR / ONLY / AIR SPIN off, HEAD Full, ARMS/TORSO/MODEL YAW 
 - Web attach or mid-air turn: no view snap; look for `hybrid: anim->vr (…) … G->T … eyes dPos`
 - Land into run/fight: blend back; `hybrid: vr->anim (land …)` with land ≥ 500 ms
 - R-stick on ground: +X turns the hero right (same sense as OG SpidyVR)
+- L-stick in a full circle while running and over rooftops: he heads where you push,
+  relative to your view; `hybrid steer: … sent L(…)` once a second
 
 ## Tabled
 - Legs redesign

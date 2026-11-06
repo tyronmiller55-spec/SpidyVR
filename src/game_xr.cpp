@@ -59,6 +59,7 @@
 #include "spidy/animated_air_spin.hpp"
 #include "spidy/hybrid_owner.hpp"
 #include "spidy/hybrid_handoff.hpp"
+#include "spidy/hybrid_steer.hpp"
 #include "spidy/animated_arms.hpp"
 #include "spidy/frame_stats.hpp"
 #include "spidy/seated.hpp"
@@ -1050,6 +1051,9 @@ DWORD WINAPI run(void*) {
         Vec3 hybridFeetWas{};
         bool hybridFeetWasSet{};
         float hybridSpeedH{};
+        // Parkour steering under HYBRID: the head-locked view's yaw, low-passed.
+        hybrid_steer::YawFilter hybridViewYaw{};
+        int64_t hybridSteerDiagAt{};
         // Slices 2–3: 180 ms eye/yaw blend + delayed arms wipe on G↔T edges.
         struct HybridBlend {
             bool active{};
@@ -4288,8 +4292,9 @@ DWORD WINAPI run(void*) {
                         // through left-stick walk facing (VALIDATION / InteractStep)
                         // — not a facing RVA write, and not CameraLook view yaw.
                         // Basic flips that own the right stick keep that ownership.
-                        if ((values.animatedSteering || values.animatedModelYaw) && !walk.dodge &&
-                            !calibrationInput && mapping == game_pad::Mapping::gameplay) {
+                        if ((values.animatedSteering || values.animatedModelYaw ||
+                             (values.animatedHybrid && values.animatedMoves)) &&
+                            !walk.dodge && !calibrationInput && mapping == game_pad::Mapping::gameplay) {
                             head_probe::StateInputs steerState;
                             steerState.playing = steering && !calibrationInput;
                             steerState.fresh = swingFresh;
@@ -4317,7 +4322,73 @@ DWORD WINAPI run(void*) {
                                             : animated_moves::yieldsBody(steerGate, steerState, webAimIntent,
                                                                          values.animatedArms);
                             const Vec3 actorAhead{body[8], body[9], body[10]};
-                            if (animated_steering::active(values.animatedSteering, yieldingPose)) {
+                            // HYBRID parkour steering: while the animation owns and the
+                            // view is head-locked, aim the left stick at what the player
+                            // sees (headbone yaw + HMD turn since the view latched + the
+                            // Level R-stick turn), low-passed, then into the game camera's
+                            // walk axes. ANIMATED STEERING is bypassed (it keeps only the
+                            // stick's magnitude). On a surface the crawl stick stays.
+                            const bool hybridViewSteer =
+                                hybrid_steer::usesView(hybridSteer, yieldingPose,
+                                                       animated_moves::headFollow(values.animatedHead) !=
+                                                               animated_moves::HeadFollow::off &&
+                                                           !flatScreen) &&
+                                !motion.onSurface;
+                            bool hybridViewOk = false;
+                            float hybridViewYawNow = 0.f;
+                            if (hybridViewSteer) {
+                                Mat4 headMat{};
+                                const bool levelHead = animated_moves::headFollow(values.animatedHead) ==
+                                                       animated_moves::HeadFollow::level;
+                                if (levelHead ? game_fp::frameLevel(headMat) : game_fp::frame(headMat)) {
+                                    const Vec3 headAhead{headMat[8], headMat[9], headMat[10]};
+                                    if (finite(headAhead) && std::hypot(headAhead.x, headAhead.z) > .2f) {
+                                        float trackedYaw = 0.f, refYaw = 0.f;
+                                        if (animHeadRefSet && validTrackedPose(frame.head)) {
+                                            trackedYaw = hybrid_handoff::lookYaw(
+                                                screenAhead(frame.head, 0).orientation.rotate({0, 0, -1}));
+                                            refYaw = hybrid_handoff::lookYaw(
+                                                animHeadRef.orientation.rotate({0, 0, -1}));
+                                        }
+                                        const float target = hybrid_steer::viewYaw(
+                                            hybrid_handoff::lookYaw(headAhead), trackedYaw, refYaw,
+                                            animHeadRefSet ? animHeadTurn : 0.f);
+                                        hybridViewYawNow = hybridViewYaw.update(
+                                            target, std::isfinite(frame.seconds) ? frame.seconds : 0.f);
+                                        hybridViewOk = true;
+                                    }
+                                }
+                                if (!hybridViewOk && hybridViewYaw.set) {
+                                    // No head sample this frame: keep the last view yaw.
+                                    hybridViewYawNow = hybridViewYaw.yaw;
+                                    hybridViewOk = true;
+                                }
+                                const auto& moveHand = frame.hands[0];
+                                const float walkMag = std::hypot(walk.right, walk.forward);
+                                if (hybridViewOk && moveHand.valid && walkMag > 1e-3f) {
+                                    // Direction from the raw stick, magnitude from the
+                                    // vanilla walk (its run curve / zeroing kept).
+                                    const auto viewed = hybrid_steer::viewRelativeStick(
+                                        moveHand.stickX, moveHand.stickY, hybridViewYawNow,
+                                        motion.walkForwardAxis, motion.walkRightAxis, std::min(walkMag, 1.f));
+                                    if (frame.predictedDisplayTime - hybridSteerDiagAt > 1'000'000'000) {
+                                        hybridSteerDiagAt = frame.predictedDisplayTime;
+                                        diag_log::writef(
+                                            "hybrid steer: stick(%.2f,%.2f) viewYaw %.0f actorYaw %.0f sent "
+                                            "L(%.2f,%.2f)",
+                                            moveHand.stickX, moveHand.stickY,
+                                            hybridViewYawNow * (180.f / 3.14159265f),
+                                            hybrid_handoff::actorLookYaw(actorAhead) * (180.f / 3.14159265f),
+                                            viewed.right, viewed.forward);
+                                    }
+                                    walk.right = viewed.right;
+                                    walk.forward = viewed.forward;
+                                }
+                            } else {
+                                hybridViewYaw.reset();
+                            }
+                            if (hybrid_steer::steeringApplies(values.animatedSteering, yieldingPose,
+                                                              hybridViewSteer)) {
                                 const auto steered = animated_steering::actorRelativeForward(
                                     walk.right, walk.forward, actorAhead, motion.walkForwardAxis,
                                     motion.walkRightAxis);
@@ -4343,13 +4414,25 @@ DWORD WINAPI run(void*) {
                                 animated_model_yaw::ownsStick(values.animatedModelYaw, yieldingPose,
                                                               airSpinOwnsStick) &&
                                 !motion.basicFlipControls && !hybridYawHold;
-                            if (modelYawOwns || airSpinOwnsStick || hybridYawHold ||
+                            // HYBRID view steering: MODEL YAW frees CameraLook only while
+                            // the R-stick turns; otherwise the game camera follows the
+                            // view so its parkour assists see a sensible camera.
+                            const bool modelYawClears =
+                                hybridViewSteer && hybridViewOk
+                                    ? hybrid_steer::clearsLook(
+                                          modelYawOwns, frame.hands[1].valid ? frame.hands[1].stickX : 0.f)
+                                    : modelYawOwns;
+                            if (modelYawClears || airSpinOwnsStick || hybridYawHold ||
                                 hybridBlend.clearLook) {
                                 // Free the right stick from CameraLook so it does not
                                 // also yaw the follow camera (HMD free look stays XR;
                                 // tracking yaw / AIR SPIN keep the stick).
                                 walk.look = 0;
                                 hybridBlend.clearLook = false;
+                            } else if (hybridViewSteer && hybridViewOk) {
+                                walk.look =
+                                    cameraLook.update(hybrid_steer::viewForward(hybridViewYawNow),
+                                                      {camera[8], camera[9], camera[10]}, cameraSteered);
                             }
                             if (hybridYawHold && hybridBlend.seedActorYawValid) {
                                 // Seed the game actor toward the rig look the player

@@ -7,6 +7,23 @@ Per-check results are in [VALIDATION.md](VALIDATION.md).
 
 Not in a build yet, newest first. The release adds these to the next build's entry.
 
+**ANIMATED HYBRID: steer parkour with the left stick toward the view.**
+
+- **Why.** With ANIMATED STEERING on, `animated_steering::actorRelativeForward`
+  kept only the stick's magnitude and re-aimed it along the hero's facing, so
+  parkour ran one way and the left stick could never turn him (`0063b5e`
+  session: most common sent stick `L(0.0, 1.0)`). MODEL YAW also cleared the
+  game's CameraLook every frame, so the follow camera stopped tracking the view.
+- **Change.** Under HYBRID while the animation owns and the view is head-locked
+  (not on a crawl surface), the left stick's direction is taken relative to the
+  view the player sees (headbone yaw + HMD turn since the view latched + the
+  Level R-stick turn, low-passed τ 0.3 s) and put into the game camera's walk
+  axes with the vanilla walk's magnitude (`hybrid_steer.hpp`). ANIMATED
+  STEERING is bypassed there (kept for non-HYBRID). CameraLook is cleared only
+  while the R-stick turns past MODEL YAW's deadzone; otherwise the game camera
+  is steered toward the view. VR owner: OG stick unchanged. Diag once a second:
+  `hybrid steer: stick(…) viewYaw … actorYaw … sent L(…)`.
+
 **ANIMATED HYBRID: stay on animations until you grab, spin, or pick up speed.**
 
 - **Why.** Headset on `0063b5e`: the handoff blend felt good, but ownership
@@ -30,7 +47,7 @@ Not in a build yet, newest first. The release adds these to the next build's ent
   SPIN is ignored at the stick under HYBRID too. Diag:
   `hybrid: anim->vr (web|air-web|rotate|speed|wallrun) speed … rot …, G->T (…)`,
   `hybrid: vr->anim (land … ms), T->G (…)`.
-- **Not in this patch.** Parkour left-stick steering (next entry); longer blend
+- **Not in this patch.** Parkour left-stick steering (entry above); longer blend
   window; Slice 4 immersion; legs.
 
 **ANIMATED HYBRID handoff: smooth takeoff and landing (Slices 2+3).**
