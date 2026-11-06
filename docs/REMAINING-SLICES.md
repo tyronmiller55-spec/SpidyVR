@@ -1,20 +1,19 @@
-# Remaining after feat/animated-dedicated-yaw
+# Remaining after feat/animated-torso-softlock
 
-## Delivered (this zip — not headset-tested)
-- Prior stack through animated-only-sphere @ 4e4c3d5
-- **dedicated yaw @ (this tip):** MODEL YAW gated off midair when AIR SPIN owns
-  R-stick 6DOF; CameraLook cleared; ground MODEL YAW sign kept (SpidyVR parity);
-  diag `model yaw:` apply / idle lines.
+## Delivered
+- dedicated yaw @ 2b74b11
+- **torso softlock (this tip):** midair effective softlock (anchored 4 / frameLevel,
+  followHero on); ground Full/Level unchanged; named diag/policy
 
-## Still open / not done
-- Headset verify: ground +R → model turns right; midair AIR SPIN 6DOF no opposite yaw;
-  MODEL YAW diag idle midair while spin active
-- Midair torso softlock (Slices 2–3) — next zip
-- Tracking-lock 1:1 under softlock + weblines from shooters (Slices 4–5)
-- ONLY + AIR SPIN headset verification (Slice 6)
-- Legs redesign (tabled)
+## Still open
+- Headset verify softlock feel + perch→jump blend; capture true chest perch offset
+- Tracking-lock 1:1 under softlock eyes + weblines from shooters (next zip)
+- ONLY + AIR SPIN headset verification
+- Legs tabled
 
-## View policy (user 2026-11-05; softlock not in this zip yet)
-- Ground/parkour/perch: headbone follow (Full/Level per setting; never silent Level)
-- Midair: torso softlock (perch-like) — lands in torso-softlock zip
-- Outside yield: SpidyVR tracking path
+## View policy (live)
+| State | View |
+|---|---|
+| Ground/parkour/perch/wall | Headbone Full or Level per setting |
+| Midair yield | Torso softlock (free HMD, level axes) |
+| Outside yield | SpidyVR tracking |

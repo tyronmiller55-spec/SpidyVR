@@ -49,6 +49,9 @@ void want(bool on);
 // frameLevel() the same way finishers do.
 void followHero(bool on);
 bool followingHero();
+// Re-latch frameLevel axes (as a cut): call when midair softlock begins so the
+// level forward settles to the current torso/head facing without a nausea pop.
+void relatchHeadFrame();
 // The XR worker, once per headset frame, with want(): what the view is where no head is found. 0: nothing,
 // the scene goes to the theatre screen. 1: the scene's own camera, where no head can be found (a head is
 // looked for all the same, and takes over when it is found). 2: the scene's own camera always (launcher:

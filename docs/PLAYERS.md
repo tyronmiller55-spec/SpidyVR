@@ -999,9 +999,12 @@ VR settings
                    follows Spider-Man's gameplay head the way finishers do.
                    LEVEL: only his place follows, on a level frame — you look
                    about freely (safer). FULL: turns with the anim head
-                   (pitch/roll included) on ground and in air. Level is only
-                   when you pick LEVEL — Full is never forced down. Off by
-                   default. Leaving a yield resyncs the VR body and tracking.
+                   pitch/roll on the ground / perch / wall. Midair (air,
+                   swing, web, zip, airborne parkour/combat): automatic
+                   torso softlock — a perch-like level frame so the chest
+                   stays ahead of you and the HMD looks freely (not a silent
+                   Full→Level rewrite; diag says softlock). The head mesh
+                   shrinks so it is not in front of the eyes. Off by default.
   ANIMATED AIR     (off until you switch it on; EXPERIMENTAL, after ANIMATED
                    HEAD) freefall, swing and web-hold air: the game's animation
                    drives the body while the mod keeps swing physics (direction
@@ -1053,8 +1056,9 @@ VR settings
                    SpidyVR takeHeading (MODEL YAW does not also drive midair).
                    FLIPS + MOMENTUM also leans him along his travel (dives
                    nose-down, climbs nose-up) and banks him into turns. Turned
-                   about his head; with ANIMATED HEAD FULL your view turns with
-                   him (never leveled). Visual and view only. Limits provisional.
+                   about his head; midair view stays torso softlock (free HMD)
+                   while the model still 6DOF-spins. Visual and view only.
+                   Limits provisional.
   DODGE TUMBLE     (OFF until you pick one) when the game dodges, your
                    view tips toward the dodge (LEAN) or turns a full roll
                    (ROLL, sideways dodges) so you can tell it dodged. Your

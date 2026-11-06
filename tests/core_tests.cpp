@@ -26706,17 +26706,31 @@ int main() {
         // ANIMATED ARMS: freefall web intent keeps pose yield (arms aim).
         in.webbed = false;
         check(animated_moves::yieldsBody(g, in, true, true), "arms mode still interrupted by freefall aim");
-        // Full is Full in air and on ground (no silent Level force). Level only if chosen.
+        // Midair: deliberate softlock (not silent Level). Ground keeps Full/Level.
         in = {};
         in.playing = in.fresh = true;
-        check(animated_moves::headFollowForYield(2, in) == animated_moves::HeadFollow::full,
-              "air Full forced to Level");
-        check(animated_moves::headFollowForYield(1, in) == animated_moves::HeadFollow::level,
-              "explicit Level not kept in air");
+        check(animated_moves::midairSoftlock(in), "freefall not midair softlock");
+        check(animated_moves::headFollowForYield(2, in) == animated_moves::HeadFollow::softlock,
+              "air Full not softlock");
+        check(animated_moves::headFollowForYield(1, in) == animated_moves::HeadFollow::softlock,
+              "air Level not softlock");
+        check(std::strcmp(animated_moves::headFollowName(animated_moves::HeadFollow::softlock), "softlock") ==
+                  0,
+              "softlock name");
+        check(animated_moves::headFollowForYield(0, in) == animated_moves::HeadFollow::off,
+              "air Off became softlock");
         in.grounded = true;
+        check(!animated_moves::midairSoftlock(in), "ground treated as softlock");
         check(animated_moves::headFollowForYield(2, in) == animated_moves::HeadFollow::full,
               "ground Full lost");
+        check(animated_moves::headFollowForYield(1, in) == animated_moves::HeadFollow::level,
+              "ground Level lost");
         check(animated_moves::followsHead(2, true, in), "ground Full does not follow");
+        in.grounded = false;
+        in.wall = 1;
+        check(!animated_moves::midairSoftlock(in), "wall softlock");
+        check(animated_moves::headFollowForYield(2, in) == animated_moves::HeadFollow::full,
+              "wall Full became softlock");
     });
     test("ANIMATED STEERING: off by default, after ANIMATED AIR, swing settings version 35", [] {
         using namespace vr_settings;

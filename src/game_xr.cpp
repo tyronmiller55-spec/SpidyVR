@@ -1046,6 +1046,8 @@ DWORD WINAPI run(void*) {
         int64_t trackingLockDiagAt{};
         int64_t animatedMovesDiagAt{};
         bool animatedHeadFollowWas{};
+        bool animatedSoftlockWas{};
+        int animatedHeadModeWas = -1;
         Vec3 animatedMovesYieldFeet{}; // actor feet when yield began (diag: actor vs latch)
         Pose animHeadRef{};
         bool animHeadRefSet{};
@@ -5076,6 +5078,8 @@ DWORD WINAPI run(void*) {
                             animated_moves::followsHead(values.animatedHead, yieldAnim, animState) &&
                             !flatScreen && !(onlyHeld && !animState.playing);
                         animHeadFollowNow = headFollow;
+                        // Always character-held camera while HEAD ≠ Off (ground
+                        // headbone or midair softlock proxy); shrinkHead stays on.
                         game_fp::followHero(headFollow);
                         const Vec3 nowFeet = finite(Vec3{body[12], body[13], body[14]})
                                                  ? Vec3{body[12], body[13], body[14]}
@@ -5117,13 +5121,27 @@ DWORD WINAPI run(void*) {
                                              animated_moves::yieldName(animState));
                             animatedMovesDiagAt = frame.predictedDisplayTime;
                         }
-                        if (headFollow != animatedHeadFollowWas) {
-                            // Log the active follow state: "off" on exit, not the setting name.
+                        const bool softlockNow =
+                            headFollow && animHeadMode == animated_moves::HeadFollow::softlock;
+                        if (softlockNow && !animatedSoftlockWas) {
+                            game_fp::relatchHeadFrame();
+                            diag_log::writef(
+                                "view softlock: midair chest|headbone (%s) offHeadPitch — dYaw —",
+                                animated_moves::yieldName(animState));
+                        }
+                        if (!softlockNow && animatedSoftlockWas) {
+                            game_fp::relatchHeadFrame(); // settle back onto ground headbone frame
+                        }
+                        animatedSoftlockWas = softlockNow;
+                        const int modeNow = headFollow ? static_cast<int>(animHeadMode) : -1;
+                        if (headFollow != animatedHeadFollowWas || modeNow != animatedHeadModeWas) {
+                            // softlock|full|level|off — never silent "level" for Full midair.
                             diag_log::writef(
                                 "animated moves: head follow %s (%s)",
                                 headFollow ? animated_moves::headFollowName(animHeadMode) : "off",
                                 animated_moves::yieldName(animState));
                             animatedHeadFollowWas = headFollow;
+                            animatedHeadModeWas = modeNow;
                             if (!headFollow) {
                                 animHeadRefSet = false;
                                 animHeadTurn = 0;
@@ -5406,11 +5424,18 @@ DWORD WINAPI run(void*) {
                             animHeadTurn = 0;
                             animHeadFlick = false;
                         }
+                        // Full (ground): anchored 2 follows anim head pitch/roll.
+                        // Level (ground) / softlock (midair): anchored 4 level frame,
+                        // free HMD. Softlock is deliberate midair policy — not a
+                        // silent Full→Level settings rewrite (diag says softlock).
                         const bool followFull = animHeadMode == animated_moves::HeadFollow::full;
+                        const bool followSoftlock =
+                            animHeadMode == animated_moves::HeadFollow::softlock;
                         eyes.anchored = followFull ? 2u : 4u;
-                        if (!followFull) {
-                            // Level: right stick turns the view, as in cutscenes with
-                            // head tracking off.
+                        if (!followFull && !followSoftlock) {
+                            // Level only: right stick turns the view, as in cutscenes
+                            // with head tracking off. Softlock leaves R-stick to AIR
+                            // SPIN / tracking yaw.
                             const float x = frame.hands[1].stickX;
                             const float degrees = 3.14159265f / 180;
                             if (values.smoothTurn > 0) {

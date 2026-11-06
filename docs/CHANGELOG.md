@@ -7,6 +7,21 @@ Per-check results are in [VALIDATION.md](VALIDATION.md).
 
 Not in a build yet, newest first. The release adds these to the next build's entry.
 
+**ANIMATED HEAD midair torso softlock (automatic while HEAD ≠ Off).**
+
+- **Why.** Full headbone midair put eyes on the flailing anim head; chest/arms
+  remapping fought the HMD. User (2026-11-05): midair view softlocks to a
+  perch-like torso-forward frame (chest ahead/below chin, free HMD) —
+  supersedes “Full must follow anim head midair.” Not a silent Full→Level lie.
+- **Change.** `headFollowForYield` returns effective `softlock` while yielding
+  airborne (air/swing/web/zip/parkour/combat, not ground/wall). Eyes use
+  anchored 4 / `frameLevel` (level axes, free HMD); `followHero` stays on so the
+  character still holds the camera (shrinkHead). Relatch on softlock enter/exit.
+  Ground/perch keep Full or Level as set. Diag: `view softlock: midair …`,
+  `animated moves: head follow softlock|full|level|off (state)`.
+- **Not in this patch.** Perch eyes-from-chest offset capture (uses head place
+  with level axes for now); legs; hands/webline zip.
+
 **ANIMATED MODEL YAW / AIR SPIN: dedicated yaw ownership (opt-in paths).**
 
 - **Why.** With REALISTIC FLIPS, `basicFlipControls` is false midair, so MODEL YAW

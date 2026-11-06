@@ -1705,6 +1705,9 @@ void followHero(bool on) {
 bool followingHero() {
     return followHeroOn.load(std::memory_order_relaxed);
 }
+void relatchHeadFrame() {
+    ++cutCount;
+}
 void sceneCamera(int mode) {
     cameraMode = mode < 0 ? 0 : mode > 2 ? 2 : mode;
 }

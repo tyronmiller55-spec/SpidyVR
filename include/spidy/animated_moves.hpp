@@ -101,7 +101,10 @@ inline const char* yieldName(const head_probe::StateInputs& s) {
 }
 
 // ANIMATED HEAD choices (vr_settings Int, swing Settings::animatedHead).
-enum class HeadFollow : int { off = 0, level = 1, full = 2 };
+// softlock is effective-only (not a settings row): midair torso-forward view
+// frame (frameLevel / anchored 4) with free HMD — deliberate named policy, not
+// a silent Full→Level rewrite.
+enum class HeadFollow : int { off = 0, level = 1, full = 2, softlock = 3 };
 
 inline HeadFollow headFollow(int setting) {
     if (setting == 2)
@@ -111,12 +114,33 @@ inline HeadFollow headFollow(int setting) {
     return HeadFollow::off;
 }
 
-// Effective head-follow mode while yielding: the user's choice as-is. Full
-// keeps anim pitch/roll in air and on ground; Level only when explicitly set.
-// `s` is kept for call-site compatibility / future per-state options.
+// Midair (same airborne set as AIR SPIN): softlock when HEAD ≠ Off. Ground /
+// parkour / perch / wall keep the user's Full or Level headbone choice.
+inline bool midairSoftlock(const head_probe::StateInputs& s) {
+    if (s.grounded || s.wall != 0)
+        return false;
+    switch (head_probe::classify(s)) {
+    case head_probe::State::air:
+    case head_probe::State::swing:
+    case head_probe::State::web:
+    case head_probe::State::zip:
+    case head_probe::State::parkour:
+    case head_probe::State::combat:
+        return true;
+    default:
+        return false;
+    }
+}
+
+// Effective head-follow while yielding. Midair → softlock (torso-forward /
+// perch-like level frame, free HMD). Ground keeps Full/Level as set.
 inline HeadFollow headFollowForYield(int headSetting, const head_probe::StateInputs& s) {
-    (void)s;
-    return headFollow(headSetting);
+    const HeadFollow choice = headFollow(headSetting);
+    if (choice == HeadFollow::off)
+        return HeadFollow::off;
+    if (midairSoftlock(s))
+        return HeadFollow::softlock;
+    return choice;
 }
 
 inline bool followsHead(int headSetting, bool yielding, const head_probe::StateInputs& s) {
@@ -135,6 +159,8 @@ inline const char* headFollowName(HeadFollow mode) {
         return "full";
     case HeadFollow::level:
         return "level";
+    case HeadFollow::softlock:
+        return "softlock";
     default:
         return "off";
     }
