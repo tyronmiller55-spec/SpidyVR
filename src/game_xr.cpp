@@ -1065,6 +1065,7 @@ DWORD WINAPI run(void*) {
             float enterEyeDPos{};
             float enterEyeDYaw{};
             float landSpeed{};
+            bool clearLook{};
         } hybridBlend{};
         int64_t modelYawDiagAt{};
         animated_arms::State animatedArmsState{};
@@ -4340,11 +4341,13 @@ DWORD WINAPI run(void*) {
                                 animated_model_yaw::ownsStick(values.animatedModelYaw, yieldingPose,
                                                               airSpinOwnsStick) &&
                                 !motion.basicFlipControls && !hybridYawHold;
-                            if (modelYawOwns || airSpinOwnsStick || hybridYawHold) {
+                            if (modelYawOwns || airSpinOwnsStick || hybridYawHold ||
+                                hybridBlend.clearLook) {
                                 // Free the right stick from CameraLook so it does not
                                 // also yaw the follow camera (HMD free look stays XR;
                                 // tracking yaw / AIR SPIN keep the stick).
                                 walk.look = 0;
+                                hybridBlend.clearLook = false;
                             }
                             if (hybridYawHold && hybridBlend.seedActorYawValid) {
                                 // Seed the game actor toward the rig look the player
@@ -5232,7 +5235,7 @@ DWORD WINAPI run(void*) {
                                 hybridBlend.delayModelYaw = false; // OG stick from frame 0
                                 hybridBlend.enterEyeDPos = dPos >= 0.f ? dPos : 0.f;
                                 hybridBlend.enterEyeDYaw = dYaw;
-                                walk.look = 0; // residual CameraLook must not fight stickTurn
+                                hybridBlend.clearLook = true; // clear Walk::look next pad frame
                                 diag_log::writef(
                                     "hybrid: G->T (%s) eyes dPos %.2f m dYaw %.0f, ikWarm 1, "
                                     "overlay->body %.0f ms",
@@ -5731,8 +5734,13 @@ DWORD WINAPI run(void*) {
                     // animHeadMode is the user choice (Full may include air pitch/roll).
                     const bool headFollowEyes =
                         animHeadFollowNow && animHeadMode != animated_moves::HeadFollow::off && !flatScreen;
+                    const int64_t eyeBlendNow =
+                        frame.predictedDisplayTime > 0
+                            ? frame.predictedDisplayTime
+                            : static_cast<int64_t>(GetTickCount64()) * 1'000'000ll;
                     const int64_t eyeBlendElapsed =
-                        hybridBlend.active ? (handoffNs - hybridBlend.startNs) : hybrid_handoff::handoffNs;
+                        hybridBlend.active ? (eyeBlendNow - hybridBlend.startNs)
+                                           : hybrid_handoff::handoffNs;
                     const float eyeBlendW =
                         hybridBlend.active ? hybrid_handoff::blendAlpha(eyeBlendElapsed) : 1.f;
                     const bool hybridEyeBlend =
