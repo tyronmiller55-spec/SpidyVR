@@ -81,6 +81,7 @@
 #include "spidy/head_probe.hpp"
 #include "spidy/animated_moves.hpp"
 #include "spidy/hybrid_owner.hpp"
+#include "spidy/hybrid_handoff.hpp"
 #include "spidy/animated_steering.hpp"
 #include "spidy/animated_arms.hpp"
 #include "spidy/animated_torso.hpp"
@@ -27106,7 +27107,9 @@ int main() {
 
     test("ANIMATED MODEL YAW: walk-facing stick, deadzone, no camera substitute", [] {
         using namespace animated_model_yaw;
-        Vec3 actor{0, 0, 1}, af{0, 0, 1}, ar{1, 0, 0};
+        // Actor/OpenXR ahead is −Z (same as ANIMATED STEERING tests). +R-stick
+        // must ask toward actor right (+X) so the game turns the hero right.
+        Vec3 actor{0, 0, -1}, af{0, 0, -1}, ar{1, 0, 0};
         // Deadzone: R stick quiet leaves L stick alone.
         auto s = apply(0.f, .8f, .1f, actor, af, ar);
         check(std::abs(s.forward - .8f) < 1e-4f && std::abs(s.right) < 1e-4f, "deadzone moved stick");
@@ -27672,6 +27675,55 @@ int main() {
         s.fighting = true;
         check(o.yielding(true, s, false, false), "sticky combat not yield");
     });
+
+    test("ANIMATED HYBRID handoff: adoptEyesOrigin matches world eyes within 1 mm / 0.1 deg", [] {
+        using namespace hybrid_handoff;
+        const Vec3 trackedHead{.02f, 1.65f, -.03f};
+        const Vec3 standOff{.05f, 0, .02f};
+        const Vec3 headDrop{0, -.01f, 0};
+        const Vec3 runOff{};
+        const Vec3 worldEyes{10.f, 1.72f, -4.f};
+        const float worldYaw = .35f; // ~20°
+        const Vec3 trackedLook = Quat::yaw(.1f).rotate({0, 0, -1});
+        const float rigYaw = adoptEyesRigYaw(worldYaw, trackedLook);
+        const Vec3 origin =
+            adoptEyesOrigin(worldEyes, worldYaw, rigYaw, trackedHead, standOff, headDrop, runOff);
+        const Vec3 got = predictedEyes(origin, rigYaw, trackedHead, standOff, headDrop, runOff);
+        check(length(got - worldEyes) < .001f, "adoptEyesOrigin eye miss > 1 mm");
+        // Rig look yaw + tracked look → world look.
+        const float recovered = wrapPi(rigYaw + lookYaw(trackedLook));
+        check(std::abs(wrapPi(recovered - worldYaw)) < .001745f, "adoptEyesRigYaw > 0.1 deg");
+        // Offsets must not be required to be zero (kept through adopt).
+        const Vec3 originClear =
+            adoptEyesOrigin(worldEyes, worldYaw, rigYaw, trackedHead, {}, {}, {});
+        check(length(originClear - (worldEyes - Quat::yaw(rigYaw).rotate(trackedHead))) < 1e-5f,
+              "clear-offset origin");
+        check(blendAlpha(0) == 0.f && blendAlpha(handoffNs) == 1.f &&
+                  blendAlpha(handoffNs / 2) > .4f && blendAlpha(handoffNs / 2) < .6f,
+              "blendAlpha window");
+        check(std::abs(lerpAngle(0.f, 3.f, 1.f) - 3.f) < 1e-4f, "lerpAngle");
+    });
+
+    test("ANIMATED HYBRID handoff: GameTrackingRig::adoptEyes keeps offsets and hits eyes", [] {
+        GameTrackingRig rig;
+        auto f = trackedFrame();
+        const Vec3 start{10, 0, 20};
+        auto placed = playFor(rig, f, start, {0, 1, 0}, .2f);
+        check(placed.active, "tracking not active at start");
+        // Re-anchor onto a new eye pose at the same feet (no travel replay).
+        const Vec3 wantEyes{10.f, 1.7f, 20.f};
+        const float wantYaw = .2f;
+        rig.adoptEyes(wantEyes, wantYaw, f.head);
+        ++f.predictedDisplayTime;
+        placed = rig.update(f, start, {0, 0, -1}, true);
+        check(placed.active, "tracking not active after adoptEyes");
+        const Vec3 head = matrixRow(placed.head, 3);
+        check(length(Vec3{head.x - wantEyes.x, head.y - wantEyes.y, head.z - wantEyes.z}) < .05f,
+              "adoptEyes head not on world eyes");
+        const float yaw = std::atan2(-matrixRow(placed.head, 2).x, -matrixRow(placed.head, 2).z);
+        check(std::abs(std::remainder(yaw - wantYaw, 6.2831853f)) < .05f, "adoptEyes yaw miss");
+    });
+
 
     test("STEADY STATES: RT comes back after a moment, goes at once, never in a fight; off as before", [] {
         using namespace ground_state;

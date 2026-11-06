@@ -1,4 +1,5 @@
 #include "spidy/game_tracking.hpp"
+#include "spidy/hybrid_handoff.hpp"
 #include "spidy/presentation_gate.hpp"
 
 namespace spidy {
@@ -245,6 +246,18 @@ void GameTrackingRig::adoptFeet(Vec3 feet, const Pose& head) {
     headDrop_ = {};
     runViewOffset_ = {};
     pendingAdopt_ = true;
+}
+void GameTrackingRig::adoptEyes(Vec3 worldEyes, float worldLookYaw, const Pose& head) {
+    if (!finite(worldEyes) || !std::isfinite(worldLookYaw) || !validTrackedPose(head))
+        return;
+    const Vec3 look = head.orientation.rotate({0, 0, -1});
+    rig_.yaw = hybrid_handoff::adoptEyesRigYaw(worldLookYaw, look);
+    // Keep stand-off / run-view / surface / head-drop: the view continues from
+    // the same place the anim head had it; only origin + yaw move underneath.
+    rig_.origin = hybrid_handoff::adoptEyesOrigin(worldEyes, worldLookYaw, rig_.yaw, head.position,
+                                                  standOff_, headDrop_, runViewOffset_);
+    lastHead_ = head;
+    // Do not set pendingAdopt_ — that path is the rested feet snap.
 }
 void GameTrackingRig::reset() {
     const float snap = snap_, smooth = smooth_, wallDistance = wallDistance_;

@@ -58,6 +58,7 @@
 #include "spidy/animated_model_yaw.hpp"
 #include "spidy/animated_air_spin.hpp"
 #include "spidy/hybrid_owner.hpp"
+#include "spidy/hybrid_handoff.hpp"
 #include "spidy/animated_arms.hpp"
 #include "spidy/frame_stats.hpp"
 #include "spidy/seated.hpp"
@@ -1046,6 +1047,25 @@ DWORD WINAPI run(void*) {
         hybrid_owner::HybridOwner hybridOwner{};
         bool hybridWebWas{}, hybridZipWas{}, hybridOwnedWas{};
         unsigned hybridWallWas{};
+        // Slices 2–3: 180 ms eye/yaw blend + delayed arms wipe on G↔T edges.
+        struct HybridBlend {
+            bool active{};
+            bool toTraversal{}; // true = G→T reclaim; false = T→G land
+            int64_t startNs{};
+            int64_t landConfirmNs{}; // grounded clock at enterG (diag)
+            Vec3 fromEyes{};
+            float fromYaw{};
+            Vec3 fromEyePos[2]{};
+            Quat fromEyeOri[2]{};
+            bool fromValid{};
+            bool delayArmsClear{};
+            bool delayModelYaw{};
+            float seedActorYaw{};
+            bool seedActorYawValid{};
+            float enterEyeDPos{};
+            float enterEyeDYaw{};
+            float landSpeed{};
+        } hybridBlend{};
         int64_t modelYawDiagAt{};
         animated_arms::State animatedArmsState{};
         int64_t trackingLockDiagAt{};
@@ -4282,9 +4302,17 @@ DWORD WINAPI run(void*) {
                                 values.triggerWebs
                                     ? (frame.hands[0].squeeze > .5f || frame.hands[1].squeeze > .5f)
                                     : (frame.hands[0].trigger > .5f || frame.hands[1].trigger > .5f);
-                            const animated_moves::Gate steerGate{values.animatedMoves, values.animatedAir};
-                            const bool yieldingPose = animated_moves::yieldsBody(
-                                steerGate, steerState, webAimIntent, values.animatedArms);
+                            // Under HYBRID the air yield is forced off (same as the
+                            // body gate later): MODEL YAW / STEERING only while ground.
+                            const bool hybridSteer = values.animatedHybrid && values.animatedMoves;
+                            const animated_moves::Gate steerGate{values.animatedMoves,
+                                                                 hybridSteer ? false : values.animatedAir,
+                                                                 hybridSteer ? false : values.animatedOnly};
+                            const bool yieldingPose =
+                                hybridSteer ? hybridOwner.yielding(values.animatedMoves, steerState,
+                                                                   webAimIntent, values.animatedArms)
+                                            : animated_moves::yieldsBody(steerGate, steerState, webAimIntent,
+                                                                         values.animatedArms);
                             const Vec3 actorAhead{body[8], body[9], body[10]};
                             if (animated_steering::active(values.animatedSteering, yieldingPose)) {
                                 const auto steered = animated_steering::actorRelativeForward(
@@ -4298,15 +4326,38 @@ DWORD WINAPI run(void*) {
                             // Gate MODEL YAW off so walk-facing cannot fight that yaw.
                             const bool airSpinOwnsStick = animated_air_spin::ownsRightStick(
                                 values.animatedAirSpin, yieldingPose, steerState);
+                            // Blend clock: hybridOwner updates later this frame; the
+                            // hold uses state latched on a prior enterG edge.
+                            const int64_t blendNowNs =
+                                frame.predictedDisplayTime > 0
+                                    ? frame.predictedDisplayTime
+                                    : static_cast<int64_t>(GetTickCount64()) * 1'000'000ll;
+                            const bool hybridYawHold =
+                                values.animatedHybrid && values.animatedMoves && hybridBlend.active &&
+                                !hybridBlend.toTraversal && hybridBlend.delayModelYaw &&
+                                !hybrid_handoff::blendDone(blendNowNs - hybridBlend.startNs);
                             const bool modelYawOwns =
                                 animated_model_yaw::ownsStick(values.animatedModelYaw, yieldingPose,
                                                               airSpinOwnsStick) &&
-                                !motion.basicFlipControls;
-                            if (modelYawOwns || airSpinOwnsStick) {
+                                !motion.basicFlipControls && !hybridYawHold;
+                            if (modelYawOwns || airSpinOwnsStick || hybridYawHold) {
                                 // Free the right stick from CameraLook so it does not
                                 // also yaw the follow camera (HMD free look stays XR;
                                 // tracking yaw / AIR SPIN keep the stick).
                                 walk.look = 0;
+                            }
+                            if (hybridYawHold && hybridBlend.seedActorYawValid) {
+                                // Seed the game actor toward the rig look the player
+                                // last held in OG air (reverse of G→T yaw carry).
+                                const Vec3 want =
+                                    Quat::yaw(hybridBlend.seedActorYaw).rotate({0, 0, -1});
+                                const auto seeded = animated_model_yaw::worldToStick(
+                                    want, motion.walkForwardAxis, motion.walkRightAxis,
+                                    animated_model_yaw::turnTilt);
+                                if (std::hypot(walk.right, walk.forward) < animated_model_yaw::deadzone) {
+                                    walk.right = seeded.right;
+                                    walk.forward = seeded.forward;
+                                }
                             }
                             if (modelYawOwns) {
                                 const float rStickX =
@@ -5079,16 +5130,188 @@ DWORD WINAPI run(void*) {
                         hybridFrame.cutscene = !animState.playing || !animState.fresh;
                         if (hybridOn) {
                             hybridOwner.update(hybridFrame, handoffNs);
-                            if (hybridOwner.enterT)
-                                diag_log::writef("hybrid: G->T (%s)",
-                                                 hybrid_owner::enterTName(hybridOwner.lastEnterT));
-                            if (hybridOwner.enterG)
-                                diag_log::writef("hybrid: T->G (land)");
-                            if (hybridOwner.bounceSuppressed)
-                                diag_log::writef("hybrid: bounce suppressed (%s)",
-                                                 hybridOwner.bounceWhy ? hybridOwner.bounceWhy : "?");
+                            if (hybridOwner.enterT) {
+                                // Slice 2 G→T: capture the view the player is seeing,
+                                // re-anchor tracking onto it, warm-reclaim IK, start
+                                // the 180 ms pos+rot blend. Do this BEFORE followHero
+                                // flips off so we do not publish a raw snap frame.
+                                Vec3 worldEyes{};
+                                float worldYaw = 0.f;
+                                bool eyesOk = false;
+                                Mat4 headMat{};
+                                const bool levelHead =
+                                    animated_moves::headFollow(values.animatedHead) ==
+                                        animated_moves::HeadFollow::level;
+                                if (levelHead ? game_fp::frameLevel(headMat) : game_fp::frame(headMat)) {
+                                    worldEyes = {headMat[12], headMat[13], headMat[14]};
+                                    worldYaw = hybrid_handoff::lookYaw({headMat[8], headMat[9], headMat[10]});
+                                    eyesOk = finite(worldEyes);
+                                }
+                                if (!eyesOk && motion.active) {
+                                    worldEyes = {(motion.eyes[0][12] + motion.eyes[1][12]) * .5f,
+                                                 (motion.eyes[0][13] + motion.eyes[1][13]) * .5f,
+                                                 (motion.eyes[0][14] + motion.eyes[1][14]) * .5f};
+                                    worldYaw = hybrid_handoff::lookYaw(
+                                        motion.headPose.orientation.rotate({0, 0, -1}));
+                                    eyesOk = finite(worldEyes);
+                                }
+                                // Prefer actor look-yaw (MODEL YAW ownership while
+                                // yielding) so torso/hands match after reclaim.
+                                const Vec3 actorAhead{body[8], body[9], body[10]};
+                                if (finite(actorAhead) &&
+                                    length(Vec3{actorAhead.x, 0, actorAhead.z}) > .2f)
+                                    worldYaw = hybrid_handoff::actorLookYaw(actorAhead);
+                                float dPos = 0.f, dYaw = 0.f;
+                                if (eyesOk) {
+                                    const Vec3 before =
+                                        motion.active
+                                            ? Vec3{(motion.eyes[0][12] + motion.eyes[1][12]) * .5f,
+                                                   (motion.eyes[0][13] + motion.eyes[1][13]) * .5f,
+                                                   (motion.eyes[0][14] + motion.eyes[1][14]) * .5f}
+                                            : worldEyes;
+                                    if (finite(before))
+                                        dPos = length(before - worldEyes);
+                                    const float preYaw = hybrid_handoff::lookYaw(
+                                        motion.headPose.orientation.rotate({0, 0, -1}));
+                                    dYaw = hybrid_handoff::wrapPi(worldYaw - preYaw) * (180.f / 3.14159265f);
+                                    if (validTrackedPose(frame.head))
+                                        rig.adoptEyes(worldEyes, worldYaw, frame.head);
+                                }
+                                native_body::beginReclaim();
+                                hybridBlend = {};
+                                hybridBlend.active = true;
+                                hybridBlend.toTraversal = true;
+                                hybridBlend.startNs = handoffNs;
+                                hybridBlend.fromEyes = worldEyes;
+                                hybridBlend.fromYaw = worldYaw;
+                                hybridBlend.fromValid = eyesOk;
+                                // Prefer anim-head orientation (game_fp) so the
+                                // blend settles pitch/roll out of Full head follow.
+                                Quat animOri = Quat::yaw(worldYaw);
+                                if (eyesOk) {
+                                    const Vec3 right{headMat[0], headMat[1], headMat[2]};
+                                    const Vec3 down{headMat[4], headMat[5], headMat[6]};
+                                    const Vec3 forward{headMat[8], headMat[9], headMat[10]};
+                                    if (length(right) > .2f && length(down) > .2f && length(forward) > .2f) {
+                                        // Same layout as worldPose: images of +X, −Y, −Z.
+                                        animOri = Quat::yaw(worldYaw); // level yaw carry
+                                        // Approximate full orientation from basis via
+                                        // looking along forward with down as −up.
+                                        const Vec3 up = normalized(Vec3{-down.x, -down.y, -down.z});
+                                        const Vec3 look = normalized(forward);
+                                        const Vec3 r = normalized(cross(look, up));
+                                        const Vec3 u = cross(r, look);
+                                        // Build quat that rotates −Z→look, +Y→u (approx yaw*pitch*roll).
+                                        // Use fromAxes-free path: store look as yaw+pitch via two turns.
+                                        const float yaw = hybrid_handoff::lookYaw(look);
+                                        const float pitch = std::asin(std::clamp(look.y, -1.f, 1.f));
+                                        animOri = Quat::yaw(yaw) * Quat::around({1, 0, 0}, -pitch);
+                                        (void)r;
+                                        (void)u;
+                                    }
+                                }
+                                if (motion.active) {
+                                    for (unsigned i = 0; i < 2; ++i) {
+                                        hybridBlend.fromEyePos[i] = {motion.eyes[i][12], motion.eyes[i][13],
+                                                                     motion.eyes[i][14]};
+                                        // Re-centre stereo around the anim eyes we captured.
+                                        if (eyesOk) {
+                                            const Vec3 centre{(motion.eyes[0][12] + motion.eyes[1][12]) * .5f,
+                                                              (motion.eyes[0][13] + motion.eyes[1][13]) * .5f,
+                                                              (motion.eyes[0][14] + motion.eyes[1][14]) * .5f};
+                                            hybridBlend.fromEyePos[i] =
+                                                worldEyes + (hybridBlend.fromEyePos[i] - centre);
+                                        }
+                                        hybridBlend.fromEyeOri[i] = animOri;
+                                    }
+                                } else if (eyesOk) {
+                                    hybridBlend.fromEyePos[0] = hybridBlend.fromEyePos[1] = worldEyes;
+                                    hybridBlend.fromEyeOri[0] = hybridBlend.fromEyeOri[1] = animOri;
+                                }
+                                hybridBlend.delayArmsClear = true;
+                                hybridBlend.delayModelYaw = false; // OG stick from frame 0
+                                hybridBlend.enterEyeDPos = dPos >= 0.f ? dPos : 0.f;
+                                hybridBlend.enterEyeDYaw = dYaw;
+                                walk.look = 0; // residual CameraLook must not fight stickTurn
+                                diag_log::writef(
+                                    "hybrid: G->T (%s) eyes dPos %.2f m dYaw %.0f, ikWarm 1, "
+                                    "overlay->body %.0f ms",
+                                    hybrid_owner::enterTName(hybridOwner.lastEnterT),
+                                    hybridBlend.enterEyeDPos, hybridBlend.enterEyeDYaw,
+                                    hybrid_handoff::handoffSec * 1000.f);
+                            }
+                            if (hybridOwner.enterG) {
+                                // Slice 3 T→G: blend eyes back to the headbone; keep
+                                // IK state warm; delay MODEL YAW until the blend ends;
+                                // seed actor facing from the rig look yaw. No adoptFeet.
+                                Vec3 fromEyes{};
+                                float fromYaw = 0.f;
+                                bool fromOk = false;
+                                if (motion.active) {
+                                    fromEyes = {(motion.eyes[0][12] + motion.eyes[1][12]) * .5f,
+                                                (motion.eyes[0][13] + motion.eyes[1][13]) * .5f,
+                                                (motion.eyes[0][14] + motion.eyes[1][14]) * .5f};
+                                    fromYaw = hybrid_handoff::lookYaw(
+                                        motion.headPose.orientation.rotate({0, 0, -1}));
+                                    fromOk = finite(fromEyes);
+                                }
+                                float headDPos = -1.f, headDAng = 0.f;
+                                Mat4 headMat{};
+                                if (game_fp::frame(headMat)) {
+                                    const Vec3 hb{headMat[12], headMat[13], headMat[14]};
+                                    if (fromOk && finite(hb))
+                                        headDPos = length(fromEyes - hb);
+                                    const float hbYaw =
+                                        hybrid_handoff::lookYaw({headMat[8], headMat[9], headMat[10]});
+                                    if (fromOk)
+                                        headDAng = std::abs(hybrid_handoff::wrapPi(hbYaw - fromYaw)) *
+                                                   (180.f / 3.14159265f);
+                                }
+                                const float landMs =
+                                    hybridOwner.sinceNs > 0
+                                        ? static_cast<float>(handoffNs - hybridOwner.sinceNs) / 1e6f
+                                        : 0.f;
+                                const float landSpeed =
+                                    swingFresh && finite(swingState.velocity)
+                                        ? length(Vec3{swingState.velocity.x, 0, swingState.velocity.z})
+                                        : 0.f;
+                                hybridBlend = {};
+                                hybridBlend.active = true;
+                                hybridBlend.toTraversal = false;
+                                hybridBlend.startNs = handoffNs;
+                                hybridBlend.fromEyes = fromEyes;
+                                hybridBlend.fromYaw = fromYaw;
+                                hybridBlend.fromValid = fromOk;
+                                if (motion.active) {
+                                    for (unsigned i = 0; i < 2; ++i) {
+                                        hybridBlend.fromEyePos[i] = {motion.eyes[i][12], motion.eyes[i][13],
+                                                                     motion.eyes[i][14]};
+                                        hybridBlend.fromEyeOri[i] = motion.headPose.orientation;
+                                    }
+                                }
+                                hybridBlend.delayArmsClear = false;
+                                hybridBlend.delayModelYaw = true; // MODEL YAW after H
+                                hybridBlend.seedActorYaw = fromYaw;
+                                hybridBlend.seedActorYawValid = fromOk;
+                                hybridBlend.landSpeed = landSpeed;
+                                diag_log::writef(
+                                    "hybrid: T->G (land %.0f ms, speed %.1f) eyeBlend %.0f ms, "
+                                    "headbone dPos %.2f m dAng %.0f",
+                                    landMs, landSpeed, hybrid_handoff::handoffSec * 1000.f,
+                                    headDPos >= 0.f ? headDPos : 0.f, headDAng);
+                            }
+                            if (hybridOwner.bounceSuppressed) {
+                                const float heldMs =
+                                    hybridOwner.sinceNs > 0
+                                        ? static_cast<float>(handoffNs - hybridOwner.sinceNs) / 1e6f
+                                        : 0.f;
+                                diag_log::writef("hybrid: bounce suppressed (%s, %.0f ms)",
+                                                 hybridOwner.bounceWhy ? hybridOwner.bounceWhy : "?",
+                                                 heldMs);
+                            }
                         } else {
                             hybridOwner = {};
+                            hybridBlend = {};
                         }
                         hybridWebWas = webNow;
                         hybridZipWas = zipNow;
@@ -5144,12 +5367,19 @@ DWORD WINAPI run(void*) {
                                                  ? Vec3{body[12], body[13], body[14]}
                                                  : motion.anchor;
                         animatedMovesHandoff.update(yieldAnim);
-                        if (animatedMovesHandoff.exit)
-                            animatedArmsState = {};
+                        if (animatedMovesHandoff.exit) {
+                            // Hybrid G→T: keep overlay state alive for H so arms
+                            // crossfade into bodyOn instead of popping off.
+                            if (!(hybridOn && hybridBlend.active && hybridBlend.toTraversal &&
+                                  hybridBlend.delayArmsClear))
+                                animatedArmsState = {};
+                        }
                         const bool cancelledPending = animatedMovesHandoff.enter && animatedMovesHandoff.pendingExit;
                         if (animatedMovesHandoff.enter) {
                             animatedMovesYieldFeet = nowFeet;
-                            if (!cancelledPending)
+                            // Hybrid T→G: do not wipe IK — beginReclaim already
+                            // warmed the opposite edge; a quick re-jump stays warm.
+                            if (!cancelledPending && !(hybridOn && hybridBlend.active && !hybridBlend.toTraversal))
                                 native_body::resyncAfterYield();
                             diag_log::writef(
                                 "animated moves: game anim drives body (%s) actor (%.1f, %.1f, %.1f)%s",
@@ -5164,15 +5394,27 @@ DWORD WINAPI run(void*) {
                                 finite(nowFeet) ? nowFeet : animatedMovesHandoff.pendingExitFeet;
                             const Vec3 delta = feet - animatedMovesYieldFeet;
                             const float moved = finite(delta) ? length(delta) : -1.f;
-                            native_body::resyncAfterYield();
-                            if (finite(feet) && validTrackedPose(frame.head))
-                                rig.adoptFeet(feet, frame.head);
-                            diag_log::writef(
-                                "animated moves: mod body again (%s) actor (%.1f, %.1f, %.1f) "
-                                "moved %.2f m since yield, head-follow was %s, adopt+ik resync",
-                                animated_moves::yieldName(animState), feet.x, feet.y, feet.z, moved,
-                                animatedHeadFollowWas ? animated_moves::headFollowName(animHeadMode)
-                                                      : "off");
+                            if (hybridOn) {
+                                // Slices 2–3 already ran adoptEyes + beginReclaim on
+                                // enterT. Skipping adoptFeet / state={} keeps the
+                                // warm handoff; origin already tracked feet in yield.
+                                diag_log::writef(
+                                    "animated moves: mod body again (%s) actor (%.1f, %.1f, %.1f) "
+                                    "moved %.2f m since yield, head-follow was %s, hybrid handoff",
+                                    animated_moves::yieldName(animState), feet.x, feet.y, feet.z, moved,
+                                    animatedHeadFollowWas ? animated_moves::headFollowName(animHeadMode)
+                                                          : "off");
+                            } else {
+                                native_body::resyncAfterYield();
+                                if (finite(feet) && validTrackedPose(frame.head))
+                                    rig.adoptFeet(feet, frame.head);
+                                diag_log::writef(
+                                    "animated moves: mod body again (%s) actor (%.1f, %.1f, %.1f) "
+                                    "moved %.2f m since yield, head-follow was %s, adopt+ik resync",
+                                    animated_moves::yieldName(animState), feet.x, feet.y, feet.z, moved,
+                                    animatedHeadFollowWas ? animated_moves::headFollowName(animHeadMode)
+                                                          : "off");
+                            }
                             animatedMovesDiagAt = frame.predictedDisplayTime;
                         } else if (!animatedMovesHandoff.enter && yieldAnim &&
                                    frame.predictedDisplayTime - animatedMovesDiagAt > 2'000'000'000) {
@@ -5223,8 +5465,14 @@ DWORD WINAPI run(void*) {
                             armSamples[i].webButton = motion.swing.hands[i].grip > .5f ||
                                                       motion.swing.hands[i].trigger > .5f;
                         }
+                        const bool hybridArmFade =
+                            hybridOn && hybridBlend.active && hybridBlend.toTraversal &&
+                            hybridBlend.delayArmsClear &&
+                            !hybrid_handoff::blendDone(handoffNs - hybridBlend.startNs);
                         const bool armsWanted =
                             values.animatedArms && yieldAnim && !flatScreen && values.body;
+                        const bool armsOverlayLive =
+                            armsWanted || (hybridArmFade && animated_arms::anyActive(animatedArmsState));
                         pose.flags = (flatScreen || !values.body || yieldAnim ? 0u : native_body::bodyOn) |
                                      native_body::hideHead |
                                      native_body::handTurn |
@@ -5324,6 +5572,8 @@ DWORD WINAPI run(void*) {
                             armSamples[i].fist = fingered.fist;
                             armSamples[i].shoot = fingered.shoot;
                         }
+                        // Hybrid G→T: enabled=false ramps overlay 1→0 over ~blendOut;
+                        // keep calling update + armsOverlay so the crossfade reaches bodyOn.
                         animated_arms::update(animatedArmsState, armDt, armsWanted, motion.anchor,
                                               armSamples);
                         if (armsWanted) {
@@ -5334,6 +5584,12 @@ DWORD WINAPI run(void*) {
                             native_body::setArmOverlay(animatedArmsState.arms[0].weight,
                                                        animatedArmsState.arms[1].weight);
                             native_body::setTorsoAssist(values.animatedTorso);
+                        } else if (armsOverlayLive) {
+                            pose.flags |= native_body::armsOverlay;
+                            // Force target toward 0 while fading into body IK.
+                            native_body::setArmOverlay(animatedArmsState.arms[0].weight,
+                                                       animatedArmsState.arms[1].weight);
+                            native_body::setTorsoAssist(false);
                         } else {
                             native_body::setArmOverlay(0.f, 0.f);
                             native_body::setTorsoAssist(false);
@@ -5475,12 +5731,18 @@ DWORD WINAPI run(void*) {
                     // animHeadMode is the user choice (Full may include air pitch/roll).
                     const bool headFollowEyes =
                         animHeadFollowNow && animHeadMode != animated_moves::HeadFollow::off && !flatScreen;
+                    const int64_t eyeBlendElapsed =
+                        hybridBlend.active ? (handoffNs - hybridBlend.startNs) : hybrid_handoff::handoffNs;
+                    const float eyeBlendW =
+                        hybridBlend.active ? hybrid_handoff::blendAlpha(eyeBlendElapsed) : 1.f;
+                    const bool hybridEyeBlend =
+                        hybridBlend.active && hybridBlend.fromValid && eyeBlendW < 1.f - 1e-4f && !flatScreen;
                     native_eyes::Command eyes;
                     eyes.enabled = flatScreen ? 2 : 1;
                     eyes.serial = ++serial;
                     eyes.leaseMs = 250;
                     eyes.anchor = motion.anchor;
-                    if (headFollowEyes) {
+                    if (headFollowEyes && !hybridEyeBlend) {
                         if (!animHeadRefSet) {
                             animHeadRef = {frame.head.position, screenAhead(frame.head, 0).orientation};
                             animHeadRefSet = validTrackedPose(frame.head);
@@ -5537,6 +5799,53 @@ DWORD WINAPI run(void*) {
                             eyes.eyes[i].fov[2] = f.down;
                             eyes.eyes[i].fov[3] = f.up;
                         }
+                    }
+                    // Hybrid 180 ms pos+rot blend: slerp published eyes from the
+                    // edge capture toward the live owner (tracking on G→T,
+                    // headbone-centred on T→G). adoptEyes already re-anchored
+                    // the rig on G→T; this covers residual gap and pitch/roll
+                    // settle so reclaim is not a hard cut.
+                    if (hybridEyeBlend) {
+                        Vec3 landDelta{};
+                        bool landDeltaOk = false;
+                        if (!hybridBlend.toTraversal) {
+                            Mat4 hb{};
+                            if (game_fp::frame(hb) && motion.active) {
+                                const Vec3 hbPos{hb[12], hb[13], hb[14]};
+                                const Vec3 centre{(motion.eyes[0][12] + motion.eyes[1][12]) * .5f,
+                                                  (motion.eyes[0][13] + motion.eyes[1][13]) * .5f,
+                                                  (motion.eyes[0][14] + motion.eyes[1][14]) * .5f};
+                                landDelta = hbPos - centre;
+                                landDeltaOk = finite(landDelta);
+                            }
+                        }
+                        for (unsigned i = 0; i < 2; ++i) {
+                            Vec3 toPos = motion.active ? Vec3{motion.eyes[i][12], motion.eyes[i][13],
+                                                              motion.eyes[i][14]}
+                                                       : hybridBlend.fromEyePos[i];
+                            Quat toOri = motion.active ? motion.headPose.orientation
+                                                       : hybridBlend.fromEyeOri[i];
+                            if (!hybridBlend.toTraversal && landDeltaOk) {
+                                toPos = toPos + landDelta;
+                            }
+                            eyes.eyes[i].world = hybrid_handoff::blendEyeMat(
+                                hybridBlend.fromEyePos[i], hybridBlend.fromEyeOri[i], toPos, toOri,
+                                eyeBlendW);
+                            const auto& f = motion.fovs[i];
+                            eyes.eyes[i].fov[0] = f.left;
+                            eyes.eyes[i].fov[1] = f.right;
+                            eyes.eyes[i].fov[2] = f.down;
+                            eyes.eyes[i].fov[3] = f.up;
+                        }
+                        eyes.anchored = 1;
+                        animHeadRefSet = false;
+                    }
+                    if (hybridBlend.active && hybrid_handoff::blendDone(eyeBlendElapsed)) {
+                        if (hybridBlend.delayArmsClear)
+                            animatedArmsState = {};
+                        hybridBlend.delayArmsClear = false;
+                        hybridBlend.delayModelYaw = false;
+                        hybridBlend.active = false;
                     }
                     // The HUD panel for this command's frame, as the head sees it:
                     // fixed in the room, so a reused image the headset turns to a

@@ -257,6 +257,10 @@ void submit(const Command&);
 // (so residual IK does not fight the game anim) and on yield exit (before the
 // first mod-owned pose). Does not change the live command or bodyOn flag.
 void resyncAfterYield();
+// ANIMATED HYBRID G→T: warm reclaim — seed yaw from the actor, clear outward
+// anchors / overlay side channels, leave the rest of State so weight ramps
+// 0→1 via body_ik's existing blendSpeed. No full state={} wipe.
+void beginReclaim();
 // ANIMATED ARMS: per-arm overlay weights (0..1) read by the next pose job when
 // Flags::armsOverlay is set. Cleared by resyncAfterYield. No Command layout change.
 void setArmOverlay(float left, float right);

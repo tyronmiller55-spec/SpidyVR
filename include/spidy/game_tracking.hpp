@@ -458,6 +458,12 @@ class GameTrackingRig {
     // the anim head (those are camera/latch state, not the actor's place).
     // Call on yield exit before the first mod-owned eyes/body frame.
     void adoptFeet(Vec3 feet, const Pose& head);
+    // ANIMATED HYBRID G→T: re-anchor tracking eyes onto the view the player is
+    // already seeing (anim-head resolve). Sets origin + yaw so tracking-owned
+    // eyes land on worldEyes at worldLookYaw. Keeps standOff / runViewOffset /
+    // surface / headDrop (no rested snap). Pitch/roll of the anim head are
+    // discarded — level settle is the 180 ms hybrid blend's job.
+    void adoptEyes(Vec3 worldEyes, float worldLookYaw, const Pose& head);
     void reset();
 
   private:

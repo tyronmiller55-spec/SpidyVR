@@ -81,9 +81,10 @@ inline Stick apply(float walkRight, float walkForward, float rStickX, Vec3 actor
     ahead = normalized(ahead);
     // Point the virtual left stick toward a yaw-offset of the actor facing so
     // the game's walk-facing turns him (same family as InteractStep).
-    // Positive R-stick X → turn right (clockwise from above): −90° on +Z ahead → +X.
-    // Sign matches SpidyVR snap/smooth turn (copysign(..., -stickX)).
-    const float yaw = std::copysign(1.5707963f, -rStickX);
+    // Actor forward is OpenXR/game ahead (−Z). +R-stick must ask toward the
+    // actor's right (+X when facing −Z): +90° yaw. The earlier −stickX match to
+    // SpidyVR *view* turn inverted walk-facing on headset (known bug).
+    const float yaw = std::copysign(1.5707963f, rStickX);
     const float c = std::cos(yaw), s = std::sin(yaw);
     const Vec3 want{ahead.x * c - ahead.z * s, 0, ahead.x * s + ahead.z * c};
     const float amount = tilt * std::min(1.f, std::abs(rStickX));

@@ -2,19 +2,20 @@
 
 ## Delivered
 1. Flesh-out stack (dedicated yaw → softlock → hands-webs) @ `3ddbe36`
-2. **Slice 1 — ANIMATED HYBRID** (this tip): ground anims / OG SpidyVR air FSM +
-   setting (default Off). No clean eye/IK handoff yet.
+2. **Slice 1 — ANIMATED HYBRID** FSM + setting (default Off)
+3. **Slices 2+3 — clean G↔T handoff** (this tip): `adoptEyes` re-anchor,
+   warm `beginReclaim`, 180 ms eye/yaw blend both ways, delayed arms wipe on
+   G→T, delayed MODEL YAW + actor-yaw seed on T→G, no `adoptFeet` on hybrid land.
+   MODEL YAW sign fixed (+R turns hero right with −Z actor ahead).
 
 ## Next
-- **Slice 2:** `adoptEyes` + warm `beginReclaim` + arm crossfade on G→T
-- **Slice 3:** eye blend + yaw carry on T→G (no `adoptFeet` on hybrid land)
 - **Slice 4+:** OG air immersion (momentum lean, swing-arc legs, web-arm tension)
 
-## Headset check for Hybrid
-MOVES on, HYBRID on, AIR off, ONLY off, AIR SPIN off, HEAD Full, ARMS/TORSO/MODEL YAW on.
-- Ground fight/run still animated
-- Jump/swing/wall → OG body; look for `hybrid: G->T` / `T->G` / bounce suppressed
-- Expect old reclaim pop until Slice 2/3 (baseline)
+## Headset check for Hybrid handoff
+MOVES on, HYBRID on, AIR / ONLY / AIR SPIN off, HEAD Full, ARMS/TORSO/MODEL YAW on.
+- Jump / web attach: no view snap; look for `hybrid: G->T … eyes dPos` (want p90 < 0.05 m)
+- Land into run/fight: blend back; `hybrid: T->G (land …) eyeBlend 180 ms`
+- R-stick on ground: +X turns the hero right (same sense as OG SpidyVR)
 
 ## Tabled
 - Legs redesign

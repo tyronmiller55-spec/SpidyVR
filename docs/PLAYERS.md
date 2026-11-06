@@ -1062,9 +1062,11 @@ VR settings
   ANIMATED HYBRID  (off until you switch it on; EXPERIMENTAL, after ANIMATED
                    AIR SPIN) with ANIMATED MOVES: keep game anims on the ground
                    (run, fight, perch, vault) and use OG SpidyVR for jump,
-                   freefall, swing, zip and wall crawl/run. Animated Air, Air
-                   Spin and midair softlock stay off while Hybrid is on. Off by
-                   default; handoff polish still experimental.
+                   freefall, swing, zip and wall crawl/run. Leaving the ground
+                   re-anchors the view and warms IK instead of snapping; landing
+                   blends back to the headbone (~180 ms). Animated Air, Air Spin
+                   and midair softlock stay off while Hybrid is on. Off by
+                   default.
   DODGE TUMBLE     (OFF until you pick one) when the game dodges, your
                    view tips toward the dodge (LEAN) or turns a full roll
                    (ROLL, sideways dodges) so you can tell it dodged. Your

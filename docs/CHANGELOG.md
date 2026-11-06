@@ -7,6 +7,20 @@ Per-check results are in [VALIDATION.md](VALIDATION.md).
 
 Not in a build yet, newest first. The release adds these to the next build's entry.
 
+**ANIMATED HYBRID handoff: smooth takeoff and landing (Slices 2+3).**
+
+- **Why.** Slice 1 ownership worked on headset, but every G→T still ran the old
+  reclaim (`followHero(false)` + `resyncAfterYield` `state={}` + arms wipe) —
+  a view/body snap. R-stick MODEL YAW was also inverted vs OpenXR −Z ahead.
+- **Change.** Under HYBRID only: G→T calls `GameTrackingRig::adoptEyes` (keeps
+  stand-off / run-view offsets), `native_body::beginReclaim` (warm IK, no full
+  wipe), 180 ms eye pos+yaw blend, arms overlay crossfade; T→G blends eyes
+  back to the headbone, seeds actor facing from rig yaw, delays MODEL YAW for
+  180 ms, skips `adoptFeet`. MODEL YAW sign: +R → hero turns right. Diag:
+  `hybrid: G->T (…) eyes dPos … dYaw …, ikWarm 1, overlay->body 180 ms`,
+  `hybrid: T->G (land …) eyeBlend 180 ms, headbone dPos … dAng …`.
+- **Not in this patch.** Slice 4 immersion polish; crash `0xC0000409`.
+
 **ANIMATED HYBRID: ground anims, OG SpidyVR in the air (opt-in, off).**
 
 - **Why.** Headset on hands-webs (`3ddbe36`): fighting/running feel good on the
@@ -20,8 +34,8 @@ Not in a build yet, newest first. The release adds these to the next build's ent
   AIR / AIR SPIN / midair softlock stay inactive under Hybrid. Diag:
   `hybrid: G->T (web|zip|wall|jump|swing-took)`, `hybrid: T->G (land)`,
   `hybrid: bounce suppressed (…)`.
-- **Not in this patch.** Clean `adoptEyes` / warm IK / eye-blend handoff
-  (Slices 2–3); immersive OG air body polish; legs.
+- **Not in this patch.** Immersive OG air body polish (Slice 4+); legs.
+  Handoff Slices 2–3 landed in the entry above.
 
 **ANIMATED ARMS / WEB AIM: softlock remap + healthy forearm weblines.**
 

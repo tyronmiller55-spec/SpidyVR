@@ -764,6 +764,30 @@ void native_body::resyncAfterYield() {
     outwardWeight.store(0.f, std::memory_order_relaxed);
     ReleaseSRWLockExclusive(&solveLock);
 }
+void native_body::beginReclaim() {
+    AcquireSRWLockExclusive(&solveLock);
+    // Warm: keep crawl/held latches; only reset what would fight the handoff.
+    state.weight = 0.f;
+    state.armWeight = {};
+    state.outwardAnchor = {};
+    state.overlayTorsoYaw = state.overlayTorsoPitch = 0.f;
+    if (actorHeadingSet) {
+        state.yaw = actorHeading;
+        state.yawSet = true;
+    } else {
+        state.yawSet = false;
+    }
+    overlayArmWeight[0] = overlayArmWeight[1] = 0.f;
+    overlayTorsoAssist = false;
+    yieldTiltBody = yieldTiltHands = {};
+    viewSoftlock = false;
+    overlayTrackingSample = {};
+    // Fresh tracking yaw latch on the first bodyOn frame (no stale turnState jump).
+    trackingYawSet = false;
+    trackingYaw = 0;
+    outwardWeight.store(0.f, std::memory_order_relaxed);
+    ReleaseSRWLockExclusive(&solveLock);
+}
 void native_body::setArmOverlay(float left, float right) {
     auto clamp01 = [](float v) {
         return std::isfinite(v) ? std::clamp(v, 0.f, 1.f) : 0.f;
