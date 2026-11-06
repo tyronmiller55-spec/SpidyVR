@@ -57,6 +57,7 @@
 #include "spidy/animated_steering.hpp"
 #include "spidy/animated_model_yaw.hpp"
 #include "spidy/animated_air_spin.hpp"
+#include "spidy/hybrid_owner.hpp"
 #include "spidy/animated_arms.hpp"
 #include "spidy/frame_stats.hpp"
 #include "spidy/seated.hpp"
@@ -1041,6 +1042,10 @@ DWORD WINAPI run(void*) {
         animated_air_spin::Tracker airSpin{};
         int64_t airSpinDiagAt{};
         bool airSpinWas{};
+        // ANIMATED HYBRID (off by default): ground anim / OG air domain FSM.
+        hybrid_owner::HybridOwner hybridOwner{};
+        bool hybridWebWas{}, hybridZipWas{}, hybridOwnedWas{};
+        unsigned hybridWallWas{};
         int64_t modelYawDiagAt{};
         animated_arms::State animatedArmsState{};
         int64_t trackingLockDiagAt{};
@@ -5043,14 +5048,57 @@ DWORD WINAPI run(void*) {
                         // the yield (wall / zip / combat too) so the OG SpidyVR body
                         // never reclaims mid-play; a cutscene/stale classify keeps it
                         // for StayLatch's grace before a real exit (animated_moves.hpp).
-                        const animated_moves::Gate animGate{values.animatedMoves, values.animatedAir,
-                                                            values.animatedOnly};
-                        const bool animOnly = animated_moves::stays(animGate);
+                        const bool hybridOn = values.animatedHybrid && values.animatedMoves;
+                        // Hybrid forces AIR off for the gate; AIR SPIN / softlock stay inactive
+                        // because midair never yields under hybrid (hybrid_owner.hpp).
+                        const animated_moves::Gate animGate{values.animatedMoves,
+                                                            hybridOn ? false : values.animatedAir,
+                                                            hybridOn ? false : values.animatedOnly};
+                        const bool animOnly = !hybridOn && animated_moves::stays(animGate);
                         const int64_t handoffNs = frame.predictedDisplayTime > 0
                                                       ? frame.predictedDisplayTime
                                                       : static_cast<int64_t>(GetTickCount64()) * 1'000'000ll;
-                        const bool rawYield = animated_moves::yieldsBody(animGate, animState, webAimIntent,
-                                                                         values.animatedArms);
+                        const bool webNow = animState.webbed;
+                        const bool zipNow = animState.zipping;
+                        const unsigned wallNow = animState.wall;
+                        const bool ownedNow = animState.owned;
+                        hybrid_owner::Frame hybridFrame;
+                        hybridFrame.state = animState;
+                        hybridFrame.webRising = webNow && !hybridWebWas;
+                        hybridFrame.zipRising = zipNow && !hybridZipWas;
+                        hybridFrame.wallRising = wallNow != 0 && hybridWallWas == 0;
+                        hybridFrame.swingTook = ownedNow && !hybridOwnedWas && !animState.grounded;
+                        hybridFrame.velocityY =
+                            swingFresh && finite(swingState.velocity) ? swingState.velocity.y : 0.f;
+                        {
+                            const Vec3 feetHY = finite(Vec3{body[12], body[13], body[14]})
+                                                    ? Vec3{body[12], body[13], body[14]}
+                                                    : motion.anchor;
+                            hybridFrame.feetY = feetHY.y;
+                        }
+                        hybridFrame.cutscene = !animState.playing || !animState.fresh;
+                        if (hybridOn) {
+                            hybridOwner.update(hybridFrame, handoffNs);
+                            if (hybridOwner.enterT)
+                                diag_log::writef("hybrid: G->T (%s)",
+                                                 hybrid_owner::enterTName(hybridOwner.lastEnterT));
+                            if (hybridOwner.enterG)
+                                diag_log::writef("hybrid: T->G (land)");
+                            if (hybridOwner.bounceSuppressed)
+                                diag_log::writef("hybrid: bounce suppressed (%s)",
+                                                 hybridOwner.bounceWhy ? hybridOwner.bounceWhy : "?");
+                        } else {
+                            hybridOwner = {};
+                        }
+                        hybridWebWas = webNow;
+                        hybridZipWas = zipNow;
+                        hybridWallWas = wallNow;
+                        hybridOwnedWas = ownedNow;
+                        const bool rawYield =
+                            hybridOn ? hybridOwner.yielding(values.animatedMoves, animState, webAimIntent,
+                                                            values.animatedArms)
+                                     : animated_moves::yieldsBody(animGate, animState, webAimIntent,
+                                                                  values.animatedArms);
                         yieldAnim = animOnly ? animatedOnlyLatch.update(rawYield, animatedMovesHandoff.yielding,
                                                                         handoffNs)
                                              : rawYield;
@@ -5079,7 +5127,10 @@ DWORD WINAPI run(void*) {
                                     animated_moves::yieldName(animState));
                             animatedOnlyStateWas = st;
                         }
-                        animHeadMode = animated_moves::headFollowForYield(values.animatedHead, animState);
+                        // Hybrid: no midair softlock — air is OG SpidyVR (no yield).
+                        animHeadMode = hybridOn ? animated_moves::headFollow(values.animatedHead)
+                                                : animated_moves::headFollowForYield(values.animatedHead,
+                                                                                     animState);
                         // In the grace window keep following the anim head through a
                         // stale sample, but not over a menu / the game's camera.
                         const bool headFollow =
@@ -5371,9 +5422,10 @@ DWORD WINAPI run(void*) {
                         // the flip tilt (+ momentum lean) turns the yielded anim
                         // skeleton about its head — SpidyVR-style spherical midair on
                         // the game's pose. Visual/view only; physics untouched.
-                        if (values.animatedAirSpin || airSpinWas) {
-                            const auto spinMode = animated_air_spin::mode(values.animatedAirSpin);
+                        if ((values.animatedAirSpin && !hybridOn) || airSpinWas) {
+                            const auto spinMode = animated_air_spin::mode(hybridOn ? 0 : values.animatedAirSpin);
                             const bool spinActive =
+                                !hybridOn &&
                                 animated_air_spin::active(values.animatedAirSpin, yieldAnim, animState) &&
                                 !flatScreen && values.body;
                             const Quat flipWorld =

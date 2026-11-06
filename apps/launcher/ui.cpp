@@ -1936,6 +1936,11 @@ void App::options(ImVec2 origin, ImVec2 size) {
                "its own body. FLIPS + MOMENTUM also leans him along his travel (dives, climbs) and banks him "
                "into turns. Visual and view only; the physics stay the mod's. Off by default; provisional.",
                S(150), [&] { tabCombo("##animatedairspin", Item::animatedAirSpin); });
+        option("Animated hybrid (experimental)",
+               "Keep game animations on the ground (Native Run / Spidy Run / fight) and use OG SpidyVR for "
+               "jump, freefall, swing, zip and wall crawl/run. Animated Air, Air Spin and midair softlock stay "
+               "off while Hybrid is on. Off by default; handoff polish is still experimental.",
+               S(42), [&] { tabToggle("##animatedhybrid", Item::animatedHybrid); });
         option("Web aim (experimental)",
                "MODEL FOREARM: your webs leave along the forearm of the Spider-Man body you see, rather than "
                "along the controller, and go back to the controller's line whenever the body cannot say "

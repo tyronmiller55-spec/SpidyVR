@@ -7,6 +7,22 @@ Per-check results are in [VALIDATION.md](VALIDATION.md).
 
 Not in a build yet, newest first. The release adds these to the next build's entry.
 
+**ANIMATED HYBRID: ground anims, OG SpidyVR in the air (opt-in, off).**
+
+- **Why.** Headset on hands-webs (`3ddbe36`): fighting/running feel good on the
+  animated stack; jump/swing are a mess (anim head pitch p50 43–50° midair,
+  forearm offs ~70–79°, softlock only band-aids the view latch). User: keep
+  Native Run / Spidy Run anims on the ground; all air moves = OG SpidyVR.
+- **Change.** ANIMATED HYBRID (`animated_hybrid`, off): with MOVES on, a domain
+  FSM (`hybrid_owner.hpp`) yields the game pose only on the ground (and sticky
+  combat that started there). Jump (120 ms + rise), web, zip, wall and
+  swing-took switch to traversal (OG body); land needs 250 ms confirmed ground.
+  AIR / AIR SPIN / midair softlock stay inactive under Hybrid. Diag:
+  `hybrid: G->T (web|zip|wall|jump|swing-took)`, `hybrid: T->G (land)`,
+  `hybrid: bounce suppressed (…)`.
+- **Not in this patch.** Clean `adoptEyes` / warm IK / eye-blend handoff
+  (Slices 2–3); immersive OG air body polish; legs.
+
 **ANIMATED ARMS / WEB AIM: softlock remap + healthy forearm weblines.**
 
 - **Why.** Causal chain: stable view frame → remapGripToChest 1:1 → drop

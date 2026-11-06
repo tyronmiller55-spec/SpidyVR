@@ -1059,6 +1059,12 @@ VR settings
                    about his head; midair view stays torso softlock (free HMD)
                    while the model still 6DOF-spins. Visual and view only.
                    Limits provisional.
+  ANIMATED HYBRID  (off until you switch it on; EXPERIMENTAL, after ANIMATED
+                   AIR SPIN) with ANIMATED MOVES: keep game anims on the ground
+                   (run, fight, perch, vault) and use OG SpidyVR for jump,
+                   freefall, swing, zip and wall crawl/run. Animated Air, Air
+                   Spin and midair softlock stay off while Hybrid is on. Off by
+                   default; handoff polish still experimental.
   DODGE TUMBLE     (OFF until you pick one) when the game dodges, your
                    view tips toward the dodge (LEAN) or turns a full roll
                    (ROLL, sideways dodges) so you can tell it dodged. Your
@@ -1145,7 +1151,7 @@ VR settings
                    Off: v5's jump, the game's, up to 0.2 s later.
   Changes apply at once. The launcher starts your next session with them;
   its options show every one of them but VR VIEW too.
-  NEAR CLIP, RECORDING FOV, UI STYLE, BLOW SOUNDS, PC MEDIA, NATIVE RUN, AIR SLINGSHOT, WEB ANGLE, WRIST SHOOTERS, DODGE TUMBLE, RUN CURVE, NATIVE RUN AT, RUN LOGS, RUNNING LEAP, EARLY JUMP, SOFT LANDING, SPIDY RUN, RUN FROM STANDING, WEB AIM, FOREARM BLEND, SMOOTH WEB LANDING, WEB LANDING IMPACT, STEADY STATES, COMBAT RESPONSIVE, SPIDY RUN JUMP, FOREARM AIM LIMIT, PALM SHOOTERS, HEAD PROBE, ANIMATED MOVES, ANIMATED HEAD, ANIMATED AIR, ANIMATED STEERING, ANIMATED ARMS, ANIMATED TORSO, ANIMATED MODEL YAW, ANIMATED ONLY, ANIMATED AIR SPIN, HEIGHT, SEATED, EYE AIM,
+  NEAR CLIP, RECORDING FOV, UI STYLE, BLOW SOUNDS, PC MEDIA, NATIVE RUN, AIR SLINGSHOT, WEB ANGLE, WRIST SHOOTERS, DODGE TUMBLE, RUN CURVE, NATIVE RUN AT, RUN LOGS, RUNNING LEAP, EARLY JUMP, SOFT LANDING, SPIDY RUN, RUN FROM STANDING, WEB AIM, FOREARM BLEND, SMOOTH WEB LANDING, WEB LANDING IMPACT, STEADY STATES, COMBAT RESPONSIVE, SPIDY RUN JUMP, FOREARM AIM LIMIT, PALM SHOOTERS, HEAD PROBE, ANIMATED MOVES, ANIMATED HEAD, ANIMATED AIR, ANIMATED STEERING, ANIMATED ARMS, ANIMATED TORSO, ANIMATED MODEL YAW, ANIMATED ONLY, ANIMATED AIR SPIN, ANIMATED HYBRID, HEIGHT, SEATED, EYE AIM,
   SMART ANCHOR, WEB RANGE, WEB SPEED, ELASTIC WEB, SOFT RELEASE, SWING
   ASSIST, SLINGSHOT SPEED, SINGLE HAND YANK STRENGTH, TWO HAND WEB ZIP, HAND ROPE STEERING, RECORDING
   SMOOTHING, REEL HAPTICS, SWING HAPTICS, the four body haptics switches

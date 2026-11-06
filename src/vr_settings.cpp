@@ -413,6 +413,8 @@ template <class V> auto switchOf(Item item, V& v) -> decltype(&v.aimMarkers) {
         return &v.animatedModelYaw;
     case Item::animatedOnly:
         return &v.animatedOnly;
+    case Item::animatedHybrid:
+        return &v.animatedHybrid;
     case Item::webLandingSmooth:
         return &v.webLandingSmooth;
     case Item::softLanding:
@@ -722,6 +724,8 @@ const std::array<Row, 103>& rows() {
         {Item::animatedAirSpin, "ANIMATED AIR SPIN",
          "While yielding midair: flips (+momentum lean) turn the anim body. Provisional.",
          animatedAirSpinChoices},
+        {Item::animatedHybrid, "ANIMATED HYBRID",
+         "Ground: game anims. Air/swing/wall/zip: OG SpidyVR. Experimental.", {}},
         {Item::realisticFlips,
          "REALISTIC FLIPS",
          "Momentum rotation from arms and webs. FLIPS also enables left-stick steering.",
@@ -998,6 +1002,7 @@ constexpr TabOnly tabOnly[] = {
     {"animated_model_yaw", &Values::animatedModelYaw, nullptr},
     {"animated_only", &Values::animatedOnly, nullptr},
     {"animated_air_spin", nullptr, &Values::animatedAirSpin},
+    {"animated_hybrid", &Values::animatedHybrid, nullptr},
 };
 } // namespace
 std::string tabOnlyText(const Values& v) {

@@ -1,21 +1,21 @@
-# Remaining after feat/animated-hands-webs
+# Remaining after feat/animated-hybrid-owner
 
-## Delivered (flesh-out stack — not headset-tested)
-1. dedicated yaw — MODEL YAW gated midair when AIR SPIN owns R-stick
-2. torso softlock — midair effective softlock; ground Full/Level kept
-3. **hands+webs (this tip):** softlock/headbone → remapGripToChest; weblines
-   from shooters when forearm offs healthy (armsOverlay fallback otherwise)
+## Delivered
+1. Flesh-out stack (dedicated yaw → softlock → hands-webs) @ `3ddbe36`
+2. **Slice 1 — ANIMATED HYBRID** (this tip): ground anims / OG SpidyVR air FSM +
+   setting (default Off). No clean eye/IK handoff yet.
 
-## Slice 6 — ONLY + AIR SPIN verification (headset script, no new features)
-Enable ONLY + AIR SPIN FLIPS+MOMENTUM + HEAD Full + ARMS + MODEL YAW + stack.
-- Wall/combat/zip under ONLY → zero `mod body again` except cutscene
-- Midair: `head follow softlock`, `model yaw: idle (air spin owns R-stick)`
-- `tracking lock: … softlock 1 …` offs trending down vs Full-anim-head dumps
-- `forearm aim:` arms-overlay fallback rate drops when offs healthy; webs leave
-  shooters
-- AIR SPIN lean/bank comfort (provisional maxDive/Bank)
+## Next
+- **Slice 2:** `adoptEyes` + warm `beginReclaim` + arm crossfade on G→T
+- **Slice 3:** eye blend + yaw carry on T→G (no `adoptFeet` on hybrid land)
+- **Slice 4+:** OG air immersion (momentum lean, swing-arc legs, web-arm tension)
 
-## Still open / tabled
-- True chest perch eyes-from-chest offset (softlock uses head place + level axes)
-- Legs redesign (tabled)
-- Pure zero-translation turn-in-place creep
+## Headset check for Hybrid
+MOVES on, HYBRID on, AIR off, ONLY off, AIR SPIN off, HEAD Full, ARMS/TORSO/MODEL YAW on.
+- Ground fight/run still animated
+- Jump/swing/wall → OG body; look for `hybrid: G->T` / `T->G` / bounce suppressed
+- Expect old reclaim pop until Slice 2/3 (baseline)
+
+## Tabled
+- Legs redesign
+- True chest perch eyes offset

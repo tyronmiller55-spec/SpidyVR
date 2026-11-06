@@ -356,6 +356,10 @@ struct Values {
     // the animated skeleton about its head (animated_air_spin.hpp). Visual/view
     // only; physics untouched.
     int animatedAirSpin = 0;
+    // ANIMATED HYBRID (off by default): ground keeps game anims (MOVES); air /
+    // swing / wall / zip use OG SpidyVR. Forces AIR and AIR SPIN / midair softlock
+    // inactive (hybrid_owner.hpp). Experimental.
+    bool animatedHybrid = false;
     // How much speed a fast one-hand web yank adds, percent (the tab's SINGLE
     // HAND YANK STRENGTH; Swing::singleHandYankStrength): 100 as before.
     int singleHandYankPercent = 100;
@@ -503,8 +507,9 @@ enum class Item : uint8_t {
     animatedModelYaw,
     animatedOnly,
     animatedAirSpin,
+    animatedHybrid,
 };
-inline constexpr Item lastItem = Item::animatedAirSpin;
+inline constexpr Item lastItem = Item::animatedHybrid;
 // Where a row shows: in the tab; on the pause menu's first page instead,
 // under RESUME: VR VIEW (the user, October 15: "move the VIEW: GAME SCREEN to
 // the first menu (the one with resume)"); or only in the launcher's options:

@@ -80,6 +80,7 @@
 #include "spidy/ground_state.hpp"
 #include "spidy/head_probe.hpp"
 #include "spidy/animated_moves.hpp"
+#include "spidy/hybrid_owner.hpp"
 #include "spidy/animated_steering.hpp"
 #include "spidy/animated_arms.hpp"
 #include "spidy/animated_torso.hpp"
@@ -23845,7 +23846,7 @@ int main() {
                   "flip_reprojection=0\nsteady_hud=0\nreel_haptics=0\nswing_haptics=0\n"
                   "pc_media=0\nsingle_hand_yank_percent=100\nweb_tie=0\nnative_run=0\nair_slingshot=0\nweb_angle_"
                   "degrees=0\nwrist_shooters=0\n"
-                  "dodge_tumble=0\nrun_curve=0\nnative_run_at_percent=70\nrun_logs=0\nrunning_leap=0\nearly_jump=0\nsoft_landing=0\nspidy_run=0\nspidy_run_from_standing=0\nweb_aim_source=0\nforearm_blend=100\nweb_landing_smooth=0\nweb_landing_impact_speed=24\nsteady_states=0\ncombat_responsive=0\nspidy_run_jump=1\nforearm_aim_limit=180\npalm_shooters=0\nhead_probe=0\nanimated_moves=0\nanimated_head=0\nanimated_air=0\nanimated_steering=0\nanimated_arms=0\nanimated_torso=0\nanimated_model_yaw=0\nanimated_only=0\nanimated_air_spin=0\n",
+                  "dodge_tumble=0\nrun_curve=0\nnative_run_at_percent=70\nrun_logs=0\nrunning_leap=0\nearly_jump=0\nsoft_landing=0\nspidy_run=0\nspidy_run_from_standing=0\nweb_aim_source=0\nforearm_blend=100\nweb_landing_smooth=0\nweb_landing_impact_speed=24\nsteady_states=0\ncombat_responsive=0\nspidy_run_jump=1\nforearm_aim_limit=180\npalm_shooters=0\nhead_probe=0\nanimated_moves=0\nanimated_head=0\nanimated_air=0\nanimated_steering=0\nanimated_arms=0\nanimated_torso=0\nanimated_model_yaw=0\nanimated_only=0\nanimated_air_spin=0\nanimated_hybrid=0\n",
               "the defaults' text");
         Values changed = defaults;
         changed.recordingFov = 140;
@@ -27066,7 +27067,7 @@ int main() {
               "not switched on");
         check(tabOnlyText(v).find("animated_model_yaw=1\n") != std::string::npos &&
                   withTabOnly({}, "animated_model_yaw=1\n").animatedModelYaw &&
-                  !withTabOnly({}, "animated_model_yaw=0\nanimated_only=0\nanimated_air_spin=0\n").animatedModelYaw &&
+                  !withTabOnly({}, "animated_model_yaw=0\nanimated_only=0\nanimated_air_spin=0\nanimated_hybrid=0\n").animatedModelYaw &&
                   !withTabOnly({}, "").animatedModelYaw,
               "spidy_vr.ini does not keep MODEL YAW");
         const auto& all = rows();
@@ -27207,7 +27208,10 @@ int main() {
                   all[91].choices.size() == 3 && std::strcmp(all[91].choices[2], "FLIPS + MOMENTUM") == 0 &&
                   all[91].place == Place::tab,
               "ANIMATED AIR SPIN row");
-        check(lastItem == Item::animatedAirSpin, "AIR SPIN not the last item");
+        check(all[92].item == Item::animatedHybrid && std::strcmp(all[92].title, "ANIMATED HYBRID") == 0 &&
+                  all[92].choices.empty() && all[92].place == Place::tab,
+              "ANIMATED HYBRID row");
+        check(lastItem == Item::animatedHybrid, "HYBRID not the last item");
     });
 
     test("ANIMATED ONLY: every gameplay state yields, no web interrupt, cutscene grace", [] {
@@ -27544,6 +27548,125 @@ int main() {
             turned += f.update(.01f, 0, 16);
         check(turned == 1, "a 6-degree turn not written");
     });
+    test("ANIMATED HYBRID: off by default, kept in spidy_vr.ini after AIR SPIN", [] {
+        using namespace vr_settings;
+        Values v;
+        check(!v.animatedHybrid && defaultChoice(Item::animatedHybrid) == 0, "HYBRID on by default");
+        check(choose(Item::animatedHybrid, 1, v) && v.animatedHybrid, "HYBRID not switched on");
+        check(tabOnlyText(v).find("animated_hybrid=1\n") != std::string::npos, "ini missing hybrid");
+        check(withTabOnly({}, "animated_hybrid=1\n").animatedHybrid && !withTabOnly({}, "").animatedHybrid,
+              "ini read back wrong");
+    });
+
+    test("ANIMATED HYBRID owner: web/zip/wall immediate, jump debounce, land confirm, bounce rearm", [] {
+        using namespace hybrid_owner;
+        HybridOwner o;
+        Frame f{};
+        f.state.playing = f.state.fresh = true;
+        f.state.grounded = true;
+        f.feetY = 10.f;
+        // Idle ground.
+        check(o.update(f, 0) == Domain::ground && !o.enterT && !o.enterG, "idle not ground");
+        // Web attach leaves immediately.
+        f.webRising = true;
+        f.state.webbed = true;
+        f.state.grounded = false;
+        check(o.update(f, 10'000'000) == Domain::traversal && o.enterT && o.lastEnterT == EnterT::web,
+              "web not immediate");
+        f.webRising = false;
+        // Land needs 250 ms grounded clear.
+        f.state.grounded = true;
+        f.state.webbed = false;
+        check(o.update(f, 20'000'000) == Domain::traversal && !o.enterG, "land too fast");
+        check(o.update(f, 20'000'000 + landHoldNs) == Domain::ground && o.enterG, "land not confirmed");
+        // Jump: brief ungrounded without rise stays G.
+        f.state.grounded = false;
+        f.velocityY = 0.2f;
+        f.feetY = 10.05f;
+        check(o.update(f, o.sinceNs + jumpRearmNs + 1) == Domain::ground, "tiny hop left G");
+        // Jump with rise after hold.
+        f.velocityY = 3.f;
+        f.feetY = 10.5f;
+        const int64_t t0 = o.sinceNs + jumpRearmNs + 1;
+        o.update(f, t0); // start ungrounded clock
+        check(o.update(f, t0 + jumpHoldNs) == Domain::traversal && o.enterT && o.lastEnterT == EnterT::jump,
+              "jump not taken");
+        // Back to ground, then immediate jump suppressed by rearm.
+        f.state.grounded = true;
+        f.velocityY = 0;
+        o.update(f, t0 + jumpHoldNs + landHoldNs);
+        check(o.domain == Domain::ground, "rearm setup");
+        f.state.grounded = false;
+        f.velocityY = 4.f;
+        f.feetY = 11.f;
+        const int64_t tLand = o.sinceNs;
+        o.update(f, tLand + 1);
+        check(o.update(f, tLand + jumpHoldNs) == Domain::ground && o.bounceSuppressed,
+              "bounce not suppressed");
+        // Zip immediate from ground.
+        o = {};
+        f = {};
+        f.state.playing = f.state.fresh = f.state.grounded = true;
+        o.update(f, 0);
+        f.zipRising = true;
+        f.state.zipping = true;
+        f.state.grounded = false;
+        check(o.update(f, 1) == Domain::traversal && o.lastEnterT == EnterT::zip, "zip not immediate");
+        // Wall immediate.
+        o = {};
+        f = {};
+        f.state.playing = f.state.fresh = f.state.grounded = true;
+        o.update(f, 0);
+        f.wallRising = true;
+        f.state.wall = 1;
+        f.state.grounded = false;
+        check(o.update(f, 1) == Domain::traversal && o.lastEnterT == EnterT::wall, "wall not immediate");
+    });
+
+    test("ANIMATED HYBRID owner: combat sticky keeps G until web or idle clear", [] {
+        using namespace hybrid_owner;
+        HybridOwner o;
+        Frame f{};
+        f.state.playing = f.state.fresh = f.state.grounded = true;
+        o.update(f, 0);
+        f.state.fighting = true;
+        o.update(f, 1);
+        check(o.combatSticky, "sticky not set");
+        // Airborne hop during fight stays G.
+        f.state.grounded = false;
+        f.velocityY = 5.f;
+        f.feetY = 2.f;
+        o.update(f, 2);
+        check(o.update(f, 2 + jumpHoldNs) == Domain::ground, "sticky hop left G");
+        // Web still leaves.
+        f.webRising = true;
+        f.state.webbed = true;
+        check(o.update(f, 2 + jumpHoldNs + 1) == Domain::traversal && o.lastEnterT == EnterT::web,
+              "sticky ignored web");
+    });
+
+    test("ANIMATED HYBRID yielding: ground yes, air no, sticky combat yes", [] {
+        using namespace hybrid_owner;
+        HybridOwner o;
+        head_probe::StateInputs s;
+        s.playing = s.fresh = s.grounded = true;
+        check(o.yielding(true, s, false, false), "ground not yield");
+        check(!o.yielding(false, s, false, false), "moves off yielded");
+        s.grounded = false;
+        s.owned = true;
+        // Still domain G but classify air — should not yield until jump edge, and
+        // yielding() only allows ground/parkour/sticky combat.
+        check(!o.yielding(true, s, false, false), "air classified while G yielded");
+        o.domain = Domain::traversal;
+        s.grounded = true;
+        check(!o.yielding(true, s, false, false), "traversal ground yielded");
+        o.domain = Domain::ground;
+        o.combatSticky = true;
+        s.grounded = false;
+        s.fighting = true;
+        check(o.yielding(true, s, false, false), "sticky combat not yield");
+    });
+
     test("STEADY STATES: RT comes back after a moment, goes at once, never in a fight; off as before", [] {
         using namespace ground_state;
         RiseDelay r;
