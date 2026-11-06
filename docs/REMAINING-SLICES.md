@@ -14,7 +14,14 @@ it as well: with ARMS the OG body now fades out over the view's 180 ms on SpidyV
 animation (it vanished on the first frame while the view glided, so the neck was not
 under the view), a Y zip from a swing no longer gets the landing's facing stick, and
 the vr->anim / headbone diag values are real; owner rules and timings unchanged; not
-headset-tested. Next approved: J (jump-adopt), L/T/P. No custom offsets; docs/REFERENCE.md and VALIDATION.md remain
+headset-tested. J (jump-adopt) is on it: a real jump or leap the player asked for on the
+ground (A, the game's A, a charged leap, SPIDY RUN JUMP) goes to SpidyVR on the
+leave-ground frame (`hybrid_owner` EnterVr::jump; not in a fight, zip, crawl, on a wall
+or in the game's parkour; within 0.5 s of the ask); the pose job snapshots the live
+authored pose and seeds the body from it (`body::seedFromPose`: hips' heading, weight
+from 0, arms at full weight at once), legs keep the jump's shape in the air; a jump the
+game's crawl mounts onto a wall goes back to ANIM (EnterAnim::mount); landing by the
+existing rules; not headset-tested. Next approved: L/T/P. No custom offsets; docs/REFERENCE.md and VALIDATION.md remain
 the executable evidence. Packaging merge has not been headset-tested.
 
 ---

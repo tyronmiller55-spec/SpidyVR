@@ -28531,6 +28531,340 @@ int main() {
                    "a stale weight stayed");
          });
 
+    test("ANIMATED HYBRID jump adopt: a real jump or leap asked for takes VR on the frame he leaves the "
+         "ground",
+         [] {
+             using namespace hybrid_owner;
+             // A tap of A (or the game's A, a charged leap let go of, SPIDY RUN JUMP): the takeoff
+             // plays on the ground as the animation, and VR takes him the frame he leaves it.
+             for (const bool swingJump : {false, true}) {
+                 HybridOwner o;
+                 Frame f{};
+                 f.state.playing = f.state.fresh = f.state.grounded = true;
+                 f.state.owned = swingJump; // SPIDY RUN JUMP / a charged leap: the swing's own jump
+                 int64_t t = 0;
+                 o.update(f, t);
+                 f.jumpAsk = true;
+                 check(o.update(f, t += 11'000'000) == Domain::anim, "the ask itself took VR on the ground");
+                 f.jumpAsk = false;
+                 while ((t += 11'000'000) < 250'000'000)
+                     check(o.update(f, t) == Domain::anim, "the takeoff on the ground left the animation");
+                 f.state.grounded = false;
+                 check(o.update(f, t) == Domain::vr && o.enterVr && o.lastEnterVr == EnterVr::jump &&
+                           o.vrBy == EnterVr::jump,
+                       "the jump was not adopted on the leave-ground frame");
+             }
+             check(std::strcmp(enterVrName(EnterVr::jump), "jump") == 0, "jump name");
+             // An ask too long before leaving the ground (a stand, then a fall off a ledge) is spent.
+             HybridOwner o;
+             Frame f{};
+             f.state.playing = f.state.fresh = f.state.grounded = true;
+             o.update(f, 0);
+             f.jumpAsk = true;
+             o.update(f, 10'000'000);
+             f.jumpAsk = false;
+             o.update(f, 10'000'000 + jumpAskNs + 1);
+             f.state.grounded = false;
+             check(o.update(f, 20'000'000 + jumpAskNs) == Domain::anim, "a stale ask took a fall");
+             // An ask in the air (A to wall-jump, a double tap) is no jump from the ground.
+             o = {};
+             f = {};
+             f.state.playing = f.state.fresh = f.state.grounded = true;
+             o.update(f, 0);
+             f.state.grounded = false;
+             o.update(f, 11'000'000);
+             f.jumpAsk = true;
+             o.update(f, 22'000'000);
+             f.jumpAsk = false;
+             f.state.grounded = true;
+             o.update(f, 33'000'000);
+             f.state.grounded = false;
+             check(o.update(f, 44'000'000) == Domain::anim,
+                   "an ask in the air was kept for the next takeoff");
+         });
+
+    test("ANIMATED HYBRID jump adopt: vaults, mantles, hops, crawls, zips, launchers and wall mounts stay "
+         "anim",
+         [] {
+             using namespace hybrid_owner;
+             struct Case {
+                 const char* what;
+                 bool ask;
+                 void (*atAsk)(Frame&);
+                 void (*atLeave)(Frame&);
+             };
+             const Case cases[] = {
+                 // The game's own moves ask for nothing: they leave the ground on their own.
+                 {"a parkour vault / mantle (NATIVE RUN's RT)", false, [](Frame&) {},
+                  [](Frame& f) { f.state.runRt = true; }},
+                 {"a short hop", false, [](Frame&) {}, [](Frame&) {}},
+                 // NATIVE RUN still holding RT off the ground: the game's parkour (head_probe parkour).
+                 {"an ask that left as the game's parkour", true, [](Frame&) {},
+                  [](Frame& f) { f.state.runRt = true; }},
+                 {"a floor crawl (kind 3)", true, [](Frame& f) { f.state.wall = surfaceFloor; },
+                  [](Frame& f) { f.state.wall = surfaceFloor; }},
+                 {"the game's crawl (kind 2)", true, [](Frame& f) { f.state.wall = surfaceGame; },
+                  [](Frame& f) { f.state.wall = surfaceGame; }},
+                 {"a fight's launcher hop", true, [](Frame& f) { f.state.fighting = true; },
+                  [](Frame& f) { f.state.fighting = true; }},
+                 {"a dodge", true, [](Frame& f) { f.state.dodging = true; }, [](Frame&) {}},
+                 {"a zip asked for", true, [](Frame&) {}, [](Frame& f) { f.state.zipping = true; }},
+                 {"a Y web zip pressed as he leaves", true, [](Frame&) {},
+                  [](Frame& f) { f.zipPress = true; }},
+             };
+             for (const auto& c : cases) {
+                 HybridOwner o;
+                 Frame f{};
+                 f.state.playing = f.state.fresh = f.state.grounded = true;
+                 int64_t t = 0;
+                 o.update(f, t);
+                 Frame ask = f;
+                 ask.jumpAsk = c.ask;
+                 c.atAsk(ask);
+                 o.update(ask, t += 11'000'000);
+                 Frame leave = f;
+                 c.atLeave(leave);
+                 o.update(leave, t += 100'000'000);
+                 leave.state.grounded = false;
+                 bool vr = o.update(leave, t += 11'000'000) == Domain::vr;
+                 leave.zipPress = false;
+                 for (int i = 0; i < 40; ++i)
+                     vr = vr || o.update(leave, t += 11'000'000) == Domain::vr;
+                 check(!vr, (std::string(c.what) + " took VR as a jump").c_str());
+             }
+             // Combat sticky: a fight that just ended still owns the next hop.
+             {
+                 HybridOwner o;
+                 Frame f{};
+                 f.state.playing = f.state.fresh = f.state.grounded = true;
+                 f.state.fighting = true;
+                 o.update(f, 0);
+                 f.state.fighting = false;
+                 o.update(f, 50'000'000);
+                 f.jumpAsk = true;
+                 o.update(f, 100'000'000);
+                 f.jumpAsk = false;
+                 f.state.grounded = false;
+                 check(o.update(f, 150'000'000) == Domain::anim, "a launcher hop in combat sticky took VR");
+             }
+             // A Y-zip: anim for the whole zip, even after an ask on the ground.
+             {
+                 HybridOwner o;
+                 Frame f{};
+                 f.state.playing = f.state.fresh = f.state.grounded = true;
+                 o.update(f, 0);
+                 f.jumpAsk = true;
+                 o.update(f, 11'000'000);
+                 f.jumpAsk = false;
+                 f.zipPress = true;
+                 o.update(f, 22'000'000);
+                 f.zipPress = false;
+                 f.state.grounded = false;
+                 f.state.zipping = true;
+                 int64_t t = 22'000'000;
+                 while ((t += 11'000'000) < 1'000'000'000)
+                     check(o.update(f, t) == Domain::anim, "the zip left the animation as a jump");
+             }
+             // A jump onto a wall: the game's crawl mounts him; the animation has the climb at once.
+             {
+                 HybridOwner o;
+                 Frame f{};
+                 f.state.playing = f.state.fresh = f.state.grounded = true;
+                 o.update(f, 0);
+                 f.jumpAsk = true;
+                 o.update(f, 11'000'000);
+                 f.jumpAsk = false;
+                 f.state.grounded = false;
+                 check(o.update(f, 120'000'000) == Domain::vr, "set-up: the jump was not adopted");
+                 f.state.wall = surfaceGame;
+                 check(o.update(f, 200'000'000) == Domain::anim && o.lastEnterAnim == EnterAnim::mount &&
+                           !seedsFacing(o.lastEnterAnim) &&
+                           std::strcmp(enterAnimName(EnterAnim::mount), "mount") == 0,
+                       "a wall mount from a jump kept VR");
+                 // A web on the way is the player's: the wall keeps VR as before.
+                 o = {};
+                 f = {};
+                 f.state.playing = f.state.fresh = f.state.grounded = true;
+                 o.update(f, 0);
+                 f.jumpAsk = true;
+                 o.update(f, 11'000'000);
+                 f.jumpAsk = false;
+                 f.state.grounded = false;
+                 o.update(f, 120'000'000);
+                 f.webRising = f.state.webbed = true;
+                 o.update(f, 150'000'000);
+                 f.webRising = f.state.webbed = false;
+                 f.state.wall = surfaceGame;
+                 check(o.update(f, 200'000'000) == Domain::vr && o.vrBy == EnterVr::web,
+                       "a webbed jump onto a wall left VR as a mount");
+             }
+         });
+
+    test("ANIMATED HYBRID jump adopt: the landing goes back to anim by the land rules unless a web keeps VR",
+         [] {
+             using namespace hybrid_owner;
+             for (const bool webbed : {false, true}) {
+                 HybridOwner o;
+                 Frame f{};
+                 f.state.playing = f.state.fresh = f.state.grounded = true;
+                 o.update(f, 0);
+                 f.jumpAsk = true;
+                 o.update(f, 11'000'000);
+                 f.jumpAsk = false;
+                 f.state.grounded = false;
+                 const int64_t leave = 100'000'000;
+                 check(o.update(f, leave) == Domain::vr, "set-up: not adopted");
+                 int64_t t = leave;
+                 while ((t += 11'000'000) < leave + 300'000'000)
+                     check(o.update(f, t) == Domain::vr, "the leap left VR in the air");
+                 if (webbed)
+                     f.webRising = f.state.webbed = f.state.owned = true;
+                 o.update(f, t);
+                 f.webRising = false;
+                 f.state.grounded = true; // touch down 0.3 s in
+                 const int64_t land = t += 11'000'000;
+                 Domain d = o.update(f, land);
+                 while (d == Domain::vr && (t += 11'000'000) < leave + 3'000'000'000)
+                     d = o.update(f, t);
+                 if (webbed) {
+                     check(d == Domain::vr, "a web held on landing let the animation take him");
+                     continue;
+                 }
+                 check(d == Domain::anim && o.lastEnterAnim == EnterAnim::land &&
+                           seedsFacing(o.lastEnterAnim),
+                       "the landing did not go back to the animation");
+                 check(t - land >= landHoldNs && t - leave >= vrMinDwellNs &&
+                           t - std::max(land + landHoldNs, leave + vrMinDwellNs) <= 11'000'000,
+                       "the landing skipped the land confirm or the VR minimum");
+             }
+         });
+
+    test("ANIMATED HYBRID jump adopt: the first SpidyVR frame is the takeoff's pose, the arms on the "
+         "controllers",
+         [] {
+             const auto b = testBody();
+             const auto& rig = b.rig;
+             const int joints = static_cast<int>(rig.parent.size());
+             // The game's takeoff: knees bent under him, a lean, and the hips turned off the model's +z.
+             auto jump = b.rest;
+             {
+                 body::Pose p(jump.data(), joints);
+                 for (const auto& leg : rig.legs) {
+                     p.turn(rig.below[leg.upper], body::axisAngle({1, 0, 0}, -.6f), p.position(leg.upper));
+                     p.turn(rig.below[leg.lower], body::axisAngle({1, 0, 0}, 1.2f), p.position(leg.lower));
+                 }
+                 p.turn(rig.below[rig.spine.front()], body::axisAngle({1, 0, 0}, .25f),
+                        p.position(rig.spine.front()));
+                 p.turn(rig.below[rig.pelvis], Quat::yaw(.5f), p.position(rig.pelvis));
+             }
+             const body::Pose snap(jump.data(), joints);
+             const Vec3 hipsWay = snap.direction(rig.pelvis, rig.pelvisForward);
+             const float hipsYaw = std::atan2(hipsWay.x, hipsWay.z);
+             const auto kneeBend = [&](const body::Pose& p, int i) {
+                 const auto& leg = rig.legs[i];
+                 const Vec3 thigh = normalized(p.position(leg.lower) - p.position(leg.upper));
+                 const Vec3 shin = normalized(p.position(leg.foot) - p.position(leg.lower));
+                 return std::acos(std::clamp(dot(thigh, shin), -1.f, 1.f));
+             };
+             const float bentAt[2] = {kneeBend(snap, 0), kneeBend(snap, 1)};
+             check(bentAt[0] > .9f && snap.position(rig.legs[0].foot).y < .3f,
+                   "set-up: no jump shape, or feet too high to stand");
+             // The view re-anchored on the head as he leaves the ground, already rising past it;
+             // looking the way his hips face. Controllers ahead of his chest.
+             body::Targets t;
+             t.head = true;
+             t.up = {0, 1, 0};
+             t.facing = Quat::yaw(hipsYaw + 3.14159265f);
+             const Vec3 F = t.facing.rotate({0, 0, -1}), U = t.facing.rotate({0, 1, 0});
+             check(std::abs(std::atan2(F.x, F.z) - hipsYaw) < 1e-3f, "set-up: facing");
+             t.eyes = snap.position(rig.head) + F * rig.eyesFromHead.x + U * rig.eyesFromHead.y +
+                      cross(U, F) * rig.eyesFromHead.z + Vec3{0, .12f, 0};
+             const Quat yawed = Quat::yaw(hipsYaw);
+             for (int i = 0; i < 2; ++i) {
+                 const Vec3 shoulder = snap.position(rig.arms[i].upper);
+                 t.hands[i] = {true, shoulder + yawed.rotate({0, -.15f, .35f}), yawed * gripFacing({0, 0, 1}),
+                               0, 0};
+             }
+             t.airborne = true; // an adopted jump in the air (game_xr's hybridLeapAir)
+             const float dt = 1.f / 90;
+             const auto bodyJoints = {rig.pelvis, 2, 3, 4, 5, rig.head, 21, 22, 23, 24, 25, 26, 27, 28};
+             // The OG body as beginReclaim leaves it: weight 0, a heading latched from elsewhere.
+             const auto stale = [&] {
+                 body::State s;
+                 s.yaw = hipsYaw + 1.2f;
+                 s.yawSet = true;
+                 return s;
+             };
+             body::Config c;
+             // Seeded from the snapshot: the first frame is the snapshot; the arms are on the controllers.
+             body::State seeded = stale();
+             check(body::seedFromPose(snap, rig, t, seeded) && seeded.adoptArms && seeded.weight == 0.f &&
+                       std::abs(seeded.yaw - hipsYaw) < 1e-3f,
+                   "the seed did not take the snapshot's hips");
+             auto first = jump;
+             body::Pose firstPose(first.data(), joints);
+             const auto r = body::solve(firstPose, rig, t, c, seeded, true, dt);
+             float off = 0;
+             for (const int j : bodyJoints)
+                 off = std::max(off, length(firstPose.position(j) - snap.position(j)));
+             check(r.solved && r.weight < .1f && off < .02f,
+                   ("the first VR frame is not the snapshot: " + std::to_string(off) + " m").c_str());
+             check(r.handError[0] >= 0 && r.handError[0] < .01f && r.handError[1] >= 0 &&
+                       r.handError[1] < .01f,
+                   "the arms did not take the controllers on the first VR frame");
+             // The old reclaim: the arms crossfade from the animation over the body's blend.
+             body::State plain = stale();
+             auto other = jump;
+             body::Pose otherPose(other.data(), joints);
+             const auto r0 = body::solve(otherPose, rig, t, c, plain, true, dt);
+             check(r0.handError[0] > .1f, "set-up: the arms were on the controllers without the adopt");
+             // All in: the legs go on in the jump's shape, the hips where the takeoff turned them.
+             body::State grounded = stale();
+             body::seedFromPose(snap, rig, t, grounded);
+             body::Targets standing = t;
+             standing.airborne = false;
+             std::vector<float> air, ground;
+             for (int k = 0; k < 60; ++k) {
+                 air = jump;
+                 body::Pose a(air.data(), joints);
+                 body::solve(a, rig, t, c, seeded, true, dt);
+                 ground = jump;
+                 body::Pose g(ground.data(), joints);
+                 body::solve(g, rig, standing, c, grounded, true, dt);
+                 check(!seeded.adoptArms || seeded.weight < 1.f, "the adopt's arms outlived the blend");
+             }
+             body::Pose a(air.data(), joints), g(ground.data(), joints);
+             check(seeded.weight >= 1.f && !seeded.adoptArms, "the body never came all in");
+             for (int i = 0; i < 2; ++i)
+                 check(std::abs(kneeBend(a, i) - bentAt[i]) < .05f,
+                       "the adopted legs snapped out of the jump's shape (a standing pose)");
+             check(std::abs(kneeBend(g, 0) - bentAt[0]) > .1f,
+                   "set-up: legs standing on the ground kept the jump's knees anyway");
+             const Vec3 way = a.direction(rig.pelvis, rig.pelvisForward);
+             check(std::abs(std::remainder(std::atan2(way.x, way.z) - hipsYaw, 6.2831853f)) < .1f,
+                   "the adopted hips turned off the takeoff's heading");
+             // Unseeded, the stale heading turns the hips away.
+             body::State turned = stale();
+             std::vector<float> spun;
+             for (int k = 0; k < 60; ++k) {
+                 spun = jump;
+                 body::Pose p(spun.data(), joints);
+                 body::solve(p, rig, t, c, turned, true, dt);
+             }
+             const Vec3 spunWay = body::Pose(spun.data(), joints).direction(rig.pelvis, rig.pelvisForward);
+             check(std::abs(std::remainder(std::atan2(spunWay.x, spunWay.z) - hipsYaw, 6.2831853f)) > .3f,
+                   "set-up: a stale heading did not turn the hips");
+             // The animation's overlay ends an adopt that never came all in.
+             body::State cut = stale();
+             body::seedFromPose(snap, rig, t, cut);
+             body::Targets overlay;
+             overlay.armsOnly = true;
+             auto o = jump;
+             body::Pose op(o.data(), joints);
+             body::solve(op, rig, overlay, c, cut, true, dt);
+             check(!cut.adoptArms, "the overlay kept a stale adopt");
+         });
+
     test("ANIMATED HYBRID animOwns: ungrounded frame keeps yield + head follow (no classify drop)", [] {
         using namespace hybrid_owner;
         HybridOwner o;

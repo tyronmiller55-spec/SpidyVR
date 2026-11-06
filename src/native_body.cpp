@@ -82,6 +82,11 @@ body::Targets lastTargets;
 // The last full-body (bodyOn) targets: what the body fades out on when the animation takes it
 // back under the ANIMATED ARMS overlay (body::fadeOut).
 body::Targets lastBodyTargets;
+// ANIMATED HYBRID jump adopt (beginJumpAdopt): wanted since this tick (0 none), the live pose
+// snapshot taken at the first bodyOn job, and that first frame's result.
+uint64_t adoptWantedTick{};
+std::array<float, native_body::maxJoints * 16> adoptSnapshot{};
+native_body::JumpAdopt adoptSample{};
 // The body's turn away from the wall at the last solve (crawlOutwardWeight),
 // for the XR thread, which must not wait out a solve for it.
 std::atomic<float> outwardWeight{};
@@ -618,10 +623,25 @@ void solveHero(float* out, uintptr_t job, uintptr_t instance) {
                         ? body_calibration::bodyScale(wanted.height, heroProportions)
                         : std::clamp(wanted.height / cache.ik.eyeHeight, .85f, 1.2f);
         armScale = body_calibration::armScale(wanted.armLength, scale, heroProportions);
-        const float dt = lastSolve.QuadPart ? static_cast<float>(now.QuadPart - lastSolve.QuadPart) / frequency.QuadPart
-                                            : 0.f;
+        float dt = lastSolve.QuadPart
+                       ? static_cast<float>(now.QuadPart - lastSolve.QuadPart) / frequency.QuadPart
+                       : 0.f;
         lastSolve = now;
         body::Pose pose(out, static_cast<int>(joints));
+        // ANIMATED HYBRID jump adopt: the first SpidyVR frame of a real jump is the pose the game's
+        // takeoff left him in. Snapshot it before the solve and seed the body from it.
+        bool adopted = false;
+        if (adoptWantedTick && GetTickCount64() - adoptWantedTick > 250)
+            adoptWantedTick = 0;
+        if (on && adoptWantedTick && joints <= native_body::maxJoints) {
+            adoptWantedTick = 0;
+            std::memcpy(adoptSnapshot.data(), out, joints * 64ull);
+            const body::Pose snapshot(adoptSnapshot.data(), static_cast<int>(joints));
+            adopted = body::seedFromPose(snapshot, cache.ik, lastTargets, state);
+            // A first frame long after the last solve would take the whole blend at once.
+            if (adopted && std::isfinite(dt))
+                dt = std::clamp(dt, 0.f, 1.f / 30);
+        }
         // ANIMATED HYBRID T->G under ANIMATED ARMS: the overlay solves on the game's pose and never
         // ramps the body's weight, so the body would leave at once while the view still glides onto
         // the head. It fades out with that 180 ms glide first, so the neck stays under the view.
@@ -629,6 +649,21 @@ void solveHero(float* out, uintptr_t job, uintptr_t instance) {
             body::fadeOut(pose, cache.ik, lastBodyTargets, config, state, dt, hybrid_handoff::handoffSec,
                           scale, armScale);
         result = body::solve(pose, cache.ik, lastTargets, config, state, on || armsOverlayOn || armsBlend || spinOn, dt, scale, armScale);
+        if (adopted) {
+            const body::Pose snapshot(adoptSnapshot.data(), static_cast<int>(joints));
+            native_body::JumpAdopt a;
+            a.count = adoptSample.count + 1;
+            a.joints = joints;
+            a.hips = length(pose.position(cache.ik.pelvis) - snapshot.position(cache.ik.pelvis));
+            for (const auto& leg : cache.ik.legs)
+                for (const int j : {leg.upper, leg.lower, leg.foot})
+                    if (j >= 0 && j < static_cast<int>(joints))
+                        a.legs = std::max(a.legs, length(pose.position(j) - snapshot.position(j)));
+            a.weight = result.weight;
+            a.handError[0] = lastTargets.hands[0].tracked ? result.handError[0] : -1.f;
+            a.handError[1] = lastTargets.hands[1].tracked ? result.handError[1] : -1.f;
+            adoptSample = a;
+        }
         // Internal diagnostic snapshot: all values belong to this command + pose job.
         overlayTrackingSample.serial = wanted.serial;
         overlayTrackingSample.targetFrame = lastTargets.viewMapped ? view.frame : animated_view::Frame::none;
@@ -838,6 +873,7 @@ void native_body::retarget(uintptr_t heroRecord) {
 void native_body::resyncAfterYield() {
     AcquireSRWLockExclusive(&solveLock);
     state = {};
+    adoptWantedTick = 0;
     overlayArmWeight[0] = overlayArmWeight[1] = 0.f;
     overlayTorsoAssist = false;
     yieldTiltBody = yieldTiltHands = {};
@@ -851,6 +887,8 @@ void native_body::resyncAfterYield() {
 void native_body::beginReclaim() {
     AcquireSRWLockExclusive(&solveLock);
     // Warm: keep crawl/held latches; only reset what would fight the handoff.
+    adoptWantedTick = 0;
+    state.adoptArms = false;
     state.weight = 0.f;
     state.armWeight = {};
     state.outwardAnchor = {};
@@ -907,6 +945,18 @@ void native_body::setViewSoftlock(bool on) {
     ReleaseSRWLockExclusive(&solveLock);
 }
 
+void native_body::beginJumpAdopt() {
+    beginReclaim();
+    AcquireSRWLockExclusive(&solveLock);
+    adoptWantedTick = std::max<uint64_t>(GetTickCount64(), 1);
+    ReleaseSRWLockExclusive(&solveLock);
+}
+native_body::JumpAdopt native_body::jumpAdopt() {
+    AcquireSRWLockShared(&solveLock);
+    const JumpAdopt copy = adoptSample;
+    ReleaseSRWLockShared(&solveLock);
+    return copy;
+}
 native_body::OverlayTracking native_body::overlayTracking() {
     AcquireSRWLockShared(&solveLock);
     const OverlayTracking copy = overlayTrackingSample;

@@ -3,6 +3,37 @@
 Every build, newest first, with what changed, why, and what was measured.
 Per-check results are in [VALIDATION.md](VALIDATION.md).
 
+## Native Animation: jumps hand over from their own pose
+
+**Pick up real jumps and leaps in SpidyVR from the pose the animation left you in.**
+
+- A real jump or leap the player asks for on the ground - A (`Command::jump`), the
+  game's A, a charged leap let go of (`Command::leap`, RUNNING LEAP), SPIDY RUN JUMP
+  (`Command::asks` bit 3) - plays the game's takeoff and goes to SpidyVR on the frame
+  he leaves the ground, within 0.5 s of the ask (`hybrid_owner::EnterVr::jump`).
+- Never on the game's own moves: parkour vaults, mantles and wall runs (no ask, or
+  `head_probe::State::parkour` as he leaves), short hops, the floor crawl (3) and the
+  game's crawl (2), any wall, Y zips (held on the animation for the whole zip), fights
+  and combat-sticky launcher hops. Earlier "any leave-ground" logic yanked parkour
+  into SpidyVR; this keys on the player's own ask.
+- A jump the game's crawl mounts onto a wall (no web on the way) goes back to the
+  animation at once (`EnterAnim::mount`). Landing returns by the existing confirmed
+  landing (250 ms, 500 ms VR minimum) unless a web keeps SpidyVR.
+- On the first SpidyVR pose job the pose writer snapshots the hero's live pose as
+  the takeoff left it and seeds the body from it (`native_body::beginJumpAdopt`,
+  `body::seedFromPose`): the body's heading is the snapshot hips' (no hip turn), its
+  weight starts at 0 (the first frame is the snapshot), the arms take the
+  controllers at full weight at once, and the legs keep the jump's shape in the air
+  (`body::Targets::airborne` until he lands). The view uses the existing eye
+  re-anchor and 180 ms blend. Diag: `hybrid: anim->vr (jump)` and `hybrid: jump adopt
+  seeded from the live pose ... hips / legs off it, wrists from the controllers`.
+- No new setting, offsets or shared-struct version (pose writer per docs/REFERENCE.md,
+  docs/VALIDATION.md; side channel like the arms overlay). Momentum legs, tuck and
+  physics (L/T/P) not started. Tests: jump / leap / SPIDY RUN JUMP adopt on the
+  leave-ground frame; vault, mantle, hop, crawls, zips, combat, wall mount stay
+  animation; landing rules; first frame = snapshot with the arms on the controllers,
+  legs in the jump's shape all the way in. Not headset-tested.
+
 ## Native Animation: one system across the switches
 
 **Keep the body under your view when the animation takes it back.**

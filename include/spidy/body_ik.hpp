@@ -348,6 +348,10 @@ struct State {
     CrawlFeet outwardFeet;
     CrawlTurn crawlTurn;
     float weight{}, yaw{};
+    // Jump adopt (seedFromPose): the arms take the controllers at full weight
+    // from the first frame while the rest of the body blends in from the
+    // game's pose. Ends once the body is all in, or no longer wanted.
+    bool adoptArms{};
     // Per-arm overlay blend while Targets::armsOnly (separate from weight).
     std::array<float, 2> armWeight{};
     // Smoothed ANIMATED TORSO spine angles while armsOnly + torsoAssist (rad).
@@ -417,4 +421,14 @@ Result solve(Pose& pose, const Rig& rig, const Targets& targets, const Config& c
 // weight is gone (and drops a weight left with no full-body targets).
 Result fadeOut(Pose& pose, const Rig& rig, const Targets& last, const Config& config, State& state, float dt,
                float seconds, float scale = 1, float armScale = 1);
+// ANIMATED HYBRID jump adopt: the full-body solve picks the body up from the
+// game's pose on the frame a real jump leaves the ground. `snapshot` is that
+// live pose, as the game's animation left it (before any solve). The body's
+// yaw is set to the snapshot's hips (so they are not turned), its weight
+// starts from 0 (the first solved frame is the snapshot, less a frame's
+// blend), and the arms take the controllers at once (State::adoptArms).
+// With Targets::airborne the legs go on from the jump's own shape. `targets`
+// gives the up the yaw is measured about. False (state untouched) when the
+// rig or the snapshot cannot be used.
+bool seedFromPose(const Pose& snapshot, const Rig& rig, const Targets& targets, State& state);
 } // namespace spidy::body

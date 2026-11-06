@@ -264,6 +264,24 @@ void resyncAfterYield();
 // anchors / overlay side channels, leave the rest of State so weight ramps
 // 0→1 via body_ik's existing blendSpeed. No full state={} wipe.
 void beginReclaim();
+// ANIMATED HYBRID jump adopt (hybrid_owner EnterVr::jump): beginReclaim, then
+// the next bodyOn pose job (within a quarter second) snapshots the hero's
+// live pose as the game's animation left it, before its solve, and seeds the
+// body from it (body::seedFromPose): the first SpidyVR frame is that pose,
+// the arms on the controllers at once. Side channel: no Command layout or
+// version change.
+void beginJumpAdopt();
+// The latest adopt's first frame (diagnostics): how far the solved hips and
+// legs ended from the snapshot, model metres, the body's weight then, and
+// each wrist's distance from its controller (-1 untracked). `count` goes up
+// once per seeded adopt.
+struct JumpAdopt {
+    uint64_t count{};
+    uint32_t joints{};
+    float hips{}, legs{}, weight{};
+    float handError[2]{-1, -1};
+};
+JumpAdopt jumpAdopt();
 // ANIMATED ARMS: per-arm overlay weights (0..1) read by the next pose job when
 // Flags::armsOverlay is set. Cleared by resyncAfterYield. No Command layout change.
 void setArmOverlay(float left, float right);

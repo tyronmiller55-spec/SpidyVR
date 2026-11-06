@@ -1060,6 +1060,14 @@ DWORD WINAPI run(void*) {
         // frame, for the owner's update further down the same frame.
         bool hybridZipPress{};
         bool hybridYWas{};
+        // ANIMATED HYBRID jump adopt (hybrid_owner::Frame::jumpAsk): a real jump or leap asked for
+        // on the ground this frame. hybridLeapAir: an adopted jump is in the air (its legs keep
+        // the jump's shape, body::Targets::airborne). The adopt's first-frame diag waits on
+        // native_body::jumpAdopt's count.
+        bool hybridJumpAsk{};
+        bool hybridLeapAir{};
+        bool hybridAdoptWaiting{};
+        uint64_t hybridAdoptSeen{};
         // Horizontal measured (feet position-delta) speed for the owner's speed intent.
         Vec3 hybridFeetWas{};
         bool hybridFeetWasSet{};
@@ -3938,6 +3946,12 @@ DWORD WINAPI run(void*) {
                                 runJumpOpen = jumpPressOpen = false;
                             }
                         }
+                        // ANIMATED HYBRID jump adopt: the player's own jump from the ground - A
+                        // pressed, the game's A sent, SPIDY RUN JUMP's own jump. (A charged leap
+                        // let go of is below.) The owner adopts it on the frame he leaves the ground.
+                        if (steering && !calibrationInput && swingState.grounded &&
+                            ((raw && !jumpRawBefore) || (out && !jumpOutBefore) || runJumpOpen))
+                            hybridJumpAsk = true;
                         jumpRawBefore = raw;
                         jumpOutBefore = out;
                     }
@@ -3954,6 +3968,8 @@ DWORD WINAPI run(void*) {
                     }
                     if (chargeJump.leaps() != leapsBefore) {
                         leapsBefore = chargeJump.leaps();
+                        // A charged leap let go of (Command::leap): a real leap, from the ground.
+                        hybridJumpAsk = true;
                         runtime.haptic(0, .8f, .12f);
                         runtime.haptic(1, 1.f, .12f);
                         feel(body_haptics::Kind::leap);
@@ -5634,6 +5650,7 @@ DWORD WINAPI run(void*) {
                                 screenAhead(frame.head, 0).orientation.rotate({0, 0, -1}));
                         hybridFrame.cutscene = !animState.playing || !animState.fresh;
                         hybridFrame.zipPress = hybridZipPress;
+                        hybridFrame.jumpAsk = hybridJumpAsk;
                         if (hybridOn) {
                             hybridOwner.update(hybridFrame, handoffNs);
                             if (hybridFrame.zipPress)
@@ -5706,7 +5723,18 @@ DWORD WINAPI run(void*) {
                                     if (validTrackedPose(frame.head))
                                         rig.adoptEyes(worldEyes, worldYaw, frame.head);
                                 }
-                                native_body::beginReclaim();
+                                // A real jump or leap: SpidyVR picks the body up from the pose the
+                                // game's takeoff left it in (snapshot + seed on the next pose job),
+                                // the arms on the controllers at once, the legs in the jump's shape.
+                                const bool jumpAdopt = hybridOwner.lastEnterVr == hybrid_owner::EnterVr::jump;
+                                if (jumpAdopt) {
+                                    hybridAdoptSeen = native_body::jumpAdopt().count;
+                                    native_body::beginJumpAdopt();
+                                } else {
+                                    native_body::beginReclaim();
+                                }
+                                hybridLeapAir = jumpAdopt;
+                                hybridAdoptWaiting = jumpAdopt;
                                 hybridBlend = {};
                                 hybridBlend.active = true;
                                 hybridBlend.toTraversal = true;
@@ -5781,6 +5809,11 @@ DWORD WINAPI run(void*) {
                                     hybrid_handoff::handoffSec * 1000.f);
                             }
                             if (hybridOwner.enterAnim) {
+                                if (hybridAdoptWaiting)
+                                    diag_log::write(
+                                        "hybrid: jump adopt never seeded (no SpidyVR body frame before "
+                                        "the animation took him back)");
+                                hybridLeapAir = hybridAdoptWaiting = false;
                                 // Slice 3 T→G (vr→anim): blend eyes back to the headbone; keep
                                 // IK state warm; delay MODEL YAW until the blend ends;
                                 // seed actor facing from the rig look yaw. No adoptFeet.
@@ -5862,8 +5895,27 @@ DWORD WINAPI run(void*) {
                         } else {
                             hybridOwner = {};
                             hybridBlend = {};
+                            hybridLeapAir = hybridAdoptWaiting = false;
                         }
+                        // Jump adopt's first frame, once the pose job has seeded it.
+                        if (hybridAdoptWaiting) {
+                            const auto adopt = native_body::jumpAdopt();
+                            if (adopt.count != hybridAdoptSeen) {
+                                hybridAdoptSeen = adopt.count;
+                                hybridAdoptWaiting = false;
+                                diag_log::writef(
+                                    "hybrid: jump adopt seeded from the live pose (%u joints): first "
+                                    "frame hips %.3f m legs %.3f m off it, body %.2f in, wrists %.3f "
+                                    "/ %.3f m from the controllers",
+                                    adopt.joints, adopt.hips, adopt.legs, adopt.weight, adopt.handError[0],
+                                    adopt.handError[1]);
+                            }
+                        }
+                        // An adopted jump's legs keep its shape only in the air.
+                        if (swingState.grounded)
+                            hybridLeapAir = false;
                         hybridZipPress = false;
+                        hybridJumpAsk = false;
                         hybridWebWas = webNow;
                         // HYBRID: yield (and so head follow) changes only on an owner
                         // edge, which always runs the blend above.
@@ -6044,13 +6096,14 @@ DWORD WINAPI run(void*) {
                             values.animatedArms && yieldAnim && !flatScreen && values.body;
                         const bool armsOverlayLive =
                             armsWanted || (hybridArmFade && animated_arms::anyActive(animatedArmsState));
-                        pose.flags = (flatScreen || !values.body || yieldAnim ? 0u : native_body::bodyOn) |
-                                     native_body::hideHead |
-                                     native_body::handTurn |
-                                     (swingState.owned && !motion.standing ? native_body::airborne : 0u) |
-                                     (calibratedEye > 0 || values.heightCm ? native_body::calibrated : 0u) |
-                                     (motion.standing || crawlsFloor ? native_body::standing : 0u) |
-                                     (kneels ? native_body::kneel : 0u);
+                        pose.flags =
+                            (flatScreen || !values.body || yieldAnim ? 0u : native_body::bodyOn) |
+                            native_body::hideHead | native_body::handTurn |
+                            ((swingState.owned || hybridLeapAir) && !motion.standing ? native_body::airborne
+                                                                                     : 0u) |
+                            (calibratedEye > 0 || values.heightCm ? native_body::calibrated : 0u) |
+                            (motion.standing || crawlsFloor ? native_body::standing : 0u) |
+                            (kneels ? native_body::kneel : 0u);
                         pose.standUp = motion.standUp;
                         pose.floor = motion.floor;
                         // A dive: the legs kick out at him (body::Targets::kick).

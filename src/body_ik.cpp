@@ -456,6 +456,7 @@ Result solve(Pose& pose, const Rig& rig, const Targets& targets, const Config& c
     // returns to the game anim (not a frozen hold). Pose is the game's frame
     // each solve — no cumulative mutation of an animation base across frames.
     if (targets.armsOnly) {
+        state.adoptArms = false; // the animation has the body: no adopted jump under way
         if (!rig.ready || pose.count() < static_cast<int>(rig.parent.size()))
             return r;
         const float s = std::isfinite(scale) && scale > .1f ? scale : 1.f;
@@ -697,6 +698,10 @@ Result solve(Pose& pose, const Rig& rig, const Targets& targets, const Config& c
     state.weight = approach(state.weight, wanted ? 1.f : 0.f, c.blendSpeed * dt);
     r.weight = state.weight;
     const float w = state.weight;
+    // Jump adopt: the arms are the controllers' from the first frame; the rest blends in at w.
+    if (!wanted || w >= 1.f)
+        state.adoptArms = false;
+    const float armW = state.adoptArms ? 1.f : w;
     if (!wanted && w <= 0) state.crawlTwist = 0;
     if (!targets.crawl || !targets.crawlPlanted || !targets.head || !wanted)
         state.crawlFeet.reset();
@@ -1903,11 +1908,12 @@ Result solve(Pose& pose, const Rig& rig, const Targets& targets, const Config& c
                 if (stretch > 0)
                     pose.turn(rig.below[arm.clavicle],
                               partial(between(shoulder - base, wrist - base),
-                                      (t.wallRun && viewRun > 0 ? .55f : .35f) * stretch * w), base);
+                                      (t.wallRun && viewRun > 0 ? .55f : .35f) * stretch * armW),
+                              base);
             }
             const Vec3 side = i == 0 ? left : left * -1.f;
             const Vec3 pole = upperTurn.rotate(normalized(up * -1.f + side * .6f - forward * .3f));
-            limb(pose, rig, arm.upper, arm.lower, arm.hand, wrist, pole, w);
+            limb(pose, rig, arm.upper, arm.lower, arm.hand, wrist, pole, armW);
             r.handError[i] = length(pose.position(arm.hand) - wrist);
             if (c.handOrientation) {
                 // The palm faces +x on a left hand, -x on a right one.
@@ -1920,9 +1926,9 @@ Result solve(Pose& pose, const Rig& rig, const Targets& targets, const Config& c
                 };
                 const Vec3 elbow = pose.position(arm.lower);
                 const Vec3 forearm = normalized(pose.position(arm.hand) - elbow);
-                pose.turn(rig.below[arm.lower], partial(twistAbout(handTurn(), forearm), c.forearmRoll * w),
-                          elbow);
-                pose.turn(rig.below[arm.hand], partial(handTurn(), w), pose.position(arm.hand));
+                pose.turn(rig.below[arm.lower],
+                          partial(twistAbout(handTurn(), forearm), c.forearmRoll * armW), elbow);
+                pose.turn(rig.below[arm.hand], partial(handTurn(), armW), pose.position(arm.hand));
             }
         }
         // The hand is this body's own: everything under the wrist goes back
@@ -2119,5 +2125,28 @@ Result fadeOut(Pose& pose, const Rig& rig, const Targets& last, const Config& co
     if (std::isfinite(seconds) && seconds > 0)
         c.blendSpeed = 1 / seconds;
     return solve(pose, rig, last, c, state, false, dt, scale, armScale);
+}
+bool seedFromPose(const Pose& snapshot, const Rig& rig, const Targets& targets, State& state) {
+    if (!rig.ready || rig.pelvis < 0 || snapshot.count() < static_cast<int>(rig.parent.size()))
+        return false;
+    // The same level frame solve measures the body's yaw in (plain air: the player's up).
+    Vec3 up = finite(targets.up) && length(targets.up) > .5f ? normalized(targets.up) : worldUp;
+    const auto level = [&](Vec3 v) { return v - up * dot(v, up); };
+    Vec3 reference = level({0, 0, 1});
+    if (length(reference) < .3f)
+        reference = level({1, 0, 0});
+    reference = normalized(reference);
+    const Vec3 quarter = cross(up, reference);
+    const Vec3 hips = level(snapshot.direction(rig.pelvis, rig.pelvisForward));
+    if (!finite(hips))
+        return false;
+    if (length(hips) > .2f) {
+        state.yaw = std::atan2(dot(hips, quarter), dot(hips, reference));
+        state.yawSet = true;
+    }
+    state.weight = 0.f;
+    state.armWeight = {};
+    state.adoptArms = true;
+    return true;
 }
 } // namespace spidy::body
