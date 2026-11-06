@@ -1937,10 +1937,29 @@ void App::options(ImVec2 origin, ImVec2 size) {
                "into turns. Visual and view only; the physics stay the mod's. Off by default; provisional.",
                S(150), [&] { tabCombo("##animatedairspin", Item::animatedAirSpin); });
         option("Animated hybrid (experimental)",
-               "Keep game animations on the ground (Native Run / Spidy Run / fight) and use OG SpidyVR for "
-               "jump, freefall, swing, zip and wall crawl/run. Animated Air, Air Spin and midair softlock stay "
-               "off while Hybrid is on. Off by default; handoff polish is still experimental.",
+               "With Animated moves: the game's animations play by default (running, fighting, parkour, hops, "
+               "jumps, the game's zips and crawls) and your view stays on Spidey's head, the way finishers "
+               "show it. OG SpidyVR takes over only when you web, turn in mid-air (right stick held or a fast "
+               "body turn) or pick up real speed in the air, and landing hands back with a blend. Animated "
+               "Air, Only and Air Spin are ignored while Hybrid is on. Off by default.",
                S(42), [&] { tabToggle("##animatedhybrid", Item::animatedHybrid); });
+        option("Hybrid speed takeover",
+               "With Animated hybrid: how long you must keep 15 m/s or more in the air before OG SpidyVR takes "
+               "over, from 5 ms (snaps at once) to 500 ms (ignores short bursts). Off: speed never takes over; "
+               "webs, mid-air turns and wall runs still do. 200 ms by default.",
+               S(150), [&] {
+                   int ms = tabOnly_.animatedHybridSpeedMs;
+                   ImGui::PushFont(fonts_.semibold, 14);
+                   if (slider("##animatedhybridspeed", &ms, 0, 500, ms <= 0 ? "Off" : "%d ms")) {
+                       // 5 ms steps; the far left is Off.
+                       ms = ms < 3 ? 0 : std::clamp((ms + 2) / 5 * 5, 5, 500);
+                       if (ms != tabOnly_.animatedHybridSpeedMs) {
+                           tabOnly_.animatedHybridSpeedMs = ms;
+                           tabChanged = true;
+                       }
+                   }
+                   ImGui::PopFont();
+               });
         option("Web aim (experimental)",
                "MODEL FOREARM: your webs leave along the forearm of the Spider-Man body you see, rather than "
                "along the controller, and go back to the controller's line whenever the body cannot say "

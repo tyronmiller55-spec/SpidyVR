@@ -123,6 +123,11 @@ static_assert(std::size(animatedHeadChoices) == std::size(animatedHeads));
 constexpr int animatedAirSpins[] = {0, 1, 2};
 constexpr const char* animatedAirSpinChoices[] = {"OFF", "FLIPS", "FLIPS + MOMENTUM"};
 static_assert(std::size(animatedAirSpinChoices) == std::size(animatedAirSpins));
+// ANIMATED HYBRID SPEED: OFF, then the speed hold before OG SpidyVR takes over, ms.
+constexpr int animatedHybridSpeeds[] = {0, 5, 10, 25, 50, 100, 200, 300, 500};
+constexpr const char* animatedHybridSpeedChoices[] = {"OFF",    "5 MS",   "10 MS",  "25 MS", "50 MS",
+                                                      "100 MS", "200 MS", "300 MS", "500 MS"};
+static_assert(std::size(animatedHybridSpeedChoices) == std::size(animatedHybridSpeeds));
 constexpr int nativeRunPercents[] = {50, 60, 70, 80, 90};
 constexpr const char* nativeRunPercentChoices[] = {"50%", "60%", "70%", "80%", "90%"};
 static_assert(std::size(nativeRunPercentChoices) == std::size(nativeRunPercents));
@@ -185,6 +190,8 @@ std::span<const int> steps(Item item) {
         return animatedHeads;
     case Item::animatedAirSpin:
         return animatedAirSpins;
+    case Item::animatedHybridSpeed:
+        return animatedHybridSpeeds;
     case Item::earlyJump:
         return earlyJumps;
     case Item::webAimSource:
@@ -272,6 +279,8 @@ float numberOf(Item item, const Values& v) {
         return static_cast<float>(v.animatedHead);
     case Item::animatedAirSpin:
         return static_cast<float>(v.animatedAirSpin);
+    case Item::animatedHybridSpeed:
+        return static_cast<float>(v.animatedHybridSpeedMs);
     case Item::earlyJump:
         return static_cast<float>(v.earlyJump);
     case Item::webAimSource:
@@ -459,6 +468,7 @@ Values sanitized(Values v) {
     v.dodgeTumble = std::clamp(v.dodgeTumble, 0, 2);
     v.animatedHead = std::clamp(v.animatedHead, 0, 2);
     v.animatedAirSpin = std::clamp(v.animatedAirSpin, 0, 2);
+    v.animatedHybridSpeedMs = v.animatedHybridSpeedMs <= 0 ? 0 : std::clamp(v.animatedHybridSpeedMs, 5, 500);
     v.earlyJump = std::clamp(v.earlyJump, 0, 2);
     v.webAimSource = std::clamp(v.webAimSource, 0, 1);
     v.forearmBlend = std::clamp(v.forearmBlend, 0, 100);
@@ -481,9 +491,9 @@ Values sanitized(Values v) {
     v.automaticHandThreshold = std::clamp(v.automaticHandThreshold, 50, 300);
     return v;
 }
-const std::array<Row, 104>& rows() {
+const std::array<Row, 105>& rows() {
     // The help fits the game's description column beside the rows.
-    static const std::array<Row, 104> all{{
+    static const std::array<Row, 105> all{{
         {Item::none, "WEBS", nullptr, {}},
         {Item::webStyle, "WEB STYLE",
          "Arcade: webs pass lamp posts, signs and cars, and swings stay above the street.", webStyleChoices},
@@ -725,7 +735,10 @@ const std::array<Row, 104>& rows() {
          "While yielding midair: flips (+momentum lean) turn the anim body. Provisional.",
          animatedAirSpinChoices},
         {Item::animatedHybrid, "ANIMATED HYBRID",
-         "Ground: game anims. Air/swing/wall/zip: OG SpidyVR. Experimental.", {}},
+         "Anims by default, view on his head. SpidyVR on web, mid-air turn or speed.", {}},
+        {Item::animatedHybridSpeed, "ANIMATED HYBRID SPEED",
+         "With HYBRID: how long 15 m/s in the air must last before SpidyVR takes over.",
+         animatedHybridSpeedChoices},
         {Item::realisticFlips,
          "REALISTIC FLIPS",
          "Momentum rotation from arms and webs. FLIPS also enables left-stick steering.",
@@ -849,6 +862,9 @@ bool choose(Item item, int index, Values& v) {
         break;
     case Item::animatedAirSpin:
         v.animatedAirSpin = s[index];
+        break;
+    case Item::animatedHybridSpeed:
+        v.animatedHybridSpeedMs = s[index];
         break;
     case Item::earlyJump:
         v.earlyJump = s[index];
@@ -1003,6 +1019,7 @@ constexpr TabOnly tabOnly[] = {
     {"animated_only", &Values::animatedOnly, nullptr},
     {"animated_air_spin", nullptr, &Values::animatedAirSpin},
     {"animated_hybrid", &Values::animatedHybrid, nullptr},
+    {"animated_hybrid_speed_ms", nullptr, &Values::animatedHybridSpeedMs},
 };
 } // namespace
 std::string tabOnlyText(const Values& v) {

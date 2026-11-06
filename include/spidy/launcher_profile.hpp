@@ -155,6 +155,7 @@ inline constexpr ProfileSetting profileSettings[] = {
     tabOnly("animated_only", Item::animatedOnly, &Values::animatedOnly),
     tabOnly("animated_air_spin", Item::animatedAirSpin, 0, 2, &Values::animatedAirSpin),
     tabOnly("animated_hybrid", Item::animatedHybrid, &Values::animatedHybrid),
+    tabOnly("animated_hybrid_speed_ms", Item::animatedHybridSpeed, 0, 500, &Values::animatedHybridSpeedMs),
     retired("wall_distance_cm", vr_settings::fixedWallDistance),
     tabOnly("realistic_flips", Item::realisticFlips, &Values::realisticFlips),
     tabOnly("rotation_strength", Item::automaticStrength, 25, 100, &Values::automaticStrength),

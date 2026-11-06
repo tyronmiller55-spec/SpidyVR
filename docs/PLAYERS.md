@@ -1060,13 +1060,32 @@ VR settings
                    while the model still 6DOF-spins. Visual and view only.
                    Limits provisional.
   ANIMATED HYBRID  (off until you switch it on; EXPERIMENTAL, after ANIMATED
-                   AIR SPIN) with ANIMATED MOVES: keep game anims on the ground
-                   (run, fight, perch, vault) and use OG SpidyVR for jump,
-                   freefall, swing, zip and wall crawl/run. Leaving the ground
-                   re-anchors the view and warms IK instead of snapping; landing
-                   blends back to the headbone (~180 ms). Animated Air, Air Spin
-                   and midair softlock stay off while Hybrid is on. Off by
-                   default.
+                   AIR SPIN) with ANIMATED MOVES: the game's animations play by
+                   default - running, fighting, parkour, vaults, hops, jumps,
+                   the game's zips and crawls, falls - and your view stays on
+                   Spidey's head the whole time, the way finishers show it
+                   (your HEAD setting, Full by default, in the air too). OG
+                   SpidyVR only takes over when you do something: a web
+                   attaches or you press trigger/grip for a web in the air (on
+                   the ground grip stays a fist), you turn in mid-air (right
+                   stick held, or a fast ~90 degree body turn - looking around
+                   does not count), you pick up real speed in the air (about
+                   15 m/s held briefly), or Spidy's own wall run. A zip while
+                   you are already swinging stays in SpidyVR. Landing hands
+                   back to the animation after a short confirm (at least half
+                   a second in SpidyVR, so it does not flip back and forth).
+                   Every switch re-anchors the view and blends (~180 ms)
+                   instead of snapping. Animated Air, Animated Only and Air
+                   Spin are ignored while Hybrid is on. Off by default.
+  ANIMATED HYBRID SPEED (200 MS until you change it; after ANIMATED HYBRID,
+                   used only while Hybrid is on) how long you must keep 15 m/s
+                   or more in the air before OG SpidyVR takes over: OFF (speed
+                   never takes over; webs, mid-air turns and wall runs still
+                   do), or 5, 10, 25, 50, 100, 200, 300 or 500 MS in the
+                   headset. Short holds snap into SpidyVR almost at once; long
+                   ones ignore brief bursts of speed. The launcher's slider
+                   takes any value from 5 to 500 ms in 5 ms steps, slid all the
+                   way left for Off.
   DODGE TUMBLE     (OFF until you pick one) when the game dodges, your
                    view tips toward the dodge (LEAN) or turns a full roll
                    (ROLL, sideways dodges) so you can tell it dodged. Your
@@ -1153,7 +1172,7 @@ VR settings
                    Off: v5's jump, the game's, up to 0.2 s later.
   Changes apply at once. The launcher starts your next session with them;
   its options show every one of them but VR VIEW too.
-  NEAR CLIP, RECORDING FOV, UI STYLE, BLOW SOUNDS, PC MEDIA, NATIVE RUN, AIR SLINGSHOT, WEB ANGLE, WRIST SHOOTERS, DODGE TUMBLE, RUN CURVE, NATIVE RUN AT, RUN LOGS, RUNNING LEAP, EARLY JUMP, SOFT LANDING, SPIDY RUN, RUN FROM STANDING, WEB AIM, FOREARM BLEND, SMOOTH WEB LANDING, WEB LANDING IMPACT, STEADY STATES, COMBAT RESPONSIVE, SPIDY RUN JUMP, FOREARM AIM LIMIT, PALM SHOOTERS, HEAD PROBE, ANIMATED MOVES, ANIMATED HEAD, ANIMATED AIR, ANIMATED STEERING, ANIMATED ARMS, ANIMATED TORSO, ANIMATED MODEL YAW, ANIMATED ONLY, ANIMATED AIR SPIN, ANIMATED HYBRID, HEIGHT, SEATED, EYE AIM,
+  NEAR CLIP, RECORDING FOV, UI STYLE, BLOW SOUNDS, PC MEDIA, NATIVE RUN, AIR SLINGSHOT, WEB ANGLE, WRIST SHOOTERS, DODGE TUMBLE, RUN CURVE, NATIVE RUN AT, RUN LOGS, RUNNING LEAP, EARLY JUMP, SOFT LANDING, SPIDY RUN, RUN FROM STANDING, WEB AIM, FOREARM BLEND, SMOOTH WEB LANDING, WEB LANDING IMPACT, STEADY STATES, COMBAT RESPONSIVE, SPIDY RUN JUMP, FOREARM AIM LIMIT, PALM SHOOTERS, HEAD PROBE, ANIMATED MOVES, ANIMATED HEAD, ANIMATED AIR, ANIMATED STEERING, ANIMATED ARMS, ANIMATED TORSO, ANIMATED MODEL YAW, ANIMATED ONLY, ANIMATED AIR SPIN, ANIMATED HYBRID, ANIMATED HYBRID SPEED, HEIGHT, SEATED, EYE AIM,
   SMART ANCHOR, WEB RANGE, WEB SPEED, ELASTIC WEB, SOFT RELEASE, SWING
   ASSIST, SLINGSHOT SPEED, SINGLE HAND YANK STRENGTH, TWO HAND WEB ZIP, HAND ROPE STEERING, RECORDING
   SMOOTHING, REEL HAPTICS, SWING HAPTICS, the four body haptics switches

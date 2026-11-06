@@ -7,6 +7,32 @@ Per-check results are in [VALIDATION.md](VALIDATION.md).
 
 Not in a build yet, newest first. The release adds these to the next build's entry.
 
+**ANIMATED HYBRID: stay on animations until you grab, spin, or pick up speed.**
+
+- **Why.** Headset on `0063b5e`: the handoff blend felt good, but ownership
+  flipped 169 times each way in ~7 minutes (median 0.64 s in OG VR): 115
+  `wall` edges (124 of the wall rises were the floor-crawl flag `0->3` lit by
+  rooftop parkour), 31 jumps, 14 game zips. Head follow also dropped on 21
+  airborne frames with no owner edge at all (the per-frame classify in
+  `yielding()`), which skipped the blend.
+- **Change.** Under HYBRID only, the owner (`hybrid_owner.hpp`) is now
+  animation-default (`anim`) with intent-only `vr`: web attach, airborne
+  trigger/grip web press (not on the ground, not fighting), mid-air R-stick
+  |x| >= 0.5 held 150 ms or a >= 90° tracked HMD turn within 0.5 s, airborne
+  measured (feet position-delta) speed >= 15 m/s held for the new ANIMATED
+  HYBRID SPEED time (`animated_hybrid_speed_ms`, OFF or 5–500 ms, 200 by
+  default; the launcher slides in 5 ms steps), or Spidy's own
+  wall run (`Surface::wall`). Jumps, hops, game zips, the game's crawl and the
+  floor-crawl flag stay `anim`. Back to `anim` after 250 ms grounded and at
+  least 500 ms in VR; a zip while in VR stays VR until it lands; combat sticky
+  kept. Yield and head follow now come from `animOwns()` (owner domain only,
+  no classify drop), so every view change goes through the existing blend. AIR
+  SPIN is ignored at the stick under HYBRID too. Diag:
+  `hybrid: anim->vr (web|air-web|rotate|speed|wallrun) speed … rot …, G->T (…)`,
+  `hybrid: vr->anim (land … ms), T->G (…)`.
+- **Not in this patch.** Parkour left-stick steering (next entry); longer blend
+  window; Slice 4 immersion; legs.
+
 **ANIMATED HYBRID handoff: smooth takeoff and landing (Slices 2+3).**
 
 - **Why.** Slice 1 ownership worked on headset, but every G→T still ran the old

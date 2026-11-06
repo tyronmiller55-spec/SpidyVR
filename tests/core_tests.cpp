@@ -23379,8 +23379,9 @@ int main() {
                                   Item::automaticHandStrength, Item::automaticFalloff,     Item::automaticHandThreshold,
                                   Item::automaticAirBrake,     Item::automaticCombat};
         // The realistic flips' rows come last, after the EXPERIMENTAL rows before them
-        // (ANIMATED MODEL YAW 89, ANIMATED ONLY 90, ANIMATED AIR SPIN 91, ANIMATED HYBRID 92).
-        constexpr size_t firstRealistic = 93;
+        // (ANIMATED MODEL YAW 89, ANIMATED ONLY 90, ANIMATED AIR SPIN 91, ANIMATED HYBRID 92,
+        // ANIMATED HYBRID SPEED 93).
+        constexpr size_t firstRealistic = 94;
         check(all.size() == firstRealistic + std::size(realistic), "the realistic flips' rows are not the last");
         for (size_t i = 0; i < std::size(realistic); ++i)
             check(all[firstRealistic + i].item == realistic[i], "the realistic flips' rows out of order");
@@ -23588,7 +23589,7 @@ int main() {
                                                          : Place::tab),
                   "a row in the wrong place");
         }
-        check(std::count_if(all.begin(), all.end(), [](const Row& r) { return r.place == Place::tab; }) == 99,
+        check(std::count_if(all.begin(), all.end(), [](const Row& r) { return r.place == Place::tab; }) == 100,
               "the tab's own rows");
         check(all[1].item == Item::webStyle && std::strcmp(all[1].title, "WEB STYLE") == 0 &&
                   all[1].choices.size() == 2 && std::strcmp(all[1].choices[0], "REALISTIC") == 0 &&
@@ -23847,7 +23848,7 @@ int main() {
                   "flip_reprojection=0\nsteady_hud=0\nreel_haptics=0\nswing_haptics=0\n"
                   "pc_media=0\nsingle_hand_yank_percent=100\nweb_tie=0\nnative_run=0\nair_slingshot=0\nweb_angle_"
                   "degrees=0\nwrist_shooters=0\n"
-                  "dodge_tumble=0\nrun_curve=0\nnative_run_at_percent=70\nrun_logs=0\nrunning_leap=0\nearly_jump=0\nsoft_landing=0\nspidy_run=0\nspidy_run_from_standing=0\nweb_aim_source=0\nforearm_blend=100\nweb_landing_smooth=0\nweb_landing_impact_speed=24\nsteady_states=0\ncombat_responsive=0\nspidy_run_jump=1\nforearm_aim_limit=180\npalm_shooters=0\nhead_probe=0\nanimated_moves=0\nanimated_head=0\nanimated_air=0\nanimated_steering=0\nanimated_arms=0\nanimated_torso=0\nanimated_model_yaw=0\nanimated_only=0\nanimated_air_spin=0\nanimated_hybrid=0\n",
+                  "dodge_tumble=0\nrun_curve=0\nnative_run_at_percent=70\nrun_logs=0\nrunning_leap=0\nearly_jump=0\nsoft_landing=0\nspidy_run=0\nspidy_run_from_standing=0\nweb_aim_source=0\nforearm_blend=100\nweb_landing_smooth=0\nweb_landing_impact_speed=24\nsteady_states=0\ncombat_responsive=0\nspidy_run_jump=1\nforearm_aim_limit=180\npalm_shooters=0\nhead_probe=0\nanimated_moves=0\nanimated_head=0\nanimated_air=0\nanimated_steering=0\nanimated_arms=0\nanimated_torso=0\nanimated_model_yaw=0\nanimated_only=0\nanimated_air_spin=0\nanimated_hybrid=0\nanimated_hybrid_speed_ms=200\n",
               "the defaults' text");
         Values changed = defaults;
         changed.recordingFov = 140;
@@ -27214,7 +27215,12 @@ int main() {
         check(all[92].item == Item::animatedHybrid && std::strcmp(all[92].title, "ANIMATED HYBRID") == 0 &&
                   all[92].choices.empty() && all[92].place == Place::tab,
               "ANIMATED HYBRID row");
-        check(lastItem == Item::animatedHybrid, "HYBRID not the last item");
+        check(all[93].item == Item::animatedHybridSpeed &&
+                  std::strcmp(all[93].title, "ANIMATED HYBRID SPEED") == 0 && all[93].choices.size() == 9 &&
+                  std::strcmp(all[93].choices[0], "OFF") == 0 &&
+                  std::strcmp(all[93].choices[8], "500 MS") == 0 && all[93].place == Place::tab,
+              "ANIMATED HYBRID SPEED row");
+        check(lastItem == Item::animatedHybridSpeed, "HYBRID SPEED not the last item");
     });
 
     test("ANIMATED ONLY: every gameplay state yields, no web interrupt, cutscene grace", [] {
@@ -27561,78 +27567,312 @@ int main() {
               "ini read back wrong");
     });
 
-    test("ANIMATED HYBRID owner: web/zip/wall immediate, jump debounce, land confirm, bounce rearm", [] {
+    test("ANIMATED HYBRID SPEED: on at 200 ms by default, OFF and 5..500 ms kept in spidy_vr.ini", [] {
+        using namespace vr_settings;
+        Values v;
+        check(v.animatedHybridSpeedMs == 200 && choice(Item::animatedHybridSpeed, v) == 6 &&
+                  defaultChoice(Item::animatedHybridSpeed) == 6,
+              "HYBRID SPEED not 200 ms by default");
+        check(choose(Item::animatedHybridSpeed, 0, v) && v.animatedHybridSpeedMs == 0,
+              "HYBRID SPEED not OFF");
+        check(choose(Item::animatedHybridSpeed, 1, v) && v.animatedHybridSpeedMs == 5,
+              "HYBRID SPEED not 5 ms");
+        check(choose(Item::animatedHybridSpeed, 8, v) && v.animatedHybridSpeedMs == 500,
+              "HYBRID SPEED not 500 ms");
+        check(tabOnlyText(v).find("animated_hybrid_speed_ms=500\n") != std::string::npos,
+              "ini missing speed ms");
+        check(withTabOnly({}, "animated_hybrid_speed_ms=0\n").animatedHybridSpeedMs == 0 &&
+                  withTabOnly({}, "animated_hybrid_speed_ms=35\n").animatedHybridSpeedMs == 35 &&
+                  withTabOnly({}, "").animatedHybridSpeedMs == 200,
+              "ini speed ms read back wrong");
+        Values wild;
+        wild.animatedHybridSpeedMs = 9000;
+        check(sanitized(wild).animatedHybridSpeedMs == 500, "speed ms not clamped high");
+        wild.animatedHybridSpeedMs = 2;
+        check(sanitized(wild).animatedHybridSpeedMs == 5, "speed ms not clamped low");
+        wild.animatedHybridSpeedMs = -4;
+        check(sanitized(wild).animatedHybridSpeedMs == 0, "negative speed ms not off");
+    });
+
+    test("ANIMATED HYBRID intent: parkour hop / jump / zip / floor+game crawl stay anim", [] {
         using namespace hybrid_owner;
         HybridOwner o;
         Frame f{};
-        f.state.playing = f.state.fresh = true;
-        f.state.grounded = true;
-        f.feetY = 10.f;
-        // Idle ground.
-        check(o.update(f, 0) == Domain::ground && !o.enterT && !o.enterG, "idle not ground");
-        // Web attach leaves immediately.
-        f.webRising = true;
-        f.state.webbed = true;
-        f.state.grounded = false;
-        check(o.update(f, 10'000'000) == Domain::traversal && o.enterT && o.lastEnterT == EnterT::web,
-              "web not immediate");
-        f.webRising = false;
-        // Land needs 250 ms grounded clear.
-        f.state.grounded = true;
-        f.state.webbed = false;
-        check(o.update(f, 20'000'000) == Domain::traversal && !o.enterG, "land too fast");
-        check(o.update(f, 20'000'000 + landHoldNs) == Domain::ground && o.enterG, "land not confirmed");
-        // Jump: brief ungrounded without rise stays G.
-        f.state.grounded = false;
-        f.velocityY = 0.2f;
-        f.feetY = 10.05f;
-        check(o.update(f, o.sinceNs + jumpRearmNs + 1) == Domain::ground, "tiny hop left G");
-        // Jump with rise after hold.
-        f.velocityY = 3.f;
-        f.feetY = 10.5f;
-        const int64_t t0 = o.sinceNs + jumpRearmNs + 1;
-        o.update(f, t0); // start ungrounded clock
-        check(o.update(f, t0 + jumpHoldNs) == Domain::traversal && o.enterT && o.lastEnterT == EnterT::jump,
-              "jump not taken");
-        // Back to ground (land needs a start frame + landHoldNs), then jump
-        // suppressed by the rearm window.
-        f.state.grounded = true;
-        f.velocityY = 0;
-        f.feetY = 10.f;
-        const int64_t tLandStart = t0 + jumpHoldNs + 1;
-        check(o.update(f, tLandStart) == Domain::traversal && !o.enterG, "land clock");
-        check(o.update(f, tLandStart + landHoldNs) == Domain::ground && o.enterG, "rearm setup");
-        f.state.grounded = false;
-        f.velocityY = 4.f;
-        f.feetY = 11.f;
-        const int64_t tLand = o.sinceNs;
-        const int64_t tBounce0 = tLand + 1;
-        o.update(f, tBounce0); // start ungrounded clock inside rearm window
-        // Held clock starts at tBounce0; rearm still open at tBounce0 + jumpHoldNs
-        // (120 ms into the 150 ms rearm).
-        check(o.update(f, tBounce0 + jumpHoldNs) == Domain::ground && o.bounceSuppressed,
-              "bounce not suppressed");
-        // Zip immediate from ground.
-        o = {};
-        f = {};
         f.state.playing = f.state.fresh = f.state.grounded = true;
-        o.update(f, 0);
-        f.zipRising = true;
+        check(o.update(f, 0) == Domain::anim && !o.enterVr && !o.enterAnim, "idle not anim");
+        // A parkour hop / jump: off the ground, rising, ordinary speed, 1 s.
+        f.state.grounded = false;
+        f.speedH = 9.f;
+        int64_t t = 0;
+        for (int i = 0; i < 90; ++i)
+            check(o.update(f, t += 11'000'000) == Domain::anim && !o.enterVr, "hop/jump left anim");
+        // A game zip (R-stick up): zipping, airborne.
         f.state.zipping = true;
+        f.speedH = 12.f;
+        for (int i = 0; i < 30; ++i)
+            check(o.update(f, t += 11'000'000) == Domain::anim, "game zip left anim");
+        f.state.zipping = false;
+        // Floor-crawl flag (wall 0->3) lit by rooftop parkour, grounded or not.
+        f.state.wall = surfaceFloor;
+        for (int i = 0; i < 30; ++i)
+            check(o.update(f, t += 11'000'000) == Domain::anim, "floor crawl flag left anim");
+        f.state.grounded = true;
+        check(o.update(f, t += 11'000'000) == Domain::anim, "grounded floor flag left anim");
+        // The game's own wall crawl (wall 2).
+        f.state.wall = surfaceGame;
         f.state.grounded = false;
-        check(o.update(f, 1) == Domain::traversal && o.lastEnterT == EnterT::zip, "zip not immediate");
-        // Wall immediate.
-        o = {};
-        f = {};
-        f.state.playing = f.state.fresh = f.state.grounded = true;
-        o.update(f, 0);
-        f.wallRising = true;
-        f.state.wall = 1;
-        f.state.grounded = false;
-        check(o.update(f, 1) == Domain::traversal && o.lastEnterT == EnterT::wall, "wall not immediate");
+        for (int i = 0; i < 30; ++i)
+            check(o.update(f, t += 11'000'000) == Domain::anim, "game crawl left anim");
+        // Spidy's own wall run is the mod driving: VR.
+        f.state.wall = surfaceWall;
+        check(o.update(f, t += 11'000'000) == Domain::vr && o.enterVr && o.lastEnterVr == EnterVr::wallRun,
+              "spidy wall run not vr");
+        check(std::strcmp(enterVrName(EnterVr::wallRun), "wallrun") == 0 &&
+                  std::strcmp(enterVrName(EnterVr::airWeb), "air-web") == 0,
+              "enter names");
     });
 
-    test("ANIMATED HYBRID owner: combat sticky keeps G until web or idle clear", [] {
+    test("ANIMATED HYBRID intent: web attach and airborne web intent enter vr; ground grip (fist) does not",
+         [] {
+             using namespace hybrid_owner;
+             HybridOwner o;
+             Frame f{};
+             f.state.playing = f.state.fresh = f.state.grounded = true;
+             o.update(f, 0);
+             // Ground grip held: a fist, stays anim.
+             f.webIntent = true;
+             int64_t t = 0;
+             for (int i = 0; i < 40; ++i)
+                 check(o.update(f, t += 11'000'000) == Domain::anim, "ground grip entered vr");
+             // Held through a hop: still a fist (the press did not start in the air).
+             f.state.grounded = false;
+             for (int i = 0; i < 40; ++i)
+                 check(o.update(f, t += 11'000'000) == Domain::anim,
+                       "ground fist held through hop entered vr");
+             // Released and pressed again in the air: a web.
+             f.webIntent = false;
+             o.update(f, t += 11'000'000);
+             f.webIntent = true;
+             bool entered = false;
+             for (int i = 0; i < 20 && !entered; ++i) {
+                 o.update(f, t += 11'000'000);
+                 entered = o.enterVr;
+             }
+             check(entered && o.domain == Domain::vr && o.lastEnterVr == EnterVr::airWeb,
+                   "air web intent not vr");
+             // Fighting in the air: a punch, not a web.
+             o = {};
+             f = {};
+             f.state.playing = f.state.fresh = f.state.grounded = true;
+             f.state.fighting = true;
+             o.update(f, 0);
+             f.state.grounded = false;
+             o.update(f, 11'000'000);
+             f.webIntent = true;
+             t = 11'000'000;
+             for (int i = 0; i < 40; ++i)
+                 check(o.update(f, t += 11'000'000) == Domain::anim, "fight punch in air entered vr");
+             // A web attaching wins over combat sticky.
+             f.webRising = true;
+             f.state.webbed = true;
+             check(o.update(f, t += 11'000'000) == Domain::vr && o.lastEnterVr == EnterVr::web,
+                   "web attach not vr");
+         });
+
+    test("ANIMATED HYBRID intent: mid-air R-stick rotate and 90 deg body spin enter vr; head look-around "
+         "does not",
+         [] {
+             using namespace hybrid_owner;
+             HybridOwner o;
+             Frame f{};
+             f.state.playing = f.state.fresh = f.state.grounded = true;
+             f.hmdYawValid = true;
+             o.update(f, 0);
+             // R-stick on the ground: MODEL YAW, stays anim.
+             f.rStickX = .9f;
+             int64_t t = 0;
+             for (int i = 0; i < 30; ++i)
+                 check(o.update(f, t += 11'000'000) == Domain::anim, "ground R-stick entered vr");
+             // In the air: a brief flick does not, a hold does.
+             f.state.grounded = false;
+             f.rStickX = 0;
+             o.update(f, t += 11'000'000);
+             f.rStickX = .8f;
+             const int64_t t0 = t += 11'000'000;
+             check(o.update(f, t0) == Domain::anim, "flick start");
+             check(o.update(f, t0 + rotateHoldNs - 1) == Domain::anim, "R-stick under hold entered");
+             check(o.update(f, t0 + rotateHoldNs) == Domain::vr && o.lastEnterVr == EnterVr::rotate,
+                   "R-stick hold not vr");
+             // Head look-around in a hop: +-35 deg, back and forth.
+             o = {};
+             f = {};
+             f.state.playing = f.state.fresh = f.state.grounded = true;
+             f.hmdYawValid = true;
+             o.update(f, 0);
+             f.state.grounded = false;
+             t = 0;
+             for (int i = 0; i < 120; ++i) {
+                 f.hmdYaw = .6f * std::sin(static_cast<float>(i) * .1f); // +-35 deg, ~0.7 s period
+                 check(o.update(f, t += 11'000'000) == Domain::anim, "look-around entered vr");
+             }
+             // A steady physical turn (180 deg over 2 s) does not either.
+             const float base = f.hmdYaw;
+             for (int i = 0; i < 180; ++i) {
+                 f.hmdYaw = std::remainder(base + static_cast<float>(i) * (3.1415927f / 180.f), 6.2831853f);
+                 check(o.update(f, t += 11'000'000) == Domain::anim, "slow turn entered vr");
+             }
+             // A fast 100 deg spin across the +-180 seam within 0.4 s does.
+             bool spun = false;
+             const float start = 2.6f;
+             for (int i = 0; i <= 36 && !spun; ++i) {
+                 f.hmdYaw = std::remainder(start + static_cast<float>(i) * (1.745f / 36.f), 6.2831853f);
+                 o.update(f, t += 11'000'000);
+                 spun = o.enterVr;
+             }
+             check(spun && o.lastEnterVr == EnterVr::rotate, "fast body spin not vr");
+         });
+
+    test("ANIMATED HYBRID intent: speed >= threshold held enters vr; brief spike does not", [] {
+        using namespace hybrid_owner;
+        HybridOwner o;
+        Frame f{};
+        f.state.playing = f.state.fresh = f.state.grounded = true;
+        o.update(f, 0);
+        // Fast on the ground (a Spidy Run): anim.
+        f.speedH = 20.f;
+        int64_t t = 0;
+        for (int i = 0; i < 40; ++i)
+            check(o.update(f, t += 11'000'000) == Domain::anim, "ground speed entered vr");
+        // Airborne spike for 150 ms then slow: anim.
+        f.state.grounded = false;
+        for (int i = 0; i < 13; ++i)
+            check(o.update(f, t += 11'000'000) == Domain::anim, "speed spike entered vr");
+        f.speedH = 10.f;
+        check(o.update(f, t += 11'000'000) == Domain::anim, "slow after spike");
+        // Held over the threshold.
+        f.speedH = vrSpeed + .5f;
+        const int64_t t0 = t += 11'000'000;
+        check(o.update(f, t0) == Domain::anim, "speed start");
+        check(o.update(f, t0 + speedHoldNs - 1) == Domain::anim, "speed under hold entered");
+        check(o.update(f, t0 + speedHoldNs) == Domain::vr && o.lastEnterVr == EnterVr::speed,
+              "speed hold not vr");
+    });
+
+    test("ANIMATED HYBRID SPEED: off never speed-enters; short hold snaps quickly; long hold ignores a spike",
+         [] {
+             using namespace hybrid_owner;
+             const auto airborneFast = [](HybridOwner& o, Frame& f, int64_t holdNs) {
+                 o = {};
+                 f = {};
+                 f.state.playing = f.state.fresh = f.state.grounded = true;
+                 f.speedHoldNs = holdNs;
+                 o.update(f, 0);
+                 f.state.grounded = false;
+                 f.speedH = vrSpeed;
+             };
+             HybridOwner o;
+             Frame f;
+             // OFF: 15 m/s in the air for 3 s never enters VR; a web still does.
+             airborneFast(o, f, 0);
+             int64_t t = 0;
+             for (int i = 0; i < 270; ++i)
+                 check(o.update(f, t += 11'000'000) == Domain::anim, "speed OFF entered vr");
+             f.webRising = f.state.webbed = true;
+             check(o.update(f, t += 11'000'000) == Domain::vr && o.lastEnterVr == EnterVr::web,
+                   "OFF blocked web");
+             // 5 ms: the next frame at speed snaps to VR.
+             airborneFast(o, f, 5'000'000);
+             check(o.update(f, 11'000'000) == Domain::anim, "5 ms start");
+             check(o.update(f, 22'000'000) == Domain::vr && o.lastEnterVr == EnterVr::speed,
+                   "5 ms hold not quick");
+             // 500 ms: a 300 ms spike does not, 15 m/s held 500 ms does.
+             airborneFast(o, f, 500'000'000);
+             t = 0;
+             for (int i = 0; i < 27; ++i)
+                 check(o.update(f, t += 11'000'000) == Domain::anim, "500 ms hold took a 300 ms spike");
+             f.speedH = 9.f;
+             o.update(f, t += 11'000'000);
+             f.speedH = vrSpeed;
+             const int64_t t0 = t += 11'000'000;
+             check(o.update(f, t0) == Domain::anim, "500 ms start");
+             check(o.update(f, t0 + 500'000'000 - 1) == Domain::anim, "500 ms entered early");
+             check(o.update(f, t0 + 500'000'000) == Domain::vr && o.lastEnterVr == EnterVr::speed,
+                   "15 m/s held 500 ms not vr");
+             // Just under the threshold never enters, whatever the hold.
+             airborneFast(o, f, 5'000'000);
+             f.speedH = vrSpeed - .01f;
+             for (int i = 0; i < 100; ++i)
+                 check(o.update(f, 1 + i * 11'000'000) == Domain::anim, "under 15 m/s entered vr");
+         });
+
+    test("ANIMATED HYBRID intent: vr min dwell + land confirm, no ping-pong", [] {
+        using namespace hybrid_owner;
+        HybridOwner o;
+        Frame f{};
+        f.state.playing = f.state.fresh = f.state.grounded = true;
+        o.update(f, 0);
+        f.state.grounded = false;
+        f.webRising = f.state.webbed = true;
+        check(o.update(f, 1'000'000'000) == Domain::vr && o.enterVr, "web not vr");
+        const int64_t tIn = o.sinceNs;
+        // Let go and touch down at once: land confirm 250 ms, but VR minimum 500 ms.
+        f.webRising = f.state.webbed = false;
+        f.state.grounded = true;
+        check(o.update(f, tIn + 10'000'000) == Domain::vr, "land clock start");
+        check(o.update(f, tIn + 10'000'000 + landHoldNs) == Domain::vr && !o.enterAnim,
+              "left vr under min dwell");
+        check(o.update(f, tIn + vrMinDwellNs - 1) == Domain::vr, "left vr 1 ns early");
+        check(o.update(f, tIn + vrMinDwellNs) == Domain::anim && o.enterAnim,
+              "land not confirmed after dwell");
+        // A bounce right after landing (hop, zip, floor flag) stays anim: no ping-pong.
+        const int64_t tLand = o.sinceNs;
+        f.state.grounded = false;
+        f.state.wall = surfaceFloor;
+        f.speedH = 11.f;
+        for (int i = 1; i < 60; ++i)
+            check(o.update(f, tLand + i * 11'000'000) == Domain::anim && !o.enterVr,
+                  "bounce flipped back to vr");
+        // Long VR flight landing: ungrounded frame resets the land clock.
+        o = {};
+        f = {};
+        f.state.playing = f.state.fresh = f.state.grounded = true;
+        o.update(f, 0);
+        f.state.grounded = false;
+        f.webRising = f.state.webbed = true;
+        o.update(f, 10'000'000);
+        f.webRising = f.state.webbed = false;
+        f.state.grounded = true;
+        o.update(f, 2'000'000'000);
+        f.state.grounded = false;
+        o.update(f, 2'100'000'000);
+        f.state.grounded = true;
+        check(o.update(f, 2'200'000'000) == Domain::vr, "land clock not reset by takeoff");
+        check(o.update(f, 2'200'000'000 + landHoldNs) == Domain::anim && o.enterAnim,
+              "second land not confirmed");
+        // A zip while in VR stays VR until it lands.
+        o = {};
+        f = {};
+        f.state.playing = f.state.fresh = f.state.grounded = true;
+        o.update(f, 0);
+        f.state.grounded = false;
+        f.webRising = f.state.webbed = true;
+        o.update(f, 10'000'000);
+        f.webRising = f.state.webbed = false;
+        f.state.zipping = true;
+        f.state.grounded = true; // zip touching ground mid-way
+        for (int i = 1; i < 100; ++i)
+            check(o.update(f, 10'000'000 + i * 11'000'000) == Domain::vr, "zip in vr flipped to anim");
+        // Spidy's wall keeps VR; the game's crawl does not.
+        f.state.zipping = false;
+        f.state.wall = surfaceWall;
+        o.update(f, 2'000'000'000);
+        check(o.update(f, 2'000'000'000 + landHoldNs) == Domain::vr, "spidy wall let vr go");
+        f.state.wall = surfaceGame;
+        o.update(f, 3'000'000'000);
+        check(o.update(f, 3'000'000'000 + landHoldNs) == Domain::anim, "game crawl kept vr");
+    });
+
+    test("ANIMATED HYBRID owner: combat sticky keeps anim through a launcher hop until web", [] {
         using namespace hybrid_owner;
         HybridOwner o;
         Frame f{};
@@ -27641,39 +27881,42 @@ int main() {
         f.state.fighting = true;
         o.update(f, 1);
         check(o.combatSticky, "sticky not set");
-        // Airborne hop during fight stays G.
+        // Launcher hop: fast, R-stick, air - stays anim.
         f.state.grounded = false;
-        f.velocityY = 5.f;
-        f.feetY = 2.f;
-        o.update(f, 2);
-        check(o.update(f, 2 + jumpHoldNs) == Domain::ground, "sticky hop left G");
+        f.speedH = 18.f;
+        f.rStickX = 1.f;
+        int64_t t = 1;
+        for (int i = 0; i < 40; ++i)
+            check(o.update(f, t += 11'000'000) == Domain::anim, "sticky hop left anim");
         // Web still leaves.
         f.webRising = true;
         f.state.webbed = true;
-        check(o.update(f, 2 + jumpHoldNs + 1) == Domain::traversal && o.lastEnterT == EnterT::web,
-              "sticky ignored web");
+        check(o.update(f, t += 1) == Domain::vr && o.lastEnterVr == EnterVr::web, "sticky ignored web");
     });
 
-    test("ANIMATED HYBRID yielding: ground yes, air no, sticky combat yes", [] {
+    test("ANIMATED HYBRID animOwns: ungrounded frame keeps yield + head follow (no classify drop)", [] {
         using namespace hybrid_owner;
         HybridOwner o;
         head_probe::StateInputs s;
         s.playing = s.fresh = s.grounded = true;
-        check(o.yielding(true, s, false, false), "ground not yield");
-        check(!o.yielding(false, s, false, false), "moves off yielded");
+        check(o.animOwns(true, s), "ground not owned");
+        check(!o.animOwns(false, s), "moves off owned");
+        // One ungrounded frame (classify says air, or wall 3, or zip): still owned,
+        // so head follow (Full) stays on - no raw cut without an owner edge.
         s.grounded = false;
         s.owned = true;
-        // Still domain G but classify air — should not yield until jump edge, and
-        // yielding() only allows ground/parkour/sticky combat.
-        check(!o.yielding(true, s, false, false), "air classified while G yielded");
-        o.domain = Domain::traversal;
+        check(o.animOwns(true, s) && o.yielding(true, s, true, false), "air frame dropped yield");
+        check(animated_moves::followsHead(2, o.animOwns(true, s)), "air frame dropped head follow");
+        s.wall = surfaceFloor;
+        s.zipping = true;
+        check(o.animOwns(true, s), "floor flag / zip dropped yield");
+        // Stale or cutscene: the game scene takes the view.
+        s.fresh = false;
+        check(!o.animOwns(true, s), "stale owned");
+        s.fresh = true;
+        o.domain = Domain::vr;
         s.grounded = true;
-        check(!o.yielding(true, s, false, false), "traversal ground yielded");
-        o.domain = Domain::ground;
-        o.combatSticky = true;
-        s.grounded = false;
-        s.fighting = true;
-        check(o.yielding(true, s, false, false), "sticky combat not yield");
+        check(!o.animOwns(true, s), "vr owned");
     });
 
     test("ANIMATED HYBRID handoff: adoptEyesOrigin matches world eyes within 1 mm / 0.1 deg", [] {

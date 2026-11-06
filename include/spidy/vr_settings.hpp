@@ -356,10 +356,17 @@ struct Values {
     // the animated skeleton about its head (animated_air_spin.hpp). Visual/view
     // only; physics untouched.
     int animatedAirSpin = 0;
-    // ANIMATED HYBRID (off by default): ground keeps game anims (MOVES); air /
-    // swing / wall / zip use OG SpidyVR. Forces AIR and AIR SPIN / midair softlock
-    // inactive (hybrid_owner.hpp). Experimental.
+    // ANIMATED HYBRID (off by default): game anims own the body by default
+    // (MOVES), head locked to the hero; OG SpidyVR only on player intent (web,
+    // mid-air turn, airborne speed, Spidy wall run). Forces AIR / ONLY / AIR SPIN
+    // / midair softlock inactive (hybrid_owner.hpp). Experimental.
     bool animatedHybrid = false;
+    // ANIMATED HYBRID SPEED (with HYBRID; unused without it): how long airborne
+    // measured horizontal speed must stay at or above the takeover speed
+    // (hybrid_owner::vrSpeed) before OG SpidyVR takes over, ms; 0 = off (speed
+    // never forces a takeover; webs / mid-air turns / wall runs still do).
+    // 5..500, 200 by default.
+    int animatedHybridSpeedMs = 200;
     // How much speed a fast one-hand web yank adds, percent (the tab's SINGLE
     // HAND YANK STRENGTH; Swing::singleHandYankStrength): 100 as before.
     int singleHandYankPercent = 100;
@@ -508,8 +515,9 @@ enum class Item : uint8_t {
     animatedOnly,
     animatedAirSpin,
     animatedHybrid,
+    animatedHybridSpeed,
 };
-inline constexpr Item lastItem = Item::animatedHybrid;
+inline constexpr Item lastItem = Item::animatedHybridSpeed;
 // Where a row shows: in the tab; on the pause menu's first page instead,
 // under RESUME: VR VIEW (the user, October 15: "move the VIEW: GAME SCREEN to
 // the first menu (the one with resume)"); or only in the launcher's options:
@@ -532,7 +540,7 @@ struct Row {
     std::span<const char* const> choices{};
     Place place{};
 };
-const std::array<Row, 104>& rows();
+const std::array<Row, 105>& rows();
 // The most choices a row shows (game_menu's buffers): a row with more would
 // lose its last ones.
 inline constexpr size_t maxChoices = 9;

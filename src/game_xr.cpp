@@ -1043,16 +1043,19 @@ DWORD WINAPI run(void*) {
         animated_air_spin::Tracker airSpin{};
         int64_t airSpinDiagAt{};
         bool airSpinWas{};
-        // ANIMATED HYBRID (off by default): ground anim / OG air domain FSM.
+        // ANIMATED HYBRID (off by default): animation-default / intent-VR owner FSM.
         hybrid_owner::HybridOwner hybridOwner{};
-        bool hybridWebWas{}, hybridZipWas{}, hybridOwnedWas{};
-        unsigned hybridWallWas{};
+        bool hybridWebWas{};
+        // Horizontal measured (feet position-delta) speed for the owner's speed intent.
+        Vec3 hybridFeetWas{};
+        bool hybridFeetWasSet{};
+        float hybridSpeedH{};
         // Slices 2–3: 180 ms eye/yaw blend + delayed arms wipe on G↔T edges.
         struct HybridBlend {
             bool active{};
             bool toTraversal{}; // true = G→T reclaim; false = T→G land
             int64_t startNs{};
-            int64_t landConfirmNs{}; // grounded clock at enterG (diag)
+            int64_t landConfirmNs{}; // grounded clock at enterAnim (diag)
             Vec3 fromEyes{};
             float fromYaw{};
             Vec3 fromEyePos[2]{};
@@ -4303,15 +4306,14 @@ DWORD WINAPI run(void*) {
                                 values.triggerWebs
                                     ? (frame.hands[0].squeeze > .5f || frame.hands[1].squeeze > .5f)
                                     : (frame.hands[0].trigger > .5f || frame.hands[1].trigger > .5f);
-                            // Under HYBRID the air yield is forced off (same as the
-                            // body gate later): MODEL YAW / STEERING only while ground.
+                            // Under HYBRID the owner decides (animOwns: no per-frame
+                            // classify), and AIR / ONLY / AIR SPIN are ignored.
                             const bool hybridSteer = values.animatedHybrid && values.animatedMoves;
                             const animated_moves::Gate steerGate{values.animatedMoves,
                                                                  hybridSteer ? false : values.animatedAir,
                                                                  hybridSteer ? false : values.animatedOnly};
                             const bool yieldingPose =
-                                hybridSteer ? hybridOwner.yielding(values.animatedMoves, steerState,
-                                                                   webAimIntent, values.animatedArms)
+                                hybridSteer ? hybridOwner.animOwns(values.animatedMoves, steerState)
                                             : animated_moves::yieldsBody(steerGate, steerState, webAimIntent,
                                                                          values.animatedArms);
                             const Vec3 actorAhead{body[8], body[9], body[10]};
@@ -4326,16 +4328,16 @@ DWORD WINAPI run(void*) {
                             // (RealisticFlip / takeHeading → trackingYaw + worldFlip).
                             // Gate MODEL YAW off so walk-facing cannot fight that yaw.
                             const bool airSpinOwnsStick = animated_air_spin::ownsRightStick(
-                                values.animatedAirSpin, yieldingPose, steerState);
+                                hybridSteer ? 0 : values.animatedAirSpin, yieldingPose, steerState);
                             // Blend clock: hybridOwner updates later this frame; the
-                            // hold uses state latched on a prior enterG edge.
+                            // hold uses state latched on a prior enterAnim edge.
                             const int64_t blendNowNs =
                                 frame.predictedDisplayTime > 0
                                     ? frame.predictedDisplayTime
                                     : static_cast<int64_t>(GetTickCount64()) * 1'000'000ll;
                             const bool hybridYawHold =
-                                values.animatedHybrid && values.animatedMoves && hybridBlend.active &&
-                                !hybridBlend.toTraversal && hybridBlend.delayModelYaw &&
+                                hybridSteer && hybridBlend.active && !hybridBlend.toTraversal &&
+                                hybridBlend.delayModelYaw &&
                                 !hybrid_handoff::blendDone(blendNowNs - hybridBlend.startNs);
                             const bool modelYawOwns =
                                 animated_model_yaw::ownsStick(values.animatedModelYaw, yieldingPose,
@@ -5113,28 +5115,46 @@ DWORD WINAPI run(void*) {
                                                       ? frame.predictedDisplayTime
                                                       : static_cast<int64_t>(GetTickCount64()) * 1'000'000ll;
                         const bool webNow = animState.webbed;
-                        const bool zipNow = animState.zipping;
-                        const unsigned wallNow = animState.wall;
-                        const bool ownedNow = animState.owned;
+                        // Intent inputs (existing signals only): measured horizontal
+                        // speed from the actor's feet (not the swing's velocity, which
+                        // reads high at takeoff), R-stick x, tracked HMD yaw, the web
+                        // button, and the wall kind already in animState.wall.
+                        {
+                            const Vec3 feetNow{body[12], body[13], body[14]};
+                            const float dt = std::isfinite(frame.seconds) ? frame.seconds : 0.f;
+                            if (finite(feetNow) && hybridFeetWasSet && dt > 1e-4f && dt < .1f) {
+                                const Vec3 d = feetNow - hybridFeetWas;
+                                const float v = std::hypot(d.x, d.z) / dt;
+                                // A teleport / respawn is not speed; ~0.1 s low-pass.
+                                if (v < 80.f)
+                                    hybridSpeedH += (v - hybridSpeedH) * std::min(1.f, dt / .1f);
+                                else
+                                    hybridSpeedH = 0.f;
+                            } else if (!finite(feetNow)) {
+                                hybridSpeedH = 0.f;
+                            }
+                            hybridFeetWas = feetNow;
+                            hybridFeetWasSet = finite(feetNow);
+                        }
                         hybrid_owner::Frame hybridFrame;
                         hybridFrame.state = animState;
                         hybridFrame.webRising = webNow && !hybridWebWas;
-                        hybridFrame.zipRising = zipNow && !hybridZipWas;
-                        hybridFrame.wallRising = wallNow != 0 && hybridWallWas == 0;
-                        hybridFrame.swingTook = ownedNow && !hybridOwnedWas && !animState.grounded;
-                        hybridFrame.velocityY =
-                            swingFresh && finite(swingState.velocity) ? swingState.velocity.y : 0.f;
-                        {
-                            const Vec3 feetHY = finite(Vec3{body[12], body[13], body[14]})
-                                                    ? Vec3{body[12], body[13], body[14]}
-                                                    : motion.anchor;
-                            hybridFrame.feetY = feetHY.y;
-                        }
+                        hybridFrame.webIntent = webAimIntent;
+                        hybridFrame.speedH = hybridSpeedH;
+                        hybridFrame.speedHoldNs =
+                            static_cast<int64_t>(values.animatedHybridSpeedMs) * 1'000'000ll;
+                        hybridFrame.rStickX = frame.hands[1].valid && std::isfinite(frame.hands[1].stickX)
+                                                  ? frame.hands[1].stickX
+                                                  : 0.f;
+                        hybridFrame.hmdYawValid = validTrackedPose(frame.head);
+                        if (hybridFrame.hmdYawValid)
+                            hybridFrame.hmdYaw = hybrid_handoff::lookYaw(
+                                screenAhead(frame.head, 0).orientation.rotate({0, 0, -1}));
                         hybridFrame.cutscene = !animState.playing || !animState.fresh;
                         if (hybridOn) {
                             hybridOwner.update(hybridFrame, handoffNs);
-                            if (hybridOwner.enterT) {
-                                // Slice 2 G→T: capture the view the player is seeing,
+                            if (hybridOwner.enterVr) {
+                                // Slice 2 G→T (anim→vr): capture the view the player is seeing,
                                 // re-anchor tracking onto it, warm-reclaim IK, start
                                 // the 180 ms pos+rot blend. Do this BEFORE followHero
                                 // flips off so we do not publish a raw snap frame.
@@ -5237,14 +5257,16 @@ DWORD WINAPI run(void*) {
                                 hybridBlend.enterEyeDYaw = dYaw;
                                 hybridBlend.clearLook = true; // clear Walk::look next pad frame
                                 diag_log::writef(
-                                    "hybrid: G->T (%s) eyes dPos %.2f m dYaw %.0f, ikWarm 1, "
-                                    "overlay->body %.0f ms",
-                                    hybrid_owner::enterTName(hybridOwner.lastEnterT),
+                                    "hybrid: anim->vr (%s) speed %.1f rot %.0f, G->T (%s) eyes dPos %.2f m "
+                                    "dYaw %.0f, ikWarm 1, overlay->body %.0f ms",
+                                    hybrid_owner::enterVrName(hybridOwner.lastEnterVr), hybridFrame.speedH,
+                                    hybridOwner.lastSpin * (180.f / 3.14159265f),
+                                    hybrid_owner::enterVrName(hybridOwner.lastEnterVr),
                                     hybridBlend.enterEyeDPos, hybridBlend.enterEyeDYaw,
                                     hybrid_handoff::handoffSec * 1000.f);
                             }
-                            if (hybridOwner.enterG) {
-                                // Slice 3 T→G: blend eyes back to the headbone; keep
+                            if (hybridOwner.enterAnim) {
+                                // Slice 3 T→G (vr→anim): blend eyes back to the headbone; keep
                                 // IK state warm; delay MODEL YAW until the blend ends;
                                 // seed actor facing from the rig look yaw. No adoptFeet.
                                 Vec3 fromEyes{};
@@ -5297,32 +5319,21 @@ DWORD WINAPI run(void*) {
                                 hybridBlend.seedActorYaw = fromYaw;
                                 hybridBlend.seedActorYawValid = fromOk;
                                 hybridBlend.landSpeed = landSpeed;
-                                diag_log::writef(
-                                    "hybrid: T->G (land %.0f ms, speed %.1f) eyeBlend %.0f ms, "
-                                    "headbone dPos %.2f m dAng %.0f",
-                                    landMs, landSpeed, hybrid_handoff::handoffSec * 1000.f,
-                                    headDPos >= 0.f ? headDPos : 0.f, headDAng);
-                            }
-                            if (hybridOwner.bounceSuppressed) {
-                                const float heldMs =
-                                    hybridOwner.sinceNs > 0
-                                        ? static_cast<float>(handoffNs - hybridOwner.sinceNs) / 1e6f
-                                        : 0.f;
-                                diag_log::writef("hybrid: bounce suppressed (%s, %.0f ms)",
-                                                 hybridOwner.bounceWhy ? hybridOwner.bounceWhy : "?",
-                                                 heldMs);
+                                diag_log::writef("hybrid: vr->anim (land %.0f ms), T->G (land %.0f ms, speed "
+                                                 "%.1f) eyeBlend %.0f ms, headbone dPos %.2f m dAng %.0f",
+                                                 landMs, landMs, landSpeed,
+                                                 hybrid_handoff::handoffSec * 1000.f,
+                                                 headDPos >= 0.f ? headDPos : 0.f, headDAng);
                             }
                         } else {
                             hybridOwner = {};
                             hybridBlend = {};
                         }
                         hybridWebWas = webNow;
-                        hybridZipWas = zipNow;
-                        hybridWallWas = wallNow;
-                        hybridOwnedWas = ownedNow;
+                        // HYBRID: yield (and so head follow) changes only on an owner
+                        // edge, which always runs the blend above.
                         const bool rawYield =
-                            hybridOn ? hybridOwner.yielding(values.animatedMoves, animState, webAimIntent,
-                                                            values.animatedArms)
+                            hybridOn ? hybridOwner.animOwns(values.animatedMoves, animState)
                                      : animated_moves::yieldsBody(animGate, animState, webAimIntent,
                                                                   values.animatedArms);
                         yieldAnim = animOnly ? animatedOnlyLatch.update(rawYield, animatedMovesHandoff.yielding,
@@ -5353,7 +5364,8 @@ DWORD WINAPI run(void*) {
                                     animated_moves::yieldName(animState));
                             animatedOnlyStateWas = st;
                         }
-                        // Hybrid: no midair softlock — air is OG SpidyVR (no yield).
+                        // Hybrid: no midair softlock — the user's HEAD setting (Full) in
+                        // the air too, while the animation owns.
                         animHeadMode = hybridOn ? animated_moves::headFollow(values.animatedHead)
                                                 : animated_moves::headFollowForYield(values.animatedHead,
                                                                                      animState);
@@ -5399,7 +5411,7 @@ DWORD WINAPI run(void*) {
                             const float moved = finite(delta) ? length(delta) : -1.f;
                             if (hybridOn) {
                                 // Slices 2–3 already ran adoptEyes + beginReclaim on
-                                // enterT. Skipping adoptFeet / state={} keeps the
+                                // enterVr. Skipping adoptFeet / state={} keeps the
                                 // warm handoff; origin already tracked feet in yield.
                                 diag_log::writef(
                                     "animated moves: mod body again (%s) actor (%.1f, %.1f, %.1f) "
