@@ -271,14 +271,18 @@ void setTorsoAssist(bool on);
 // the armsOnly solve with zero arm weight when ANIMATED ARMS is off. Cleared
 // by resyncAfterYield. Side channel: no Command layout / version change.
 void setYieldTilt(Quat body, Quat hands);
+// Midair softlock / headbone view: remap grips in the character view frame
+// (chest-forward eyes) instead of raw HMD tracking. Side channel like setYieldTilt.
+void setViewSoftlock(bool on);
 // Slice C tracking-lock diag (side channel; no Command / Forearms layout change).
 // Latest armsOnly chest vs player yaw and overlay weights after a pose job.
 struct OverlayTracking {
     uint64_t job{};
     float armWeight[2]{};
     float chestYaw{};  // rad, anim chest look
-    float playerYaw{}; // rad, HMD/player look
+    float playerYaw{}; // rad, player/softlock look
     uint32_t remapped{}; // 1 when armsOnly chest remap ran
+    uint32_t softlock{}; // 1 when remap used softlock/headbone player frame
 };
 OverlayTracking overlayTracking();
 // A render frame begins (the stereo module's render setup, main thread).

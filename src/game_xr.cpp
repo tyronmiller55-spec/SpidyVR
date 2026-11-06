@@ -2789,25 +2789,33 @@ DWORD WINAPI run(void*) {
                                     why = Fallback::stale;
                                 else if (!(f.handError >= 0 && f.handError <= web_aim::forearmMiss))
                                     why = Fallback::wristMiss;
-                                // ANIMATED ARMS yield: arm-only IK is not torso-anchored —
-                                // MODEL FOREARM would steer webs off the controller (logs:
-                                // forearm vs controller 55–134 deg with tiny wrist miss).
-                                else if (animatedMovesHandoff.yielding && values.animatedArms)
-                                    why = Fallback::armsOverlay;
                                 // A flip's tilt is no fallback since v6: the solve turns
                                 // the whole body back with it (body_ik step 7) and the
                                 // wrist miss check still guards the sample. V5 fell back
                                 // in 492 of 1134 forearm aim: lines for it.
                                 const Quat aimNow = input.hands[i].aim.orientation;
                                 Quat target{};
+                                float alignDeg = -1.f;
                                 if (why == Fallback::none) {
                                     const Vec3 forearmDir = normalized(f.wrist - f.elbow);
-                                    const float align =
+                                    alignDeg =
                                         std::acos(std::clamp(
                                             dot(forearmDir, aimNow.rotate({0, 0, -1})), -1.f, 1.f)) *
                                         57.29578f;
-                                    if (std::isfinite(align) && align > web_aim::forearmAlignDegrees)
+                                    if (std::isfinite(alignDeg) && alignDeg > web_aim::forearmAlignDegrees)
                                         why = Fallback::misaligned;
+                                }
+                                // ANIMATED ARMS yield: keep controller-line overlay
+                                // fallback until softlock remap makes forearms healthy.
+                                // Drop fallback only when overlay weight is high and
+                                // forearm vs controller is under the align threshold.
+                                if (why == Fallback::none && animatedMovesHandoff.yielding &&
+                                    values.animatedArms) {
+                                    const float w = animatedArmsState.arms[i].weight;
+                                    const bool healthy = w > .85f && std::isfinite(alignDeg) &&
+                                                         alignDeg <= web_aim::forearmAlignDegrees;
+                                    if (!healthy)
+                                        why = Fallback::armsOverlay;
                                 }
                                 if (why == Fallback::none) {
                                     target =
@@ -5279,6 +5287,8 @@ DWORD WINAPI run(void*) {
                             native_body::setArmOverlay(0.f, 0.f);
                             native_body::setTorsoAssist(false);
                         }
+                        // Softlock / headbone view frame → remapGripToChest player eyes.
+                        native_body::setViewSoftlock(animHeadFollowNow && values.animatedArms);
                         // Dense tracking-lock diag (~10 Hz) while ARMS yield:
                         // overlay weights, forearm vs controller, actor/chest
                         // yaw delta, HMD vs anim head. Full never silent Level.
@@ -5304,8 +5314,9 @@ DWORD WINAPI run(void*) {
                                 (i == 0 ? offL : offR) = off;
                             }
                             const Vec3 actorAhead{body[8], body[9], body[10]};
+                            const bool actorOk = finite(actorAhead) && length(Vec3{actorAhead.x, 0, actorAhead.z}) > .2f;
                             const float actorYaw =
-                                animated_arms::lookYaw(actorAhead) * 57.29578f;
+                                actorOk ? animated_arms::lookYaw(actorAhead) * 57.29578f : -1.f;
                             const float chestYaw = ot.chestYaw * 57.29578f;
                             const float playerYaw = ot.playerYaw * 57.29578f;
                             float hmdY = 0, hmdP = 0, hmdR = 0;
@@ -5328,11 +5339,11 @@ DWORD WINAPI run(void*) {
                             diag_log::writef(
                                 "tracking lock: Lw %.2f Rw %.2f floor %.2f offL %.1f offR %.1f "
                                 "actorYaw %.0f chestYaw %.0f playerYaw %.0f dYaw %.0f "
-                                "hmd ypr %.0f/%.0f/%.0f anim ypr %.0f/%.0f/%.0f remap %u head %s",
+                                "hmd ypr %.0f/%.0f/%.0f anim ypr %.0f/%.0f/%.0f remap %u softlock %u head %s",
                                 animatedArmsState.arms[0].weight, animatedArmsState.arms[1].weight,
                                 animated_arms::yieldFloor, offL, offR, actorYaw, chestYaw, playerYaw,
                                 chestYaw - playerYaw, hmdY, hmdP, hmdR, animY, animP, animR, ot.remapped,
-                                animated_moves::headFollowName(animHeadMode));
+                                ot.softlock, animated_moves::headFollowName(animHeadMode));
                         }
                         // The player's size: HEIGHT when set, else the T-pose
                         // calibration's, else the headset's running height.

@@ -7,6 +7,19 @@ Per-check results are in [VALIDATION.md](VALIDATION.md).
 
 Not in a build yet, newest first. The release adds these to the next build's entry.
 
+**ANIMATED ARMS / WEB AIM: softlock remap + healthy forearm weblines.**
+
+- **Why.** Causal chain: stable view frame → remapGripToChest 1:1 → drop
+  armsOverlay controller-line aim → weblines from shooters. Softlock/headbone
+  eyes must feed remap; do not lift forearm fallback early.
+- **Change.** `native_body::setViewSoftlock` while HEAD follow + ARMS: armsOnly
+  remap uses anim head/chest-forward as playerEyes/playerLook. Tracking-lock
+  diag adds `softlock 0/1`; actorYaw prints -1 when actor ahead invalid.
+  Forearm aim: ANIMATED ARMS yield keeps `arms overlay` fallback unless that
+  arm's overlay weight > 0.85 and forearm-vs-controller ≤ align threshold —
+  then MODEL FOREARM / shooter path may run.
+- **Not in this patch.** Legs; headset p50 offs proof; early overlay drop.
+
 **ANIMATED HEAD midair torso softlock (automatic while HEAD ≠ Off).**
 
 - **Why.** Full headbone midair put eyes on the flailing anim head; chest/arms

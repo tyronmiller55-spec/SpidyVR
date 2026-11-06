@@ -27090,6 +27090,19 @@ int main() {
         check(game_swing::validSettings(s), "version 37 settings packet refused");
     });
 
+    test("ANIMATED ARMS softlock: remap uses chest-forward eyes as player frame", [] {
+        using namespace animated_arms;
+        // Softlock player eyes at anim head (0,1.6,0), look +Z; chest same.
+        // Grip 30 cm right of HMD-looking eyes would disagree — with softlock
+        // eyes==anchor the local offset is from the character head.
+        const Vec3 eyes{0, 1.6f, 0}, look{0, 0, 1}, up{0, 1, 0};
+        const Vec3 grip{0.3f, 1.6f, 0}; // 30 cm to +X of eyes
+        const auto r = remapGripToChest(grip, {}, eyes, look, up, eyes, look, up);
+        check(r.applied, "softlock remap not applied");
+        check(std::abs(r.grip.x - 0.3f) < .05f && std::abs(r.grip.y - 1.6f) < .05f,
+              "softlock remap grip drifted");
+    });
+
     test("ANIMATED MODEL YAW: walk-facing stick, deadzone, no camera substitute", [] {
         using namespace animated_model_yaw;
         Vec3 actor{0, 0, 1}, af{0, 0, 1}, ar{1, 0, 0};

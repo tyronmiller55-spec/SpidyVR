@@ -536,6 +536,17 @@ Result solve(Pose& pose, const Rig& rig, const Targets& targets, const Config& c
         Vec3 wrists[2]{}, shoulders[2]{};
         float armLens[2]{};
         Targets::Hand handsRemapped[2] = {tg.hands[0], tg.hands[1]};
+        // Softlock / headbone: measure grips in the character view frame
+        // (chest-forward, eyes at anim head/chest proxy) so 1:1 hands track
+        // the softlocked view instead of flailing HMD-vs-anim offsets.
+        Vec3 remapEyes = tg.eyes;
+        Vec3 remapLook = playerLook;
+        bool softlockRemap = false;
+        if (tg.viewSoftlock && finite(animAnchor) && length(chestLook) > .2f) {
+            remapEyes = animAnchor;
+            remapLook = chestLook;
+            softlockRemap = true;
+        }
         for (int i = 0; i < 2; ++i) {
             const float want =
                 std::clamp(std::isfinite(tg.armWeight[i]) ? tg.armWeight[i] : 0.f, 0.f, 1.f);
@@ -547,7 +558,7 @@ Result solve(Pose& pose, const Rig& rig, const Targets& targets, const Config& c
             auto& hand = handsRemapped[i];
             if (hand.tracked && finite(hand.grip)) {
                 const auto remapped = animated_arms::remapGripToChest(
-                    hand.grip, hand.orientation, tg.eyes, playerLook, up, animAnchor, chestLook,
+                    hand.grip, hand.orientation, remapEyes, remapLook, up, animAnchor, chestLook,
                     chestUp);
                 if (remapped.applied) {
                     hand.grip = remapped.grip;
@@ -616,7 +627,8 @@ Result solve(Pose& pose, const Rig& rig, const Targets& targets, const Config& c
         }
         // Publish chest/player yaw for XR dense diag (side channel).
         state.overlayChestYaw = animated_arms::lookYaw(chestLook);
-        state.overlayPlayerYaw = animated_arms::lookYaw(playerLook);
+        state.overlayPlayerYaw = animated_arms::lookYaw(remapLook);
+        state.overlaySoftlock = softlockRemap;
         for (int i = 0; i < 2; ++i) {
             const float aw = weights[i];
             auto hand = handsRemapped[i];

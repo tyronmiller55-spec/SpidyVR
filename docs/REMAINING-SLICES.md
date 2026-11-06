@@ -1,19 +1,21 @@
-# Remaining after feat/animated-torso-softlock
+# Remaining after feat/animated-hands-webs
 
-## Delivered
-- dedicated yaw @ 2b74b11
-- **torso softlock (this tip):** midair effective softlock (anchored 4 / frameLevel,
-  followHero on); ground Full/Level unchanged; named diag/policy
+## Delivered (flesh-out stack — not headset-tested)
+1. dedicated yaw — MODEL YAW gated midair when AIR SPIN owns R-stick
+2. torso softlock — midair effective softlock; ground Full/Level kept
+3. **hands+webs (this tip):** softlock/headbone → remapGripToChest; weblines
+   from shooters when forearm offs healthy (armsOverlay fallback otherwise)
 
-## Still open
-- Headset verify softlock feel + perch→jump blend; capture true chest perch offset
-- Tracking-lock 1:1 under softlock eyes + weblines from shooters (next zip)
-- ONLY + AIR SPIN headset verification
-- Legs tabled
+## Slice 6 — ONLY + AIR SPIN verification (headset script, no new features)
+Enable ONLY + AIR SPIN FLIPS+MOMENTUM + HEAD Full + ARMS + MODEL YAW + stack.
+- Wall/combat/zip under ONLY → zero `mod body again` except cutscene
+- Midair: `head follow softlock`, `model yaw: idle (air spin owns R-stick)`
+- `tracking lock: … softlock 1 …` offs trending down vs Full-anim-head dumps
+- `forearm aim:` arms-overlay fallback rate drops when offs healthy; webs leave
+  shooters
+- AIR SPIN lean/bank comfort (provisional maxDive/Bank)
 
-## View policy (live)
-| State | View |
-|---|---|
-| Ground/parkour/perch/wall | Headbone Full or Level per setting |
-| Midair yield | Torso softlock (free HMD, level axes) |
-| Outside yield | SpidyVR tracking |
+## Still open / tabled
+- True chest perch eyes-from-chest offset (softlock uses head place + level axes)
+- Legs redesign (tabled)
+- Pure zero-translation turn-in-place creep

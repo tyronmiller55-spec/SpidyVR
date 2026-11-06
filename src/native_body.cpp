@@ -74,6 +74,7 @@ body::State state;
 std::array<float, 2> overlayArmWeight{};
 bool overlayTorsoAssist{};
 Quat yieldTiltBody{}, yieldTiltHands{}; // ANIMATED AIR SPIN (setYieldTilt), world axes
+bool viewSoftlock{}; // midair softlock / headbone remap player frame
 native_body::OverlayTracking overlayTrackingSample{};
 body::Targets lastTargets;
 // The body's turn away from the wall at the last solve (crawlOutwardWeight),
@@ -543,6 +544,7 @@ void solveHero(float* out, uintptr_t job, uintptr_t instance) {
                 if (body::angle(body::unit(yieldTiltHands)) > 1e-4f)
                     t.tilt = toModel * body::unit(yieldTiltHands) * toWorld;
             }
+            t.viewSoftlock = viewSoftlock;
             t.up = toModel.rotate(Vec3{0, 1, 0});
             t.eyes = toModel.rotate(wanted.eyes);
             t.facing = toModel * wanted.facing;
@@ -635,6 +637,7 @@ void solveHero(float* out, uintptr_t job, uintptr_t instance) {
         overlayTrackingSample.chestYaw = state.overlayChestYaw;
         overlayTrackingSample.playerYaw = state.overlayPlayerYaw;
         overlayTrackingSample.remapped = armsOverlayOn ? 1u : 0u;
+        overlayTrackingSample.softlock = state.overlaySoftlock ? 1u : 0u;
     }
     if (probing) {
         // And as the body left it, then published (its own lock, a copy).
@@ -754,6 +757,7 @@ void native_body::resyncAfterYield() {
     overlayArmWeight[0] = overlayArmWeight[1] = 0.f;
     overlayTorsoAssist = false;
     yieldTiltBody = yieldTiltHands = {};
+    viewSoftlock = false;
     overlayTrackingSample = {};
     actorHeadingSet = trackingYawSet = false;
     actorHeading = trackingYaw = 0;
@@ -786,6 +790,12 @@ void native_body::setYieldTilt(Quat bodyTilt, Quat handTilt) {
     AcquireSRWLockExclusive(&solveLock);
     yieldTiltBody = clean(bodyTilt);
     yieldTiltHands = clean(handTilt);
+    ReleaseSRWLockExclusive(&solveLock);
+}
+
+void native_body::setViewSoftlock(bool on) {
+    AcquireSRWLockExclusive(&solveLock);
+    viewSoftlock = on;
     ReleaseSRWLockExclusive(&solveLock);
 }
 

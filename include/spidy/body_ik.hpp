@@ -173,6 +173,8 @@ struct Targets {
     // flip on the grips) is undone on the hand targets about `eyes` first, as
     // the full-body path does, so arms solve level and then turn with it.
     Quat yieldTilt{};
+    // Midair softlock / headbone: remap player frame = chest-forward eyes.
+    bool viewSoftlock{};
     // In the air (swinging, falling): the legs keep the game's pose instead
     // of standing on the ground.
     bool airborne{};
@@ -353,6 +355,7 @@ struct State {
     // Slice C tracking-lock diag: last armsOnly chest vs player look yaw (rad).
     float overlayChestYaw{};
     float overlayPlayerYaw{};
+    bool overlaySoftlock{};
     float crawlWeight{};
     float crawlTwist{};
     float crawlOutwardMotion{};
