@@ -54,6 +54,7 @@
 #include "spidy/diag_log.hpp"
 #include "spidy/ground_state.hpp"
 #include "spidy/head_probe.hpp"
+#include "spidy/head_seat.hpp"
 #include "spidy/animated_moves.hpp"
 #include "spidy/animated_steering.hpp"
 #include "spidy/animated_model_yaw.hpp"
@@ -1102,6 +1103,11 @@ DWORD WINAPI run(void*) {
         Vec3 animatedMovesYieldFeet{}; // actor feet when yield began (diag: actor vs latch)
         Pose animHeadRef{};
         bool animHeadRefSet{};
+        // The check that keeps that reference seated on the neck over every switch (head_seat.hpp).
+        head_seat::Glide animHeadSeat{};
+        int animSeatStateWas = -1;
+        uint32_t animSeatCount{};
+        int64_t animSeatDiagAt{};
         float animHeadTurn{};
         bool animHeadFlick{};
         std::array<float, 2> forearmJitter{};
@@ -5537,6 +5543,8 @@ DWORD WINAPI run(void*) {
                                           : standingEye - std::min(standingEye - h, frame.seconds * .01f);
                     bool yieldAnim = false;
                     bool animHeadFollowNow = false;
+                    // A switch this frame that puts the head-locked view back on the neck (head_seat).
+                    auto seatWhy = head_seat::Why::none;
                     auto animHeadMode = animated_moves::HeadFollow::off;
                     native_body::Command pose;
                     if (bodyStarted) {
@@ -5969,6 +5977,27 @@ DWORD WINAPI run(void*) {
                             game_fp::relatchHeadFrame(); // settle back onto ground headbone frame
                         }
                         animatedSoftlockWas = softlockNow;
+                        // Head seat (head_seat.hpp): every switch while the view is on the hero's
+                        // head puts it back on the neck, so the room's steps and leans since the
+                        // lock began cannot pile up into a head off its neck. An owner edge or a
+                        // recenter starts the lock afresh; the others glide back onto the head.
+                        if (headFollow && hybridOn) {
+                            const int stateNow = static_cast<int>(head_probe::classify(animState));
+                            if (hybridOwner.enterAnim || hybridOwner.enterVr)
+                                seatWhy = head_seat::Why::owner;
+                            else if (frame.recentered)
+                                seatWhy = head_seat::Why::recenter;
+                            else if (hybridFrame.zipPress)
+                                seatWhy = head_seat::Why::zip;
+                            else if (animatedHeadFollowWas &&
+                                     static_cast<int>(animHeadMode) != animatedHeadModeWas)
+                                seatWhy = head_seat::Why::mode;
+                            else if (animSeatStateWas >= 0 && stateNow != animSeatStateWas)
+                                seatWhy = head_seat::Why::state;
+                            animSeatStateWas = stateNow;
+                        } else {
+                            animSeatStateWas = -1;
+                        }
                         const int modeNow = headFollow ? static_cast<int>(animHeadMode) : -1;
                         if (headFollow != animatedHeadFollowWas || modeNow != animatedHeadModeWas) {
                             // softlock|full|level|off — never silent "level" for Full midair.
@@ -6310,12 +6339,41 @@ DWORD WINAPI run(void*) {
                     // are built (reference latched at its first frame) as the blend's
                     // destination, so the blend ends on exactly the view that follows.
                     if (headFollowEyes) {
+                        // An owner switch or a recenter: the lock starts afresh, on the neck.
+                        if (seatWhy == head_seat::Why::owner || seatWhy == head_seat::Why::recenter)
+                            animHeadRefSet = false;
                         if (!animHeadRefSet) {
                             animHeadRef = {frame.head.position, screenAhead(frame.head, 0).orientation};
                             animHeadRefSet = validTrackedPose(frame.head);
                             animHeadTurn = 0;
                             animHeadFlick = false;
+                            animHeadSeat = {};
+                            animSeatCount = 0;
+                        } else if (validTrackedPose(frame.head)) {
+                            // Any other switch, or farther off the head than a lean: glide the
+                            // reference to the headset now (its heading, the player's look, kept).
+                            if (seatWhy == head_seat::Why::none && values.animatedHybrid &&
+                                values.animatedMoves &&
+                                head_seat::overDrift(animHeadSeat, animHeadRef, frame.head.position))
+                                seatWhy = head_seat::Why::drift;
+                            float off = 0.f;
+                            if (seatWhy != head_seat::Why::none &&
+                                head_seat::reseat(animHeadSeat, animHeadRef, frame.head.position, eyeBlendNow,
+                                                  &off)) {
+                                ++animSeatCount;
+                                if (eyeBlendNow - animSeatDiagAt > 250'000'000) {
+                                    animSeatDiagAt = eyeBlendNow;
+                                    diag_log::writef(
+                                        "head seat: back on the neck (%s, %s) off %.2f m, glide %.0f ms, "
+                                        "%u this lock",
+                                        head_seat::whyName(seatWhy),
+                                        animated_moves::headFollowName(animHeadMode), off,
+                                        head_seat::glideNs / 1e6, animSeatCount);
+                                }
+                            }
                         }
+                        // The reference this frame (a glide under way included): eyes and hands alike.
+                        head_seat::step(animHeadSeat, animHeadRef, eyeBlendNow);
                         // Full (ground): anchored 2 follows anim head pitch/roll.
                         // Level (ground) / softlock (midair): anchored 4 level frame,
                         // free HMD. Softlock is deliberate midair policy — not a

@@ -78,6 +78,7 @@
 #include "spidy/diag_log.hpp"
 #include "spidy/ground_state.hpp"
 #include "spidy/head_probe.hpp"
+#include "spidy/head_seat.hpp"
 #include "spidy/animated_moves.hpp"
 #include "spidy/hybrid_owner.hpp"
 #include "spidy/hybrid_steer.hpp"
@@ -28608,6 +28609,137 @@ int main() {
         check(!clearsLook(true, 0.f) && !clearsLook(true, .1f) && clearsLook(true, .6f) &&
                   clearsLook(true, -.6f) && !clearsLook(false, 1.f),
               "CameraLook clear rule");
+    });
+
+    // HEAD SEAT (head_seat.hpp): the head-locked view, built exactly as game_xr builds it
+    // (animated_view::relative -> native_view::relativePose -> native_eyes::onHead), stays on the neck.
+    struct SeatView {
+        Mat4 head{};
+        // Both eyes of a headset at `hmd` (a 64 mm IPD), shown on the head through `ref`.
+        Pose eye(const Pose& hmd, const Pose& ref, int i) const {
+            const Mat4 axes = {1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1};
+            const Pose raw = compose(hmd, Pose{{i ? .032f : -.032f, 0, 0}, {}});
+            return animated_view::fromNative(native_eyes::onHead(
+                native_view::relativePose(axes, animated_view::relative(raw, ref, 0)), head));
+        }
+        // How far the shown view's centre is from the head's own eye point.
+        float off(const Pose& hmd, const Pose& ref) const {
+            const Vec3 c = (eye(hmd, ref, 0).position + eye(hmd, ref, 1).position) * .5f;
+            return length(c - Vec3{head[12], head[13], head[14]});
+        }
+    };
+    auto seatAngle = [](Quat a, Quat b) {
+        const float d = std::abs(a.x * b.x + a.y * b.y + a.z * b.z + a.w * b.w);
+        return 2.f * std::acos(std::clamp(d, 0.f, 1.f));
+    };
+
+    test("HEAD SEAT: a switch glides the head-locked view back onto the neck, look and hands kept", [=] {
+        SeatView v;
+        check(animated_view::headFrame({3, 1.8f, 7}, normalized(Vec3{.3f, -.4f, .9f}),
+                                       normalized(Vec3{.1f, 1, .3f}), {.08f, .05f, 0}, v.head),
+              "head frame");
+        // A fresh lock (what an owner switch starts) is on the neck.
+        const Pose hmd0{{.1f, 1.6f, .2f}, Quat::yaw(.3f)};
+        Pose ref{hmd0.position, Quat::yaw(.3f)};
+        check(v.off(hmd0, ref) < 1e-4f, "a fresh lock is not on the neck");
+        // Steps and a lean in the room since: the view is a long way off the head.
+        const Pose hmd{hmd0.position + Vec3{.25f, -.05f, .12f},
+                       Quat::yaw(1.2f) * Quat::around({1, 0, 0}, -.2f)};
+        const float before = v.off(hmd, ref);
+        check(before > .25f, "the drift did not move the view off the head");
+        const Quat lookBefore = v.eye(hmd, ref, 0).orientation;
+        const Pose gripRaw{hmd.position + Vec3{.2f, -.4f, -.3f}, Quat::yaw(.7f)};
+        const Pose gripBefore = animated_view::relative(gripRaw, ref, 0);
+        const Pose eyeBefore = animated_view::relative(hmd, ref, 0);
+        head_seat::Glide g;
+        float moved = 0;
+        const int64_t t0 = 5'000'000'000ll;
+        check(head_seat::reseat(g, ref, hmd.position, t0, &moved) && g.active, "a switch did not reseat");
+        check(std::abs(moved - length(hmd.position - hmd0.position)) < 1e-5f, "reseat offset reported");
+        // Over the 180 ms glide: no frame steps like a cut, and it ends on the head.
+        constexpr int64_t frameNs = 11'111'111;
+        float prev = before, worstStep = 0;
+        for (int64_t t = t0; t <= t0 + head_seat::glideNs + 2 * frameNs; t += frameNs) {
+            head_seat::step(g, ref, t);
+            const float now = v.off(hmd, ref);
+            worstStep = std::max(worstStep, std::abs(prev - now));
+            prev = now;
+        }
+        const float frames = static_cast<float>(head_seat::glideNs) / static_cast<float>(frameNs);
+        check(!g.active, "the glide did not end");
+        check(prev < 1e-3f, "the view did not end on the neck");
+        check(worstStep < 1.5f * before / frames * 1.25f, "a glide frame stepped like a cut");
+        // Where the player looks is theirs: the reseat moves only the place.
+        check(seatAngle(lookBefore, v.eye(hmd, ref, 0).orientation) < 1e-3f, "the reseat turned the view");
+        // The hands share the reference: their place relative to the eyes is unchanged.
+        const Pose gripAfter = animated_view::relative(gripRaw, ref, 0);
+        const Pose eyeAfter = animated_view::relative(hmd, ref, 0);
+        check(length((gripAfter.position - eyeAfter.position) - (gripBefore.position - eyeBefore.position)) <
+                  1e-5f,
+              "the hands came apart from the eyes");
+    });
+
+    test("HEAD SEAT: repeated switches never pile up an offset; a switch mid-glide does not jump", [=] {
+        SeatView v;
+        check(animated_view::headFrame({-20, 5, 40}, normalized(Vec3{-.6f, .2f, .7f}), {0, 1, 0},
+                                       {.08f, .05f, 0}, v.head),
+              "head frame");
+        Pose hmd{{0, 1.7f, 0}, Quat::yaw(-.4f)};
+        Pose ref{hmd.position, Quat::yaw(-.4f)};
+        Pose unseated = ref; // the old lock: latched once, never reseated
+        head_seat::Glide g;
+        constexpr int64_t frameNs = 11'111'111;
+        int64_t t = 1'000'000'000ll;
+        float worstSettled = 0, worstEver = 0;
+        for (int k = 0; k < 200; ++k) {
+            // The player wanders the room between switches (8 cm each, always drifting one way).
+            const float a = .7f * static_cast<float>(k);
+            hmd.position =
+                hmd.position + Vec3{.06f + .02f * std::cos(a), .005f * std::sin(a), .05f * std::sin(a)};
+            hmd.orientation = Quat::yaw(-.4f + .8f * std::sin(.3f * static_cast<float>(k)));
+            check(head_seat::reseat(g, ref, hmd.position, t), "a switch past min drift did not reseat");
+            for (int64_t e = 0; e <= head_seat::glideNs + frameNs; e += frameNs, t += frameNs) {
+                head_seat::step(g, ref, t);
+                worstEver = std::max(worstEver, v.off(hmd, ref));
+            }
+            worstSettled = std::max(worstSettled, v.off(hmd, ref));
+        }
+        check(worstSettled < 1e-3f, "an offset piled up over 200 switches");
+        check(worstEver < .1f, "the view went farther off the head than one step between switches");
+        check(v.off(hmd, unseated) > 10.f, "control: the unseated lock should have floated away");
+        // A switch while a glide is under way goes on from where the reference is, no jump.
+        hmd.position = hmd.position + Vec3{.3f, 0, 0};
+        check(head_seat::reseat(g, ref, hmd.position, t), "reseat");
+        t += 4 * frameNs;
+        head_seat::step(g, ref, t);
+        const Vec3 at = ref.position;
+        hmd.position = hmd.position + Vec3{0, 0, -.2f};
+        check(head_seat::reseat(g, ref, hmd.position, t), "reseat mid glide");
+        check(length(ref.position - at) < 1e-6f, "a switch mid-glide jumped the reference");
+        for (int i = 0; i < 40; ++i, t += frameNs)
+            head_seat::step(g, ref, t);
+        check(!g.active && v.off(hmd, ref) < 1e-3f, "the second glide did not land on the neck");
+    });
+
+    test("HEAD SEAT: small offsets left alone, past a lean reseats, bad heads ignored", [] {
+        head_seat::Glide g;
+        Pose ref{{1, 1.7f, 1}, Quat::yaw(.2f)};
+        check(!head_seat::reseat(g, ref, ref.position + Vec3{.01f, 0, 0}, 0) && !g.active &&
+                  length(ref.position - Vec3{1, 1.7f, 1}) < 1e-7f,
+              "a 1 cm offset should leave the view alone");
+        check(!head_seat::overDrift(g, ref, ref.position + Vec3{.3f, 0, 0}) &&
+                  head_seat::overDrift(g, ref, ref.position + Vec3{0, 0, .4f}),
+              "backstop threshold");
+        check(!head_seat::reseat(g, ref, {NAN, 0, 0}, 0) && !g.active, "a bad head reseated");
+        // While gliding, the backstop measures from where the glide lands (no re-trigger every frame).
+        check(head_seat::reseat(g, ref, ref.position + Vec3{0, 0, .5f}, 0), "reseat");
+        check(!head_seat::overDrift(g, ref, ref.position + Vec3{0, 0, .5f}), "backstop re-fired mid glide");
+        check(head_seat::alpha(0) == 0.f && head_seat::alpha(head_seat::glideNs) == 1.f &&
+                  head_seat::glideNs == hybrid_handoff::handoffNs,
+              "glide window is the handoff's 180 ms");
+        check(std::string(head_seat::whyName(head_seat::Why::owner)) == "owner switch" &&
+                  std::string(head_seat::whyName(head_seat::Why::drift)) == "drift",
+              "diag names");
     });
 
     test("ANIMATED HYBRID handoff: adoptEyesOrigin matches world eyes within 1 mm / 0.1 deg", [] {

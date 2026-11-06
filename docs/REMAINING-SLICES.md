@@ -6,7 +6,11 @@ ownership), C (swing-blend polish), legs and known 0xC0000409 crash investigatio
 were out of scope for the package. Z and C are now on `feat/native-animation` (web zips
 are ANIM from the press frame, held for the zip; swing blends start on the shown
 view and end on the new owner's, travelling with the player, 180 ms kept; not
-headset-tested). Next approved: J (jump-adopt), then L/T/P. No custom offsets; docs/REFERENCE.md and VALIDATION.md remain
+headset-tested). Head-neck seat (N) is on it too: every owner switch starts the head
+lock afresh and every move change, Y zip, HEAD change or recenter glides the
+reference back to the headset (180 ms, look kept; 35 cm backstop) so room drift
+cannot pile up off the neck; not headset-tested. Next approved: the error /
+state-change pass, then J (jump-adopt), L/T/P. No custom offsets; docs/REFERENCE.md and VALIDATION.md remain
 the executable evidence. Packaging merge has not been headset-tested.
 
 ---

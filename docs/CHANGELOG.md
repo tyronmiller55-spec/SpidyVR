@@ -3,6 +3,30 @@
 Every build, newest first, with what changed, why, and what was measured.
 Per-check results are in [VALIDATION.md](VALIDATION.md).
 
+## Native Animation: head stays on the neck
+
+**Keep your view seated on the hero's neck through parkour and every switch.**
+
+- While the animation owns the body, the head-locked view (HEAD Full or Level) is
+  the headset's movement since a reference latched when the lock began, put on the
+  hero's head joint (the same resolve as first-person finishers; pose writer and
+  name-resolved head per docs/REFERENCE.md, no new offsets). Turning the head is
+  the player's, but each step or lean in the room since that latch also moved the
+  eyes off the head, and under the intent owner one lock can last through minutes
+  of parkour, zips, crawls and fights. The offset grew until the view floated off
+  the neck.
+- New pure `head_seat.hpp`: an owner switch or a headset recenter starts the lock
+  afresh, on the neck; a move change while it lasts (running, a hop, a zip, a
+  crawl, a fight), a Y zip press and a HEAD mode change glide the reference's
+  place to the headset over the handoff's 180 ms smoothstep. Its heading (where
+  the player looks) is kept, and the hands share the reference, so they stay with
+  the eyes. Under 2 cm nothing moves; past 35 cm (more than a lean) it reseats
+  without waiting for a switch. Diag: `head seat: back on the neck (...)`.
+- Hybrid only; legacy ANIMATED MOVES unchanged. Owner rules, Y zip hold, swing
+  blend endpoints, hands, run+turn and combat sticky untouched; no new setting.
+- New reseat, no-accumulation-over-200-switches, mid-glide and threshold tests.
+  Not headset-tested.
+
 ## Native Animation: smoother swing blends
 
 **Smooth the view between SpidyVR swings and the animation, with no cuts.**

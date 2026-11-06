@@ -43,7 +43,14 @@ animation (starting or ending a swing, a zip, landing) keeps the same 180 ms
 blend, now from exactly the view you were seeing to exactly the view that
 follows, moving with you at swing speed, so the view does not pop at either end or
 lag behind and catch up. Taking a swing over keeps the way you were looking; only
-the animated head's tilt eases out. Legs remain tabled.
+the animated head's tilt eases out. Your view stays seated on the hero's neck while
+the animation owns him: every switch (SpidyVR and the animation trading the body,
+going from running to a hop, a zip, a crawl or a fight and back, a Y zip, a HEAD
+change, a headset recenter) glides the view back onto his head over the same
+180 ms, so steps and leans in your room during long parkour runs no longer add up
+into a head floating off the body. Where you look stays yours, and your hands move
+with the view. A lean farther than 35 cm is also brought back without waiting for a
+switch. Legs remain tabled.
 
 The launcher's existing updater still targets official Spidy releases, not this
 fork. Installing an official update replaces the community layer; use Native
