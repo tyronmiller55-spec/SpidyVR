@@ -1076,6 +1076,8 @@ DWORD WINAPI run(void*) {
         } hybridBlend{};
         int64_t modelYawDiagAt{};
         animated_arms::State animatedArmsState{};
+        Pose animatedLastGrip[2]{}, animatedLastAim[2]{};
+        bool animatedHandSeen[2]{};
         int64_t trackingLockDiagAt{};
         int64_t animatedMovesDiagAt{};
         bool animatedHeadFollowWas{};
@@ -2798,6 +2800,7 @@ DWORD WINAPI run(void*) {
                             swingWebTurns) {
                             using web_aim::Fallback;
                             const auto arms = native_body::forearms();
+                            const auto overlay = native_body::overlayTracking();
                             forearmStaleFrames = arms.job != forearmJob ? 0u : forearmStaleFrames + 1;
                             forearmJob = arms.job;
                             const float dt = input.sampleSeconds;
@@ -2827,13 +2830,17 @@ DWORD WINAPI run(void*) {
                                 // wrist miss check still guards the sample. V5 fell back
                                 // in 492 of 1134 forearm aim: lines for it.
                                 const Quat aimNow = input.hands[i].aim.orientation;
+                                const Quat solvedAim =
+                                    overlay.targetFrame != animated_view::Frame::none && overlay.valid[i]
+                                        ? overlay.aim[i]
+                                        : aimNow;
                                 Quat target{};
                                 float alignDeg = -1.f;
                                 if (why == Fallback::none) {
                                     const Vec3 forearmDir = normalized(f.wrist - f.elbow);
                                     alignDeg =
-                                        std::acos(std::clamp(
-                                            dot(forearmDir, aimNow.rotate({0, 0, -1})), -1.f, 1.f)) *
+                                        std::acos(std::clamp(dot(forearmDir, solvedAim.rotate({0, 0, -1})),
+                                                             -1.f, 1.f)) *
                                         57.29578f;
                                     if (std::isfinite(alignDeg) && alignDeg > web_aim::forearmAlignDegrees)
                                         why = Fallback::misaligned;
@@ -2884,8 +2891,8 @@ DWORD WINAPI run(void*) {
                                     // expected +, the right -), and the jitter.
                                     const Vec3 forearm = normalized(f.wrist - f.elbow);
                                     const float off =
-                                        std::acos(
-                                            std::clamp(dot(forearm, aimNow.rotate({0, 0, -1})), -1.f, 1.f)) *
+                                        std::acos(std::clamp(dot(forearm, solvedAim.rotate({0, 0, -1})), -1.f,
+                                                             1.f)) *
                                         57.29578f;
                                     const float lag =
                                         web_aim::turnAngle(f.grip.conjugate() * motion.grips[i].orientation) *
@@ -5147,10 +5154,10 @@ DWORD WINAPI run(void*) {
                     bool yieldAnim = false;
                     bool animHeadFollowNow = false;
                     auto animHeadMode = animated_moves::HeadFollow::off;
+                    native_body::Command pose;
                     if (bodyStarted) {
                         // The hero's body follows the headset and the controllers,
                         // placed from the same feet as the eyes.
-                        native_body::Command pose;
                         pose.serial = serial;
                         // Under a roof that holds the head below the player's
                         // own: the legs kneel rather than fold up in front of
@@ -5672,8 +5679,8 @@ DWORD WINAPI run(void*) {
                         }
                         // Hybrid G→T: enabled=false ramps overlay 1→0 over ~blendOut;
                         // keep calling update + armsOverlay so the crossfade reaches bodyOn.
-                        animated_arms::update(animatedArmsState, armDt, armsWanted, motion.anchor,
-                                              armSamples);
+                        animated_arms::update(animatedArmsState, armDt, armsWanted, motion.anchor, armSamples,
+                                              hybridOn && values.animatedHead != 0);
                         if (armsWanted) {
                             // Flag while yielding so native_body can blend arm
                             // weights out smoothly when idle; soft floor keeps
@@ -5706,10 +5713,13 @@ DWORD WINAPI run(void*) {
                             float offL = -1.f, offR = -1.f;
                             for (unsigned i = 0; i < 2; ++i) {
                                 const auto& f = arms.arms[i];
-                                if (!f.valid || !frame.hands[i].valid)
+                                const bool mapped = ot.targetFrame != animated_view::Frame::none;
+                                if (mapped ? !ot.valid[i] : (!f.valid || !frame.hands[i].valid))
                                     continue;
-                                const Vec3 forearm = normalized(f.wrist - f.elbow);
-                                const Vec3 aim = frame.hands[i].aim.orientation.rotate({0, 0, -1});
+                                const Vec3 forearm = mapped ? normalized(ot.solvedWrist[i] - ot.elbow[i])
+                                                            : normalized(f.wrist - f.elbow);
+                                const Vec3 aim = (mapped ? ot.aim[i] : motion.swing.hands[i].aim.orientation)
+                                                     .rotate({0, 0, -1});
                                 if (length(forearm) < .2f || length(aim) < .2f)
                                     continue;
                                 const float off =
@@ -5749,6 +5759,27 @@ DWORD WINAPI run(void*) {
                                 animated_arms::yieldFloor, offL, offR, actorYaw, chestYaw, playerYaw,
                                 chestYaw - playerYaw, hmdY, hmdP, hmdR, animY, animP, animR, ot.remapped,
                                 ot.softlock, animated_moves::headFollowName(animHeadMode));
+                            if (ot.targetFrame != animated_view::Frame::none) {
+                                for (unsigned i = 0; i < 2; ++i) {
+                                    diag_log::writef(
+                                        "animated hand: owner anim serial %llu job %llu frame %u %c valid %u "
+                                        "overlay %.2f solver %.2f clamp %u residual %.3f m %.1f deg",
+                                        static_cast<unsigned long long>(ot.serial),
+                                        static_cast<unsigned long long>(ot.job),
+                                        static_cast<unsigned>(ot.targetFrame), i ? 'R' : 'L', ot.valid[i],
+                                        ot.requestedWeight[i], ot.armWeight[i], ot.reachClamped[i],
+                                        ot.residual[i], ot.angle[i]);
+                                    diag_log::writef(
+                                        "animated hand points: serial %llu job %llu %c grip %.3f/%.3f/%.3f "
+                                        "target %.3f/%.3f/%.3f actual %.3f/%.3f/%.3f (feet-relative world "
+                                        "axes)",
+                                        static_cast<unsigned long long>(ot.serial),
+                                        static_cast<unsigned long long>(ot.job), i ? 'R' : 'L', ot.grip[i].x,
+                                        ot.grip[i].y, ot.grip[i].z, ot.wrist[i].x, ot.wrist[i].y,
+                                        ot.wrist[i].z, ot.solvedWrist[i].x, ot.solvedWrist[i].y,
+                                        ot.solvedWrist[i].z);
+                                }
+                            }
                         }
                         // The player's size: HEIGHT when set, else the T-pose
                         // calibration's, else the headset's running height.
@@ -5810,7 +5841,7 @@ DWORD WINAPI run(void*) {
                                     animated_moves::headFollowName(animHeadMode));
                             }
                         }
-                        native_body::submit(pose);
+                        // Submitted together with the finalized eye-frame mapping below.
                     } else {
                         game_fp::followHero(false);
                         if (animatedHeadFollowWas) {
@@ -5879,11 +5910,9 @@ DWORD WINAPI run(void*) {
                                     animHeadFlick = false;
                             }
                         }
-                        const Pose toRef = inverse(animHeadRef);
                         const Mat4 axes = {1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1};
-                        const Pose turned{{}, Quat::yaw(animHeadTurn)};
                         for (unsigned i = 0; i < 2; ++i) {
-                            Pose eye = compose(turned, compose(toRef, frame.eyes[i].pose));
+                            Pose eye = animated_view::relative(frame.eyes[i].pose, animHeadRef, animHeadTurn);
                             eyes.eyes[i].world = native_view::relativePose(axes, eye);
                             const auto& f = frame.eyes[i].fov;
                             eyes.eyes[i].fov[0] = f.left;
@@ -5950,6 +5979,60 @@ DWORD WINAPI run(void*) {
                         hybridBlend.delayModelYaw = false;
                         hybridBlend.active = false;
                     }
+                    // HYBRID hands use the very same reference/turn as the eyes.
+                    // Publish with the body command under commandLock; the pose job
+                    // resolves Full on its fresh, unmodified head (not this thread's sample).
+                    animated_view::Targets handView;
+                    if (bodyStarted && values.animatedHybrid && yieldAnim && headFollowEyes &&
+                        values.animatedArms && (pose.flags & native_body::armsOverlay)) {
+                        const bool anchoredHead = eyes.anchored == 2 || eyes.anchored == 4;
+                        Pose reference = animHeadRef;
+                        float turn = animHeadTurn;
+                        handView.frame =
+                            eyes.anchored == 2 ? animated_view::Frame::full : animated_view::Frame::level;
+                        bool frameOk = anchoredHead && animHeadRefSet;
+                        if (eyes.anchored == 4) {
+                            float levelYaw = 0;
+                            frameOk = frameOk && game_fp::sceneYaw(true, levelYaw);
+                            handView.levelWorld = Quat::yaw(levelYaw);
+                        } else if (!anchoredHead && validTrackedPose(frame.head)) {
+                            // Existing world-space eye blend: map hands around its
+                            // displayed centre, without changing blend endpoints/timing.
+                            handView.frame = animated_view::Frame::world;
+                            handView.worldAnchor = animated_view::fromNative(eyes.eyes[0].world);
+                            handView.worldAnchor.position =
+                                Vec3{(eyes.eyes[0].world[12] + eyes.eyes[1].world[12]) * .5f,
+                                     (eyes.eyes[0].world[13] + eyes.eyes[1].world[13]) * .5f,
+                                     (eyes.eyes[0].world[14] + eyes.eyes[1].world[14]) * .5f} -
+                                motion.anchor;
+                            reference = frame.head;
+                            turn = 0;
+                            frameOk = true;
+                        }
+                        if (frameOk) {
+                            handView.head = animated_view::relative(frame.head, reference, turn);
+                            for (unsigned i = 0; i < 2; ++i) {
+                                if (frame.hands[i].valid && validTrackedPose(frame.hands[i].grip) &&
+                                    validTrackedPose(frame.hands[i].aim)) {
+                                    animatedLastGrip[i] = frame.hands[i].grip;
+                                    animatedLastAim[i] = frame.hands[i].aim;
+                                    animatedHandSeen[i] = true;
+                                }
+                                handView.valid[i] = animatedHandSeen[i];
+                                handView.grips[i] =
+                                    animated_view::relative(animatedLastGrip[i], reference, turn);
+                                handView.aims[i] =
+                                    animated_view::relative(animatedLastAim[i], reference, turn);
+                            }
+                        } else {
+                            handView = {};
+                            handView.frame = animated_view::Frame::missing;
+                        }
+                    } else {
+                        animatedHandSeen[0] = animatedHandSeen[1] = false;
+                    }
+                    if (bodyStarted)
+                        native_body::submit(pose, handView);
                     // The HUD panel for this command's frame, as the head sees it:
                     // fixed in the room, so a reused image the headset turns to a
                     // newer head shows it where it was.

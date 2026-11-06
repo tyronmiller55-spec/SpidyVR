@@ -542,7 +542,7 @@ Result solve(Pose& pose, const Rig& rig, const Targets& targets, const Config& c
         Vec3 remapEyes = tg.eyes;
         Vec3 remapLook = playerLook;
         bool softlockRemap = false;
-        if (tg.viewSoftlock && finite(animAnchor) && length(chestLook) > .2f) {
+        if (tg.viewSoftlock && !tg.viewMapped && finite(animAnchor) && length(chestLook) > .2f) {
             remapEyes = animAnchor;
             remapLook = chestLook;
             softlockRemap = true;
@@ -550,13 +550,13 @@ Result solve(Pose& pose, const Rig& rig, const Targets& targets, const Config& c
         for (int i = 0; i < 2; ++i) {
             const float want =
                 std::clamp(std::isfinite(tg.armWeight[i]) ? tg.armWeight[i] : 0.f, 0.f, 1.f);
-            state.armWeight[i] = approach(state.armWeight[i], want, c.blendSpeed * dt);
+            state.armWeight[i] = tg.viewMapped ? want : approach(state.armWeight[i], want, c.blendSpeed * dt);
             weights[i] = state.armWeight[i];
             maxW = std::max(maxW, weights[i]);
             armLens[i] = (rig.upperArm[i] + rig.forearm[i]) * s * arms;
             shoulders[i] = pose.position(rig.arms[i].upper);
             auto& hand = handsRemapped[i];
-            if (hand.tracked && finite(hand.grip)) {
+            if (hand.tracked && finite(hand.grip) && !tg.viewMapped) {
                 const auto remapped = animated_arms::remapGripToChest(
                     hand.grip, hand.orientation, remapEyes, remapLook, up, animAnchor, chestLook,
                     chestUp);
@@ -564,6 +564,8 @@ Result solve(Pose& pose, const Rig& rig, const Targets& targets, const Config& c
                     hand.grip = remapped.grip;
                     hand.orientation = remapped.orientation;
                 }
+            }
+            if (hand.tracked && finite(hand.grip)) {
                 const Vec3 offset{i == 0 ? -c.wristFromGrip.x : c.wristFromGrip.x, c.wristFromGrip.y,
                                   c.wristFromGrip.z};
                 wrists[i] = hand.grip + hand.orientation.rotate(offset);

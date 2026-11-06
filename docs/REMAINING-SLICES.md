@@ -33,3 +33,11 @@ MOVES on, HYBRID on, AIR / ONLY / AIR SPIN off, HEAD Full, ARMS/TORSO/MODEL YAW 
 ## Tabled
 - Legs redesign
 - True chest perch eyes offset
+
+## Hands / run-and-turn follow-up (2026-11-06 PT)
+
+- H: HYBRID hands share the resolved animated eye frame, continuous tracked
+  overlay with existing ramps, same-solve diagnostics/tests. Not headset-tested.
+- S next: preserve run magnitude while turning; unify pad/native heading.
+- Z (Y-zip immediate animation ownership) and C (exact blend endpoints / slight
+  view smoothing) remain separate and unimplemented. Legs remain tabled.

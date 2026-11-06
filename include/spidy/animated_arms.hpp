@@ -151,11 +151,19 @@ inline Remap remapGripToChest(Vec3 grip, Quat orientation, Vec3 playerEyes, Vec3
 // Update per-arm overlay weights. root = actor feet / tracking anchor (world).
 // Subtracts root travel from grip motion so falling/swinging the body is not
 // counted as hand activity. Tracked idle hands keep yieldFloor (soft lock).
-inline void update(State& s, float dt, bool enabled, Vec3 root, const Sample hands[2]) {
+inline void update(State& s, float dt, bool enabled, Vec3 root, const Sample hands[2],
+                   bool trackingLock = false) {
     dt = std::isfinite(dt) ? std::clamp(dt, 0.f, .1f) : 0.f;
     if (!enabled) {
-        for (auto& a : s.arms)
-            a = {};
+        for (auto& a : s.arms) {
+            if (trackingLock) {
+                a.weight = approach(a.weight, 0.f, blendOut, dt);
+                a.hold = 0;
+                a.lastRelSet = false;
+            } else {
+                a = {};
+            }
+        }
         s.rootSet = false;
         return;
     }
@@ -193,7 +201,7 @@ inline void update(State& s, float dt, bool enabled, Vec3 root, const Sample han
             a.hold = std::max(0.f, a.hold - dt);
         }
         // Soft floor while tracked: idle stays on controllers. Intent/hold → 1.
-        const float want = intent ? webBoost : (a.hold > 0.f ? 1.f : yieldFloor);
+        const float want = trackingLock ? 1.f : (intent ? webBoost : (a.hold > 0.f ? 1.f : yieldFloor));
         a.weight = approach(a.weight, want, want > a.weight ? blendIn : blendOut, dt);
     }
 }

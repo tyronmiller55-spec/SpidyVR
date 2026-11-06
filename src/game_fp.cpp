@@ -6,6 +6,7 @@
 // and its pose array at +0xd8. The head joint is the one named 0x37519912.
 //
 // MSVC: functions with __try hold no object that needs a destructor.
+#include "spidy/animated_view.hpp"
 #include "spidy/game_fp.hpp"
 #include <atomic>
 #include <cmath>
@@ -1874,42 +1875,14 @@ bool frame(Mat4& head) {
                     f[c] += headAxes[r].load(std::memory_order_relaxed) * joint[r][c];
                     u[c] += headAxes[3 + r].load(std::memory_order_relaxed) * joint[r][c];
                 }
-            auto norm = [](float* v) {
-                const float l = std::sqrt(v[0] * v[0] + v[1] * v[1] + v[2] * v[2]);
-                if (l < 1e-6f)
-                    return false;
-                for (int c = 0; c < 3; ++c)
-                    v[c] /= l;
-                return true;
-            };
-            auto crossOf = [](const float* a, const float* b, float* o) {
-                o[0] = a[1] * b[2] - a[2] * b[1];
-                o[1] = a[2] * b[0] - a[0] * b[2];
-                o[2] = a[0] * b[1] - a[1] * b[0];
-            };
-            float left[3];
-            ok = norm(f) && norm(u);
-            if (ok) {
-                crossOf(u, f, left); // left = up x forward, as the body's rest pose defines them
-                ok = norm(left);
-            }
-            if (ok) {
-                crossOf(f, left, u); // up again, square to both
-                const float x = headAxes[6].load(std::memory_order_relaxed);
-                const float y = headAxes[7].load(std::memory_order_relaxed);
-                const float z = headAxes[8].load(std::memory_order_relaxed);
-                float eye[3];
-                for (int c = 0; c < 3; ++c)
-                    eye[c] = world[12 + c] + f[c] * x + u[c] * y + left[c] * z;
-                for (int c = 0; c < 3; ++c) {
-                    world[c] = -left[c];    // right
-                    world[4 + c] = -u[c];   // down
-                    world[8 + c] = f[c];    // forward
-                    world[12 + c] = eye[c]; // between the eyes
-                }
-                world[3] = world[7] = world[11] = 0;
-                world[15] = 1;
-            }
+            Mat4 anchor{};
+            ok = animated_view::headFrame(
+                {world[12], world[13], world[14]}, {f[0], f[1], f[2]}, {u[0], u[1], u[2]},
+                {headAxes[6].load(std::memory_order_relaxed), headAxes[7].load(std::memory_order_relaxed),
+                 headAxes[8].load(std::memory_order_relaxed)},
+                anchor);
+            if (ok)
+                std::memcpy(world, anchor.data(), sizeof(world));
         }
     }
     const ULONGLONG now = GetTickCount64();

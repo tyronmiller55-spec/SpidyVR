@@ -175,6 +175,7 @@ struct Targets {
     Quat yieldTilt{};
     // Midair softlock / headbone: remap player frame = chest-forward eyes.
     bool viewSoftlock{};
+    bool viewMapped{}; // already resolved with the eye anchor: never remap to chest again
     // In the air (swinging, falling): the legs keep the game's pose instead
     // of standing on the ground.
     bool airborne{};

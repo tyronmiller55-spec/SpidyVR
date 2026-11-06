@@ -7,6 +7,26 @@ Per-check results are in [VALIDATION.md](VALIDATION.md).
 
 Not in a build yet, newest first. The release adds these to the next build's entry.
 
+**ANIMATED HYBRID: track your hands with the headset while animations play.**
+
+- HYBRID + ARMS + HEAD Full/Level resolves controllers through the same
+  HMD-reference/turn/head frame as the eyes. The pose job uses its unmodified,
+  name-resolved animation head and existing eye offset; Full retains pitch/roll,
+  Level uses the existing latched view yaw. Arms-only IK leaves animated root,
+  head and legs in place; bounded TORSO remains available.
+- Tracked hands stay at full overlay weight when idle, with the existing 12/s
+  entry and 6/s loss/exit ramps; no extra controller filter or new rest pose.
+  Already view-mapped targets bypass legacy chest remapping and duplicate weight
+  smoothing. Non-HYBRID and VR full-body policies are unchanged.
+- Internal hand-frame data travels under the body command lock with its serial;
+  no exported Command/Forearms layout or protocol version changed. Diagnostics
+  distinguish overlay/solver weights and log same-solve target/actual wrists,
+  clamp status and position/orientation residuals. Tracking angles use mapped aim.
+- Evidence: [REFERENCE.md](REFERENCE.md) (supported executable, pose writer/rig)
+  and [VALIDATION.md](VALIDATION.md) (existing body/rig/calibration checks).
+  New transform/weight/arm-only regression tests; not tried in a headset.
+  Zip ownership and view-blend endpoint/smoothing changes are **not included**.
+
 **ANIMATED HYBRID: steer parkour with the left stick toward the view.**
 
 - **Why.** With ANIMATED STEERING on, `animated_steering::actorRelativeForward`

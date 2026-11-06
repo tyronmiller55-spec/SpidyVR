@@ -26791,6 +26791,106 @@ int main() {
         check(!active(true, false), "applies outside yield");
     });
 
+    test("HYBRID hands: eye and controller frames share Full rotation, reference and Level anchor", [] {
+        const Pose ref{{.2f, 1.6f, -.1f}, Quat::yaw(.7f)};
+        const Pose head{{.3f, 1.65f, .1f}, Quat::yaw(1.1f) * Quat::around({1, 0, 0}, .2f)};
+        const Pose grip{{.6f, 1.2f, -.4f}, Quat::yaw(.4f) * Quat::around({0, 0, 1}, -.3f)};
+        const Pose authored{{5, 9, 12},
+                            Quat::yaw(-1.3f) * Quat::around({1, 0, 0}, .5f) * Quat::around({0, 0, 1}, .4f)};
+        const Mat4 anchor = animated_view::toNative(authored);
+        const float turn = .35f;
+        const auto relativeHead = animated_view::relative(head, ref, turn);
+        const auto relativeGrip = animated_view::relative(grip, ref, turn);
+        const auto shownHead = animated_view::resolve(anchor, relativeHead);
+        const auto shownGrip = animated_view::resolve(anchor, relativeGrip);
+        const auto expected = compose(authored, compose({{}, Quat::yaw(turn)}, inverse(ref)));
+        check(length(shownGrip.position - compose(expected, grip).position) < 1e-4f, "wrong hand frame");
+        near(body::angle(shownGrip.orientation * compose(expected, grip).orientation.conjugate()), 0.f);
+        const auto before = compose(inverse(head), grip);
+        const auto after = compose(inverse(shownHead), shownGrip);
+        check(length(before.position - after.position) < 1e-4f,
+              "HMD turn applied twice / relative hand drift");
+        near(body::angle(before.orientation * after.orientation.conjugate()), 0.f);
+        const Mat4 axes = {1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1};
+        const Mat4 eye = native_eyes::onHead(native_view::relativePose(axes, relativeHead), anchor);
+        const auto resolvedEye = animated_view::fromNative(eye);
+        check(length(resolvedEye.position - shownHead.position) < 1e-4f, "not actual eye-chain convention");
+        near(body::angle(resolvedEye.orientation * shownHead.orientation.conjugate()), 0.f);
+        const Pose level{authored.position, Quat::yaw(.8f)};
+        const auto levelGrip = animated_view::resolve(animated_view::toNative(level), relativeGrip);
+        const auto levelHead = animated_view::resolve(animated_view::toNative(level), relativeHead);
+        check(length(compose(inverse(levelHead), levelGrip).position - before.position) < 1e-4f,
+              "Level hand/head mismatch");
+        Mat4 rebuilt{};
+        const Vec3 look = authored.orientation.rotate({0, 0, -1});
+        const Vec3 up = authored.orientation.rotate({0, 1, 0});
+        const Vec3 offset{.02f, .04f, .01f};
+        check(animated_view::headFrame(authored.position, look, up, offset, rebuilt), "head axes invalid");
+        const Vec3 expectedEye =
+            authored.position + look * offset.x + up * offset.y + cross(up, look) * offset.z;
+        check(length(animated_view::fromNative(rebuilt).position - expectedEye) < 1e-4f,
+              "rig eye offset lost");
+        near(body::angle(animated_view::fromNative(rebuilt).orientation * authored.orientation.conjugate()),
+             0.f);
+        check(!animated_view::headFrame({}, {}, {}, {}, rebuilt), "invalid head accepted");
+    });
+    test("HYBRID hands: idle is tracked at full weight; independent loss and entry/exit ramps", [] {
+        animated_arms::State st;
+        animated_arms::Sample hands[2] = {{{.3f, 1.2f, 0}, true}, {{-.3f, 1.2f, 0}, true}};
+        animated_arms::update(st, 1.f / 90, true, {}, hands, true);
+        check(st.arms[0].weight > 0 && st.arms[0].weight < 1, "entry not ramped");
+        for (int i = 0; i < 100; ++i)
+            animated_arms::update(st, 1.f / 90, true, {}, hands, true);
+        near(st.arms[0].weight, 1.f);
+        near(st.arms[1].weight, 1.f);
+        hands[0].tracked = false;
+        animated_arms::update(st, 1.f / 90, true, {}, hands, true);
+        check(st.arms[0].weight < 1 && st.arms[0].weight > 0, "loss did not ramp");
+        near(st.arms[1].weight, 1.f);
+        for (int i = 0; i < 20; ++i)
+            animated_arms::update(st, 1.f / 90, true, {}, hands, true);
+        near(st.arms[0].weight, 0.f);
+        near(st.arms[1].weight, 1.f);
+        animated_arms::update(st, 1.f / 90, false, {}, hands, true);
+        check(st.arms[1].weight < 1 && st.arms[1].weight > 0, "exit cleared instead of ramping");
+    });
+    test("HYBRID hands: view-mapped arm solve reaches wrists without moving authored head or legs", [] {
+        auto b = testBody(true);
+        auto data = b.rest;
+        body::Pose base(data.data(), static_cast<int>(b.rig.parent.size()));
+        body::Targets t;
+        t.armsOnly = t.viewMapped = t.viewSoftlock = t.torsoAssist = true;
+        t.armWeight = {1, 1};
+        // Deliberately unrelated eyes/facing: the legacy chest remap must NOT run.
+        t.eyes = {7, 8, 9};
+        t.facing = Quat::yaw(1.2f);
+        body::Config c;
+        c.hideHead = false;
+        for (unsigned i = 0; i < 2; ++i) {
+            const Vec3 offset{i == 0 ? -c.wristFromGrip.x : c.wristFromGrip.x, c.wristFromGrip.y,
+                              c.wristFromGrip.z};
+            const Vec3 wrist = base.position(b.rig.arms[i].hand) + Vec3{0, .05f, .08f};
+            t.hands[i] = {true, wrist - offset, {}, 0, 0};
+        }
+        body::State st;
+        for (int frame = 0; frame < 30; ++frame) {
+            auto fresh = b.rest;
+            body::Pose pose(fresh.data(), static_cast<int>(b.rig.parent.size()));
+            const auto solved = body::solve(pose, b.rig, t, c, st, true, 1.f / 90, 1.f, 1.f);
+            check(solved.solved && solved.handError[0] < .02f && solved.handError[1] < .02f,
+                  "reachable mapped wrist missed / remapped twice");
+            near(st.armWeight[0], 1.f); // no second solver low-pass after XR entry ramp
+            for (int joint : {b.rig.head, b.rig.pelvis, b.rig.legs[0].upper, b.rig.legs[0].lower,
+                              b.rig.legs[0].foot, b.rig.legs[1].foot}) {
+                check(length(pose.position(joint) - base.position(joint)) < 1e-4f,
+                      "authored root/head/leg moved");
+            }
+            check(dot(pose.direction(b.rig.head, b.rig.headForward),
+                      base.direction(b.rig.head, b.rig.headForward)) > .999f,
+                  "authored head rotated");
+        }
+    });
+
     test("ANIMATED ARMS: off by default, after ANIMATED STEERING, swing settings field at v36", [] {
         using namespace vr_settings;
         Values v;

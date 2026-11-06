@@ -1028,6 +1028,13 @@ VR settings
                    also on. Tracking loss yields to the game arm. Dense
                    "tracking lock:" diag lines while yielding. Thresholds
                    provisional. Off by default.
+                   With HYBRID + HEAD Full/Level, tracked hands instead use the
+                   same head-relative frame as your eyes, at full weight even
+                   when idle. Entry ramps in (~83 ms), tracking loss fades that
+                   hand out (~167 ms); the other hand keeps tracking. Reach is
+                   limited by the existing arm solver, not by moving the root
+                   or head. Game locomotion/legs stay animated. Non-HYBRID keeps
+                   the legacy soft-floor/chest assist above. Not headset-verified.
   ANIMATED TORSO   (off until you switch it on; EXPERIMENTAL, after ANIMATED
                    ARMS) with ANIMATED ARMS, the waist→chest bends toward
                    extreme controller aims so midair pointing can contort the

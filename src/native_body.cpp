@@ -36,6 +36,7 @@ std::atomic<bool> enabled{};
 SRWLOCK lifecycle = SRWLOCK_INIT, commandLock = SRWLOCK_INIT, solveLock = SRWLOCK_INIT,
         statusLock = SRWLOCK_INIT, forearmLock = SRWLOCK_INIT, headLock = SRWLOCK_INIT;
 Command command{};
+animated_view::Targets commandView{};
 uint64_t commandDeadline{};
 // The probe's joint roles for a rig of `overrideJoints` joints (0: none).
 struct Roles {
@@ -388,8 +389,10 @@ void solveHero(float* out, uintptr_t job, uintptr_t instance) {
     if (!cache.problem && cache.ik.ready)
         game_fp::setHeadAxes(cache.ik.headForward, cache.ik.headUp, cache.ik.eyesFromHead);
     Command wanted{};
+    animated_view::Targets view{};
     AcquireSRWLockShared(&commandLock);
     wanted = command;
+    view = commandView;
     const bool live = GetTickCount64() < commandDeadline;
     ReleaseSRWLockShared(&commandLock);
     const bool on = live && (wanted.flags & native_body::bodyOn);
@@ -557,6 +560,45 @@ void solveHero(float* out, uintptr_t job, uintptr_t instance) {
                 if (!h.tracked)
                     t.armWeight[i] = 0.f;
             }
+            if (armsOverlayOn && view.frame != animated_view::Frame::none) {
+                const body::Pose game(out, static_cast<int>(joints));
+                Mat4 anchor{};
+                bool valid = animated_view::headFrame(
+                    game.position(cache.ik.head), game.direction(cache.ik.head, cache.ik.headForward),
+                    game.direction(cache.ik.head, cache.ik.headUp), cache.ik.eyesFromHead, anchor);
+                if (valid && view.frame == animated_view::Frame::level) {
+                    auto at = animated_view::fromNative(anchor);
+                    at.orientation = toModel * view.levelWorld;
+                    anchor = animated_view::toNative(at);
+                } else if (view.frame == animated_view::Frame::world) {
+                    anchor = animated_view::toNative(
+                        {toModel.rotate(view.worldAnchor.position), toModel * view.worldAnchor.orientation});
+                    valid = native_view::validPose(anchor);
+                }
+                valid = valid && view.frame != animated_view::Frame::missing;
+                if (valid) {
+                    const auto head = animated_view::resolve(anchor, view.head);
+                    t.eyes = head.position;
+                    t.facing = head.orientation;
+                    t.viewMapped = true;
+                    for (unsigned i = 0; i < 2; ++i) {
+                        const auto grip = animated_view::resolve(anchor, view.grips[i]);
+                        // A lost hand keeps only its last valid target during its short fade.
+                        t.hands[i].tracked =
+                            view.valid[i] && (wanted.hands[i].tracked || overlayArmWeight[i] > 0);
+                        t.hands[i].grip = grip.position;
+                        t.hands[i].orientation = grip.orientation;
+                        t.armWeight[i] = view.valid[i] ? overlayArmWeight[i] : 0.f;
+                        overlayTrackingSample.aim[i] =
+                            toWorld * animated_view::resolve(anchor, view.aims[i]).orientation;
+                    }
+                } else {
+                    // No usable animation frame: return arms to authored animation, not stale rig targets.
+                    t.armWeight = {};
+                    for (auto& hand : t.hands)
+                        hand.tracked = false;
+                }
+            }
             lastTargets = t;
         }
         body::Config config;
@@ -576,6 +618,36 @@ void solveHero(float* out, uintptr_t job, uintptr_t instance) {
         lastSolve = now;
         body::Pose pose(out, static_cast<int>(joints));
         result = body::solve(pose, cache.ik, lastTargets, config, state, on || armsOverlayOn || armsBlend || spinOn, dt, scale, armScale);
+        // Internal diagnostic snapshot: all values belong to this command + pose job.
+        overlayTrackingSample.serial = wanted.serial;
+        overlayTrackingSample.targetFrame = lastTargets.viewMapped ? view.frame : animated_view::Frame::none;
+        for (unsigned i = 0; i < 2; ++i) {
+            const auto& hand = lastTargets.hands[i];
+            const auto& a = cache.ik.arms[i];
+            const Vec3 offset{i == 0 ? -config.wristFromGrip.x : config.wristFromGrip.x,
+                              config.wristFromGrip.y, config.wristFromGrip.z};
+            const Vec3 wrist = hand.grip + hand.orientation.rotate(offset);
+            overlayTrackingSample.requestedWeight[i] = overlayArmWeight[i];
+            overlayTrackingSample.grip[i] = toWorld.rotate(hand.grip);
+            overlayTrackingSample.wrist[i] = toWorld.rotate(wrist);
+            overlayTrackingSample.solvedWrist[i] = toWorld.rotate(pose.position(a.hand));
+            overlayTrackingSample.elbow[i] = toWorld.rotate(pose.position(a.lower));
+            overlayTrackingSample.valid[i] = result.solved && hand.tracked;
+            overlayTrackingSample.residual[i] = result.handError[i];
+            overlayTrackingSample.reachClamped[i] =
+                length(wrist - pose.position(a.upper)) >
+                (cache.ik.upperArm[i] + cache.ik.forearm[i]) * scale * armScale;
+            const Vec3 right = hand.orientation.rotate({1, 0, 0});
+            const Quat pitch = body::axisAngle(right, config.fingerPitch);
+            const Vec3 fingers = pitch.rotate(hand.orientation.rotate({0, -1, 0}));
+            const Vec3 palm = pitch.rotate(i == 0 ? right : -right);
+            overlayTrackingSample.angle[i] =
+                body::angle(body::between(pose.direction(a.hand, cache.ik.handFingers[i]),
+                                          pose.direction(a.hand, cache.ik.handPalm[i]), fingers, palm)) *
+                57.29578f;
+            if (!lastTargets.viewMapped)
+                overlayTrackingSample.aim[i] = {}; // XR caller uses its matching rig-space aim instead
+        }
         // MODEL FOREARM: each arm as this solve left it, in world axes.
         native_body::Forearms forearmsOut;
         for (int i = 0; i < 2; ++i) {
@@ -588,7 +660,8 @@ void solveHero(float* out, uintptr_t job, uintptr_t instance) {
             f.wrist = toWorld.rotate(pose.position(a.hand));
             const Vec3 palm = cache.ik.handPalm[i];
             f.palm = length(palm) > .5f ? normalized(toWorld.rotate(pose.direction(a.hand, palm))) : Vec3{};
-            f.grip = wanted.hands[i].orientation;
+            f.grip = lastTargets.viewMapped ? toWorld * lastTargets.hands[i].orientation
+                                            : wanted.hands[i].orientation;
             f.handError = result.handError[i];
             f.valid = wanted.hands[i].tracked && finite(f.elbow) && finite(f.wrist) &&
                       length(f.wrist - f.elbow) > 1e-3f;
@@ -636,7 +709,7 @@ void solveHero(float* out, uintptr_t job, uintptr_t instance) {
         overlayTrackingSample.armWeight[1] = state.armWeight[1];
         overlayTrackingSample.chestYaw = state.overlayChestYaw;
         overlayTrackingSample.playerYaw = state.overlayPlayerYaw;
-        overlayTrackingSample.remapped = armsOverlayOn ? 1u : 0u;
+        overlayTrackingSample.remapped = armsOverlayOn && !lastTargets.viewMapped ? 1u : 0u;
         overlayTrackingSample.softlock = state.overlaySoftlock ? 1u : 0u;
     }
     if (probing) {
@@ -831,8 +904,12 @@ native_body::OverlayTracking native_body::overlayTracking() {
 }
 
 void native_body::submit(const Command& next) {
+    submit(next, {});
+}
+void native_body::submit(const Command& next, const animated_view::Targets& view) {
     AcquireSRWLockExclusive(&commandLock);
     command = next;
+    commandView = view;
     commandDeadline = GetTickCount64() + std::min<uint32_t>(next.leaseMs, 500);
     ReleaseSRWLockExclusive(&commandLock);
 }

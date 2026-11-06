@@ -1,5 +1,6 @@
 #pragma once
 #include "body_calibration.hpp"
+#include "animated_view.hpp"
 #include "head_probe.hpp"
 #include "math.hpp"
 #include <cstddef>
@@ -252,6 +253,8 @@ uint32_t start(uintptr_t base);
 // The local player became another actor (zero: none).
 void retarget(uintptr_t record);
 void submit(const Command&);
+// Internal, synchronized with the command serial; not an exported IPC packet.
+void submit(const Command&, const animated_view::Targets&);
 // ANIMATED MOVES handoff: drop IK state and heading latches so the next bodyOn
 // frame takes the current actor facing and headset targets. Call on yield enter
 // (so residual IK does not fight the game anim) and on yield exit (before the
@@ -282,7 +285,13 @@ void setViewSoftlock(bool on);
 // Latest armsOnly chest vs player yaw and overlay weights after a pose job.
 struct OverlayTracking {
     uint64_t job{};
-    float armWeight[2]{};
+    uint64_t serial{};
+    animated_view::Frame targetFrame = animated_view::Frame::none;
+    Vec3 grip[2]{}, wrist[2]{}, solvedWrist[2]{}, elbow[2]{};
+    Quat aim[2]{};
+    float residual[2]{-1, -1}, angle[2]{-1, -1};
+    uint32_t valid[2]{}, reachClamped[2]{};
+    float requestedWeight[2]{}, armWeight[2]{};
     float chestYaw{};  // rad, anim chest look
     float playerYaw{}; // rad, player/softlock look
     uint32_t remapped{}; // 1 when armsOnly chest remap ran
