@@ -1098,6 +1098,10 @@ DWORD WINAPI run(void*) {
             float enterEyeDYaw{};
             float landSpeed{};
             bool clearLook{};
+            // After an owner edge: refresh sticks and hold CameraLook off
+            // through the blend and a held run, so leftover look does not
+            // orbit the walk camera until a jump.
+            bool recheckMove{};
             // Slice C: the source eyes' player position; they travel with him from it.
             Vec3 fromAnchor{};
         } hybridBlend{};
@@ -1119,6 +1123,7 @@ DWORD WINAPI run(void*) {
         // The check that keeps that reference seated on the neck over every switch (head_seat.hpp).
         head_seat::Glide animHeadSeat{};
         int animSeatStateWas = -1;
+        uint32_t animSeatActionWas = 0xffffffffu;
         uint32_t animSeatCount{};
         int64_t animSeatDiagAt{};
         float animHeadTurn{};
@@ -4792,11 +4797,24 @@ DWORD WINAPI run(void*) {
                                     ? hybrid_steer::clearsLook(
                                           modelYawOwns, frame.hands[1].valid ? frame.hands[1].stickX : 0.f)
                                     : modelYawOwns;
+                            const bool blendHold =
+                                hybridBlend.active &&
+                                !hybrid_handoff::blendDone(blendNowNs - hybridBlend.startNs);
+                            if (hybridBlend.recheckMove &&
+                                hybrid_steer::doneRecheck(blendHold, hybridInputL)) {
+                                cameraLook.reset();
+                                cameraPitch.reset();
+                                hybridViewYaw.reset();
+                                hybridBlend.recheckMove = false;
+                            }
                             if (modelYawClears || airSpinOwnsStick || hybridYawHold ||
-                                hybridBlend.clearLook) {
+                                hybridBlend.clearLook || hybridBlend.recheckMove) {
                                 // Free the right stick from CameraLook so it does not
                                 // also yaw the follow camera (HMD free look stays XR;
-                                // tracking yaw / AIR SPIN keep the stick).
+                                // tracking yaw / AIR SPIN keep the stick). After a
+                                // handoff, keep it off through the blend and until the
+                                // run stick is released, so CameraLook cannot orbit a
+                                // held forward under the turning walk camera.
                                 walk.look = 0;
                                 hybridBlend.clearLook = false;
                             } else if (hybridViewSteer && hybridViewOk) {
@@ -5817,6 +5835,11 @@ DWORD WINAPI run(void*) {
                                 hybridBlend.enterEyeDPos = dPos >= 0.f ? dPos : 0.f;
                                 hybridBlend.enterEyeDYaw = dYaw;
                                 hybridBlend.clearLook = true; // clear Walk::look next pad frame
+                                hybridBlend.recheckMove = true;
+                                hybridViewYaw.reset();
+                                cameraLook.reset();
+                                cameraPitch.reset();
+                                game_fp::relatchHeadFrame();
                                 diag_log::writef(
                                     "hybrid: anim->vr (%s) speed %.1f rot %.0f, G->T (%s) eyes dPos %.2f m "
                                     "dYaw %.0f, ikWarm 1, overlay->body %.0f ms",
@@ -5896,6 +5919,12 @@ DWORD WINAPI run(void*) {
                                 hybridBlend.seedActorYawValid =
                                     fromOk && hybrid_owner::seedsFacing(hybridOwner.lastEnterAnim);
                                 hybridBlend.landSpeed = landSpeed;
+                                hybridBlend.clearLook = true;
+                                hybridBlend.recheckMove = true;
+                                hybridViewYaw.reset();
+                                cameraLook.reset();
+                                cameraPitch.reset();
+                                game_fp::relatchHeadFrame();
                                 const char* why = hybrid_owner::enterAnimName(hybridOwner.lastEnterAnim);
                                 // The head is often not sampled yet on the edge frame (head follow
                                 // turns on below): say so rather than log a 0.00 m that never was.
@@ -6060,6 +6089,16 @@ DWORD WINAPI run(void*) {
                         // recenter starts the lock afresh; the others glide back onto the head.
                         if (headFollow && hybridOn) {
                             const int stateNow = static_cast<int>(head_probe::classify(animState));
+                            uint32_t actionNow = 0;
+                            actionNow |= animState.fighting ? 1u : 0u;
+                            actionNow |= animState.dodging ? 2u : 0u;
+                            actionNow |= animState.zipping ? 4u : 0u;
+                            actionNow |= (static_cast<uint32_t>(animState.wall) & 7u) << 3;
+                            actionNow |= phone.open() ? (1u << 6) : 0u;
+                            actionNow |= gadgetWheel.open() ? (1u << 7) : 0u;
+                            actionNow |= padLayer.latched() ? (1u << 8) : 0u;
+                            actionNow |= (namedPress.claimed() & 0x3fu) << 9;
+                            actionNow |= (static_cast<uint32_t>(listed.equipped) & 0xffu) << 16;
                             if (hybridOwner.enterAnim || hybridOwner.enterVr)
                                 seatWhy = head_seat::Why::owner;
                             else if (frame.recentered)
@@ -6071,9 +6110,13 @@ DWORD WINAPI run(void*) {
                                 seatWhy = head_seat::Why::mode;
                             else if (animSeatStateWas >= 0 && stateNow != animSeatStateWas)
                                 seatWhy = head_seat::Why::state;
+                            else if (animSeatActionWas != 0xffffffffu && actionNow != animSeatActionWas)
+                                seatWhy = head_seat::Why::action;
                             animSeatStateWas = stateNow;
+                            animSeatActionWas = actionNow;
                         } else {
                             animSeatStateWas = -1;
+                            animSeatActionWas = 0xffffffffu;
                         }
                         const int modeNow = headFollow ? static_cast<int>(animHeadMode) : -1;
                         if (headFollow != animatedHeadFollowWas || modeNow != animatedHeadModeWas) {

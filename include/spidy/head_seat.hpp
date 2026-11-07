@@ -31,10 +31,14 @@ namespace spidy::head_seat {
 constexpr int64_t glideNs = 180'000'000;
 // Smaller than this a switch leaves the view alone (no glide for nothing).
 constexpr float minDrift = .02f;
-// Farther than any lean from the head: reseated without waiting for a switch.
-constexpr float maxDrift = .35f;
+// Farther than a standing lean from the head: reseated without waiting for a
+// switch. 20 cm still leaves room to lean; 35 cm left a visibly disconnected head.
+constexpr float maxDrift = .20f;
+// While a glide is already heading there, chase a small target move without
+// restarting the 180 ms clock (repeated action edges would hitch).
+constexpr float followMeters = .08f;
 
-enum class Why : uint8_t { none, owner, state, zip, mode, recenter, drift };
+enum class Why : uint8_t { none, owner, state, zip, mode, recenter, drift, action };
 inline const char* whyName(Why w) {
     switch (w) {
     case Why::owner:
@@ -49,6 +53,8 @@ inline const char* whyName(Why w) {
         return "recenter";
     case Why::drift:
         return "drift";
+    case Why::action:
+        return "action";
     default:
         return "none";
     }
@@ -96,6 +102,15 @@ inline bool reseat(Glide& g, Pose& reference, Vec3 head, int64_t nowNs, float* m
         *moved = d;
     if (!std::isfinite(d) || d < minDrift)
         return false;
+    if (g.active) {
+        const float toOff = length(g.to - head);
+        if (toOff < minDrift)
+            return false;
+        if (toOff < followMeters) {
+            g.to = head;
+            return false;
+        }
+    }
     step(g, reference, nowNs); // from exactly where the reference is this frame
     g.active = true;
     g.from = reference.position;
@@ -104,7 +119,7 @@ inline bool reseat(Glide& g, Pose& reference, Vec3 head, int64_t nowNs, float* m
     return true;
 }
 
-// The backstop: farther from the head than any lean, reseat without a switch.
+// The backstop: farther from the head than a standing lean, reseat without a switch.
 inline bool overDrift(const Glide& g, const Pose& reference, Vec3 head) {
     const float d = length(drift(g, reference, head));
     return std::isfinite(d) && d > maxDrift;

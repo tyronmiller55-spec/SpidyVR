@@ -108,4 +108,20 @@ struct YawFilter {
     }
 };
 
+// After a SpidyVR ↔ animation handoff: CameraLook must not turn the walk
+// camera under a held run (that orbits until a jump). Hold the look stick
+// off through the blend, then until the left stick is released.
+inline bool suppressLook(bool recheckMove, bool blendHold, float stickTilt, float zone = deadzone) {
+    if (!recheckMove)
+        return false;
+    if (blendHold)
+        return true;
+    return std::isfinite(stickTilt) && stickTilt >= zone;
+}
+
+// The handoff is settled: the eye blend is done and the run stick is released.
+inline bool doneRecheck(bool blendHold, float stickTilt, float zone = deadzone) {
+    return !blendHold && (!std::isfinite(stickTilt) || stickTilt < zone);
+}
+
 } // namespace spidy::hybrid_steer

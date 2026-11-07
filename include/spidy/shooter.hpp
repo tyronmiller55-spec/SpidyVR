@@ -86,4 +86,14 @@ class Shooter {
     ShooterConfig config_;
     std::array<Hand, 2> hands_{};
 };
+// A hand is busy for web balls only when THAT hand is grabbing, holding a
+// web, climbing, or crawling. A leftover climb or crawl bit on the other
+// hand must not lock both triggers (midair animations after a wall).
+inline bool handBusy(unsigned hand, bool grabPhase, bool webAttached, unsigned climbHands,
+                     unsigned crawlHands) {
+    if (hand > 1)
+        return false;
+    const unsigned bit = 1u << hand;
+    return grabPhase || webAttached || (climbHands & bit) != 0 || (crawlHands & bit) != 0;
+}
 } // namespace spidy

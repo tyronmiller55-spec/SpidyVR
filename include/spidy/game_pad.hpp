@@ -831,6 +831,10 @@ class CameraLook {
     uint32_t turns() const {
         return turns_;
     }
+    void reset() {
+        error_ = 0;
+        turning_ = false;
+    }
 
   private:
     float error_{};
@@ -878,6 +882,10 @@ class CameraPitch {
     }
     uint32_t turns() const {
         return turns_;
+    }
+    void reset() {
+        error_ = 0;
+        turning_ = false;
     }
 
   private:

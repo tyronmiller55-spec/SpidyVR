@@ -29404,6 +29404,12 @@ int main() {
         check(!clearsLook(true, 0.f) && !clearsLook(true, .1f) && clearsLook(true, .6f) &&
                   clearsLook(true, -.6f) && !clearsLook(false, 1.f),
               "CameraLook clear rule");
+        check(!suppressLook(false, true, 1.f), "recheck off still suppressed look");
+        check(suppressLook(true, true, 0.f), "blend still suppressed look");
+        check(suppressLook(true, false, .5f), "held run after handoff still suppressed look");
+        check(!suppressLook(true, false, .05f), "released stick after blend still suppressed look");
+        check(!doneRecheck(true, 0.f) && !doneRecheck(false, .5f) && doneRecheck(false, .05f),
+              "handoff recheck settle");
     });
 
     // HEAD SEAT (head_seat.hpp): the head-locked view, built exactly as game_xr builds it
@@ -29522,8 +29528,8 @@ int main() {
         check(!head_seat::reseat(g, ref, ref.position + Vec3{.01f, 0, 0}, 0) && !g.active &&
                   length(ref.position - Vec3{1, 1.7f, 1}) < 1e-7f,
               "a 1 cm offset should leave the view alone");
-        check(!head_seat::overDrift(g, ref, ref.position + Vec3{.3f, 0, 0}) &&
-                  head_seat::overDrift(g, ref, ref.position + Vec3{0, 0, .4f}),
+        check(!head_seat::overDrift(g, ref, ref.position + Vec3{.15f, 0, 0}) &&
+                  head_seat::overDrift(g, ref, ref.position + Vec3{0, 0, .25f}),
               "backstop threshold");
         check(!head_seat::reseat(g, ref, {NAN, 0, 0}, 0) && !g.active, "a bad head reseated");
         // While gliding, the backstop measures from where the glide lands (no re-trigger every frame).
@@ -29533,8 +29539,50 @@ int main() {
                   head_seat::glideNs == hybrid_handoff::handoffNs,
               "glide window is the handoff's 180 ms");
         check(std::string(head_seat::whyName(head_seat::Why::owner)) == "owner switch" &&
-                  std::string(head_seat::whyName(head_seat::Why::drift)) == "drift",
+                  std::string(head_seat::whyName(head_seat::Why::drift)) == "drift" &&
+                  std::string(head_seat::whyName(head_seat::Why::action)) == "action",
               "diag names");
+    });
+
+    test("HEAD SEAT: a glide already heading there does not restart for a small chase", [] {
+        head_seat::Glide g;
+        Pose ref{{1, 1.7f, 1}, Quat::yaw(.2f)};
+        const Vec3 head0 = ref.position + Vec3{.15f, 0, 0};
+        check(head_seat::reseat(g, ref, head0, 0), "start");
+        const int64_t started = g.startNs;
+        const Vec3 from0 = g.from;
+        check(!head_seat::reseat(g, ref, head0 + Vec3{.03f, 0, 0}, 50'000'000) && g.active &&
+                  g.startNs == started && length(g.from - from0) < 1e-7f &&
+                  length(g.to - (head0 + Vec3{.03f, 0, 0})) < 1e-6f,
+              "a small chase restarted the glide");
+        check(!head_seat::reseat(g, ref, g.to, 80'000'000) && g.startNs == started, "same target reseated");
+        head_seat::step(g, ref, 80'000'000);
+        const Vec3 at = ref.position;
+        check(head_seat::reseat(g, ref, head0 + Vec3{.3f, 0, 0}, 80'000'000) && g.startNs == 80'000'000 &&
+                  length(ref.position - at) < 1e-6f,
+              "a large jump did not retarget");
+    });
+
+    test("HANDOFF polish: CameraLook reset drops a leftover turn; one hand climb does not busy the other", [] {
+        game_pad::CameraLook look;
+        const Vec3 north{0, 0, -1};
+        const auto at = [](float deg) {
+            const float r = deg * (3.14159265f / 180.f);
+            return Vec3{std::sin(r), 0.f, -std::cos(r)};
+        };
+        check(look.update(at(30), north, true) != 0 && look.turns() == 1, "setup turn");
+        look.reset();
+        check(look.error() == 0.f &&
+                  look.update(at(game_pad::CameraLook::startDegrees - 2), north, true) == 0,
+              "reset left a leftover turn");
+        check(!spidy::handBusy(0, false, false, 2u, 0u) && spidy::handBusy(1, false, false, 2u, 0u),
+              "right climb locked the left");
+        check(!spidy::handBusy(1, false, false, 0u, 1u) && spidy::handBusy(0, false, false, 0u, 1u),
+              "left crawl locked the right");
+        check(spidy::handBusy(0, true, false, 0u, 0u) && spidy::handBusy(1, false, true, 0u, 0u),
+              "own grab/web not busy");
+        check(!spidy::handBusy(0, false, false, 0u, 0u) && !spidy::handBusy(2, true, true, 3u, 3u),
+              "free hand or bad index");
     });
 
     test("ANIMATED HYBRID handoff: adoptEyesOrigin matches world eyes within 1 mm / 0.1 deg", [] {

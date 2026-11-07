@@ -3,6 +3,15 @@
 Every build, newest first, with what changed, why, and what was measured.
 Per-check results are in [VALIDATION.md](VALIDATION.md).
 
+## Native Animation: handoff polish
+
+**State switches reseat the head more often, refresh movement after each handoff, and no longer lock the free hand's webs.**
+
+- The head-locked view now reseats on the neck for weapon, gadget, phone and prompt changes as well as owner, move, zip, HEAD and recenter edges. The drift backstop is 20 cm (was 35 cm), so a walk in the room is brought back sooner. A glide already heading onto the neck chases a small headset move without restarting its 180 ms clock, so rapid actions do not hitch the view.
+- Every SpidyVR ↔ animation handoff resets the view-yaw filter and the camera-look / camera-pitch sticks, then holds CameraLook off through the blend and until you release a held run. Landing and keeping forward no longer orbits you until you jump.
+- Web balls treat climb and crawl as per-hand busy flags. A leftover climb or crawl on one hand no longer marks both triggers busy during midair animations. Web balls still do not change owner; grip is still how you leave the animation.
+- Tests: glide follow without restart; 20 cm backstop; action diag name; CameraLook reset drops a leftover turn; one-hand climb does not busy the other; handoff look-hold until the run stick is released. Not headset-tested.
+
 ## Native Animation: web balls, grip-out, and always-on aim markers
 
 **Shoot web balls during any animation; squeeze grip to leave it; keep the aim

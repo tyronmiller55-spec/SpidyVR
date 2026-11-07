@@ -912,8 +912,8 @@ void visit(const native_rays::QueryContext& world) {
                 const auto grab = game_grab::data();
                 uint32_t busy{};
                 for (unsigned i = 0; i < 2; ++i)
-                    if (grab.hands[i].phase || solver.webs()[i].attached || solver.climbingHands() ||
-                        crawlHands.hands())
+                    if (handBusy(i, grab.hands[i].phase, solver.webs()[i].attached,
+                                 solver.climbingHands(), crawlHands.hands()))
                         busy |= 1u << i;
                 game_shooter::update(seconds, in, busy, config.record, feet, world);
             }
