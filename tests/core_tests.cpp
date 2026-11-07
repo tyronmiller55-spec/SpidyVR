@@ -20,6 +20,7 @@
 #include "spidy/controller_layout.hpp"
 #include "spidy/game_swing.hpp"
 #include "spidy/swing_coupling.hpp"
+#include "spidy/headset_smoothing.hpp"
 #include "spidy/native_movement.hpp"
 #include "spidy/presentation_gate.hpp"
 #include "spidy/eye_resolution.hpp"
@@ -23565,7 +23566,7 @@ int main() {
                                   Item::automaticHandStrength, Item::automaticFalloff,     Item::automaticHandThreshold,
                                   Item::automaticAirBrake,     Item::automaticCombat};
         // The realistic flips' rows come last, after the EXPERIMENTAL rows before them.
-        constexpr size_t firstRealistic = 97;
+        constexpr size_t firstRealistic = 98;
         check(all.size() == firstRealistic + std::size(realistic), "the realistic flips' rows are not the last");
         for (size_t i = 0; i < std::size(realistic); ++i)
             check(all[firstRealistic + i].item == realistic[i], "the realistic flips' rows out of order");
@@ -23632,8 +23633,8 @@ int main() {
         }
         // NATIVE RUN, after STEADY HUD and before the realistic flips: a switch in the tab, off by
         // default (the stick jogs as before), kept in spidy_vr.ini as native_run.
-        check(all[89].item == Item::nativeRun && std::strcmp(all[89].title, "NATIVE RUN") == 0 &&
-                  all[89].choices.empty() && all[89].place == Place::tab,
+        check(all[90].item == Item::nativeRun && std::strcmp(all[90].title, "NATIVE RUN") == 0 &&
+                  all[90].choices.empty() && all[90].place == Place::tab,
               "NATIVE RUN: a switch in the tab, after STEADY HUD");
         check(all[61].item == Item::airSlingshot && std::strcmp(all[61].title, "AIR SLINGSHOT") == 0 &&
                   all[61].choices.empty() && all[61].place == Place::tab,
@@ -23667,8 +23668,8 @@ int main() {
         check(all[70].item == Item::softLanding && std::strcmp(all[70].title, "SOFT LANDING") == 0 &&
                   all[70].choices.empty() && all[70].place == Place::tab,
               "SOFT LANDING: a switch in the tab, after EARLY JUMP");
-        check(all[90].item == Item::spidyRun && std::strcmp(all[90].title, "SPIDY RUN") == 0 &&
-                  all[90].choices.empty() && all[90].place == Place::tab,
+        check(all[91].item == Item::spidyRun && std::strcmp(all[91].title, "SPIDY RUN") == 0 &&
+                  all[91].choices.empty() && all[91].place == Place::tab,
               "SPIDY RUN: a switch in the tab, after SOFT LANDING");
         check(all[71].item == Item::spidyRunFromStanding &&
                   std::strcmp(all[71].title, "RUN FROM STANDING") == 0 && all[71].choices.empty() &&
@@ -23780,7 +23781,7 @@ int main() {
                   "a row in the wrong place");
         }
         check(std::count_if(all.begin(), all.end(), [](const Row& r) { return r.place == Place::tab; }) ==
-                  103,
+                  104,
               "the tab's own rows");
         check(all[1].item == Item::webStyle && std::strcmp(all[1].title, "WEB STYLE") == 0 &&
                   all[1].choices.size() == 2 && std::strcmp(all[1].choices[0], "REALISTIC") == 0 &&
@@ -24065,7 +24066,7 @@ int main() {
                   "flip_reprojection=0\nsteady_hud=0\nreel_haptics=0\nswing_haptics=0\n"
                   "pc_media=0\nsingle_hand_yank_percent=100\nweb_tie=0\nnative_run=1\nair_slingshot=0\nweb_angle_"
                   "degrees=0\nwrist_shooters=0\n"
-                  "dodge_tumble=0\nrun_curve=0\nnative_run_at_percent=70\nrun_logs=0\nrunning_leap=0\nearly_jump=0\nsoft_landing=0\nspidy_run=1\nspidy_run_from_standing=0\nweb_aim_source=0\nforearm_blend=100\nweb_landing_smooth=0\nweb_landing_impact_speed=24\nsteady_states=0\ncombat_responsive=0\nspidy_run_jump=1\nforearm_aim_limit=180\npalm_shooters=0\nhead_probe=0\nanimated_moves=1\nanimated_head=2\nanimated_air=0\nanimated_steering=0\nanimated_arms=1\nanimated_torso=1\nanimated_model_yaw=1\nanimated_only=0\nanimated_air_spin=0\nanimated_hybrid=1\nanimated_hybrid_speed_ms=200\nweb_lines=0\n",
+                  "dodge_tumble=0\nrun_curve=0\nnative_run_at_percent=70\nrun_logs=0\nrunning_leap=0\nearly_jump=0\nsoft_landing=0\nspidy_run=1\nspidy_run_from_standing=0\nweb_aim_source=0\nforearm_blend=100\nweb_landing_smooth=0\nweb_landing_impact_speed=24\nsteady_states=0\ncombat_responsive=0\nspidy_run_jump=1\nforearm_aim_limit=180\npalm_shooters=0\nhead_probe=0\nanimated_moves=1\nanimated_head=2\nanimated_headset_smooth=0\nanimated_air=0\nanimated_steering=0\nanimated_arms=1\nanimated_torso=1\nanimated_model_yaw=1\nanimated_only=0\nanimated_air_spin=0\nanimated_hybrid=1\nanimated_hybrid_speed_ms=200\nweb_lines=0\n",
               "the defaults' text");
         Values changed = defaults;
         changed.recordingFov = 140;
@@ -27616,22 +27617,22 @@ int main() {
         wild.animatedAirSpin = 9;
         check(sanitized(wild).animatedAirSpin == 2, "AIR SPIN not clamped");
         const auto& all = rows();
-        check(all[94].item == Item::animatedOnly && std::strcmp(all[94].title, "ONLY (ADVANCED)") == 0 &&
-                  all[94].choices.empty() && all[94].place == Place::tab,
+        check(all[95].item == Item::animatedOnly && std::strcmp(all[95].title, "ONLY (ADVANCED)") == 0 &&
+                  all[95].choices.empty() && all[95].place == Place::tab,
               "ANIMATED ONLY row");
-        check(all[96].item == Item::animatedAirSpin &&
-                  std::strcmp(all[96].title, "AIR SPIN (ADVANCED)") == 0 && all[96].choices.size() == 3 &&
-                  std::strcmp(all[96].choices[2], "FLIPS + MOMENTUM") == 0 && all[96].place == Place::tab,
+        check(all[97].item == Item::animatedAirSpin &&
+                  std::strcmp(all[97].title, "AIR SPIN (ADVANCED)") == 0 && all[97].choices.size() == 3 &&
+                  std::strcmp(all[97].choices[2], "FLIPS + MOMENTUM") == 0 && all[97].place == Place::tab,
               "ANIMATED AIR SPIN row");
-        check(all[92].item == Item::animatedHybrid &&
-                  std::strcmp(all[92].title, "HYBRID OWNER (ADVANCED)") == 0 && all[92].choices.empty() &&
-                  all[92].place == Place::tab,
+        check(all[93].item == Item::animatedHybrid &&
+                  std::strcmp(all[93].title, "HYBRID OWNER (ADVANCED)") == 0 && all[93].choices.empty() &&
+                  all[93].place == Place::tab,
               "ANIMATED HYBRID row");
-        check(all[88].item == Item::animatedHybridSpeed && std::strcmp(all[88].title, "HYBRID SPEED") == 0 &&
-                  all[88].choices.size() == 9 && std::strcmp(all[88].choices[0], "OFF") == 0 &&
-                  std::strcmp(all[88].choices[8], "500 MS") == 0 && all[88].place == Place::tab,
+        check(all[89].item == Item::animatedHybridSpeed && std::strcmp(all[89].title, "HYBRID SPEED") == 0 &&
+                  all[89].choices.size() == 9 && std::strcmp(all[89].choices[0], "OFF") == 0 &&
+                  std::strcmp(all[89].choices[8], "500 MS") == 0 && all[89].place == Place::tab,
               "ANIMATED HYBRID SPEED row");
-        check(lastItem == Item::webLines, "WEB LINES not included in the last Item bound");
+        check(lastItem == Item::animatedHeadsetSmooth, "SMOOTHING not included in the last Item bound");
     });
 
     test("ANIMATED ONLY: every gameplay state yields, no web interrupt, cutscene grace", [] {
@@ -29715,20 +29716,57 @@ int main() {
               "flapping not capped and summed up");
     });
 
+    test("Native Animation: headset smoothing eases a look and snaps a large turn", [] {
+        using namespace headset_smoothing;
+        Filter offFilter;
+        const Quat look = Quat::yaw(0.2f);
+        const Look off = offFilter.update(look, 1.f / 90, 0);
+        check(std::abs(off.delta.x) + std::abs(off.delta.y) + std::abs(off.delta.z) < 1e-6f &&
+                  std::abs(off.filtered.y - look.y) < 1e-6f,
+              "off changed the look");
+        Filter f;
+        (void)f.update({}, 1.f / 90, 3);
+        const Look step = f.update(look, 1.f / 90, 3);
+        Quat err = look * step.filtered.conjugate();
+        if (err.w < 0)
+            err = {-err.x, -err.y, -err.z, -err.w};
+        const float remain = 2 * std::atan2(length({err.x, err.y, err.z}), std::max(0.f, err.w));
+        const float want = 0.2f * std::exp(-(1.f / 90) / responseSec[3]);
+        check(remain > want * 0.85f && remain < want * 1.15f, "one frame jumped to the look");
+        Look last = step;
+        for (int i = 0; i < 180; ++i)
+            last = f.update(look, 1.f / 90, 3);
+        err = look * last.filtered.conjugate();
+        if (err.w < 0)
+            err = {-err.x, -err.y, -err.z, -err.w};
+        const float left = 2 * std::atan2(length({err.x, err.y, err.z}), std::max(0.f, err.w));
+        check(left < 0.01f, "did not settle on the look");
+        const Quat snap = Quat::yaw(1.5707963f);
+        const Look jumped = f.update(snap, 1.f / 90, 3);
+        check(std::abs(jumped.filtered.y - snap.y) < 1e-5f &&
+                  std::abs(jumped.delta.x) + std::abs(jumped.delta.y) + std::abs(jumped.delta.z) < 1e-5f,
+              "large turn was eased");
+        Mat4 m{1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 1, 2, 3, 1};
+        rotateBasis(m, {});
+        check(m[12] == 1 && m[13] == 2 && m[14] == 3 && m[0] == 1, "identity rotate moved the matrix");
+    });
+
     test("Native Animation: recommended defaults, compound master and saved values", [] {
         using namespace vr_settings;
         Values v;
-        check(v.animatedMoves && v.animatedHybrid && v.animatedHead == 2 && v.animatedArms &&
-                  v.animatedTorso && v.animatedModelYaw && v.nativeRun && v.spidyRun &&
+        check(v.animatedMoves && v.animatedHybrid && v.animatedHead == 2 && !v.animatedHeadsetSmooth &&
+                  v.animatedArms && v.animatedTorso && v.animatedModelYaw && v.nativeRun && v.spidyRun &&
                   v.animatedHybridSpeedMs == 200,
               "recommended first-launch set");
         check(!v.animatedAir && !v.animatedOnly && !v.animatedSteering && !v.animatedAirSpin && !v.webTie &&
                   v.swingSpeed == 32 && !v.seated,
               "personal profile leaked into defaults");
         const auto saved = withTabOnly({}, "animated_moves=0\nanimated_hybrid=0\nanimated_head=1\n"
+                                           "animated_headset_smooth=2\n"
                                            "animated_arms=0\nanimated_torso=0\nanimated_model_yaw=0\n"
                                            "native_run=0\nspidy_run=0\nweb_lines=1\n");
         check(!saved.animatedMoves && !saved.animatedHybrid && saved.animatedHead == 1 &&
+                  saved.animatedHeadsetSmooth == 2 &&
                   !saved.animatedArms && !saved.animatedTorso && !saved.animatedModelYaw &&
                   !saved.nativeRun && !saved.spidyRun && saved.webLines,
               "saved choices overwritten");
@@ -29737,15 +29775,17 @@ int main() {
         v.swingSpeed = 65;
         v.animatedAir = v.animatedOnly = v.animatedSteering = true;
         v.animatedAirSpin = 2;
+        v.animatedHeadsetSmooth = 3;
         check(choose(Item::nativeAnimation, 0, v) && !v.animatedMoves && !v.animatedHybrid &&
                   !v.animatedHead && !v.animatedArms && !v.animatedTorso && !v.animatedModelYaw &&
                   !v.animatedAir && !v.animatedOnly && !v.animatedSteering && !v.animatedAirSpin &&
+                  v.animatedHeadsetSmooth == 3 &&
                   v.nativeRun && v.spidyRun && v.webTie && v.swingSpeed == 65,
               "master off scope");
         v.nativeRun = v.spidyRun = false;
         check(choose(Item::nativeAnimation, 1, v) && choice(Item::nativeAnimation, v) == 1 &&
                   v.animatedHead == 2 && v.animatedArms && v.animatedTorso && v.animatedModelYaw &&
-                  v.nativeRun && v.spidyRun,
+                  v.animatedHeadsetSmooth == 3 && v.nativeRun && v.spidyRun,
               "master on companion set");
         check(choose(Item::animatedTorso, 0, v) && choice(Item::nativeAnimation, v) == 1,
               "individual torso control killed mode");
@@ -29756,7 +29796,7 @@ int main() {
     test("Native Animation: combined menu inventory and upstream-compatible v39 settings packet", [] {
         using namespace vr_settings;
         const auto& all = rows();
-        check(all.size() == 108 && static_cast<unsigned>(lastItem) < 256, "row/Item bounds");
+        check(all.size() == 109 && static_cast<unsigned>(lastItem) < 256, "row/Item bounds");
         std::array<unsigned, 256> seen{};
         size_t start = all.size();
         for (size_t i = 0; i < all.size(); ++i) {
@@ -29768,10 +29808,12 @@ int main() {
         }
         check(
             start < all.size() && std::strcmp(all[start - 1].title, "NATIVE ANIMATION") == 0 &&
-                all[start + 1].item == Item::animatedHead && all[start + 2].item == Item::animatedArms &&
-                all[start + 3].item == Item::animatedTorso && all[start + 4].item == Item::animatedModelYaw &&
-                all[start + 5].item == Item::animatedHybridSpeed && all[start + 6].item == Item::nativeRun &&
-                all[start + 7].item == Item::spidyRun && seen[static_cast<size_t>(Item::webLines)] == 1,
+                all[start + 1].item == Item::animatedHead &&
+                all[start + 2].item == Item::animatedHeadsetSmooth &&
+                all[start + 3].item == Item::animatedArms && all[start + 4].item == Item::animatedTorso &&
+                all[start + 5].item == Item::animatedModelYaw &&
+                all[start + 6].item == Item::animatedHybridSpeed && all[start + 7].item == Item::nativeRun &&
+                all[start + 8].item == Item::spidyRun && seen[static_cast<size_t>(Item::webLines)] == 1,
             "Native Animation block or WEB LINES missing");
         for (unsigned i = 1; i <= static_cast<unsigned>(lastItem); ++i)
             check(seen[i] == 1, "Item has no menu row");

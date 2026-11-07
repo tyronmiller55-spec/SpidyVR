@@ -334,6 +334,10 @@ struct Values {
     // like finishers (anchored 4 Level / 2 Full). Full keeps anim pitch/roll
     // in air too; Level only when chosen (animated_moves.hpp).
     int animatedHead = 2;
+    // SMOOTHING (the tab's SMOOTHING; Off|Low|Medium|High|Max, default Off):
+    // ease the view toward the headset's look. Translation stays current, so
+    // leaning and travel do not trail. Not a Settings / Command field.
+    int animatedHeadsetSmooth = 0;
     // ANIMATED AIR (the tab's ANIMATED AIR; off by default): pose yield for
     // freefall / swing / web-hold air. Physics stays with the mod; no cutscene
     // worker. Off leaves air body with the VR IK (animated_moves.hpp).
@@ -523,8 +527,9 @@ enum class Item : uint8_t {
     animatedHybridSpeed,
     nativeAnimation,
     webLines,
+    animatedHeadsetSmooth,
 };
-inline constexpr Item lastItem = Item::webLines;
+inline constexpr Item lastItem = Item::animatedHeadsetSmooth;
 // Where a row shows: in the tab; on the pause menu's first page instead,
 // under RESUME: VR VIEW (the user, October 15: "move the VIEW: GAME SCREEN to
 // the first menu (the one with resume)"); or only in the launcher's options:
@@ -547,7 +552,7 @@ struct Row {
     std::span<const char* const> choices{};
     Place place{};
 };
-const std::array<Row, 108>& rows();
+const std::array<Row, 109>& rows();
 // The most choices a row shows (game_menu's buffers): a row with more would
 // lose its last ones.
 inline constexpr size_t maxChoices = 9;

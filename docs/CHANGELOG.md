@@ -3,6 +3,27 @@
 Every build, newest first, with what changed, why, and what was measured.
 Per-check results are in [VALIDATION.md](VALIDATION.md).
 
+## Native Animation: five-level headset look smoothing
+
+**Ease how quickly the view follows your headset look, without locking it down.**
+
+- A new Native Animation row, SMOOTHING, with Off, Low, Medium, High and Max.
+  Off (the default) is the view you already have. The other levels ease the
+  headset's look toward where you are pointing; leaning and travel stay with
+  you, so the camera cannot trail through the body or a wall. Your headset
+  still moves the view. Snap turns and a large recenter jump through.
+- The same ease applies while Native Animation is on, whether the view is
+  sitting on the animated head or following the headset in a swing. Body IK
+  and your hands stay on the live headset. Recording's own SMOOTHING is
+  unchanged (recordings only).
+- Not a Settings or Command field: the running session reads the launcher
+  value live. Turning the Native Animation master on or off leaves this
+  choice alone.
+- Tests: Off is identity; one High frame eases a small look rather than
+  taking it; the look settles; a 90-degree snap takes the target at once;
+  the menu row, defaults, saved `.ini` and master on/off keep the value.
+  Not headset-tested.
+
 ## Native Animation: tuck and legs feed swing spin and drag
 
 **When the knees come in, the swing spins up; legs out keep today's drag.**

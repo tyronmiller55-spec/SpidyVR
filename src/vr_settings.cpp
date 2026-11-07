@@ -120,6 +120,9 @@ static_assert(std::size(dodgeTumbleChoices) == std::size(dodgeTumbles));
 constexpr int animatedHeads[] = {0, 1, 2};
 constexpr const char* animatedHeadChoices[] = {"OFF", "LEVEL", "FULL"};
 static_assert(std::size(animatedHeadChoices) == std::size(animatedHeads));
+constexpr int animatedHeadsetSmooths[] = {0, 1, 2, 3, 4};
+constexpr const char* animatedHeadsetSmoothChoices[] = {"OFF", "LOW", "MEDIUM", "HIGH", "MAX"};
+static_assert(std::size(animatedHeadsetSmoothChoices) == std::size(animatedHeadsetSmooths));
 constexpr int animatedAirSpins[] = {0, 1, 2};
 constexpr const char* animatedAirSpinChoices[] = {"OFF", "FLIPS", "FLIPS + MOMENTUM"};
 static_assert(std::size(animatedAirSpinChoices) == std::size(animatedAirSpins));
@@ -188,6 +191,8 @@ std::span<const int> steps(Item item) {
         return dodgeTumbles;
     case Item::animatedHead:
         return animatedHeads;
+    case Item::animatedHeadsetSmooth:
+        return animatedHeadsetSmooths;
     case Item::animatedAirSpin:
         return animatedAirSpins;
     case Item::animatedHybridSpeed:
@@ -277,6 +282,8 @@ float numberOf(Item item, const Values& v) {
         return static_cast<float>(v.dodgeTumble);
     case Item::animatedHead:
         return static_cast<float>(v.animatedHead);
+    case Item::animatedHeadsetSmooth:
+        return static_cast<float>(v.animatedHeadsetSmooth);
     case Item::animatedAirSpin:
         return static_cast<float>(v.animatedAirSpin);
     case Item::animatedHybridSpeed:
@@ -469,6 +476,7 @@ Values sanitized(Values v) {
     v.webAngle = std::clamp(v.webAngle, -45, 45);
     v.dodgeTumble = std::clamp(v.dodgeTumble, 0, 2);
     v.animatedHead = std::clamp(v.animatedHead, 0, 2);
+    v.animatedHeadsetSmooth = std::clamp(v.animatedHeadsetSmooth, 0, 4);
     v.animatedAirSpin = std::clamp(v.animatedAirSpin, 0, 2);
     v.animatedHybridSpeedMs = v.animatedHybridSpeedMs <= 0 ? 0 : std::clamp(v.animatedHybridSpeedMs, 5, 500);
     v.earlyJump = std::clamp(v.earlyJump, 0, 2);
@@ -493,9 +501,9 @@ Values sanitized(Values v) {
     v.automaticHandThreshold = std::clamp(v.automaticHandThreshold, 50, 300);
     return v;
 }
-const std::array<Row, 108>& rows() {
+const std::array<Row, 109>& rows() {
     // The help fits the game's description column beside the rows.
-    static const std::array<Row, 108> all{{
+    static const std::array<Row, 109> all{{
         {Item::none, "WEBS", nullptr, {}},
         {Item::webStyle, "WEB STYLE",
          "Arcade: webs pass lamp posts, signs and cars, and swings stay above the street.", webStyleChoices},
@@ -735,6 +743,9 @@ const std::array<Row, 108>& rows() {
          {}},
         {Item::animatedHead, "HEAD", "FULL follows the animated head; LEVEL keeps the horizon level.",
          animatedHeadChoices},
+        {Item::animatedHeadsetSmooth, "SMOOTHING",
+         "Eases the headset's look. OFF is as now; leaning and travel stay with you.",
+         animatedHeadsetSmoothChoices},
         {Item::animatedArms,
          "ARMS",
          "Your tracked controllers and headset share the animated head's frame.",
@@ -914,6 +925,9 @@ bool choose(Item item, int index, Values& v) {
     case Item::animatedHead:
         v.animatedHead = s[index];
         break;
+    case Item::animatedHeadsetSmooth:
+        v.animatedHeadsetSmooth = s[index];
+        break;
     case Item::animatedAirSpin:
         v.animatedAirSpin = s[index];
         break;
@@ -1065,6 +1079,7 @@ constexpr TabOnly tabOnly[] = {
     {"head_probe", &Values::headProbe, nullptr},
     {"animated_moves", &Values::animatedMoves, nullptr},
     {"animated_head", nullptr, &Values::animatedHead},
+    {"animated_headset_smooth", nullptr, &Values::animatedHeadsetSmooth},
     {"animated_air", &Values::animatedAir, nullptr},
     {"animated_steering", &Values::animatedSteering, nullptr},
     {"animated_arms", &Values::animatedArms, nullptr},

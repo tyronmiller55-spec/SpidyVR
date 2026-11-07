@@ -147,6 +147,7 @@ inline constexpr ProfileSetting profileSettings[] = {
     tabOnly("head_probe", Item::headProbe, &Values::headProbe),
     tabOnly("animated_moves", Item::animatedMoves, &Values::animatedMoves),
     tabOnly("animated_head", Item::animatedHead, 0, 2, &Values::animatedHead),
+    tabOnly("animated_headset_smooth", Item::animatedHeadsetSmooth, 0, 4, &Values::animatedHeadsetSmooth),
     tabOnly("animated_air", Item::animatedAir, &Values::animatedAir),
     tabOnly("animated_steering", Item::animatedSteering, &Values::animatedSteering),
     tabOnly("animated_arms", Item::animatedArms, &Values::animatedArms),

@@ -1799,6 +1799,10 @@ void App::nativeAnimation(ImVec2 origin, ImVec2 size) {
             "Head",
             "Full follows the animated head, including flips. Level keeps the horizon level; Off unlocks it.",
             S(150), [&] { tabCombo("##nativehead", Item::animatedHead); });
+        option("Smoothing",
+               "How much the view eases toward your headset look. Off is as now. "
+               "Your headset still moves the view; leaning and travel stay with you.",
+               S(150), [&] { tabCombo("##nativesmoothing", Item::animatedHeadsetSmooth); });
         option("Arms", "Your controllers track through the same animated-head frame as your headset.", S(42),
                [&] { tabToggle("##nativearms", Item::animatedArms); });
         option("Torso", "Bounded upper-body reach assist. The animation keeps the head, root and legs.",

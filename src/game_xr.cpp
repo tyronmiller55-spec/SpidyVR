@@ -41,6 +41,7 @@
 #include "spidy/game_tracking.hpp"
 #include "spidy/game_warp.hpp"
 #include "spidy/hand_pose.hpp"
+#include "spidy/headset_smoothing.hpp"
 #include "spidy/impact_sound.hpp"
 #include "spidy/native_eye_frame.hpp"
 #include "spidy/native_eye_gpu.hpp"
@@ -1114,6 +1115,7 @@ DWORD WINAPI run(void*) {
         Vec3 animatedMovesYieldFeet{}; // actor feet when yield began (diag: actor vs latch)
         Pose animHeadRef{};
         bool animHeadRefSet{};
+        headset_smoothing::Filter headsetLook;
         // The check that keeps that reference seated on the neck over every switch (head_seat.hpp).
         head_seat::Glide animHeadSeat{};
         int animSeatStateWas = -1;
@@ -6414,6 +6416,16 @@ DWORD WINAPI run(void*) {
                         hybridBlend.active ? hybrid_handoff::blendAlpha(eyeBlendElapsed) : 1.f;
                     const bool hybridEyeBlend =
                         hybridBlend.active && hybridBlend.fromValid && eyeBlendW < 1.f - 1e-4f && !flatScreen;
+                    // SMOOTHING eases headset look only (translation stays current).
+                    // Raw frame.head stays for body IK; the same delta goes on both eyes.
+                    headset_smoothing::Look headsetLookNow{};
+                    if (values.animatedMoves && values.animatedHybrid && !flatScreen &&
+                        validTrackedPose(frame.head))
+                        headsetLookNow =
+                            headsetLook.update(frame.head.orientation, frame.seconds,
+                                               values.animatedHeadsetSmooth);
+                    else
+                        headsetLook.reset();
                     native_eyes::Command eyes;
                     eyes.enabled = flatScreen ? 2 : 1;
                     eyes.serial = ++serial;
@@ -6487,7 +6499,9 @@ DWORD WINAPI run(void*) {
                         }
                         const Mat4 axes = {1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1};
                         for (unsigned i = 0; i < 2; ++i) {
-                            Pose eye = animated_view::relative(frame.eyes[i].pose, animHeadRef, animHeadTurn);
+                            Pose raw = frame.eyes[i].pose;
+                            raw.orientation = headsetLookNow.delta * raw.orientation;
+                            Pose eye = animated_view::relative(raw, animHeadRef, animHeadTurn);
                             eyes.eyes[i].world = native_view::relativePose(axes, eye);
                             const auto& f = frame.eyes[i].fov;
                             eyes.eyes[i].fov[0] = f.left;
@@ -6499,7 +6513,9 @@ DWORD WINAPI run(void*) {
                         animHeadRefSet = false;
                         eyes.anchored = 1;
                         for (unsigned i = 0; i < 2; ++i) {
-                            eyes.eyes[i].world = motion.eyes[i];
+                            Mat4 world = motion.eyes[i];
+                            headset_smoothing::rotateBasis(world, headsetLookNow.delta);
+                            eyes.eyes[i].world = world;
                             const auto& f = motion.fovs[i];
                             eyes.eyes[i].fov[0] = f.left;
                             eyes.eyes[i].fov[1] = f.right;
