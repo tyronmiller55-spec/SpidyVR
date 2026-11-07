@@ -28035,35 +28035,31 @@ int main() {
               "enter names");
     });
 
-    test("ANIMATED HYBRID intent: web attach and airborne web intent enter vr; ground grip (fist) does not",
+    test("ANIMATED HYBRID intent: grip leaves animation on the ground, in a fight, or in the air",
          [] {
              using namespace hybrid_owner;
              HybridOwner o;
              Frame f{};
              f.state.playing = f.state.fresh = f.state.grounded = true;
              o.update(f, 0);
-             // Ground grip held: a fist, stays anim.
+             // Ground grip press: leaves on that frame, not a fist.
              f.webIntent = true;
-             int64_t t = 0;
-             for (int i = 0; i < 40; ++i)
-                 check(o.update(f, t += 11'000'000) == Domain::anim, "ground grip entered vr");
-             // Held through a hop: still a fist (the press did not start in the air).
+             int64_t t = 11'000'000;
+             check(o.update(f, t) == Domain::vr && o.enterVr && o.lastEnterVr == EnterVr::airWeb,
+                   "ground grip did not leave");
+             // Released and pressed again in the air: leaves on that press, no wait.
+             o = {};
+             f = {};
+             f.state.playing = f.state.fresh = f.state.grounded = true;
+             o.update(f, 0);
              f.state.grounded = false;
-             for (int i = 0; i < 40; ++i)
-                 check(o.update(f, t += 11'000'000) == Domain::anim,
-                       "ground fist held through hop entered vr");
-             // Released and pressed again in the air: a web.
-             f.webIntent = false;
-             o.update(f, t += 11'000'000);
+             o.update(f, t = 11'000'000);
              f.webIntent = true;
-             bool entered = false;
-             for (int i = 0; i < 20 && !entered; ++i) {
-                 o.update(f, t += 11'000'000);
-                 entered = o.enterVr;
-             }
-             check(entered && o.domain == Domain::vr && o.lastEnterVr == EnterVr::airWeb,
-                   "air web intent not vr");
-             // Fighting in the air: a punch, not a web.
+             check(o.update(f, t += 11'000'000) == Domain::vr && o.enterVr &&
+                       o.lastEnterVr == EnterVr::airWeb,
+                   "air grip did not leave");
+             // Fighting: grip still leaves (a web ball would not, because it
+             // never sets webIntent).
              o = {};
              f = {};
              f.state.playing = f.state.fresh = f.state.grounded = true;
@@ -28072,13 +28068,19 @@ int main() {
              f.state.grounded = false;
              o.update(f, 11'000'000);
              f.webIntent = true;
-             t = 11'000'000;
-             for (int i = 0; i < 40; ++i)
-                 check(o.update(f, t += 11'000'000) == Domain::anim, "fight punch in air entered vr");
-             // A web attaching wins over combat sticky.
+             check(o.update(f, 22'000'000) == Domain::vr && o.lastEnterVr == EnterVr::airWeb,
+                   "fight grip did not leave");
+             // A web attaching still wins while a grip is not pressed.
+             o = {};
+             f = {};
+             f.state.playing = f.state.fresh = f.state.grounded = true;
+             f.state.fighting = true;
+             o.update(f, 0);
+             f.state.grounded = false;
+             o.update(f, 11'000'000);
              f.webRising = true;
              f.state.webbed = true;
-             check(o.update(f, t += 11'000'000) == Domain::vr && o.lastEnterVr == EnterVr::web,
+             check(o.update(f, 22'000'000) == Domain::vr && o.lastEnterVr == EnterVr::web,
                    "web attach not vr");
          });
 
@@ -28312,11 +28314,12 @@ int main() {
               "Y zip press not anim on its frame");
         f.zipPress = false;
         // Through the zip: fast, a web of the swing's attaching, the R-stick, a
-        // physical spin, web buttons, Spidy's wall brushed - none takes it over.
+        // physical spin, Spidy's wall brushed - none takes it over. A held web
+        // button that is not a fresh press stays put; a fresh grip is its own
+        // test below.
         f.speedH = 32.f;
         f.rStickX = 1.f;
         f.hmdYawValid = true;
-        f.webIntent = true;
         for (int i = 0; i < 120; ++i) {
             f.hmdYaw = .05f * static_cast<float>(i);
             f.webRising = i == 10;
@@ -28333,6 +28336,42 @@ int main() {
         f.webRising = f.state.webbed = true;
         check(o.update(f, t += 11'000'000) == Domain::vr && o.lastEnterVr == EnterVr::web,
               "web attach after a zip did not take vr");
+    });
+
+    test("ANIMATED HYBRID web zip: a fresh grip press leaves the zip for vr", [] {
+        using namespace hybrid_owner;
+        HybridOwner o;
+        Frame f{};
+        f.state.playing = f.state.fresh = f.state.grounded = true;
+        o.update(f, 0);
+        f.state.grounded = false;
+        int64_t t = 0;
+        o.update(f, t += 11'000'000);
+        f.zipPress = true;
+        check(o.update(f, t += 11'000'000) == Domain::anim, "zip press");
+        f.zipPress = false;
+        // Held from before the zip: not a fresh press, the zip stays.
+        o = {};
+        f = {};
+        f.state.playing = f.state.fresh = true;
+        f.webIntent = true;
+        o.update(f, 0);
+        f.zipPress = true;
+        check(o.update(f, 10'000'000) == Domain::anim && !o.enterVr, "held grip stole the zip press");
+        f.zipPress = false;
+        check(o.update(f, 21'000'000) == Domain::anim && !o.enterVr, "held grip stole the zip");
+        // Fresh press during the zip: leaves on that frame.
+        o = {};
+        f = {};
+        f.state.playing = f.state.fresh = true;
+        o.update(f, 0);
+        f.zipPress = true;
+        o.update(f, 10'000'000);
+        f.zipPress = false;
+        f.webIntent = true;
+        check(o.update(f, 21'000'000) == Domain::vr && o.enterVr && o.lastEnterVr == EnterVr::airWeb &&
+                  o.zipNs < 0,
+              "fresh grip did not leave the zip");
     });
 
     test("ANIMATED HYBRID web zip: pressed while swinging in vr switches to anim on the press frame", [] {

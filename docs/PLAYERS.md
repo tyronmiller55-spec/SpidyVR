@@ -37,9 +37,12 @@ The **Native Animation** master represents MOVES + HYBRID, not every companion:
   through 500 ms. This changes only speed takeover, not web/rotate/wall-run takeover.
 - Advanced Air/Only/Steering/Air Spin are legacy controls, inactive under Hybrid.
 
-Existing ownership remains: animation default; SpidyVR on web, airborne web intent,
-mid-air rotation, sustained 15 m/s speed or real wall run. Ground parkour and hops
-stay animated. A real jump or leap you ask for - A from the ground, a charged leap,
+Existing ownership remains: animation default; SpidyVR on a web, squeezing the
+web-hold button (grip by default, or trigger if you swapped Web button) at any
+time, mid-air rotation, sustained 15 m/s speed or real wall run. Web balls fire
+from the tracked controllers during any animation and do not take you out of it.
+The aim markers stay up whenever Native Animation and AIM MARKERS are on,
+including while an animation is playing. Ground parkour and hops stay animated. A real jump or leap you ask for - A from the ground, a charged leap,
 SPIDY RUN JUMP - now plays the game's takeoff and hands the body to SpidyVR on the
 frame you leave the ground, starting from exactly the pose the takeoff left him in:
 your arms are on the controllers from that first frame, the rest of the body eases
@@ -57,7 +60,8 @@ hops, crawls, Y zips and fight launchers never do this, and a jump the game turn
 into a wall mount goes back to the animation for the climb. Web zips stay on the animation from the frame you press them: Y in
 the air (a web strike, a car in a chase) and the game's zip to a point (right stick
 up), from a swing or Spidy's wall too. Nothing hands that zip to SpidyVR until it
-ends (you land, or the game gives you back to your webs). A press the game does
+ends (you land, or the game gives you back to your webs), unless you squeeze
+the web-hold button, which leaves the animation and shoots a SpidyVR web. A press the game does
 not take (nothing to strike or zip to) gives the swing back after 0.4 s. Y on the
 ground or on a wall is still interact. Switching between SpidyVR and the
 animation (starting or ending a swing, a zip, landing) keeps the same 180 ms

@@ -126,7 +126,7 @@ constexpr int64_t jumpAskNs = 500'000'000;
 struct Frame {
     head_probe::StateInputs state{};
     bool webRising{};   // a web attached this frame
-    bool webIntent{};   // trigger/grip web button held (ground: a fist)
+    bool webIntent{};   // web-hold button held (grip by default; trigger if swapped)
     float speedH{};     // horizontal measured (position-delta) speed, m/s
     float rStickX{};    // right stick x, -1..1
     float hmdYaw{};     // headset yaw in tracking space, radians
@@ -245,8 +245,9 @@ struct HybridOwner {
 
         // A web zip: ANIM on its press frame, from VR too (no land confirm or VR
         // minimum: the game's zip animation is what the player asked for), and
-        // held for that zip. No VR intent takes it over meanwhile - not the web
-        // the swing still has, its speed, a turn, the wall it leaves.
+        // held for that zip. Speed, a turn, a web the swing still has, or the
+        // wall it leaves do not take it over. A fresh grip (the web-hold button)
+        // is the explicit way out, including during the zip.
         if (f.zipPress) {
             jumpAskAtNs = -1; // a zip is the game's move, never a jump to adopt
             if (domain == Domain::vr)
@@ -265,6 +266,11 @@ struct HybridOwner {
             // longest the game keeps him.
             const bool done = nowNs - zipNs >= zipMaxNs || (!asked && (!air || f.state.owned));
             if (!done) {
+                if (pressed) {
+                    zipNs = zipPressNs = -1;
+                    goVr(EnterVr::airWeb, nowNs);
+                    return domain;
+                }
                 holdForZip();
                 return domain;
             }
@@ -302,25 +308,20 @@ struct HybridOwner {
             }
             if (air)
                 jumpAskAtNs = -1; // off the ground some other way (a hop, a fall): spent
+            // Grip (the web-hold button) leaves ANIM on that press: on the
+            // ground, in the air, or in a fight. Web balls never set webIntent.
+            if (pressed) {
+                goVr(EnterVr::airWeb, nowNs);
+                return domain;
+            }
             if (!air) {
-                // On the ground, grip is a fist; hops, zips, crawls stay ANIM, and a jump
-                // waits for the frame he leaves the ground.
+                // Hops and crawls stay ANIM; a jump waits for leave-ground.
                 airWebArmed = false;
                 speedNs = rotateNs = -1;
                 clearSpin();
                 return domain;
             }
             const bool sticky = combatSticky || fighting;
-            // Air-web: the press has to start in the air (a ground fist held
-            // through a hop is not a web), then hold past a brief air time.
-            if (pressed && !sticky)
-                airWebArmed = true;
-            if (!f.webIntent || sticky)
-                airWebArmed = false;
-            if (airWebArmed && nowNs - airNs >= airWebAirNs) {
-                goVr(EnterVr::airWeb, nowNs);
-                return domain;
-            }
             // Mid-air rotation: R-stick held, or a fast physical turn.
             if (std::isfinite(f.rStickX) && std::abs(f.rStickX) >= rotateStick) {
                 if (rotateNs < 0)

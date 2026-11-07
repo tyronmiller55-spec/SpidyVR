@@ -3,6 +3,33 @@
 Every build, newest first, with what changed, why, and what was measured.
 Per-check results are in [VALIDATION.md](VALIDATION.md).
 
+## Native Animation: web balls, grip-out, and always-on aim markers
+
+**Shoot web balls during any animation; squeeze grip to leave it; keep the aim
+markers up.**
+
+- Web balls (trigger by default, or the other button if you swapped Web button)
+  fire from the tracked controllers during any animation. They no longer take
+  you out of the animation. A temple scan, the suit power, drawing the phone,
+  or a prompt that has claimed a button still keep those buttons.
+- Grip (the web-hold button) is how you leave the animation, at any time: on
+  the ground, in the air, in a fight, or during a Y-zip. It shoots a SpidyVR
+  web from the controller, not a fist. If a web attaches you stay in SpidyVR
+  as now; if you let go on the ground with no web, the existing landing
+  handoff returns you to animation.
+- The ownership path was watching the web-ball button, so shooting a ball in
+  the air could pull you out after a short delay. It now watches the web-hold
+  button instead.
+- The aim markers stay up whenever Native Animation is on and AIM MARKERS is
+  on, including while an animation is playing (they were hidden with the rest
+  of the overlay whenever the view sat on the animated head). Turning AIM
+  MARKERS off still hides them. Real first-person cutscenes and the flat
+  screen stay bare.
+- A Y-zip stays the game's zip if you do not grip. Tests: a ground, air or
+  fight grip leaves on that press; a fresh grip leaves a Y-zip; a grip held
+  through a Y-zip does not; speed, spin and a web still do not steal a zip.
+  Not headset-tested.
+
 ## Native Animation: gymnast knees-to-chest tuck
 
 **Hold B now folds the thighs against the abdomen, with the knees below the chin.**

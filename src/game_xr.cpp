@@ -4700,10 +4700,12 @@ DWORD WINAPI run(void*) {
                             steerState.dodging = dodging;
                             steerState.runRt = nativeRun.held();
                             steerState.wall = swingState.wall;
+                            // The web-hold button (grip by default; trigger if WEB BUTTON
+                            // is swapped). Web balls use the other button and never set this.
                             const bool webAimIntent =
                                 values.triggerWebs
-                                    ? (frame.hands[0].squeeze > .5f || frame.hands[1].squeeze > .5f)
-                                    : (frame.hands[0].trigger > .5f || frame.hands[1].trigger > .5f);
+                                    ? (frame.hands[0].trigger > .5f || frame.hands[1].trigger > .5f)
+                                    : (frame.hands[0].squeeze > .5f || frame.hands[1].squeeze > .5f);
                             // Under HYBRID the owner decides (animOwns: no per-frame
                             // classify), and AIR / ONLY / AIR SPIN are ignored.
                             const bool hybridSteer = values.animatedHybrid && values.animatedMoves;
@@ -5608,10 +5610,12 @@ DWORD WINAPI run(void*) {
                         animState.dodging = dodging;
                         animState.runRt = nativeRun.held();
                         animState.wall = swingState.wall;
+                        // The web-hold button (grip by default; trigger if WEB BUTTON
+                        // is swapped). Web balls use the other button and never set this.
                         const bool webAimIntent =
                             values.triggerWebs
-                                ? (frame.hands[0].squeeze > .5f || frame.hands[1].squeeze > .5f)
-                                : (frame.hands[0].trigger > .5f || frame.hands[1].trigger > .5f);
+                                ? (frame.hands[0].trigger > .5f || frame.hands[1].trigger > .5f)
+                                : (frame.hands[0].squeeze > .5f || frame.hands[1].squeeze > .5f);
                         // ANIMATED ONLY (off by default): every gameplay state keeps
                         // the yield (wall / zip / combat too) so the OG SpidyVR body
                         // never reclaims mid-play; a cutscene/stale classify keeps it
@@ -7106,7 +7110,10 @@ DWORD WINAPI run(void*) {
                         for (unsigned hand = 0; hand < 2; ++hand) {
                             auto& steady = aimMotion[hand];
                             const auto& input = rendered.swing.hands[hand];
-                            if (bare) {
+                            // Flat screen stays bare. Native Animation head-follow still
+                            // hides overlay webs and gloves (saved.scene), but the aim
+                            // markers stay up so a shot or a grip is visible.
+                            if (saved->flatScreen) {
                                 steady.reset();
                                 continue;
                             }
@@ -7367,6 +7374,8 @@ DWORD WINAPI run(void*) {
                         if (!bare)
                             overlay.renderViews(overlayViews, vertices, true, false, translucent, &grade,
                                                 &phonePicture);
+                        else if (!saved->flatScreen && !translucent.empty())
+                            overlay.renderViews(overlayViews, vertices, true, false, translucent);
                         overlayMs = std::chrono::duration<double, std::milli>(
                                         std::chrono::steady_clock::now() - overlayStart)
                                         .count();
