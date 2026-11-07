@@ -744,7 +744,7 @@ const std::array<Row, 109>& rows() {
         {Item::animatedHead, "HEAD", "FULL follows the animated head; LEVEL keeps the horizon level.",
          animatedHeadChoices},
         {Item::animatedHeadsetSmooth, "SMOOTHING",
-         "Eases the headset's look. OFF is as now; leaning and travel stay with you.",
+         "Calms animation wobble. OFF is as now; headset look and travel stay with you.",
          animatedHeadsetSmoothChoices},
         {Item::animatedArms,
          "ARMS",

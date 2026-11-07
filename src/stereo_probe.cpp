@@ -3,6 +3,7 @@
 #include "spidy/eye_job_table.hpp"
 #include "spidy/eye_resolution.hpp"
 #include "spidy/game_fp.hpp"
+#include "spidy/headset_smoothing.hpp"
 #include "spidy/native_appearance.hpp"
 #include "spidy/native_body.hpp"
 #include "spidy/native_eye_frame.hpp"
@@ -750,9 +751,16 @@ void resolveScene(native_eyes::Command& c) {
     if ((c.anchored != 2 && c.anchored != 4) || !c.enabled)
         return;
     Mat4 head{};
-    if (c.anchored == 4 ? game_fp::frameLevel(head) : game_fp::frame(head))
+    if (c.anchored == 4 ? game_fp::frameLevel(head) : game_fp::frame(head)) {
+        static headset_smoothing::Filter parentSmooth;
+        static ULONGLONG lastMs{};
+        const ULONGLONG nowMs = GetTickCount64();
+        const float dt = lastMs ? (nowMs - lastMs) * 0.001f : 0.f;
+        lastMs = nowMs;
+        head = parentSmooth.update(head, dt,
+                                   headset_smoothing::liveLevel.load(std::memory_order_relaxed));
         c = native_eyes::resolvedOnHead(c, head);
-    else
+    } else
         c.enabled = 0;
 }
 // The newest eye command's head for this frame, not yet moved with the player.

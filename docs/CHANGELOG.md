@@ -3,6 +3,29 @@
 Every build, newest first, with what changed, why, and what was measured.
 Per-check results are in [VALIDATION.md](VALIDATION.md).
 
+## Native Animation: smoothing calms animation wobble
+
+**SMOOTHING now filters the animated head, not your headset look.**
+
+- The same Off / Low / Medium / High / Max row (default Off). It no longer
+  eases the headset. That lag was making the view wobble worse the higher you
+  turned it, and it never touched the animation's own noise.
+- While Native Animation owns the view, it calms small jitter and bob on the
+  hero's animated head. Your headset look and lean stay one to one. Travel
+  stays with the body, so the camera should not trail through you or a wall.
+  A vault, jump, or real turn still comes through. Snap turns, a recenter,
+  and a large cut jump through.
+- On a SpidyVR swing the filter does nothing (the view already follows the
+  headset). Hands and body stay on the live headset. Recording's SMOOTHING is
+  unchanged.
+- Not a Settings or Command field: the running session reads the launcher
+  value live. Turning the Native Animation master on or off leaves this
+  choice alone.
+- Tests: Off is identity; travel (position) stays on the target at every
+  level; oscillating yaw jitter is reduced; a large snap and a distant cut
+  take the target at once; the menu row, defaults, saved `.ini` and master
+  on/off keep the value. Not headset-tested.
+
 ## Native Animation: five-level headset look smoothing
 
 **Ease how quickly the view follows your headset look, without locking it down.**

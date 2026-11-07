@@ -29716,39 +29716,67 @@ int main() {
               "flapping not capped and summed up");
     });
 
-    test("Native Animation: headset smoothing eases a look and snaps a large turn", [] {
+    test("Native Animation: headset smoothing calms animated-head noise and snaps a cut", [] {
         using namespace headset_smoothing;
+        const auto parentAt = [](float yaw, Vec3 pos = {}) {
+            const float c = std::cos(yaw), s = std::sin(yaw);
+            return Mat4{c, 0, -s, 0, 0, 1, 0, 0, s, 0, c, 0, pos.x, pos.y, pos.z, 1};
+        };
+        const auto turnBetween = [](const Mat4& a, const Mat4& b) {
+            const Vec3 oldX{a[0], a[1], a[2]}, oldZ{a[8], a[9], a[10]};
+            const Vec3 nextX{b[0], b[1], b[2]}, nextZ{b[8], b[9], b[10]};
+            Quat delta = arc(oldZ, nextZ);
+            const Vec3 alignedX = delta.rotate(oldX);
+            const float twist = std::atan2(dot(nextZ, cross(alignedX, nextX)), dot(alignedX, nextX));
+            delta = Quat::around(nextZ, twist) * delta;
+            if (delta.w < 0)
+                delta = {-delta.x, -delta.y, -delta.z, -delta.w};
+            const Vec3 axis{delta.x, delta.y, delta.z};
+            return 2 * std::atan2(length(axis), std::max(0.f, delta.w));
+        };
         Filter offFilter;
-        const Quat look = Quat::yaw(0.2f);
-        const Look off = offFilter.update(look, 1.f / 90, 0);
-        check(std::abs(off.delta.x) + std::abs(off.delta.y) + std::abs(off.delta.z) < 1e-6f &&
-                  std::abs(off.filtered.y - look.y) < 1e-6f,
-              "off changed the look");
+        const Mat4 look = parentAt(0.2f, {1, 2, 3});
+        const Mat4 off = offFilter.update(look, 1.f / 90, 0);
+        check(turnBetween(off, look) < 1e-6f && off[12] == 1 && off[13] == 2 && off[14] == 3,
+              "off changed the parent");
+        for (int level = 1; level <= maxLevel; ++level) {
+            Filter travel;
+            (void)travel.update(parentAt(0.f, {0, 0, 0}), 1.f / 90, level);
+            const Mat4 moved = travel.update(parentAt(0.05f, {4, 5, 6}), 1.f / 90, level);
+            check(moved[12] == 4 && moved[13] == 5 && moved[14] == 6,
+                  "smoothing lagged travel at a level");
+        }
+        Filter noise;
+        (void)noise.update(parentAt(0), 1.f / 90, 3);
+        float rawPath = 0, filteredPath = 0;
+        Mat4 prevRaw = parentAt(0), prevFilt = parentAt(0);
+        for (int i = 0; i < 90; ++i) {
+            const Mat4 target = parentAt((i % 2 == 0) ? 0.015f : -0.015f);
+            const Mat4 out = noise.update(target, 1.f / 90, 3);
+            rawPath += turnBetween(prevRaw, target);
+            filteredPath += turnBetween(prevFilt, out);
+            prevRaw = target;
+            prevFilt = out;
+            check(out[12] == 0 && out[13] == 0 && out[14] == 0, "jitter filter moved travel");
+        }
+        check(filteredPath < rawPath * 0.55f, "animated-head jitter was not reduced");
         Filter f;
-        (void)f.update({}, 1.f / 90, 3);
-        const Look step = f.update(look, 1.f / 90, 3);
-        Quat err = look * step.filtered.conjugate();
-        if (err.w < 0)
-            err = {-err.x, -err.y, -err.z, -err.w};
-        const float remain = 2 * std::atan2(length({err.x, err.y, err.z}), std::max(0.f, err.w));
-        const float want = 0.2f * std::exp(-(1.f / 90) / responseSec[3]);
-        check(remain > want * 0.85f && remain < want * 1.15f, "one frame jumped to the look");
-        Look last = step;
+        (void)f.update(parentAt(0), 1.f / 90, 3);
+        Mat4 last = parentAt(0.2f);
         for (int i = 0; i < 180; ++i)
-            last = f.update(look, 1.f / 90, 3);
-        err = look * last.filtered.conjugate();
-        if (err.w < 0)
-            err = {-err.x, -err.y, -err.z, -err.w};
-        const float left = 2 * std::atan2(length({err.x, err.y, err.z}), std::max(0.f, err.w));
-        check(left < 0.01f, "did not settle on the look");
-        const Quat snap = Quat::yaw(1.5707963f);
-        const Look jumped = f.update(snap, 1.f / 90, 3);
-        check(std::abs(jumped.filtered.y - snap.y) < 1e-5f &&
-                  std::abs(jumped.delta.x) + std::abs(jumped.delta.y) + std::abs(jumped.delta.z) < 1e-5f,
+            last = f.update(parentAt(0.2f), 1.f / 90, 3);
+        check(turnBetween(last, parentAt(0.2f)) < 0.01f, "did not settle on the parent");
+        const Mat4 snap = parentAt(1.5707963f, {1, 2, 3});
+        const Mat4 jumped = f.update(snap, 1.f / 90, 3);
+        check(turnBetween(jumped, snap) < 1e-5f && jumped[12] == 1 && jumped[13] == 2 && jumped[14] == 3,
               "large turn was eased");
-        Mat4 m{1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 1, 2, 3, 1};
-        rotateBasis(m, {});
-        check(m[12] == 1 && m[13] == 2 && m[14] == 3 && m[0] == 1, "identity rotate moved the matrix");
+        Filter cut;
+        (void)cut.update(parentAt(0.1f, {0, 0, 0}), 1.f / 90, 3);
+        (void)cut.update(parentAt(0.12f, {0.2f, 0, 0}), 1.f / 90, 3);
+        const Mat4 teleported = parentAt(0.4f, {8, 0, 0});
+        const Mat4 afterCut = cut.update(teleported, 1.f / 90, 3);
+        check(turnBetween(afterCut, teleported) < 1e-5f && afterCut[12] == 8,
+              "a distant cut was eased");
     });
 
     test("Native Animation: recommended defaults, compound master and saved values", [] {

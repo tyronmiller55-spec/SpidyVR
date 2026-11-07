@@ -25,9 +25,11 @@ The **Native Animation** master represents MOVES + HYBRID, not every companion:
 - You can turn Torso, Arms or another companion off without switching the mode off.
 - Head: Full follows animated pitch/roll; Level uses the existing level head anchor.
 - Smoothing: Off, Low, Medium, High or Max. Off (default) is the view you have
-  now. The others ease how quickly the view follows your headset look; leaning
-  and travel stay with you. Turning Native Animation on or off leaves this
-  choice alone.
+  now. The others calm small jitter and bob on the animated head the view sits
+  on, while a vault, a jump or a real turn still comes through. Your headset
+  look and lean stay with you one to one, and travel stays with the body. On a
+  SpidyVR swing the filter does nothing. Turning Native Animation on or off
+  leaves this choice alone.
 - Arms: controllers share the headset's resolved animated-head frame; idle hands
   remain tracked. Root, gait, head and legs remain authored; Torso is bounded reach assist.
 - Model Yaw: run with L and turn with R without reducing L strength.

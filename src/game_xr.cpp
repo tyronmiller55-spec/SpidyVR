@@ -1115,7 +1115,7 @@ DWORD WINAPI run(void*) {
         Vec3 animatedMovesYieldFeet{}; // actor feet when yield began (diag: actor vs latch)
         Pose animHeadRef{};
         bool animHeadRefSet{};
-        headset_smoothing::Filter headsetLook;
+        headset_smoothing::Filter animHeadSmooth;
         // The check that keeps that reference seated on the neck over every switch (head_seat.hpp).
         head_seat::Glide animHeadSeat{};
         int animSeatStateWas = -1;
@@ -5454,6 +5454,7 @@ DWORD WINAPI run(void*) {
                         return !vrPlay;
                     }
                     if ((!vrPlay || fpPlayBlip) && fpScene) {
+                        headset_smoothing::liveLevel.store(0, std::memory_order_relaxed);
                         // A first-person scene: the headset's own two eyes, inside the head of the character
                         // the scene plays. The eyes are sent relative to that head (anchored 2); the native
                         // views put them on the head of the frame they render (stereo_probe.cpp,
@@ -6416,16 +6417,12 @@ DWORD WINAPI run(void*) {
                         hybridBlend.active ? hybrid_handoff::blendAlpha(eyeBlendElapsed) : 1.f;
                     const bool hybridEyeBlend =
                         hybridBlend.active && hybridBlend.fromValid && eyeBlendW < 1.f - 1e-4f && !flatScreen;
-                    // SMOOTHING eases headset look only (translation stays current).
-                    // Raw frame.head stays for body IK; the same delta goes on both eyes.
-                    headset_smoothing::Look headsetLookNow{};
-                    if (values.animatedMoves && values.animatedHybrid && !flatScreen &&
-                        validTrackedPose(frame.head))
-                        headsetLookNow =
-                            headsetLook.update(frame.head.orientation, frame.seconds,
-                                               values.animatedHeadsetSmooth);
-                    else
-                        headsetLook.reset();
+                    // SMOOTHING filters the animated head the view sits on, not the
+                    // headset. The render thread reads liveLevel in resolveScene.
+                    headset_smoothing::liveLevel.store(
+                        headFollowEyes ? values.animatedHeadsetSmooth : 0, std::memory_order_relaxed);
+                    if (!headFollowEyes)
+                        animHeadSmooth.reset();
                     native_eyes::Command eyes;
                     eyes.enabled = flatScreen ? 2 : 1;
                     eyes.serial = ++serial;
@@ -6500,7 +6497,6 @@ DWORD WINAPI run(void*) {
                         const Mat4 axes = {1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1};
                         for (unsigned i = 0; i < 2; ++i) {
                             Pose raw = frame.eyes[i].pose;
-                            raw.orientation = headsetLookNow.delta * raw.orientation;
                             Pose eye = animated_view::relative(raw, animHeadRef, animHeadTurn);
                             eyes.eyes[i].world = native_view::relativePose(axes, eye);
                             const auto& f = frame.eyes[i].fov;
@@ -6513,14 +6509,22 @@ DWORD WINAPI run(void*) {
                         animHeadRefSet = false;
                         eyes.anchored = 1;
                         for (unsigned i = 0; i < 2; ++i) {
-                            Mat4 world = motion.eyes[i];
-                            headset_smoothing::rotateBasis(world, headsetLookNow.delta);
-                            eyes.eyes[i].world = world;
+                            eyes.eyes[i].world = motion.eyes[i];
                             const auto& f = motion.fovs[i];
                             eyes.eyes[i].fov[0] = f.left;
                             eyes.eyes[i].fov[1] = f.right;
                             eyes.eyes[i].fov[2] = f.down;
                             eyes.eyes[i].fov[3] = f.up;
+                        }
+                    }
+                    Mat4 animHeadNow{};
+                    bool haveAnimHead = false;
+                    if (headFollowEyes && (eyes.anchored == 2 || eyes.anchored == 4)) {
+                        if (eyes.anchored == 4 ? game_fp::frameLevel(animHeadNow)
+                                               : game_fp::frame(animHeadNow)) {
+                            animHeadNow = animHeadSmooth.update(
+                                animHeadNow, frame.seconds, values.animatedHeadsetSmooth);
+                            haveAnimHead = true;
                         }
                     }
                     // Hybrid 180 ms pos+rot blend: slerp published eyes from the
@@ -6534,15 +6538,13 @@ DWORD WINAPI run(void*) {
                         // the head as the render thread will (native_eyes::onHead).
                         Pose to[2]{};
                         bool toHead = false;
-                        if (headFollowEyes && (eyes.anchored == 2 || eyes.anchored == 4)) {
-                            Mat4 hb{};
-                            if (eyes.anchored == 4 ? game_fp::frameLevel(hb) : game_fp::frame(hb)) {
-                                toHead = true;
-                                for (unsigned i = 0; i < 2; ++i) {
-                                    to[i] = animated_view::fromNative(
-                                        native_eyes::onHead(eyes.eyes[i].world, hb));
-                                    toHead = toHead && finite(to[i].position);
-                                }
+                        if (headFollowEyes && (eyes.anchored == 2 || eyes.anchored == 4) &&
+                            haveAnimHead) {
+                            toHead = true;
+                            for (unsigned i = 0; i < 2; ++i) {
+                                to[i] = animated_view::fromNative(
+                                    native_eyes::onHead(eyes.eyes[i].world, animHeadNow));
+                                toHead = toHead && finite(to[i].position);
                             }
                         }
                         if (!toHead) {
@@ -6599,12 +6601,10 @@ DWORD WINAPI run(void*) {
                     hybridShown.valid = false;
                     if (values.animatedHybrid && values.animatedMoves && !flatScreen && eyes.enabled == 1) {
                         const bool onHeadEyes = eyes.anchored == 2 || eyes.anchored == 4;
-                        Mat4 hb{};
-                        if (!onHeadEyes ||
-                            (eyes.anchored == 4 ? game_fp::frameLevel(hb) : game_fp::frame(hb))) {
+                        if (!onHeadEyes || haveAnimHead) {
                             for (unsigned i = 0; i < 2; ++i)
                                 hybridShown.eyes[i] = animated_view::fromNative(
-                                    onHeadEyes ? native_eyes::onHead(eyes.eyes[i].world, hb)
+                                    onHeadEyes ? native_eyes::onHead(eyes.eyes[i].world, animHeadNow)
                                                : eyes.eyes[i].world);
                             hybridShown.anchor = eyes.anchor;
                             hybridShown.ns = eyeBlendNow;
