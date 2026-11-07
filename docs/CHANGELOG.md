@@ -3,6 +3,23 @@
 Every build, newest first, with what changed, why, and what was measured.
 Per-check results are in [VALIDATION.md](VALIDATION.md).
 
+## Native Animation: gymnast knees-to-chest tuck
+
+**Hold B now folds the thighs against the abdomen, with the knees below the chin.**
+
+- The visual tuck (hold B, dodge) was aiming each foot out in front of the
+  hip and bending the knee forward, so the thighs sat out like a chair,
+  perpendicular to the torso. The new target keeps the feet near the hips
+  and lifts the knees toward the chest, so each thigh rests against the
+  abdomen and the knees sit below the chin.
+- Same button, same quarter-second ease, and the same rule: only while
+  SpidyVR owns the air. Kick, wall-run, crawl and grounded legs stay as
+  they are. Physics coupling still reads the same fold weight, so a deeper
+  tuck also spins up a bit more.
+- Tests: a held tuck still raises the knees and eases in and out at arm
+  speed; the thighs now point up the torso more than forward; the feet
+  finish near the hips; kick and grounded plants stay put. Not headset-tested.
+
 ## Native Animation: smoothing calms animation wobble
 
 **SMOOTHING now filters the animated head, not your headset look.**

@@ -46,8 +46,9 @@ your arms are on the controllers from that first frame, the rest of the body eas
 in from his jump pose (no standing snap), and once SpidyVR has you in the air -
 that adopted leap, or a swing after a web - his legs keep that pose and trail it
 with your speed and spin so they read as weight, not a freeze. Hold B (dodge - not
-trigger or grip) while SpidyVR has you in the air and his knees ease up to his
-chest; let go and they ease back. While those knees are in, an existing spin
+trigger or grip) while SpidyVR has you in the air and his thighs ease against
+his abdomen, knees below the chin, like a gymnast's tuck; let go and they ease
+back. While those knees are in, an existing spin
 speeds up a little (like tucking as a diver) and dies off more slowly, and air
 steering answers a bit more; legs out keep the swing you already had. Kick, wall-run and
 crawl still use their own legs. The view uses the same 180 ms blend. You land back on the animation by the usual

@@ -1354,9 +1354,11 @@ Result solve(Pose& pose, const Rig& rig, const Targets& targets, const Config& c
         state.airFootSet = state.airFwdSet = false;
     }
     // Visual tuck: while SpidyVR owns the air, blend the current feet
-    // (authored, or the momentum trail just applied) toward a knees-to-chest
-    // fold. Same ease as the arms taking weight. Kick, wall-run, crawl and
-    // the ground snap the weight off so they keep their own legs.
+    // (authored, or the momentum trail just applied) toward a gymnast
+    // knees-to-chest fold. Feet stay near the hips so each thigh rests
+    // against the abdomen and the knees rise toward the chin. Same ease
+    // as the arms taking weight. Kick, wall-run, crawl and the ground
+    // snap the weight off so they keep their own legs.
     {
         const bool canTuck = t.airborne && !t.kick && !t.wallRun && !t.crawl;
         const float wantTuck = canTuck && t.tuck ? 1.f : 0.f;
@@ -1370,13 +1372,12 @@ Result solve(Pose& pose, const Rig& rig, const Targets& targets, const Config& c
                 const Vec3 hip = pose.position(leg.upper);
                 const Vec3 base = pose.position(leg.foot);
                 const Vec3 side = left * (i == 0 ? 1.f : -1.f);
-                Vec3 dest = hip + up * (.22f * s) + forward * (.20f * s) + side * (.10f * s);
-                const float reach = (rig.thigh[i] + rig.shin[i]) * s * .6f;
-                const Vec3 delta = dest - hip;
-                const float span = length(delta);
-                if (span > reach && span > 1e-4f) dest = hip + delta * (reach / span);
+                // Close to the hip (not out in front) so the IK folds tightly;
+                // the pole pulls the knee up the torso, below the chin.
+                const Vec3 dest = hip + up * (.04f * s) + forward * (.05f * s) + side * (.08f * s);
+                const Vec3 pole = normalized(up * .85f + forward * .40f);
                 const Vec3 foot = base + (dest - base) * state.tuckWeight;
-                limb(pose, rig, leg.upper, leg.lower, leg.foot, foot, forward, w);
+                limb(pose, rig, leg.upper, leg.lower, leg.foot, foot, pole, w);
                 Vec3 out = foot - hip;
                 Vec3 toe = out - up * dot(out, up);
                 toe = length(toe) > .08f * s ? normalized(toe) : forward;

@@ -29069,6 +29069,27 @@ int main() {
                    ("airborne tuck did not raise the knees: hold " + std::to_string(holdLift) +
                     " tuck " + std::to_string(tuckLift))
                        .c_str());
+             float thighUp = 0, thighFwd = 0, footNear = 0;
+             for (int i = 0; i < 2; ++i) {
+                 const auto& leg = rig.legs[i];
+                 const Vec3 hip = tuckedP.position(leg.upper);
+                 const Vec3 thigh = tuckedP.position(leg.lower) - hip;
+                 const float n = length(thigh);
+                 if (n > 1e-4f) {
+                     thighUp += dot(thigh / n, U);
+                     thighFwd += dot(thigh / n, F);
+                 }
+                 footNear += length(tuckedP.position(leg.foot) - hip);
+             }
+             thighUp *= .5f;
+             thighFwd *= .5f;
+             footNear *= .5f;
+             check(thighUp > thighFwd + .15f,
+                   ("thighs sat out like a chair: up " + std::to_string(thighUp) + " forward " +
+                    std::to_string(thighFwd))
+                       .c_str());
+             check(footNear < .28f,
+                   ("feet stayed out in front of the hips: " + std::to_string(footNear) + " m").c_str());
              // Ease from a fully weighted untucked pose so the arm-speed blend
              // is not hidden by the body's own fade-in.
              body::State easeS = heldS;
