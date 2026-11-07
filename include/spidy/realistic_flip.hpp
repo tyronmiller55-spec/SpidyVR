@@ -28,6 +28,9 @@ struct RealisticFlight {
     float ropeLength = 20;
     float coupling = 1;
     bool fighting{}; // enemies in reach of the player's blows lately
+    // Pose coupling (swing_coupling.hpp): 1 = unchanged. Lower inertia
+    // speeds an existing spin (a diver tucking); lower drag lets it last.
+    float poseInertia = 1, poseDrag = 1;
 };
 struct RealisticControls {
     bool brake{};
@@ -87,7 +90,7 @@ class RealisticFlip {
     Quat tilt_{}, levelTarget_{};
     Vec3 angular_{}, momentum_{}, averageVelocity_{}, lastPull_{0, 1, 0};
     bool attached_{}, sampled_{}, airborne_{}, leveling_{}, brakeHeld_{};
-    float missingTime_{}, lastRadius_ = 20;
+    float missingTime_{}, lastRadius_ = 20, poseInertia_ = 1;
     static Quat unit(Quat q) {
         const float n = std::sqrt(q.x * q.x + q.y * q.y + q.z * q.z + q.w * q.w);
         return n > 1e-6f ? Quat{q.x / n, q.y / n, q.z / n, q.w / n} : Quat{};
@@ -210,7 +213,18 @@ class RealisticFlip {
         const bool tether = flying && flight.attached && flight.coupling > 0 && length(flight.pull) > .01f;
         const bool enough = length(averageVelocity_) >= std::clamp(settings.minimumSpeed, 3, 16);
         const float strength = std::clamp(settings.strength, 25, 100) / 100.f;
-        const float drag = std::clamp(settings.falloffMs, 500, 3000) / 1000.f;
+        const float inertia = std::clamp(
+            std::isfinite(flight.poseInertia) && flight.poseInertia > .05f ? flight.poseInertia : 1.f,
+            .55f, 1.35f);
+        const float poseDrag = std::clamp(
+            std::isfinite(flight.poseDrag) && flight.poseDrag > .05f ? flight.poseDrag : 1.f, .55f, 1.45f);
+        if (flying && std::abs(inertia - poseInertia_) > 1e-4f) {
+            const float keep = poseInertia_ / inertia;
+            angular_ = angular_ * keep;
+            momentum_ = momentum_ * keep;
+        }
+        poseInertia_ = inertia;
+        const float drag = (std::clamp(settings.falloffMs, 500, 3000) / 1000.f) / poseDrag;
         Vec3 desired = momentum_ * std::exp(-dt / drag);
         if (tether) {
             lastPull_ = normalized(local.rotate(flight.pull));
@@ -229,7 +243,7 @@ class RealisticFlip {
             desired = angular_ + limited(orbit * strength, rate * .5f);
         }
         if (flying) {
-            const float gain = 8.f * std::clamp(settings.handStrength, 0, 200) / 100.f;
+            const float gain = 8.f * std::clamp(settings.handStrength, 0, 200) / 100.f / inertia;
             const Vec3 hand = tilt_.rotate(flight.handMomentum) * gain;
             // Capture the short arm swing that straddles takeoff, then accept
             // ongoing gestures and opposite gestures that brake the rotation.

@@ -543,6 +543,9 @@ class Swing {
     // A new gravity during play (the VR settings' weight), m/s^2, from the
     // next step.
     void setGravity(float gravity);
+    // Pose coupling from the visual tuck (1 = unchanged). Lower inertia
+    // makes air steering and a free-hand turn more responsive. Not a VR setting.
+    void setPoseCoupling(float inertia);
     // Whether a clear shot attaches in the air at maximum reach from now on
     // (the VR settings); off, it misses. Webs already attached
     // keep their anchors.
@@ -840,6 +843,7 @@ class Swing {
     bool twoHandTarget() const;
     int webSpeedMode_{};
     float singleHandYankStrength_ = 1.f;
+    float poseSteer_ = 1.f;
     struct HandState {
         // held: grip squeezed, with release hysteresis. A web shoots only on the
         // press that sets it, so a lost web never re-fires while the grip stays held.

@@ -28,8 +28,11 @@ they read as weight; kick / wall-run / crawl / grounded and ANIM-owned hops stay
 as they were; no new setting; not headset-tested. T (visual tuck) is on it:
 hold B (dodge, not trigger or grip) while SpidyVR owns the air and the same
 chains ease toward knees-to-chest and back, matching the arms' ease; kick /
-wall-run / crawl / grounded stay as they were; no new setting; physics
-coupling not started; not headset-tested. Next approved: P. No custom offsets; docs/REFERENCE.md and VALIDATION.md remain
+wall-run / crawl / grounded stay as they were; no new setting; not
+headset-tested. P (physics coupling) is on it too: the eased tuck feeds the
+swing's existing spin drag and air steering (knees in = lower inertia / faster
+spin / less angular drag / a bit more air steer; untucked is unchanged); no
+new setting; not headset-tested. No further approved slice after P. No custom offsets; docs/REFERENCE.md and VALIDATION.md remain
 the executable evidence. Packaging merge has not been headset-tested.
 
 ---

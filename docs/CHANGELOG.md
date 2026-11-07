@@ -3,6 +3,29 @@
 Every build, newest first, with what changed, why, and what was measured.
 Per-check results are in [VALIDATION.md](VALIDATION.md).
 
+## Native Animation: tuck and legs feed swing spin and drag
+
+**When the knees come in, the swing spins up; legs out keep today's drag.**
+
+- The visual tuck (hold B) now also feeds the swing's existing spin and air
+  steering. Knees in lower rotational inertia, so an existing spin speeds up
+  like a diver tucking, angular drag eases off so that spin lasts a bit longer,
+  and air / free-hand steering gets a little more responsive. Letting go eases
+  those scales back with the knees. An untucked pose is identity: the swing
+  you already have does not change.
+- Realistic Flips use the same scales on their angular drag and on angular
+  momentum (Iω). The pendulum solver gets the steering half through a side
+  channel (`SpidySwingPoseCoupling`); no Settings or Command version bump, and
+  no new launcher row. Gains live in `swing_coupling.hpp` and can be set to 0
+  to disable either half.
+- Kick, wall-run, crawl and grounded plants still snap the visual tuck off, so
+  they also send an unchanged pose (inertia 1). Animation-owned hops, vaults,
+  zips and fights never raise the tuck.
+- Tests: an untucked pose leaves scales at 1 and air steering untouched;
+  a full tuck lowers inertia, eases angular drag and steers more in the air;
+  folding into a tuck speeds an existing Realistic Flip spin; less pose drag
+  keeps more of that spin. Not headset-tested.
+
 ## Native Animation: hold B to tuck the knees in the air
 
 **Bring the knees up to the chest on a hold that does not steal the web.**

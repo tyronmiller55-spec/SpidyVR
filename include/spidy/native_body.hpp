@@ -308,6 +308,8 @@ void setAirMomentum(const Vec3& worldVelocity);
 // Side channel: no Command layout or version change. Triggers and grips
 // are not this control.
 void setTuck(bool held);
+// Eased visual tuck 0..1 from the last pose job (0 if none).
+float tuckWeight();
 // Slice C tracking-lock diag (side channel; no Command / Forearms layout change).
 // Latest armsOnly chest vs player yaw and overlay weights after a pose job.
 struct OverlayTracking {

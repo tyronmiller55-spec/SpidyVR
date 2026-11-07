@@ -278,6 +278,11 @@ void Swing::setGravity(float gravity) {
         throw std::invalid_argument("Invalid swing gravity");
     config_.gravity = gravity;
 }
+void Swing::setPoseCoupling(float inertia) {
+    if (!std::isfinite(inertia))
+        inertia = 1.f;
+    poseSteer_ = 1.f / std::clamp(inertia, .55f, 1.35f);
+}
 void Swing::allowAirAnchors(bool allowed) {
     config_.airAnchors = allowed;
 }
@@ -1281,9 +1286,9 @@ void Swing::gestures(float dt, const Input& in, const WorldQueries&) {
         const Vec3 sideways = delta[pulling] - radial * dot(delta[pulling], radial);
         const float speed = length(body_.velocity);
         if (speed > 2 && length(sideways) < config_.maxHandSpeed * dt) {
-            const Vec3 desired = normalized(body_.velocity + sideways * 20.f) * speed;
+            const Vec3 desired = normalized(body_.velocity + sideways * (20.f * poseSteer_)) * speed;
             // Turn existing momentum; do not create speed or move the anchor.
-            const Vec3 steered = body_.velocity + limited(desired - body_.velocity, 25.f * dt);
+            const Vec3 steered = body_.velocity + limited(desired - body_.velocity, 25.f * poseSteer_ * dt);
             if (length(steered) > .01f)
                 body_.velocity = normalized(steered) * speed;
         }
@@ -1554,7 +1559,7 @@ void Swing::step(float dt, const Input& in, const WorldQueries& world, const Wor
     } else {
         Vec3 steering = finite(in.move) ? limited(Vec3{in.move.x, 0, in.move.z}, 1) : Vec3{};
         body_.velocity +=
-            steering * ((body_.grounded ? config_.groundAcceleration : config_.airAcceleration) * dt);
+            steering * ((body_.grounded ? config_.groundAcceleration : config_.airAcceleration * poseSteer_) * dt);
         if (body_.grounded && landCarry_ > 0) {
             // SMOOTH WEB LANDING: the landing's speed carried, decaying to a
             // jog, steered as on the ground, in place of the ground's brake.

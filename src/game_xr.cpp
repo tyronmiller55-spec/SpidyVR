@@ -36,6 +36,7 @@
 #include "spidy/game_sound.hpp"
 #include "spidy/game_steam.hpp"
 #include "spidy/game_swing.hpp"
+#include "spidy/swing_coupling.hpp"
 #include "spidy/game_time.hpp"
 #include "spidy/game_tracking.hpp"
 #include "spidy/game_warp.hpp"
@@ -542,6 +543,8 @@ const game_dodge::Live* dodgeLive{};
 // The tab's BLOW SOUNDS to the ray module (SpidySoundMode; optional).
 DWORD(WINAPI* soundMode)(void*){};
 BridgeCall startSwing{}, submitSwing{}, sampleSwing{}, stopSwing{}, retargetSwing{}, sampleGrab{}, sampleAim{};
+// Optional: pose coupling from the visual tuck (an older ray module has none).
+BridgeCall setSwingPoseCoupling{};
 // Optional: the web tie's telemetry (game_grab::TieData; an older ray module has none).
 BridgeCall sampleTie{};
 // Optional: web lines (game_lines::LineData; an older ray module has none).
@@ -2311,6 +2314,9 @@ DWORD WINAPI run(void*) {
                             flight.coupling = coupling;
                             flight.ropeLength = ropes / static_cast<float>(attached);
                         }
+                        const auto pose = swing_coupling::scales(native_body::tuckWeight());
+                        flight.poseInertia = pose.inertia;
+                        flight.poseDrag = pose.angDrag;
                     }
                     rig.flight(flight);
                     rig.wallHands(climbState.status ? climbState.hands : 0u);
@@ -2909,6 +2915,11 @@ DWORD WINAPI run(void*) {
                         applySettings();
                     }
                     if (swingStarted) {
+                        if (setSwingPoseCoupling) {
+                            game_swing::PoseCoupling pose;
+                            pose.inertia = swing_coupling::scales(native_body::tuckWeight()).inertia;
+                            setSwingPoseCoupling(&pose);
+                        }
                         game_swing::Command input;
                         input.wallRotate = motion.wallRotate;
                         input.serial = ++serial;
@@ -7624,6 +7635,7 @@ extern "C" __declspec(dllexport) DWORD WINAPI SpidyXrStart(void* input) {
                                                           dodgeResults->bytes != expected.bytes))
         dodgeResults = nullptr;
     swingSettings = reinterpret_cast<BridgeCall>(GetProcAddress(rays, "SpidySwingSettings"));
+    setSwingPoseCoupling = reinterpret_cast<BridgeCall>(GetProcAddress(rays, "SpidySwingPoseCoupling"));
     swingWebTurns = reinterpret_cast<BridgeCall>(GetProcAddress(rays, "SpidySwingWebTurns"));
     // Optional: an older ray module has no web shooter.
     startShooter = reinterpret_cast<BridgeCall>(GetProcAddress(rays, "SpidyShooterStart"));

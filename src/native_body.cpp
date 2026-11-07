@@ -980,6 +980,13 @@ void native_body::setTuck(bool held) {
     ReleaseSRWLockExclusive(&solveLock);
 }
 
+float native_body::tuckWeight() {
+    AcquireSRWLockShared(&solveLock);
+    const float w = state.tuckWeight;
+    ReleaseSRWLockShared(&solveLock);
+    return w;
+}
+
 void native_body::beginJumpAdopt() {
     beginReclaim();
     AcquireSRWLockExclusive(&solveLock);

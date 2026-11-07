@@ -19,6 +19,7 @@
 #include "spidy/swing_haptics.hpp"
 #include "spidy/controller_layout.hpp"
 #include "spidy/game_swing.hpp"
+#include "spidy/swing_coupling.hpp"
 #include "spidy/native_movement.hpp"
 #include "spidy/presentation_gate.hpp"
 #include "spidy/eye_resolution.hpp"
@@ -29135,6 +29136,41 @@ int main() {
                  plantOff = std::max(plantOff, length(pa.position(rig.legs[i].foot) -
                                                      pb.position(rig.legs[i].foot)));
              check(plantOff < .01f, "tuck moved a grounded plant");
+         });
+
+    test("ANIMATED HYBRID physics: tuck lowers swing inertia and leaves the untucked pose unchanged",
+         [] {
+             using spidy::swing_coupling::scales;
+             const auto rest = scales(0);
+             check(std::abs(rest.inertia - 1.f) < 1e-6f && std::abs(rest.angDrag - 1.f) < 1e-6f &&
+                       std::abs(rest.steer - 1.f) < 1e-6f,
+                   "an untucked pose changed swing scales");
+             const auto tucked = scales(1);
+             check(tucked.inertia < .85f && tucked.inertia > .70f, "a full tuck did not lower inertia");
+             check(tucked.angDrag < rest.angDrag && tucked.steer > rest.steer,
+                   "a full tuck did not ease drag or pick up steering");
+             const auto mid = scales(.5f);
+             check(mid.inertia > tucked.inertia && mid.inertia < rest.inertia,
+                   "a half tuck did not sit between rest and full");
+
+             TestWorld w;
+             w.enabled = false;
+             auto config = inert();
+             config.airAcceleration = 4;
+             spidy::Swing a(config), b(config);
+             b.setPoseCoupling(tucked.inertia);
+             Body flying{{0, 50, 0}, {}, false};
+             Input in;
+             in.move = {1, 0, 0};
+             const auto va = a.predictNativeStep(.02f, in, w, flying).velocity;
+             const auto vb = b.predictNativeStep(.02f, in, w, flying).velocity;
+             check(std::abs(va.x - config.airAcceleration * .02f) < .001f, "untucked air steering drifted");
+             check(vb.x > va.x + .005f, "a tucked pose did not steer more in the air");
+             spidy::Swing c(config);
+             c.setPoseCoupling(1.f);
+             const auto vc = c.predictNativeStep(.02f, in, w, flying).velocity;
+             check(std::abs(vc.x - va.x) < 1e-5f && std::abs(vc.y - va.y) < 1e-5f,
+                   "resetting pose coupling left a leftover steer");
          });
 
     test("ANIMATED HYBRID animOwns: ungrounded frame keeps yield + head follow (no classify drop)", [] {

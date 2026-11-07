@@ -546,6 +546,13 @@ struct Bends {
     } hands[2];
 };
 static_assert(sizeof(Bends) == 200);
+// Side channel from XR: the visual tuck's inertia (1 = unchanged). Not a
+// Settings or Command field, and not versioned with those packets.
+struct PoseCoupling {
+    uint32_t magic = 0x53575043, version = 1, bytes = sizeof(PoseCoupling);
+    float inertia = 1;
+};
+static_assert(sizeof(PoseCoupling) == 16);
 // A web's edges as Bends hands them on: its anchor is the edge nearest the
 // hand, and each edge records the one before it, back to where it sticks.
 inline Bends::Hand edgesOf(const Web& w) {

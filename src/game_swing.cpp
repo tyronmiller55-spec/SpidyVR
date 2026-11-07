@@ -1692,6 +1692,23 @@ extern "C" __declspec(dllexport) DWORD WINAPI SpidySwingWebTurns(void* input) {
     ReleaseSRWLockExclusive(&webTurnsLock);
     return 0;
 }
+extern "C" __declspec(dllexport) DWORD WINAPI SpidySwingPoseCoupling(void* input) {
+    PoseCoupling p;
+    if (!copy(&p, input, sizeof(p)) || p.magic != 0x53575043 || p.version != 1 ||
+        p.bytes != sizeof(PoseCoupling) || !std::isfinite(p.inertia))
+        return 2001;
+    AcquireSRWLockExclusive(&lifecycle);
+    DWORD result{};
+    if (!started)
+        result = 1004;
+    else {
+        AcquireSRWLockExclusive(&simulation);
+        solver.setPoseCoupling(p.inertia);
+        ReleaseSRWLockExclusive(&simulation);
+    }
+    ReleaseSRWLockExclusive(&lifecycle);
+    return result;
+}
 extern "C" __declspec(dllexport) DWORD WINAPI SpidySwingSettings(void* input) {
     // Version 3 to 6 settings (the probes') are shorter: read as many bytes as they say.
     Settings s;

@@ -220,6 +220,42 @@ int main() {
             check(a.orientation().rotate({0, 1, 0}).y < .99f, "the fight over, the web turned nothing");
         }
     }
+    // Pose coupling: tucking lowers inertia (existing spin speeds up) and
+    // cuts angular drag (the spin lasts longer). Defaults stay 1, so earlier
+    // checks still describe an untucked pose.
+    {
+        RealisticFlip spun;
+        auto cfg = s;
+        cfg.enabled = true;
+        cfg.falloffMs = 3000;
+        RealisticFlight arms{{}, {}, true, false, {2, 0, 0}};
+        for (int i = 0; i < 30; ++i)
+            spun.update(arms, true, false, 0, 1.f / 90, cfg);
+        arms.handMomentum = {};
+        for (int i = 0; i < 15; ++i)
+            spun.update(arms, true, false, 0, 1.f / 90, cfg);
+        const float before = std::abs(spun.angularVelocity().x);
+        check(before > .15f, "no spin to fold into a tuck");
+        RealisticFlight tuck = arms;
+        tuck.poseInertia = .78f;
+        tuck.poseDrag = .75f;
+        spun.update(tuck, true, false, 0, 1.f / 90, cfg);
+        check(std::abs(spun.angularVelocity().x) > before * 1.15f, "tucking did not speed up the spin");
+
+        auto decay = [&](float drag) {
+            RealisticFlip a;
+            RealisticFlight sample{{}, {}, true, false, {2, 0, 0}};
+            for (int i = 0; i < 30; ++i)
+                a.update(sample, true, false, 0, 1.f / 90, cfg);
+            sample.handMomentum = {};
+            sample.poseDrag = drag;
+            sample.poseInertia = 1.f;
+            for (int i = 0; i < 180; ++i)
+                a.update(sample, true, false, 0, 1.f / 90, cfg);
+            return std::abs(a.angularVelocity().x);
+        };
+        check(decay(.75f) > decay(1.f) * 1.05f, "less pose drag did not keep more spin");
+    }
     std::cout << "Momentum rotation: attach easing, rate/acceleration caps, stability, free heading, gesture "
                  "strength, full 360, no preset turn, drag, braking, sample loss, landing, common "
                  "translation, upward arms, tracking jumps, frame rate, heading taken into the yaw passed\n";
