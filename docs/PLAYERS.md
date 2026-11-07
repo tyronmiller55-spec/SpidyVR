@@ -37,8 +37,10 @@ stay animated. A real jump or leap you ask for - A from the ground, a charged le
 SPIDY RUN JUMP - now plays the game's takeoff and hands the body to SpidyVR on the
 frame you leave the ground, starting from exactly the pose the takeoff left him in:
 your arms are on the controllers from that first frame, the rest of the body eases
-in from his jump pose (his legs stay in the jump's shape, no standing snap), and the
-view uses the same 180 ms blend. You land back on the animation by the usual
+in from his jump pose (no standing snap), and once SpidyVR has you in the air -
+that adopted leap, or a swing after a web - his legs keep that pose and trail it
+with your speed and spin so they read as weight, not a freeze. Kick, wall-run and
+crawl still use their own legs. The view uses the same 180 ms blend. You land back on the animation by the usual
 landing rules unless a web keeps you in SpidyVR. Parkour vaults and mantles, short
 hops, crawls, Y zips and fight launchers never do this, and a jump the game turns
 into a wall mount goes back to the animation for the climb. Web zips stay on the animation from the frame you press them: Y in

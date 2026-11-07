@@ -6111,6 +6111,12 @@ DWORD WINAPI run(void*) {
                             pose.flags |= native_body::kick;
                             pose.kick = diveAt - motion.anchor;
                         }
+                        // Slice L: trail air legs from swing / leap velocity. No Command bump.
+                        if ((pose.flags & native_body::airborne) && !(pose.flags & native_body::kick) &&
+                            finite(swingState.velocity) && length(swingState.velocity) > .3f)
+                            native_body::setAirMomentum(swingState.velocity);
+                        else
+                            native_body::setAirMomentum({});
                         const bool wallGrip = game_swing::outdoorClimbGrip(
                             climbState, frame.predictedDisplayTime > 0 ? frame.predictedDisplayTime : 0);
                         const bool runningPose = wallRunBody.update(motion, hold, swingState.velocity,

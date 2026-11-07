@@ -1014,6 +1014,7 @@ Result solve(Pose& pose, const Rig& rig, const Targets& targets, const Config& c
     // 5. Feet the game stands on stay on the ground, turned with the body,
     // and follow the hips once they wander off; the knees bend forward.
     if (t.kick && finite(t.kickAt)) {
+        state.airFootSet = state.airFwdSet = false;
         // A dive: both feet out at him from the hips, the toes along the
         // kick, whatever the game's air pose does.
         for (int i = 0; i < 2; ++i) {
@@ -1030,7 +1031,48 @@ Result solve(Pose& pose, const Rig& rig, const Targets& targets, const Config& c
                                        pose.direction(leg.foot, rig.footUp[i]), out, top);
             pose.turn(rig.below[leg.foot], partial(along, w), pose.position(leg.foot));
         }
+    } else if (t.airMomentum && t.airborne) {
+        // Overlay a damped trail on the pose the air already has (the jump's
+        // shape, or the game's swing pose after the hips turned) so the legs
+        // read as weight instead of standing or staying frozen.
+        const Vec3 vel = finite(t.airVelocity) ? t.airVelocity : Vec3{};
+        float yawRate = 0;
+        if (state.airFwdSet && dt > 1e-4f && length(state.airFwd) > .5f && length(forward) > .5f)
+            yawRate = dot(cross(normalized(state.airFwd), forward), up) / dt;
+        state.airFwd = forward;
+        state.airFwdSet = true;
+        const float follow = 1.f - std::exp(-dt / .12f);
+        for (int i = 0; i < 2; ++i) {
+            const auto& leg = legs[i];
+            const Vec3 hip = pose.position(leg.upper);
+            const Vec3 base = pose.position(leg.foot);
+            if (!state.airFootSet) state.airFoot[i] = base;
+            Vec3 trail = vel * -.04f;
+            trail = trail - up * (dot(vel, up) * .015f);
+            trail = trail - forward * (std::abs(yawRate) * .04f);
+            trail = trail + left * (-yawRate * .05f);
+            const float cap = .28f * s;
+            const float tlen = length(trail);
+            if (tlen > cap) trail = trail * (cap / tlen);
+            Vec3 desired = base + trail;
+            const float reach = (rig.thigh[i] + rig.shin[i]) * s * .98f;
+            const Vec3 delta = desired - hip;
+            const float span = length(delta);
+            if (span > reach && span > 1e-4f) desired = hip + delta * (reach / span);
+            state.airFoot[i] = follow >= 1.f ? desired : state.airFoot[i] + (desired - state.airFoot[i]) * follow;
+            limb(pose, rig, leg.upper, leg.lower, leg.foot, state.airFoot[i], forward, w);
+            Vec3 out = state.airFoot[i] - hip;
+            Vec3 toe = out - up * dot(out, up);
+            toe = length(toe) > .08f * s ? normalized(toe) : forward;
+            Vec3 sole = up - toe * dot(up, toe);
+            sole = length(sole) > .1f ? normalized(sole) : up;
+            const Quat along = between(pose.direction(leg.foot, rig.footForward[i]), pose.direction(leg.foot, rig.footUp[i]),
+                                       toe, sole);
+            pose.turn(rig.below[leg.foot], partial(along, w), pose.position(leg.foot));
+        }
+        state.airFootSet = true;
     } else if (t.wallRun) {
+        state.airFootSet = state.airFwdSet = false;
         const Vec3 n = normalized(t.runNormal), travel = normalized(t.runAhead);
         const Vec3 legUp = normalized(runBank * (1 - viewRun) + n * viewRun);
         const Vec3 bodyAhead = normalized(runForward - n * dot(runForward, n));
@@ -1088,6 +1130,7 @@ Result solve(Pose& pose, const Rig& rig, const Targets& targets, const Config& c
                 toe, sole), w), pose.position(leg.foot));
         }
     } else if (t.crawl) {
+        state.airFootSet = state.airFwdSet = false;
         const float share = w * state.crawlWeight;
         const Vec3 n = normalized(t.crawlNormal);
         // Pitch the toes into the facade while the heel lifts away from it.
@@ -1256,6 +1299,7 @@ Result solve(Pose& pose, const Rig& rig, const Targets& targets, const Config& c
             pose.turn(rig.below[leg.foot], partial(flat, share), pose.position(leg.foot));
         }
     } else if (r.grounded && t.plant) {
+        state.airFootSet = state.airFwdSet = false;
         // Planted: under each hip on the floor, the ankle at its rest height,
         // the foot flat and facing the body's way. The game's pose has nothing
         // to say about these legs.
@@ -1286,6 +1330,7 @@ Result solve(Pose& pose, const Rig& rig, const Targets& targets, const Config& c
             pose.turn(rig.below[leg.foot], partial(flat, w), pose.position(leg.foot));
         }
     } else if (r.grounded) {
+        state.airFootSet = state.airFwdSet = false;
         float yawTurn = 0;
         if (length(hipsForward) > .2f)
             yawTurn = wrap(state.yaw - yawOf(hipsForward)) * w;
@@ -1303,6 +1348,10 @@ Result solve(Pose& pose, const Rig& rig, const Targets& targets, const Config& c
                                       turn.rotate(footAxes[i][0]), turn.rotate(footAxes[i][1]));
             pose.turn(rig.below[leg.foot], partial(back, w), pose.position(leg.foot));
         }
+    } else {
+        // Airborne without a kick or an air-momentum trail: the feet stay
+        // where the animation (or an adopted jump) put them.
+        state.airFootSet = state.airFwdSet = false;
     }
     Quat fullTurn;
     bool rememberShoulders = false;

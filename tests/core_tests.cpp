@@ -28865,6 +28865,132 @@ int main() {
              check(!cut.adoptArms, "the overlay kept a stale adopt");
          });
 
+    test("ANIMATED HYBRID momentum legs: airborne velocity trails the jump pose, kick and ground stay put",
+         [] {
+             const auto b = testBody();
+             const auto& rig = b.rig;
+             const int joints = static_cast<int>(rig.parent.size());
+             auto jump = b.rest;
+             {
+                 body::Pose p(jump.data(), joints);
+                 for (const auto& leg : rig.legs) {
+                     p.turn(rig.below[leg.upper], body::axisAngle({1, 0, 0}, -.6f), p.position(leg.upper));
+                     p.turn(rig.below[leg.lower], body::axisAngle({1, 0, 0}, 1.2f), p.position(leg.lower));
+                 }
+                 p.turn(rig.below[rig.pelvis], Quat::yaw(.5f), p.position(rig.pelvis));
+             }
+             const body::Pose snap(jump.data(), joints);
+             const Vec3 hipsWay = snap.direction(rig.pelvis, rig.pelvisForward);
+             const float hipsYaw = std::atan2(hipsWay.x, hipsWay.z);
+             body::Targets t;
+             t.head = true;
+             t.up = {0, 1, 0};
+             t.facing = Quat::yaw(hipsYaw + 3.14159265f);
+             const Vec3 F = t.facing.rotate({0, 0, -1}), U = t.facing.rotate({0, 1, 0});
+             t.eyes = snap.position(rig.head) + F * rig.eyesFromHead.x + U * rig.eyesFromHead.y +
+                      cross(U, F) * rig.eyesFromHead.z + Vec3{0, .12f, 0};
+             const Quat yawed = Quat::yaw(hipsYaw);
+             for (int i = 0; i < 2; ++i) {
+                 const Vec3 shoulder = snap.position(rig.arms[i].upper);
+                 t.hands[i] = {true, shoulder + yawed.rotate({0, -.15f, .35f}), yawed * gripFacing({0, 0, 1}),
+                               0, 0};
+             }
+             t.airborne = true;
+             const float dt = 1.f / 90;
+             body::Config c;
+             const auto stale = [&] {
+                 body::State s;
+                 s.yaw = hipsYaw + 1.2f;
+                 s.yawSet = true;
+                 return s;
+             };
+             const auto alongF = [&](const body::Pose& p) {
+                 const Vec3 mid =
+                     (p.position(rig.legs[0].foot) + p.position(rig.legs[1].foot)) * .5f;
+                 return dot(mid - p.position(rig.pelvis), F);
+             };
+             body::Targets moving = t;
+             moving.airMomentum = true;
+             moving.airVelocity = F * 10.f;
+             body::State firstState = stale();
+             check(body::seedFromPose(snap, rig, moving, firstState), "momentum seed");
+             auto first = jump;
+             body::Pose firstPose(first.data(), joints);
+             const auto r0 = body::solve(firstPose, rig, moving, c, firstState, true, dt);
+             float off = 0;
+             for (const int j : {rig.pelvis, rig.head, rig.legs[0].foot, rig.legs[1].foot})
+                 off = std::max(off, length(firstPose.position(j) - snap.position(j)));
+             check(r0.solved && r0.weight < .1f && off < .02f,
+                   ("first momentum frame left the snapshot: " + std::to_string(off) + " m").c_str());
+             body::State frozen = stale(), trailed = stale();
+             body::seedFromPose(snap, rig, t, frozen);
+             body::seedFromPose(snap, rig, moving, trailed);
+             std::vector<float> held, swung;
+             for (int k = 0; k < 60; ++k) {
+                 held = jump;
+                 body::Pose a(held.data(), joints);
+                 body::solve(a, rig, t, c, frozen, true, dt);
+                 swung = jump;
+                 body::Pose s(swung.data(), joints);
+                 body::solve(s, rig, moving, c, trailed, true, dt);
+             }
+             body::Pose heldP(held.data(), joints), swungP(swung.data(), joints);
+             check(frozen.weight >= 1.f && trailed.weight >= 1.f, "the body never came all in");
+             const float holdAlong = alongF(heldP), swingAlong = alongF(swungP);
+             check(swingAlong < holdAlong - .12f,
+                   ("airborne legs did not trail a forward dash: hold " + std::to_string(holdAlong) +
+                    " swing " + std::to_string(swingAlong))
+                       .c_str());
+             const auto kneeBend = [&](const body::Pose& p, int i) {
+                 const auto& leg = rig.legs[i];
+                 const Vec3 thigh = normalized(p.position(leg.lower) - p.position(leg.upper));
+                 const Vec3 shin = normalized(p.position(leg.foot) - p.position(leg.lower));
+                 return std::acos(std::clamp(dot(thigh, shin), -1.f, 1.f));
+             };
+             check(std::abs(kneeBend(heldP, 0) - kneeBend(snap, 0)) < .05f,
+                   "airborne without velocity left the jump's knees");
+             body::Targets diving = moving;
+             diving.kick = true;
+             diving.kickAt = snap.position(rig.pelvis) + F * 2.f;
+             body::State kicked = stale();
+             body::seedFromPose(snap, rig, diving, kicked);
+             std::vector<float> dive;
+             for (int k = 0; k < 60; ++k) {
+                 dive = jump;
+                 body::Pose p(dive.data(), joints);
+                 body::solve(p, rig, diving, c, kicked, true, dt);
+             }
+             body::Pose diveP(dive.data(), joints);
+             const Vec3 kickMid =
+                 (diveP.position(rig.legs[0].foot) + diveP.position(rig.legs[1].foot)) * .5f;
+             check(dot(normalized(kickMid - diveP.position(rig.pelvis)), F) > .7f,
+                   "a kick lost to the air-momentum trail");
+             body::Targets plant = t;
+             plant.airborne = false;
+             plant.plant = true;
+             plant.floor = {0, 0, 0};
+             plant.airMomentum = true;
+             plant.airVelocity = F * 10.f;
+             body::Targets plantOnly = plant;
+             plantOnly.airMomentum = false;
+             body::State planted = stale(), control = stale();
+             std::vector<float> aPose, bPose;
+             for (int k = 0; k < 60; ++k) {
+                 aPose = b.rest;
+                 body::Pose pa(aPose.data(), joints);
+                 body::solve(pa, rig, plant, c, planted, true, dt);
+                 bPose = b.rest;
+                 body::Pose pb(bPose.data(), joints);
+                 body::solve(pb, rig, plantOnly, c, control, true, dt);
+             }
+             body::Pose pa(aPose.data(), joints), pb(bPose.data(), joints);
+             float plantOff = 0;
+             for (int i = 0; i < 2; ++i)
+                 plantOff = std::max(plantOff, length(pa.position(rig.legs[i].foot) -
+                                                     pb.position(rig.legs[i].foot)));
+             check(plantOff < .01f, "airMomentum moved a grounded plant");
+         });
+
     test("ANIMATED HYBRID animOwns: ungrounded frame keeps yield + head follow (no classify drop)", [] {
         using namespace hybrid_owner;
         HybridOwner o;

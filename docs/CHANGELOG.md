@@ -3,6 +3,29 @@
 Every build, newest first, with what changed, why, and what was measured.
 Per-check results are in [VALIDATION.md](VALIDATION.md).
 
+## Native Animation: midair legs trail swing and leap momentum
+
+**Give midair swinging (and an adopted leap) legs that follow your speed and spin.**
+
+- When SpidyVR owns the air - a swing after a web, or a real jump/leap that
+  handed over from its takeoff - the existing thigh-shin-foot chains keep the
+  pose they already have (the game's air pose, or the jump they were left in)
+  and trail it with the hero's linear velocity and a simple turning rate, so
+  they read as weight instead of staying frozen or snapping to a standing plant.
+- The trail is damped (about 0.12 s) and capped (about 28 cm): a 15 m/s swing
+  leans the feet back, a rise tucks them a little, a fall lets them extend,
+  and a spin shifts them opposite the turn. Kick, wall-run, crawl and grounded
+  plants are unchanged. Animation-owned hops, vaults, zips and fights never
+  see this (they never raise `airborne`).
+- Velocity arrives as a side channel (`native_body::setAirMomentum` from
+  `swingState.velocity` in XR). No new launcher setting, offsets or shared-struct
+  version. Tuck and physics coupling (T/P) are not started: the legs do not yet
+  feed swing weight, drag or spin.
+- Tests: a forward dash trails the feet behind the frozen air pose; the first
+  blended frame still matches the jump snapshot; airborne without velocity keeps
+  the jump's knees; a kick still aims the feet; a grounded plant ignores the
+  trail. Not headset-tested.
+
 ## Native Animation: jumps hand over from their own pose
 
 **Pick up real jumps and leaps in SpidyVR from the pose the animation left you in.**

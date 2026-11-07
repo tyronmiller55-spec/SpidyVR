@@ -177,8 +177,13 @@ struct Targets {
     bool viewSoftlock{};
     bool viewMapped{}; // already resolved with the eye anchor: never remap to chest again
     // In the air (swinging, falling): the legs keep the game's pose instead
-    // of standing on the ground.
+    // of standing on the ground. With airMomentum (a SpidyVR swing or an
+    // adopted leap, when XR has a velocity), they trail that pose with the
+    // body's linear and turning motion so they read as weight, not a freeze
+    // or a standing plant. Kick, wall-run and crawl still take over.
     bool airborne{};
+    bool airMomentum{};
+    Vec3 airVelocity{}; // model-space metres per second, when airMomentum
     // Directional running cycle; head and arms remain tracked.
     bool wallRun{};
     Vec3 runNormal{}, runAhead{};
@@ -391,6 +396,12 @@ struct State {
         Quat orientation{};
     };
     std::array<Held, 2> held{};
+    // Air-momentum legs: last smoothed foot points and last body forward
+    // (a simple spin). Cleared when airMomentum is off.
+    bool airFootSet{};
+    std::array<Vec3, 2> airFoot{};
+    bool airFwdSet{};
+    Vec3 airFwd{};
 };
 // Turns the body's yaw by `radians` about the up, at once: the player snap
 // turned (body and all), or the model turned under the body (the hero's

@@ -82,6 +82,10 @@ body::Targets lastTargets;
 // The last full-body (bodyOn) targets: what the body fades out on when the animation takes it
 // back under the ANIMATED ARMS overlay (body::fadeOut).
 body::Targets lastBodyTargets;
+// Midair swing / adopted-leap look (setAirMomentum): world velocity, model-mapped
+// onto Targets::airVelocity when airborne. Cleared when the call is empty.
+Vec3 airWorldVel{};
+bool airWorldVelSet{};
 // ANIMATED HYBRID jump adopt (beginJumpAdopt): wanted since this tick (0 none), the live pose
 // snapshot taken at the first bodyOn job, and that first frame's result.
 uint64_t adoptWantedTick{};
@@ -534,6 +538,10 @@ void solveHero(float* out, uintptr_t job, uintptr_t instance) {
                 t.crawlStrokes = {wanted.crawlStrokes[0], wanted.crawlStrokes[1]};
                 t.crawlDistance = wanted.version >= 9 ? wanted.crawlDistance : 0.f;
             }
+            if (t.airborne && !t.kick && !t.wallRun && !t.crawl && airWorldVelSet && finite(airWorldVel)) {
+                t.airMomentum = true;
+                t.airVelocity = toModel.rotate(airWorldVel);
+            }
             t.eyes = toModel.rotate(wanted.eyes);
             t.facing = toModel * wanted.facing;
             if (const Quat tilt = wanted.tilt; tilt.x != 0 || tilt.y != 0 || tilt.z != 0)
@@ -907,6 +915,9 @@ void native_body::beginReclaim() {
     // Fresh tracking yaw latch on the first bodyOn frame (no stale turnState jump).
     trackingYawSet = false;
     trackingYaw = 0;
+    state.airFootSet = state.airFwdSet = false;
+    state.airFoot = {};
+    state.airFwd = {};
     outwardWeight.store(0.f, std::memory_order_relaxed);
     ReleaseSRWLockExclusive(&solveLock);
 }
@@ -942,6 +953,18 @@ void native_body::setYieldTilt(Quat bodyTilt, Quat handTilt) {
 void native_body::setViewSoftlock(bool on) {
     AcquireSRWLockExclusive(&solveLock);
     viewSoftlock = on;
+    ReleaseSRWLockExclusive(&solveLock);
+}
+
+void native_body::setAirMomentum(const Vec3& worldVelocity) {
+    AcquireSRWLockExclusive(&solveLock);
+    if (finite(worldVelocity) && length(worldVelocity) > .01f) {
+        airWorldVel = worldVelocity;
+        airWorldVelSet = true;
+    } else {
+        airWorldVel = {};
+        airWorldVelSet = false;
+    }
     ReleaseSRWLockExclusive(&solveLock);
 }
 

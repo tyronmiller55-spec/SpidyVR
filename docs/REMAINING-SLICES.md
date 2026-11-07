@@ -21,7 +21,12 @@ or in the game's parkour; within 0.5 s of the ask); the pose job snapshots the l
 authored pose and seeds the body from it (`body::seedFromPose`: hips' heading, weight
 from 0, arms at full weight at once), legs keep the jump's shape in the air; a jump the
 game's crawl mounts onto a wall goes back to ANIM (EnterAnim::mount); landing by the
-existing rules; not headset-tested. Next approved: L/T/P. No custom offsets; docs/REFERENCE.md and VALIDATION.md remain
+existing rules; not headset-tested. L (momentum swing-leg look) is on it: when
+SpidyVR owns the air (a swing or an adopted leap) the existing thigh-shin-foot
+chains keep that pose and trail it with velocity and spin, damped and capped, so
+they read as weight; kick / wall-run / crawl / grounded and ANIM-owned hops stay
+as they were; no new setting; tuck and physics coupling not started; not
+headset-tested. Next approved: T then P. No custom offsets; docs/REFERENCE.md and VALIDATION.md remain
 the executable evidence. Packaging merge has not been headset-tested.
 
 ---
