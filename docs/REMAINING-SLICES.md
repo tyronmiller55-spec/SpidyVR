@@ -25,8 +25,11 @@ existing rules; not headset-tested. L (momentum swing-leg look) is on it: when
 SpidyVR owns the air (a swing or an adopted leap) the existing thigh-shin-foot
 chains keep that pose and trail it with velocity and spin, damped and capped, so
 they read as weight; kick / wall-run / crawl / grounded and ANIM-owned hops stay
-as they were; no new setting; tuck and physics coupling not started; not
-headset-tested. Next approved: T then P. No custom offsets; docs/REFERENCE.md and VALIDATION.md remain
+as they were; no new setting; not headset-tested. T (visual tuck) is on it:
+hold B (dodge, not trigger or grip) while SpidyVR owns the air and the same
+chains ease toward knees-to-chest and back, matching the arms' ease; kick /
+wall-run / crawl / grounded stay as they were; no new setting; physics
+coupling not started; not headset-tested. Next approved: P. No custom offsets; docs/REFERENCE.md and VALIDATION.md remain
 the executable evidence. Packaging merge has not been headset-tested.
 
 ---

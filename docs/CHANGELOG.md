@@ -3,6 +3,26 @@
 Every build, newest first, with what changed, why, and what was measured.
 Per-check results are in [VALIDATION.md](VALIDATION.md).
 
+## Native Animation: hold B to tuck the knees in the air
+
+**Bring the knees up to the chest on a hold that does not steal the web.**
+
+- While SpidyVR owns the air - a swing after a web, or a real jump/leap that
+  handed over from its takeoff - holding B (the dodge button) eases the same
+  thigh-shin-foot chains toward a knees-to-chest fold. Letting go eases them
+  back. The ease matches the arms taking weight (about a quarter of a second).
+- Triggers and grips stay shoot / fist / air-web. B on the ground is still
+  dodge; the pad layer still uses the face buttons when it is latched. Kick,
+  wall-run, crawl and grounded plants ignore the hold, and animation-owned
+  hops, vaults, zips and fights never see it (they never raise `airborne`).
+- The hold arrives as a side channel (`native_body::setTuck` from B in XR).
+  No new launcher setting, offsets or shared-struct version. Physics coupling
+  (feeding the tuck into swing weight, drag and spin) is not started.
+- Tests: the first blended frame still matches the jump snapshot; a held tuck
+  raises the knees toward the chest and eases in rather than snapping; releasing
+  eases back; a kick still aims the feet; a grounded plant ignores the hold.
+  Not headset-tested.
+
 ## Native Animation: midair legs trail swing and leap momentum
 
 **Give midair swinging (and an adopted leap) legs that follow your speed and spin.**

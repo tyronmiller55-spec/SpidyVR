@@ -1353,6 +1353,41 @@ Result solve(Pose& pose, const Rig& rig, const Targets& targets, const Config& c
         // where the animation (or an adopted jump) put them.
         state.airFootSet = state.airFwdSet = false;
     }
+    // Visual tuck: while SpidyVR owns the air, blend the current feet
+    // (authored, or the momentum trail just applied) toward a knees-to-chest
+    // fold. Same ease as the arms taking weight. Kick, wall-run, crawl and
+    // the ground snap the weight off so they keep their own legs.
+    {
+        const bool canTuck = t.airborne && !t.kick && !t.wallRun && !t.crawl;
+        const float wantTuck = canTuck && t.tuck ? 1.f : 0.f;
+        if (!canTuck)
+            state.tuckWeight = 0.f;
+        else
+            state.tuckWeight = approach(state.tuckWeight, wantTuck, c.blendSpeed * dt);
+        if (canTuck && state.tuckWeight > .001f) {
+            for (int i = 0; i < 2; ++i) {
+                const auto& leg = legs[i];
+                const Vec3 hip = pose.position(leg.upper);
+                const Vec3 base = pose.position(leg.foot);
+                const Vec3 side = left * (i == 0 ? 1.f : -1.f);
+                Vec3 dest = hip + up * (.22f * s) + forward * (.20f * s) + side * (.10f * s);
+                const float reach = (rig.thigh[i] + rig.shin[i]) * s * .6f;
+                const Vec3 delta = dest - hip;
+                const float span = length(delta);
+                if (span > reach && span > 1e-4f) dest = hip + delta * (reach / span);
+                const Vec3 foot = base + (dest - base) * state.tuckWeight;
+                limb(pose, rig, leg.upper, leg.lower, leg.foot, foot, forward, w);
+                Vec3 out = foot - hip;
+                Vec3 toe = out - up * dot(out, up);
+                toe = length(toe) > .08f * s ? normalized(toe) : forward;
+                Vec3 sole = up - toe * dot(up, toe);
+                sole = length(sole) > .1f ? normalized(sole) : up;
+                const Quat along = between(pose.direction(leg.foot, rig.footForward[i]),
+                                           pose.direction(leg.foot, rig.footUp[i]), toe, sole);
+                pose.turn(rig.below[leg.foot], partial(along, w), pose.position(leg.foot));
+            }
+        }
+    }
     Quat fullTurn;
     bool rememberShoulders = false;
     Vec3 turnHead{}, turnNormal{}, turnUp{};

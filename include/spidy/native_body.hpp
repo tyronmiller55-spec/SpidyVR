@@ -36,7 +36,7 @@ enum Flags : uint32_t {
     bodyOn = 1,      // the body follows the player; off blends back to the game's pose
     hideHead = 2,    // the head shrinks away (the eyes are inside it)
     handTurn = 4,    // the hands take the controllers' orientation
-    airborne = 8,    // in the air: legs keep the game's pose unless setAirMomentum trails them
+    airborne = 8,    // in the air: legs keep the game's pose unless setAirMomentum trails them or setTuck folds them
     // height is from the T-pose calibration (body_calibration.hpp), not the
     // headset's running height: the body takes it over a wider range.
     calibrated = 16,
@@ -304,6 +304,10 @@ void setViewSoftlock(bool on);
 // the air pose's legs. A non-finite or near-zero vector clears it. Side
 // channel: no Command layout or version change.
 void setAirMomentum(const Vec3& worldVelocity);
+// Visual knees-to-chest tuck while the hold is down (SpidyVR-owned air).
+// Side channel: no Command layout or version change. Triggers and grips
+// are not this control.
+void setTuck(bool held);
 // Slice C tracking-lock diag (side channel; no Command / Forearms layout change).
 // Latest armsOnly chest vs player yaw and overlay weights after a pose job.
 struct OverlayTracking {

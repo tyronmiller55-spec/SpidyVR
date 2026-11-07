@@ -180,10 +180,13 @@ struct Targets {
     // of standing on the ground. With airMomentum (a SpidyVR swing or an
     // adopted leap, when XR has a velocity), they trail that pose with the
     // body's linear and turning motion so they read as weight, not a freeze
-    // or a standing plant. Kick, wall-run and crawl still take over.
+    // or a standing plant. With tuck, those same chains ease toward a
+    // knees-to-chest fold while the hold is down (the same blendSpeed as
+    // the arms taking weight). Kick, wall-run and crawl still take over.
     bool airborne{};
     bool airMomentum{};
     Vec3 airVelocity{}; // model-space metres per second, when airMomentum
+    bool tuck{};        // visual knees-to-chest; ignored unless airborne
     // Directional running cycle; head and arms remain tracked.
     bool wallRun{};
     Vec3 runNormal{}, runAhead{};
@@ -402,6 +405,8 @@ struct State {
     std::array<Vec3, 2> airFoot{};
     bool airFwdSet{};
     Vec3 airFwd{};
+    // Visual tuck: 0..1, eases toward Targets::tuck at Config::blendSpeed.
+    float tuckWeight{};
 };
 // Turns the body's yaw by `radians` about the up, at once: the player snap
 // turned (body and all), or the model turned under the body (the hero's

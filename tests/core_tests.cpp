@@ -28991,6 +28991,152 @@ int main() {
              check(plantOff < .01f, "airMomentum moved a grounded plant");
          });
 
+    test("ANIMATED HYBRID tuck: holding pulls air knees toward the chest, kick and ground stay put",
+         [] {
+             const auto b = testBody();
+             const auto& rig = b.rig;
+             const int joints = static_cast<int>(rig.parent.size());
+             auto jump = b.rest;
+             {
+                 body::Pose p(jump.data(), joints);
+                 for (const auto& leg : rig.legs) {
+                     p.turn(rig.below[leg.upper], body::axisAngle({1, 0, 0}, -.6f), p.position(leg.upper));
+                     p.turn(rig.below[leg.lower], body::axisAngle({1, 0, 0}, 1.2f), p.position(leg.lower));
+                 }
+                 p.turn(rig.below[rig.pelvis], Quat::yaw(.5f), p.position(rig.pelvis));
+             }
+             const body::Pose snap(jump.data(), joints);
+             const Vec3 hipsWay = snap.direction(rig.pelvis, rig.pelvisForward);
+             const float hipsYaw = std::atan2(hipsWay.x, hipsWay.z);
+             body::Targets t;
+             t.head = true;
+             t.up = {0, 1, 0};
+             t.facing = Quat::yaw(hipsYaw + 3.14159265f);
+             const Vec3 F = t.facing.rotate({0, 0, -1}), U = t.facing.rotate({0, 1, 0});
+             t.eyes = snap.position(rig.head) + F * rig.eyesFromHead.x + U * rig.eyesFromHead.y +
+                      cross(U, F) * rig.eyesFromHead.z + Vec3{0, .12f, 0};
+             const Quat yawed = Quat::yaw(hipsYaw);
+             for (int i = 0; i < 2; ++i) {
+                 const Vec3 shoulder = snap.position(rig.arms[i].upper);
+                 t.hands[i] = {true, shoulder + yawed.rotate({0, -.15f, .35f}), yawed * gripFacing({0, 0, 1}),
+                               0, 0};
+             }
+             t.airborne = true;
+             const float dt = 1.f / 90;
+             body::Config c;
+             const auto stale = [&] {
+                 body::State s;
+                 s.yaw = hipsYaw + 1.2f;
+                 s.yawSet = true;
+                 return s;
+             };
+             const auto kneeLift = [&](const body::Pose& p) {
+                 const Vec3 mid =
+                     (p.position(rig.legs[0].lower) + p.position(rig.legs[1].lower)) * .5f;
+                 return dot(mid - p.position(rig.pelvis), U);
+             };
+             body::Targets folding = t;
+             folding.tuck = true;
+             body::State firstState = stale();
+             check(body::seedFromPose(snap, rig, folding, firstState), "tuck seed");
+             auto first = jump;
+             body::Pose firstPose(first.data(), joints);
+             const auto r0 = body::solve(firstPose, rig, folding, c, firstState, true, dt);
+             float off = 0;
+             for (const int j : {rig.pelvis, rig.head, rig.legs[0].foot, rig.legs[1].foot})
+                 off = std::max(off, length(firstPose.position(j) - snap.position(j)));
+             check(r0.solved && r0.weight < .1f && off < .02f,
+                   ("first tuck frame left the snapshot: " + std::to_string(off) + " m").c_str());
+             body::State heldS = stale(), tuckS = stale();
+             body::seedFromPose(snap, rig, t, heldS);
+             body::seedFromPose(snap, rig, folding, tuckS);
+             std::vector<float> held, tucked;
+             for (int k = 0; k < 60; ++k) {
+                 held = jump;
+                 body::Pose a(held.data(), joints);
+                 body::solve(a, rig, t, c, heldS, true, dt);
+                 tucked = jump;
+                 body::Pose s(tucked.data(), joints);
+                 body::solve(s, rig, folding, c, tuckS, true, dt);
+             }
+             body::Pose heldP(held.data(), joints), tuckedP(tucked.data(), joints);
+             check(heldS.weight >= 1.f && tuckS.weight >= 1.f && tuckS.tuckWeight >= .999f,
+                   "the tuck never came all in");
+             const float holdLift = kneeLift(heldP), tuckLift = kneeLift(tuckedP);
+             check(tuckLift > holdLift + .08f,
+                   ("airborne tuck did not raise the knees: hold " + std::to_string(holdLift) +
+                    " tuck " + std::to_string(tuckLift))
+                       .c_str());
+             // Ease from a fully weighted untucked pose so the arm-speed blend
+             // is not hidden by the body's own fade-in.
+             body::State easeS = heldS;
+             std::vector<float> easing;
+             for (int k = 0; k < 3; ++k) {
+                 easing = jump;
+                 body::Pose p(easing.data(), joints);
+                 body::solve(p, rig, folding, c, easeS, true, dt);
+             }
+             body::Pose earlyP(easing.data(), joints);
+             const float earlyLift = kneeLift(earlyP);
+             check(easeS.tuckWeight > .10f && easeS.tuckWeight < .20f,
+                   ("tuck weight did not ease at arm speed: " + std::to_string(easeS.tuckWeight)).c_str());
+             check(earlyLift > holdLift + .01f && earlyLift < tuckLift - .02f,
+                   ("tuck did not ease in like the arms: early " + std::to_string(earlyLift) +
+                    " full " + std::to_string(tuckLift))
+                       .c_str());
+             folding.tuck = false;
+             for (int k = 0; k < 60; ++k) {
+                 tucked = jump;
+                 body::Pose s(tucked.data(), joints);
+                 body::solve(s, rig, folding, c, tuckS, true, dt);
+             }
+             body::Pose releasedP(tucked.data(), joints);
+             check(tuckS.tuckWeight < .01f, "releasing the hold left the tuck latched");
+             check(std::abs(kneeLift(releasedP) - holdLift) < .03f,
+                   "legs did not ease back after the tuck");
+             body::Targets diving = folding;
+             diving.tuck = true;
+             diving.kick = true;
+             diving.kickAt = snap.position(rig.pelvis) + F * 2.f;
+             body::State kicked = stale();
+             body::seedFromPose(snap, rig, diving, kicked);
+             std::vector<float> dive;
+             for (int k = 0; k < 60; ++k) {
+                 dive = jump;
+                 body::Pose p(dive.data(), joints);
+                 body::solve(p, rig, diving, c, kicked, true, dt);
+             }
+             body::Pose diveP(dive.data(), joints);
+             const Vec3 kickMid =
+                 (diveP.position(rig.legs[0].foot) + diveP.position(rig.legs[1].foot)) * .5f;
+             check(dot(normalized(kickMid - diveP.position(rig.pelvis)), F) > .7f,
+                   "a kick lost to the tuck");
+             check(kicked.tuckWeight < .01f, "a kick kept a leftover tuck weight");
+             body::Targets plant = t;
+             plant.airborne = false;
+             plant.plant = true;
+             plant.floor = {0, 0, 0};
+             plant.tuck = true;
+             body::Targets plantOnly = plant;
+             plantOnly.tuck = false;
+             body::State planted = stale(), control = stale();
+             std::vector<float> aPose, bPose;
+             for (int k = 0; k < 60; ++k) {
+                 aPose = b.rest;
+                 body::Pose pa(aPose.data(), joints);
+                 body::solve(pa, rig, plant, c, planted, true, dt);
+                 bPose = b.rest;
+                 body::Pose pb(bPose.data(), joints);
+                 body::solve(pb, rig, plantOnly, c, control, true, dt);
+             }
+             body::Pose pa(aPose.data(), joints), pb(bPose.data(), joints);
+             float plantOff = 0;
+             for (int i = 0; i < 2; ++i)
+                 plantOff = std::max(plantOff, length(pa.position(rig.legs[i].foot) -
+                                                     pb.position(rig.legs[i].foot)));
+             check(plantOff < .01f, "tuck moved a grounded plant");
+         });
+
     test("ANIMATED HYBRID animOwns: ungrounded frame keeps yield + head follow (no classify drop)", [] {
         using namespace hybrid_owner;
         HybridOwner o;

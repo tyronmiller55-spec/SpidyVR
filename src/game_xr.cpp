@@ -6117,6 +6117,13 @@ DWORD WINAPI run(void*) {
                             native_body::setAirMomentum(swingState.velocity);
                         else
                             native_body::setAirMomentum({});
+                        // Slice T: hold B (dodge) to tuck. Triggers and grips stay
+                        // web. Not while the pad layer is latched, or during a kick.
+                        // Isolated here so a later remap can point at another button.
+                        native_body::setTuck((pose.flags & native_body::airborne) &&
+                                             !(pose.flags & native_body::kick) &&
+                                             (frame.buttons & buttonB) && !calibrationInput &&
+                                             !padLayer.latched());
                         const bool wallGrip = game_swing::outdoorClimbGrip(
                             climbState, frame.predictedDisplayTime > 0 ? frame.predictedDisplayTime : 0);
                         const bool runningPose = wallRunBody.update(motion, hold, swingState.velocity,

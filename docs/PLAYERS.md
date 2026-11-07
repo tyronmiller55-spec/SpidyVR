@@ -39,7 +39,9 @@ frame you leave the ground, starting from exactly the pose the takeoff left him 
 your arms are on the controllers from that first frame, the rest of the body eases
 in from his jump pose (no standing snap), and once SpidyVR has you in the air -
 that adopted leap, or a swing after a web - his legs keep that pose and trail it
-with your speed and spin so they read as weight, not a freeze. Kick, wall-run and
+with your speed and spin so they read as weight, not a freeze. Hold B (dodge - not
+trigger or grip) while SpidyVR has you in the air and his knees ease up to his
+chest; let go and they ease back. Kick, wall-run and
 crawl still use their own legs. The view uses the same 180 ms blend. You land back on the animation by the usual
 landing rules unless a web keeps you in SpidyVR. Parkour vaults and mantles, short
 hops, crawls, Y zips and fight launchers never do this, and a jump the game turns

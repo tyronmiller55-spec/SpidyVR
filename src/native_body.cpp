@@ -86,6 +86,8 @@ body::Targets lastBodyTargets;
 // onto Targets::airVelocity when airborne. Cleared when the call is empty.
 Vec3 airWorldVel{};
 bool airWorldVelSet{};
+// Visual tuck hold (setTuck): mapped onto Targets::tuck when airborne.
+bool airTuckHeld{};
 // ANIMATED HYBRID jump adopt (beginJumpAdopt): wanted since this tick (0 none), the live pose
 // snapshot taken at the first bodyOn job, and that first frame's result.
 uint64_t adoptWantedTick{};
@@ -542,6 +544,7 @@ void solveHero(float* out, uintptr_t job, uintptr_t instance) {
                 t.airMomentum = true;
                 t.airVelocity = toModel.rotate(airWorldVel);
             }
+            t.tuck = t.airborne && !t.kick && !t.wallRun && !t.crawl && airTuckHeld;
             t.eyes = toModel.rotate(wanted.eyes);
             t.facing = toModel * wanted.facing;
             if (const Quat tilt = wanted.tilt; tilt.x != 0 || tilt.y != 0 || tilt.z != 0)
@@ -887,6 +890,7 @@ void native_body::resyncAfterYield() {
     yieldTiltBody = yieldTiltHands = {};
     viewSoftlock = false;
     overlayTrackingSample = {};
+    airTuckHeld = false;
     actorHeadingSet = trackingYawSet = false;
     actorHeading = trackingYaw = 0;
     outwardWeight.store(0.f, std::memory_order_relaxed);
@@ -918,6 +922,8 @@ void native_body::beginReclaim() {
     state.airFootSet = state.airFwdSet = false;
     state.airFoot = {};
     state.airFwd = {};
+    state.tuckWeight = 0.f;
+    airTuckHeld = false;
     outwardWeight.store(0.f, std::memory_order_relaxed);
     ReleaseSRWLockExclusive(&solveLock);
 }
@@ -965,6 +971,12 @@ void native_body::setAirMomentum(const Vec3& worldVelocity) {
         airWorldVel = {};
         airWorldVelSet = false;
     }
+    ReleaseSRWLockExclusive(&solveLock);
+}
+
+void native_body::setTuck(bool held) {
+    AcquireSRWLockExclusive(&solveLock);
+    airTuckHeld = held;
     ReleaseSRWLockExclusive(&solveLock);
 }
 
