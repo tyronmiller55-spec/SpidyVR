@@ -3,6 +3,18 @@
 Every build, newest first, with what changed, why, and what was measured.
 Per-check results are in [VALIDATION.md](VALIDATION.md).
 
+## Native Animation: 0.8.5 compatibility playtest
+
+- Integrates upstream gameplay presets and category pages without replacing the
+  four Nov 8 handoff, visible-glove frame and forearm-clamp fixes.
+- Keeps animation profile preferences when selecting a built-in gameplay preset.
+- Adds a Native Animation headset category; category reset preserves independent
+  movement settings. Launcher navigation retains the dedicated animation tab.
+- Adds profile-preservation and category-reset regression tests. Windows CI and
+  headset validation must be reported for the exact build, not inferred from the
+  previous 0.8.1 playtest.
+
+
 ## Native Animation: forearm-clamped web shooters
 
 **MODEL FOREARM stays on the world's elbow-to-wrist line. Tilting a palm out never pulls the web past it; tilting inward angles it a little toward your midline.**
@@ -761,6 +773,24 @@ order; historical opt-in defaults/row placements are superseded by this package.
   `forearm aim:`; run_game_vr.py reads it into the console and
   `reports\game-vr-<time>-diag.log` with the rest.
 **Latest build (November 6): pull request #79 by HaNToP - WEB LINES, a
+**Unreleased: gameplay presets on Play.** The Play screen now switches directly
+between built-in Arcade, Balanced and Pro presets and saved profiles. The three
+presets explicitly cover 52 gameplay settings while preserving personal setup;
+they are never applied automatically. Custom profiles remain compatible, and
+unsaved settings are backed up before switching. Manage opens the Profiles page.
+The preset definitions and Discord review are in [GAMEPLAY-PRESETS.md](GAMEPLAY-PRESETS.md).
+
+**Unreleased: shorter VR settings screens.** The long settings tab is now
+seven native categories: Setup, Webs, Swinging, Movement, Flips, Haptics
+and Display, with 5 to 19 controls each. Y resets only the current category.
+The launcher has matching sidebar pages, separate Profiles and Diagnostics,
+and collapsible fine rotation tuning. Dependent or overridden controls keep
+their saved values and show when they are inactive. Blow sounds, previously
+missing from the launcher, is available under Haptics. Aiming, flip and
+combat descriptions now explain their actual interactions. No gameplay
+defaults, saved settings keys or profile formats changed.
+
+**Previous build (November 6): pull request #79 by HaNToP - WEB LINES, a
 taut web between two walls.** WEB LINES (SPIDY VR > EXPERIMENTAL after WEB
 TIE, off by default; `web_lines` in spidy_vr.ini and profiles; the
 launcher's Webs card): one web on a wall and the other on another (a post, a
