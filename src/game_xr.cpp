@@ -1064,10 +1064,10 @@ DWORD WINAPI run(void*) {
         // frame, for the owner's update further down the same frame.
         bool hybridZipPress{};
         bool hybridYWas{};
-        // ANIMATED HYBRID jump adopt (hybrid_owner::Frame::jumpAsk): a real jump or leap asked for
-        // on the ground this frame. hybridLeapAir: an adopted jump is in the air (its legs keep
-        // the jump's shape, body::Targets::airborne). The adopt's first-frame diag waits on
-        // native_body::jumpAdopt's count.
+        // ANIMATED HYBRID jump / air adopt (hybrid_owner::Frame::jumpAsk): a real jump or leap
+        // asked for on the ground this frame, or any other mid-air takeover. hybridLeapAir: the
+        // body was adopted in the air (its legs keep that pose, body::Targets::airborne). The
+        // adopt's first-frame diag waits on native_body::jumpAdopt's count.
         bool hybridJumpAsk{};
         bool hybridLeapAir{};
         bool hybridAdoptWaiting{};
@@ -5759,18 +5759,21 @@ DWORD WINAPI run(void*) {
                                     if (validTrackedPose(frame.head))
                                         rig.adoptEyes(worldEyes, worldYaw, frame.head);
                                 }
-                                // A real jump or leap: SpidyVR picks the body up from the pose the
-                                // game's takeoff left it in (snapshot + seed on the next pose job),
-                                // the arms on the controllers at once, the legs in the jump's shape.
-                                const bool jumpAdopt = hybridOwner.lastEnterVr == hybrid_owner::EnterVr::jump;
-                                if (jumpAdopt) {
+                                // A real jump or leap, or any other takeover while the hero is in
+                                // the air (web, grip, rotate, speed, swing, wallrun): snapshot the
+                                // pose the animation left and seed SpidyVR from it on the next pose
+                                // job, arms on the controllers at once, legs kept airborne. A
+                                // grounded takeover still reclaims without a seed.
+                                const bool airAdopt =
+                                    hybrid_owner::adoptsFromAir(hybridOwner.lastEnterVr, animState.grounded);
+                                if (airAdopt) {
                                     hybridAdoptSeen = native_body::jumpAdopt().count;
                                     native_body::beginJumpAdopt();
                                 } else {
                                     native_body::beginReclaim();
                                 }
-                                hybridLeapAir = jumpAdopt;
-                                hybridAdoptWaiting = jumpAdopt;
+                                hybridLeapAir = airAdopt;
+                                hybridAdoptWaiting = airAdopt;
                                 hybridBlend = {};
                                 hybridBlend.active = true;
                                 hybridBlend.toTraversal = true;
@@ -5852,7 +5855,7 @@ DWORD WINAPI run(void*) {
                             if (hybridOwner.enterAnim) {
                                 if (hybridAdoptWaiting)
                                     diag_log::write(
-                                        "hybrid: jump adopt never seeded (no SpidyVR body frame before "
+                                        "hybrid: adopt never seeded (no SpidyVR body frame before "
                                         "the animation took him back)");
                                 hybridLeapAir = hybridAdoptWaiting = false;
                                 // Slice 3 T→G (vr→anim): blend eyes back to the headbone; keep
@@ -5951,9 +5954,11 @@ DWORD WINAPI run(void*) {
                                 hybridAdoptSeen = adopt.count;
                                 hybridAdoptWaiting = false;
                                 diag_log::writef(
-                                    "hybrid: jump adopt seeded from the live pose (%u joints): first "
+                                    "hybrid: %s adopt seeded from the live pose (%u joints): first "
                                     "frame hips %.3f m legs %.3f m off it, body %.2f in, wrists %.3f "
                                     "/ %.3f m from the controllers",
+                                    hybridOwner.lastEnterVr == hybrid_owner::EnterVr::jump ? "jump"
+                                                                                           : "air",
                                     adopt.joints, adopt.hips, adopt.legs, adopt.weight, adopt.handError[0],
                                     adopt.handError[1]);
                             }

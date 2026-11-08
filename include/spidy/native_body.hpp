@@ -264,12 +264,12 @@ void resyncAfterYield();
 // anchors / overlay side channels, leave the rest of State so weight ramps
 // 0→1 via body_ik's existing blendSpeed. No full state={} wipe.
 void beginReclaim();
-// ANIMATED HYBRID jump adopt (hybrid_owner EnterVr::jump): beginReclaim, then
-// the next bodyOn pose job (within a quarter second) snapshots the hero's
-// live pose as the game's animation left it, before its solve, and seeds the
-// body from it (body::seedFromPose): the first SpidyVR frame is that pose,
-// the arms on the controllers at once. Side channel: no Command layout or
-// version change.
+// ANIMATED HYBRID jump / air adopt (a real jump, or any other mid-air
+// takeover): beginReclaim, then the next bodyOn pose job (within a quarter
+// second) snapshots the hero's live pose as the game's animation left it,
+// before its solve, and seeds the body from it (body::seedFromPose): the first
+// SpidyVR frame is that pose, the arms on the controllers at once. Side
+// channel: no Command layout or version change.
 void beginJumpAdopt();
 // The latest adopt's first frame (diagnostics): how far the solved hips and
 // legs ended from the snapshot, model metres, the body's weight then, and

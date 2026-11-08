@@ -28780,6 +28780,21 @@ int main() {
              }
          });
 
+    test("ANIMATED HYBRID air adopt: every mid-air takeover snapshots; a grounded non-jump does not", [] {
+             using namespace spidy::hybrid_owner;
+             check(adoptsFromAir(EnterVr::jump, true), "jump on the leave-ground frame");
+             check(adoptsFromAir(EnterVr::jump, false), "jump still airborne");
+             check(adoptsFromAir(EnterVr::airWeb, false), "grip in the air");
+             check(adoptsFromAir(EnterVr::web, false), "web attach in the air");
+             check(adoptsFromAir(EnterVr::rotate, false), "rotate");
+             check(adoptsFromAir(EnterVr::speed, false), "speed");
+             check(adoptsFromAir(EnterVr::swing, false), "swing after a zip");
+             check(adoptsFromAir(EnterVr::wallRun, false), "wallrun leap");
+             check(!adoptsFromAir(EnterVr::web, true), "grounded web");
+             check(!adoptsFromAir(EnterVr::wallRun, true), "grounded wallrun");
+             check(!adoptsFromAir(EnterVr::none, true), "no reason on the ground");
+         });
+
     test("ANIMATED HYBRID jump adopt: the first SpidyVR frame is the takeoff's pose, the arms on the "
          "controllers",
          [] {

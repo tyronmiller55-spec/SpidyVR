@@ -46,8 +46,11 @@ including while an animation is playing. Ground parkour and hops stay animated. 
 SPIDY RUN JUMP - now plays the game's takeoff and hands the body to SpidyVR on the
 frame you leave the ground, starting from exactly the pose the takeoff left him in:
 your arms are on the controllers from that first frame, the rest of the body eases
-in from his jump pose (no standing snap), and once SpidyVR has you in the air -
-that adopted leap, or a swing after a web - his legs keep that pose and trail it
+in from his jump pose (no standing snap). The same snapshot now happens whenever
+SpidyVR takes over in the air — a web, grip, a mid-air turn or speed, a swing after
+a zip, a wall-run leap — so those no longer start from a standing reclaim. Once
+SpidyVR has you in the air — that adopted leap, or a swing after a web — his legs
+keep that pose and trail it
 with your speed and spin so they read as weight, not a freeze. Hold B (dodge - not
 trigger or grip) while SpidyVR has you in the air and his thighs ease against
 his abdomen, knees below the chin, like a gymnast's tuck; let go and they ease

@@ -3,6 +3,15 @@
 Every build, newest first, with what changed, why, and what was measured.
 Per-check results are in [VALIDATION.md](VALIDATION.md).
 
+## Native Animation: air adopt on every mid-air takeover
+
+**Taking over in the air now starts from the pose the animation left, the way a jump already did.**
+
+- A web, grip, mid-air turn or speed, a swing after a zip, or a wall-run leap used to reclaim SpidyVR from a standing blend with no air flag, so the body could hitch or plant the legs for a moment. Those takeovers now use the same snapshot and seed as a jump: the first SpidyVR frame is the live pose, the arms go to the controllers at once, and the legs stay airborne until you land.
+- A grounded takeover (a web from the ground, a wall run you start on the wall) still reclaims without a seed. Ownership rules are unchanged.
+- Diag: `hybrid: air adopt seeded from the live pose ...` for those takeovers; jumps still log `jump adopt seeded`. `hybrid: adopt never seeded` if the animation took him back before a body frame.
+- Tests: every mid-air reason adopts; a grounded web or wall run does not; a jump still adopts even if the ground flickers. Not headset-tested.
+
 ## Native Animation: handoff polish
 
 **State switches reseat the head more often, refresh movement after each handoff, and no longer lock the free hand's webs.**

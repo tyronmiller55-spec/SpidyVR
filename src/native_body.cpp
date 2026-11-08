@@ -88,8 +88,8 @@ Vec3 airWorldVel{};
 bool airWorldVelSet{};
 // Visual tuck hold (setTuck): mapped onto Targets::tuck when airborne.
 bool airTuckHeld{};
-// ANIMATED HYBRID jump adopt (beginJumpAdopt): wanted since this tick (0 none), the live pose
-// snapshot taken at the first bodyOn job, and that first frame's result.
+// ANIMATED HYBRID jump / air adopt (beginJumpAdopt): wanted since this tick (0 none), the live
+// pose snapshot taken at the first bodyOn job, and that first frame's result.
 uint64_t adoptWantedTick{};
 std::array<float, native_body::maxJoints * 16> adoptSnapshot{};
 native_body::JumpAdopt adoptSample{};
@@ -639,8 +639,8 @@ void solveHero(float* out, uintptr_t job, uintptr_t instance) {
                        : 0.f;
         lastSolve = now;
         body::Pose pose(out, static_cast<int>(joints));
-        // ANIMATED HYBRID jump adopt: the first SpidyVR frame of a real jump is the pose the game's
-        // takeoff left him in. Snapshot it before the solve and seed the body from it.
+        // ANIMATED HYBRID jump / air adopt: the first SpidyVR frame after a mid-air takeover is
+        // the pose the game's animation left him in. Snapshot it before the solve and seed.
         bool adopted = false;
         if (adoptWantedTick && GetTickCount64() - adoptWantedTick > 250)
             adoptWantedTick = 0;

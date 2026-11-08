@@ -58,6 +58,13 @@ inline const char* enterVrName(EnterVr e) {
     }
 }
 
+// Snapshot the live pose and keep the legs airborne: a real jump (even if the
+// ground flickers on that frame), or any other takeover while the hero is not
+// on the ground. A grounded web, wall run or swing still reclaims without a seed.
+inline bool adoptsFromAir(EnterVr why, bool grounded) {
+    return why == EnterVr::jump || !grounded;
+}
+
 // Why the owner went back to ANIM.
 enum class EnterAnim : uint8_t {
     none,
