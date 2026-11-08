@@ -7,6 +7,7 @@
 #include <cstddef>
 #include <cstdint>
 #include <limits>
+#include <type_traits>
 
 namespace spidy::game_swing {
 // Gravity and air steering are the strengths the October 4-5 test builds
@@ -123,7 +124,7 @@ struct Hand {
     float trigger{}, grip{};
 };
 struct Command {
-    uint32_t magic = 0x5357434d, version = 6, bytes = sizeof(Command), focused{};
+    uint32_t magic = 0x5357434d, version = 7, bytes = sizeof(Command), focused{};
     uint64_t serial{};
     uint32_t leaseMs = 100, jump{};
     Hand hands[2];
@@ -167,15 +168,21 @@ struct Command {
     // Version 4 (commandBytesV4) ends before them.
     Vec3 wallPositions[2]{};
     float wallGrips[2]{};
-    uint32_t wallRotate{}, padding5{}; // version 5 ended in these 4 bytes of padding
+    uint32_t wallRotate{}, actionMode{}; // version 5 ended in these 4 bytes of padding
     // Version 6, EYE AIM: where the eyes look (Input::gazeOrigin, gaze; gaze
     // zero: untracked, or EYE AIM off), and eyeAim bit 0: web balls go there
     // (Input::gazeShots). The aim previews say what the gaze meets (AimData::
     // gaze) whenever there is one. Version 5 (commandBytesV5) ends before them.
     Vec3 gazeOrigin{}, gaze{};
-    uint32_t eyeAim{}, reserved6{};
+    // Version 7 interprets these formerly reserved slots; their offsets keep
+    // the v6 prefix intact. Older versions never carry cancellation semantics.
+    uint32_t eyeAim{}, animationCancel{};
+    // Version 7: physical hand velocity stays measured in the tracking rig,
+    // then rotates into the displayed animation frame for contact damage.
+    // actionMode: bit0 contact-only animation; bits1/2 valid displayed L/R.
+    Quat physicalToContact[2]{};
 };
-constexpr uint32_t commandBytesV2 = 168, commandBytesV3 = 184, commandBytesV4 = 200, commandBytesV5 = 240;
+constexpr uint32_t commandBytesV2 = 168, commandBytesV3 = 184, commandBytesV4 = 200, commandBytesV5 = 240, commandBytesV6 = 272;
 // attached: 0 none, else bits: 1 a web; 2 both hands hold it (Swing::shared:
 // the other hand's web is the same one); 4 this hand took hold of it and did
 // not shoot it (Web::taken; it stays when the other hand lets go); 8 this
@@ -216,10 +223,24 @@ struct Data {
     float wallDistance{};
     uint32_t walls{}, wallJumps{}, mount{};
 };
-static_assert(sizeof(Config) == 64 && sizeof(Hand) == 52 && sizeof(Command) == 272 &&
+static_assert(sizeof(Config) == 64 && sizeof(Hand) == 52 && sizeof(Command) == 304 &&
               offsetof(Command, tilt) == commandBytesV2 && offsetof(Command, leap) == commandBytesV3 &&
               offsetof(Command, wallPositions) == commandBytesV4 && offsetof(Command, wallRotate) == 232 &&
-              offsetof(Command, gazeOrigin) == commandBytesV5);
+              offsetof(Command, gazeOrigin) == commandBytesV5 &&
+              offsetof(Command, actionMode) == 236 && offsetof(Command, animationCancel) == 268 &&
+              offsetof(Command, physicalToContact) == commandBytesV6 && sizeof(Quat) == 16);
+static_assert(std::is_standard_layout_v<Command> && std::is_trivially_copyable_v<Command>);
+constexpr uint32_t commandBytes(uint32_t version) {
+    switch (version) {
+    case 2: return commandBytesV2;
+    case 3: return commandBytesV3;
+    case 4: return commandBytesV4;
+    case 5: return commandBytesV5;
+    case 6: return commandBytesV6;
+    case 7: return sizeof(Command);
+    default: return 0;
+    }
+}
 // Let real custom wall velocity drive the momentum pose without also asking
 // the stock game to walk. Never suppress ground, vent or stale native input.
 inline bool momentumWallDrive(bool requested, bool fresh, const Data& d) {
@@ -669,15 +690,20 @@ inline bool valid(const Command& c) {
     const auto& t = c.tilt;
     const float tilt = t.x * t.x + t.y * t.y + t.z * t.z + t.w * t.w;
     if (c.magic != 0x5357434d ||
-        !((c.version == 2 && c.bytes == commandBytesV2) || (c.version == 3 && c.bytes == commandBytesV3) ||
-          (c.version == 4 && c.bytes == commandBytesV4) || (c.version == 5 && c.bytes == commandBytesV5) ||
-          (c.version == 6 && c.bytes == sizeof(c))) ||
+        !commandBytes(c.version) || c.bytes != commandBytes(c.version) ||
         !std::isfinite(c.leap) || c.leap < 0 || c.leap > 1 || !finite(c.look) || length(c.look) > 1.01f ||
         !c.serial || c.focused > 1 || c.jump > 1 || c.leaseMs > 250 || (c.focused && !c.leaseMs) ||
         !finite(c.move) || length(c.move) > 1.001f || !std::isfinite(c.trackingYaw) || c.asks > 63 ||
         !std::isfinite(c.sampleSeconds) || c.sampleSeconds <= 0 || c.sampleSeconds > .1f ||
         (c.focused && !c.sampleTimeNs) || !std::isfinite(tilt) || tilt < .99f || tilt > 1.01f)
         return false;
+    if (c.version >= 7) {
+        if (c.actionMode > 7) return false;
+        for (const auto q : c.physicalToContact) {
+            const float n = q.x*q.x + q.y*q.y + q.z*q.z + q.w*q.w;
+            if (!std::isfinite(n) || std::abs(n-1.f) > .01f) return false;
+        }
+    }
     for (const auto& h : c.hands) {
         const auto q = h.aim.orientation;
         const float norm = q.x * q.x + q.y * q.y + q.z * q.z + q.w * q.w;
@@ -695,6 +721,25 @@ inline bool valid(const Command& c) {
     return c.wallRotate <= 1 && finite(c.gazeOrigin) && finite(c.gaze) &&
            (gaze == 0 || std::abs(gaze - 1) < .01f) && c.eyeAim <= 1;
 }
+// The actual module ingress. `read` copies a prefix from the submitted pointer
+// with its platform's checked read; tests supply a bounded wire buffer. Default
+// initialize before copying old packets, and never read beyond their wire size.
+template<class Read> inline bool decodeCommand(Command& out, Read read) {
+    uint32_t header[3]{};
+    if (!read(header, sizeof(header)) || header[0] != 0x5357434d ||
+        !commandBytes(header[1]) || header[2] != commandBytes(header[1])) return false;
+    Command candidate;
+    if (!read(&candidate, header[2]) || candidate.bytes != header[2] || !valid(candidate)) return false;
+    if (candidate.version < 7) {
+        // v5 padding and v6 reserved bytes were not action policy. Normalize
+        // them even when an older producer populated them with nonzero data.
+        candidate.actionMode = candidate.animationCancel = 0;
+        candidate.physicalToContact[0] = candidate.physicalToContact[1] = {};
+    }
+    out = candidate;
+    return true;
+}
+
 class InputSampleClock {
   public:
     float consume(const Command& c) {

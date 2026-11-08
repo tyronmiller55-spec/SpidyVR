@@ -1,3 +1,4 @@
+#include "spidy/animation_cancel.hpp"
 // Bounded first-person OpenXR integration using the game's two native views.
 #include "spidy/native_appearance.hpp"
 #include "spidy/native_body.hpp"
@@ -1052,6 +1053,10 @@ DWORD WINAPI run(void*) {
         animated_moves::Handoff animatedMovesHandoff{};
         // ANIMATED ONLY (off by default): cutscene/stale grace and state diag.
         animated_moves::StayLatch animatedOnlyLatch{};
+        animation_cancel::Gate gripCancelGate;
+        uint32_t gripCancelToken{};
+        uint64_t actionFrameFloor{};
+        uint64_t cancellationSerialFloor{};
         bool animatedOnlyHeldWas{};
         int animatedOnlyStateWas = -1;
         // ANIMATED AIR SPIN (off by default): smoothed spherical / momentum turn.
@@ -2922,7 +2927,31 @@ DWORD WINAPI run(void*) {
                         // both are optional and, like the grab, can be switched on later.
                         applySettings();
                     }
+                    animation_cancel::Decision gripCancel;
                     if (swingStarted) {
+                        unsigned webButtons{}, shotButtons{}, trackedHands{};
+                        for (unsigned i = 0; i < 2; ++i) {
+                            const auto& h = motion.swing.hands[i];
+                            webButtons |= (h.grip > .5f ? 1u : 0u) << i;
+                            shotButtons |= (h.trigger > .5f ? 1u : 0u) << i;
+                            trackedHands |= (h.tracked ? 1u : 0u) << i;
+                        }
+                        gripCancel = gripCancelGate.update(
+                            bodyStarted && values.animatedHybrid && values.animatedMoves &&
+                                !calibrationInput && swingFresh,
+                            hybridOwner.domain == hybrid_owner::Domain::anim,
+                            motion.active && !flatScreen && controlsVisible && spiderMan,
+                            webButtons, shotButtons, trackedHands);
+                        if (gripCancel.cancel) {
+                            if (!++gripCancelToken) ++gripCancelToken;
+                            hybridZipPress = hybridJumpAsk = false;
+                            stickPush.cancel();
+                            zipPress.cancel();
+                            diag_log::writef("hybrid: grip cancel consumed (no action), token %u", gripCancelToken);
+                        }
+                        // Suppress before submitSwing: ownership is evaluated later in
+                        // this loop, too late to prevent an outgoing grip web otherwise.
+                        animation_cancel::suppress(motion.swing.hands, gripCancel);
                         if (setSwingPoseCoupling) {
                             game_swing::PoseCoupling pose;
                             pose.inertia = swing_coupling::scales(native_body::tuckWeight()).inertia;
@@ -2931,6 +2960,8 @@ DWORD WINAPI run(void*) {
                         game_swing::Command input;
                         input.wallRotate = motion.wallRotate;
                         input.serial = ++serial;
+                        input.animationCancel = gripCancelToken;
+                        if (gripCancel.cancel) cancellationSerialFloor = input.serial;
                         input.focused = motion.active && !flatScreen && controlsVisible && spiderMan;
                         input.sampleTimeNs = frame.predictedDisplayTime > 0 ? frame.predictedDisplayTime : 1;
                         input.sampleSeconds =
@@ -2985,24 +3016,75 @@ DWORD WINAPI run(void*) {
                             input.hands[i] = {hand.aim, hand.gripRelativeToHead, hand.tracked, hand.trigger,
                                               hand.grip};
                             input.wallPositions[i] = motion.grips[i].position;
-                            input.wallGrips[i] = hand.tracked ? frame.hands[i].squeeze : 0.f;
+                            input.wallGrips[i] = hand.tracked &&
+                                !((gripCancel.webBlocked | gripCancel.shotBlocked) & (1u << i))
+                                    ? frame.hands[i].squeeze : 0.f;
                         }
+                        const bool nativeGroundNext = swingFresh &&
+                            (swingState.grounded || swingState.wall == hybrid_owner::surfaceGame) &&
+                            swingState.wall != hybrid_owner::surfaceWall && !gripCancel.holdVr;
+                        const bool animationActions = animation_cancel::nativeActions(
+                            values.animatedHybrid && values.animatedMoves,
+                            animatedMovesHandoff.yielding, gripCancel.holdVr, nativeGroundNext);
+                        input.actionMode = animationActions ? 1u : 0u;
+                        // Release restores ground animation later in THIS loop. Do not
+                        // allow a one-sample original-VR lunge/rig shot before that
+                        // ownership transaction has a matching displayed hand solve.
+                        if (animationActions && (!animatedMovesHandoff.yielding || !values.animatedArms)) {
+                            for (unsigned i = 0; i < 2; ++i) if (input.hands[i].grip <= .5f) {
+                                input.hands[i].tracked = 0;
+                                motion.swing.hands[i].tracked = false;
+                            }
+                        }
+                        if (gripCancel.webBlocked || gripCancel.shotBlocked) input.wallRotate = 0;
+                        if (gripCancel.cancel) {
+                            input.asks = input.jump = 0;
+                            input.leap = 0;
+                        }
+                        native_body::ActionFrame handFrame;
+                        bool handFrameRead{};
+                        const auto sampleHandFrame = [&]() -> const native_body::ActionFrame& {
+                            if (!handFrameRead) {
+                                handFrame = native_body::actionFrame();
+                                handFrameRead = true;
+                            }
+                            return handFrame;
+                        };
                         // Native Animation: gloves sit in the head-bone frame while the
                         // animation owns. Aim web balls and markers from those same
-                        // gloves. A web-hold on a hand is how you leave the animation —
-                        // that hand keeps the tracking-rig aim so the SpidyVR web leaves
-                        // the controller.
-                        if (values.animatedHybrid && values.animatedArms &&
-                            animatedMovesHandoff.yielding) {
-                            const auto overlay = native_body::overlayTracking();
-                            if (overlay.targetFrame != animated_view::Frame::none) {
-                                for (unsigned i = 0; i < 2; ++i) {
-                                    if (!overlay.valid[i] || !input.hands[i].tracked)
-                                        continue;
-                                    if (mapAimToDisplayedGrip(input.hands[i].aim,
-                                                              {overlay.grip[i], overlay.gripOri[i]}, i,
-                                                              input.hands[i].grip))
-                                        motion.swing.hands[i].aim = input.hands[i].aim;
+                        // gloves. Grip cancel is already consumed above; it never maps
+                        // or dispatches a web. An existing attached air web remains an
+                        // arm action when returning to native ground movement.
+                        if (animationActions && values.animatedArms && animatedMovesHandoff.yielding) {
+                            const auto& overlay = sampleHandFrame().tracking;
+                            const bool current = overlay.targetFrame != animated_view::Frame::none &&
+                                animation_cancel::validPose(overlay.serial, actionFrameFloor,
+                                                           overlay.deadlineMs, GetTickCount64());
+                            for (unsigned i = 0; i < 2; ++i) {
+                                if (!input.hands[i].tracked) continue;
+                                if (!current || !overlay.valid[i]) {
+                                    // Never dispatch a free-hand animation action using a
+                                    // prior owner's pose or the unrelated tracking rig.
+                                    if (input.hands[i].grip <= .5f && !gripCancel.cancel) {
+                                        input.hands[i].tracked = 0;
+                                        motion.swing.hands[i].tracked = false;
+                                    }
+                                    continue;
+                                }
+                                if (mapAimToDisplayedGrip(input.hands[i].aim,
+                                                          {overlay.grip[i], overlay.gripOri[i]},
+                                                          motion.anchor, i, input.hands[i].grip)) {
+                                    motion.swing.hands[i].aim = input.hands[i].aim;
+                                    input.physicalToContact[i] = overlay.gripOri[i] *
+                                        overlay.sourceGripOri[i].conjugate();
+                                    if (overlay.residual[i] >= 0 && overlay.residual[i] <= web_aim::forearmMiss &&
+                                        overlay.armWeight[i] > .85f)
+                                        input.actionMode |= animationActions ? (2u << i) : 0u;
+                                } else if (input.hands[i].grip <= .5f) {
+                                    // Rejected world anchor/orientation is not permission
+                                    // to fire the unrelated original tracking-rig pose.
+                                    input.hands[i].tracked = 0;
+                                    motion.swing.hands[i].tracked = false;
                                 }
                             }
                         }
@@ -3016,8 +3098,9 @@ DWORD WINAPI run(void*) {
                              values.wristShooters) &&
                             swingWebTurns) {
                             using web_aim::Fallback;
-                            const auto arms = native_body::forearms();
-                            const auto overlay = native_body::overlayTracking();
+                            const auto& snapshot = sampleHandFrame();
+                            const auto& arms = snapshot.forearms;
+                            const auto& overlay = snapshot.tracking;
                             forearmStaleFrames = arms.job != forearmJob ? 0u : forearmStaleFrames + 1;
                             forearmJob = arms.job;
                             const float dt = input.sampleSeconds;
@@ -3038,7 +3121,10 @@ DWORD WINAPI run(void*) {
                                     why = Fallback::untracked;
                                 else if (!native_body::drawn() || !f.valid)
                                     why = Fallback::notSolved;
-                                else if (forearmStaleFrames > web_aim::forearmStaleFrames)
+                                else if (forearmStaleFrames > web_aim::forearmStaleFrames ||
+                                         (values.animatedHybrid &&
+                                          !animation_cancel::validPose(overlay.serial, actionFrameFloor,
+                                                                     overlay.deadlineMs, GetTickCount64())))
                                     why = Fallback::stale;
                                 else if (!(f.handError >= 0 && f.handError <= web_aim::forearmMiss))
                                     why = Fallback::wristMiss;
@@ -5742,7 +5828,11 @@ DWORD WINAPI run(void*) {
                         hybrid_owner::Frame hybridFrame;
                         hybridFrame.state = animState;
                         hybridFrame.webRising = webNow && !hybridWebWas;
-                        hybridFrame.webIntent = webAimIntent;
+                        hybridFrame.webIntent = !gripCancel.holdVr && webAimIntent;
+                        hybridFrame.cancelGrip = gripCancel.cancel;
+                        hybridFrame.cancelGripHeld = gripCancel.holdVr;
+                        hybridFrame.groundAction = swingFresh && swingState.takeoff &&
+                            swingState.serial >= cancellationSerialFloor;
                         hybridFrame.speedH = hybridSpeedH;
                         hybridFrame.speedHoldNs =
                             static_cast<int64_t>(values.animatedHybridSpeedMs) * 1'000'000ll;
@@ -5758,6 +5848,13 @@ DWORD WINAPI run(void*) {
                         hybridFrame.jumpAsk = hybridJumpAsk;
                         if (hybridOn) {
                             hybridOwner.update(hybridFrame, handoffNs);
+                            if (hybridOwner.enterVr || hybridOwner.enterAnim) {
+                                actionFrameFloor = pose.serial;
+                                // Never carry an animation-relative correction into the
+                                // first original-VR action (or the opposite handoff).
+                                for (auto& aim : forearmAims) aim.reset();
+                                forearmTargets = {}; forearmJitter = {}; webTurnsNow = {};
+                            }
                             if (hybridFrame.zipPress)
                                 diag_log::writef("hybrid: web zip pressed, owner %s (%s), held for the zip",
                                                  hybrid_owner::domainName(hybridOwner.domain),
@@ -6013,6 +6110,7 @@ DWORD WINAPI run(void*) {
                             }
                         } else {
                             hybridOwner = {};
+                            actionFrameFloor = 0;
                             hybridBlend = {};
                             hybridLeapAir = hybridAdoptWaiting = false;
                         }

@@ -499,7 +499,7 @@ void land(PunchEvent e, bool byStrike) {
             launches.push_back({e.target, machine, d.velocity});
     }
     // Off the ground and on no web, the player stays up for the next blow.
-    if (!fighter.grounded && !fighter.swinging)
+    if (!fighter.contactOnly && !fighter.grounded && !fighter.swinging)
         strike.hangOn(false);
     ++tally.blows;
     tally.heavies += d.kind == BlowKind::Heavy;
@@ -575,7 +575,7 @@ float game_punch::worldScale() {
 }
 Opened game_punch::update(float seconds, const Input& in, const Player& player, const WorldQueries& world) {
     Opened opened;
-    if (!enabled.load(std::memory_order_relaxed) || seconds <= 0 || !TryAcquireSRWLockShared(&updating))
+    if (!enabled.load(std::memory_order_relaxed) || !TryAcquireSRWLockShared(&updating))
         return opened;
     struct Release {
         ~Release() {
@@ -585,7 +585,18 @@ Opened game_punch::update(float seconds, const Input& in, const Player& player, 
     if (!enabled)
         return opened;
     watch.current(bots);
+    if (fighter.contactOnly != player.contactOnly) {
+        punches.reset(); // no giant swept contact across the ownership edge
+        turnSeen = false;
+        strike.cancel();
+        counterWish = 0;
+        counterWishLeft = 0;
+    }
     fighter = player;
+    if (fighter.contactOnly) strike.cancel();
+    // Ownership policy is immediate even if this is a repeated/zero-time
+    // sample. Do not leave an old original-VR flight armed until time advances.
+    if (!std::isfinite(seconds) || seconds <= 0) return opened;
     // The fist: the knuckles, fistAhead along the hand from its web shooter
     // (the swing input's aim, webShooter: the nozzle, 2.5 cm further back
     // since October 18, which this keeps the fist clear of); its motion
@@ -608,9 +619,11 @@ Opened game_punch::update(float seconds, const Input& in, const Player& player, 
     for (int i = 0; i < 2; ++i) {
         const auto& h = in.hands[i];
         hands[i] = {in.focused && h.tracked, h.aim.position + h.aim.orientation.rotate({0, 0, -fistAhead}),
-                    toWorld.rotate(h.gripRelativeToHead), ((player.busy >> i) & 1) != 0};
+                    toWorld.rotate(h.gripRelativeToHead), ((player.busy >> i) & 1) != 0,
+                    player.contactOnly ? player.physicalToContact[i] : Quat{}, player.contactOnly};
         if (hands[i].tracked) {
-            head += hands[i].fist - hands[i].relative;
+            head += hands[i].fist - (player.contactOnly
+                ? player.physicalToContact[i].rotate(hands[i].relative) : hands[i].relative);
             ++tracked;
         }
     }
@@ -668,6 +681,9 @@ Opened game_punch::update(float seconds, const Input& in, const Player& player, 
         strike.spent(e.hand);
         land(e, false);
     }
+    // Contact damage above is shared. Only original VR may acquire a remote
+    // strike, dive, counter lunge or automated arrival blow below.
+    if (!fighter.contactOnly) {
     std::array<FightFist, 2> fists{};
     for (int i = 0; i < 2; ++i)
         fists[i] = {hands[i].tracked, hands[i].fist, punches.velocity(i), !hands[i].busy, player.holds[i],
@@ -731,6 +747,7 @@ Opened game_punch::update(float seconds, const Input& in, const Player& player, 
     } else if (flying && strike.phase() == WebStrike::Phase::Idle) {
         ++tally.missed; // the player took no steps: perched, or held by the game
     }
+    } // !contactOnly
     publish([&](Data& d) {
         d.status = 2;
         ++d.samples;
@@ -759,7 +776,7 @@ Opened game_punch::update(float seconds, const Input& in, const Player& player, 
 bool game_punch::lifting(Vec3 feet) {
     if (!enabled.load(std::memory_order_relaxed) || !TryAcquireSRWLockShared(&updating))
         return false;
-    const bool up = strike.lifting(feet);
+    const bool up = !fighter.contactOnly && strike.lifting(feet);
     ReleaseSRWLockShared(&updating);
     return up;
 }
@@ -772,7 +789,7 @@ Flight game_punch::fly(float seconds, Vec3 feet, bool grounded, bool waiting) {
             ReleaseSRWLockShared(&updating);
         }
     } release;
-    if (!enabled || strike.phase() == WebStrike::Phase::Idle)
+    if (!enabled || fighter.contactOnly || strike.phase() == WebStrike::Phase::Idle)
         return out;
     if (waiting && strike.phase() == WebStrike::Phase::Flying) {
         strike.wait(seconds);
@@ -818,7 +835,7 @@ Flight game_punch::fly(float seconds, Vec3 feet, bool grounded, bool waiting) {
 void game_punch::hangInAir(float seconds) {
     if (!enabled.load(std::memory_order_relaxed) || !TryAcquireSRWLockShared(&updating))
         return;
-    if (enabled && !fighter.grounded && !fighter.swinging)
+    if (enabled && !fighter.contactOnly && !fighter.grounded && !fighter.swinging)
         strike.hangOn(false, seconds);
     ReleaseSRWLockShared(&updating);
 }

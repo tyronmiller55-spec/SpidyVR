@@ -316,8 +316,11 @@ struct OverlayTracking {
     uint64_t job{};
     uint64_t serial{};
     animated_view::Frame targetFrame = animated_view::Frame::none;
+    // Positions are offsets from player feet, already rotated into WORLD axes.
+    // Absolute action/ray inputs must add their current feet anchor exactly once.
     Vec3 grip[2]{}, wrist[2]{}, solvedWrist[2]{}, elbow[2]{};
-    Quat gripOri[2]{}, aim[2]{};
+    Quat gripOri[2]{}, aim[2]{}, sourceGripOri[2]{};
+    uint64_t deadlineMs{}; // originating body command lease, not last read time
     float residual[2]{-1, -1}, angle[2]{-1, -1};
     uint32_t valid[2]{}, reachClamped[2]{};
     float requestedWeight[2]{}, armWeight[2]{};
@@ -367,6 +370,10 @@ struct Forearms {
 static_assert(sizeof(Forearm) == 60 && sizeof(Forearms) == 160);
 // The latest Forearms (a copy); `job` 0 before any.
 Forearms forearms();
+// One pose-job snapshot for animation actions: origin, physical-frame mapping
+// and the rendered forearm must not come from independently sampled jobs.
+struct ActionFrame { OverlayTracking tracking; Forearms forearms; };
+ActionFrame actionFrame();
 // HEAD PROBE (head_probe.hpp; off by default): while on, each hero pose job
 // also notes the head bone as the game's animation wrote it and as the body
 // left it - read only, nothing written to the pose. The latest (a copy; job

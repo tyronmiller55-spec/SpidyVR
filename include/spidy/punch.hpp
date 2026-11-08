@@ -29,6 +29,13 @@ struct PunchHand {
     Vec3 fist{}, relative{};
     // The hand's web holds something: its fist does not punch.
     bool busy{};
+    // Velocity is measured from physical controller-relative motion; rotate it
+    // to the visible contact frame AFTER differentiation, never differentiate
+    // authored animation/root motion as if the player threw a punch.
+    Quat physicalToContact{};
+    // Animation contact sweep follows only this sample's physical hand delta,
+    // rebased onto its current visible frame (never an authored/root teleport).
+    bool physicalSweep{};
 };
 struct PunchConfig {
     float fistRadius = .08f;
@@ -98,7 +105,8 @@ class Punches {
     }
     // The same motion with its direction, in the world's axes.
     Vec3 velocity(int hand) const {
-        return hands_[static_cast<size_t>(hand)].velocity;
+        const auto& h = hands_[static_cast<size_t>(hand)];
+        return h.physicalToContact.rotate(h.velocity);
     }
     // This hand's swing has landed its blow some other way (a web strike's):
     // it punches again once it slowed or pulled back, as after a punch.
@@ -111,8 +119,9 @@ class Punches {
 
   private:
     struct Hand {
-        bool seen{}, armed = true;
+        bool seen{}, armed = true, physicalSweep{};
         Vec3 fist{}, relative{}, velocity{};
+        Quat physicalToContact{};
         float sinceHit{};
         std::uint64_t lastTarget{};
     };

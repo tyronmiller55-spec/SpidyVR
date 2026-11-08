@@ -1,3 +1,4 @@
+#include "spidy/animation_cancel.hpp"
 // Swing prediction runs inside a native world-query lease. MoverStandard remains
 // responsible for body collision and committing the resulting position.
 #include "spidy/game_swing.hpp"
@@ -125,6 +126,7 @@ RunClock runClock;
 uint64_t stepRunMs{};
 // The game's own move out of the swing's flight, asked for (Command::asks).
 AirYield airYield;
+uint32_t acceptedCancel{}, appliedCancel{};
 InFlightStep inFlight;
 SRWLOCK lifecycle = SRWLOCK_INIT, control = SRWLOCK_INIT, output = SRWLOCK_INIT, simulation = SRWLOCK_INIT;
 std::atomic<bool> enabled{};
@@ -501,6 +503,28 @@ void visit(const native_rays::QueryContext& world) {
     ReleaseSRWLockShared(&control);
     const uint64_t runMs = runClock.update(GetTickCount64());
     const bool focused = inputHold.update(c, live, runMs);
+    if (focused && c.version >= 7 && animation_cancel::consumeToken(c.animationCancel, appliedCancel)) {
+        // Action cleanup only: do NOT call cancel()/cancelSwing(), relinquish
+        // the mover, rebuild Body, or write pose/velocity/rotation here.
+        solver.releaseAll();
+        solver.leaveWall();
+        takeoffTransition.reset();
+        mountTakeoff.reset();
+        airYield.reset();
+        tieGesture.reset();
+        lineGesture.reset();
+        lineReady = false;
+        lineZip.stop();
+        lineAim.reset();
+        lineAimClick.reset();
+        lineLeaving = 0;
+        game_grab::tieArmed(false);
+        game_grab::cancel();
+        game_punch::cancelStrike();
+        strikeFlying = gameMoveFlying = false;
+        strikeQpc = 0;
+        grabInputClock.reset();
+    }
     native_movement::Data motion;
     if (sampleMotion(&motion)) {
         fault(3001);
@@ -868,6 +892,13 @@ void visit(const native_rays::QueryContext& world) {
             fighter.busy = noBlows.load(std::memory_order_relaxed);
             fighter.combatVisuals = combatVisuals.load(std::memory_order_relaxed);
             fighter.halfPunchDamage = halfPunchDamage.load(std::memory_order_relaxed);
+            fighter.contactOnly = c.version >= 7 && (c.actionMode & 1u);
+            if (fighter.contactOnly) {
+                for (unsigned i = 0; i < 2; ++i) {
+                    fighter.physicalToContact[i] = c.physicalToContact[i];
+                    if (!(c.actionMode & (2u << i))) fighter.busy |= 1u << i;
+                }
+            }
             for (unsigned i = 0; i < 2; ++i) {
                 const bool carried = solver.webs()[i].attached && (owned || !motion.grounded);
                 fighter.swinging |= carried;
@@ -915,7 +946,7 @@ void visit(const native_rays::QueryContext& world) {
                     if (handBusy(i, grab.hands[i].phase, solver.webs()[i].attached,
                                  solver.climbingHands(), crawlHands.hands()))
                         busy |= 1u << i;
-                game_shooter::update(seconds, in, busy, config.record, feet, world);
+                game_shooter::update(seconds, in, busy, config.record, feet, world, c.serial);
             }
             if (enabled && !world.error())
                 previewAims(c, in, player, world);
@@ -1620,6 +1651,7 @@ extern "C" __declspec(dllexport) DWORD WINAPI SpidySwingStart(void* input) {
         // last one's serial would have every new sample refused as old.
         AcquireSRWLockExclusive(&control);
         command = {};
+        acceptedCancel = appliedCancel = 0;
         inputDeadline = 0;
         ReleaseSRWLockExclusive(&control);
         inputHold.reset();
@@ -1844,23 +1876,22 @@ extern "C" __declspec(dllexport) DWORD WINAPI SpidySlingshotSample(void* destina
 extern "C" __declspec(dllexport) DWORD WINAPI SpidySwingSubmit(void* input) {
     // A version 2 or 3 command (the probes') is shorter: read as many bytes as it says.
     Command c;
-    uint32_t header[3]{};
-    if (!copy(header, input, sizeof(header)) ||
-        (header[2] != commandBytesV2 && header[2] != commandBytesV3 && header[2] != commandBytesV4 &&
-         header[2] != commandBytesV5 && header[2] != sizeof(c)) ||
-        !copy(&c, input, header[2]) || !valid(c))
+    if (!decodeCommand(c, [&](void* out, size_t bytes) { return copy(out, input, bytes); }))
         return 2001;
     AcquireSRWLockExclusive(&control);
     DWORD result{};
+    bool revoke{};
     if (!enabled || GetTickCount64() >= deadline)
         result = 2002;
     else if (c.serial <= command.serial)
         result = 2003;
     else {
+        revoke = c.version >= 7 && animation_cancel::consumeToken(c.animationCancel, acceptedCancel);
         command = c;
         inputDeadline = GetTickCount64() + c.leaseMs;
     }
     ReleaseSRWLockExclusive(&control);
+    if (revoke) game_shooter::invalidatePending(c.serial);
     return result;
 }
 extern "C" __declspec(dllexport) DWORD WINAPI SpidySwingSample(void* out) {

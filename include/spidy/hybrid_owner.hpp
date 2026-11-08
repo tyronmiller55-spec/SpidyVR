@@ -7,8 +7,10 @@
 // real speed in the air, Spidy's own wall run, or a real jump or leap the
 // player asked for (Frame::jumpAsk), on the frame he leaves the ground: the
 // game's takeoff plays, and SpidyVR picks the body up from that pose (jump
-// adopt; native_body::beginJumpAdopt). Back to ANIM after a
-// confirmed landing, or once a web zip the player asked for (Y in the air or
+// adopt; native_body::beginJumpAdopt). Grip cancel is a consumed, no-shot
+// VR override while held. On release, eligible ground support (idle/walk/run)
+// restores ANIM this very update, without dwell; only a dispatched takeoff
+// can finish first. Back to ANIM also once a web zip the player asked for (Y in the air or
 // the game's zip to a point) actually begins: that zip is the game's animation
 // until it ends. A press the game does not take never leaves VR. Pure domain
 // FSM — no Windows.
@@ -36,10 +38,13 @@ enum class EnterVr : uint8_t {
     wallRun, // Spidy's own wall run (game_swing::Surface::wall): the mod drives it
     swing,   // a web zip the game did not take: the swing still carries him in the air
     jump,    // a real jump or leap the player asked for, on the frame he left the ground
+    cancel,  // consumed grip: return to VR without a web or other action
 };
 
 inline const char* enterVrName(EnterVr e) {
     switch (e) {
+    case EnterVr::cancel:
+        return "grip-cancel";
     case EnterVr::web:
         return "web";
     case EnterVr::airWeb:
@@ -69,12 +74,13 @@ inline bool adoptsFromAir(EnterVr why, bool grounded) {
 // Why the owner went back to ANIM.
 enum class EnterAnim : uint8_t {
     none,
-    land, // grounded and clear for landHoldNs, after vrMinDwellNs
+    land, // legacy diagnostic value; current ground rule uses `ground`
     zip,  // the game began a web zip the player asked for (Frame::zipPress)
     // A jump taken over (EnterVr::jump) turned out to be a wall mount: the
     // game's crawl has him on the wall, and nothing else of the player's keeps
     // VR (no web). That climb is the game's animation, as any wall mount is.
     mount,
+    ground, // eligible standing/walking/running/crawl: native immediately
 };
 
 inline const char* enterAnimName(EnterAnim e) {
@@ -85,6 +91,8 @@ inline const char* enterAnimName(EnterAnim e) {
         return "zip";
     case EnterAnim::mount:
         return "mount";
+    case EnterAnim::ground:
+        return "ground";
     default:
         return "none";
     }
@@ -107,9 +115,10 @@ inline const char* domainName(Domain d) {
 // rooftop parkour) stay ANIM.
 constexpr unsigned surfaceWall = 1, surfaceGame = 2, surfaceFloor = 3;
 
-// Timings (nanoseconds) and thresholds. Provisional, behind HYBRID only.
-constexpr int64_t landHoldNs = 250'000'000;    // grounded + clear before VR -> ANIM
-constexpr int64_t vrMinDwellNs = 500'000'000;  // VR at least this long (no ping-pong)
+// Historical constants retained for old diagnostics/tests; NOT restoration gates.
+constexpr int64_t landHoldNs = 250'000'000;
+constexpr int64_t vrMinDwellNs = 500'000'000;
+// Active timings (nanoseconds) and thresholds, behind HYBRID only.
 constexpr int64_t combatClearNs = 300'000'000; // sticky combat ends after idle
 constexpr float vrSpeed = 15.f;                // m/s horizontal, measured
 constexpr int64_t speedHoldNs = 200'000'000;   // default hold (ANIMATED HYBRID SPEED)
@@ -156,6 +165,8 @@ struct Frame {
     // ANIMATED HYBRID SPEED: how long speed must hold before VR; 0 = speed never
     // forces a takeover (webs, mid-air turns and wall runs still do).
     int64_t speedHoldNs = hybrid_owner::speedHoldNs;
+    bool cancelGrip{}, cancelGripHeld{}; // consumed no-action exit; hold VR until release
+    bool groundAction{}; // actual dispatched takeoff, not a queue/phase cooldown
 };
 
 // Airborne for intent purposes: off the ground and not on the game's own crawl.
@@ -227,6 +238,21 @@ struct HybridOwner {
             webIntentWas = f.webIntent;
             return domain;
         }
+        // Explicit cancel wins over a stale zip/jump/web edge, including combat
+        // and grounded animation. Existing pose adoption/blend handles continuity.
+        if (f.cancelGrip && domain == Domain::anim) {
+            clearZip();
+            webIntentWas = false;
+            goVr(EnterVr::cancel, nowNs);
+            return domain;
+        }
+        if (domain == Domain::vr && f.cancelGripHeld) {
+            resetClocks();
+            clearZip();
+            jumpAskAtNs = -1;
+            webIntentWas = false;
+            return domain;
+        }
         // The frame he leaves the ground (the swing's sample of the game's contact).
         const bool leftGround = groundedWasSet && groundedWas && !f.state.grounded;
         groundedWas = f.state.grounded;
@@ -256,6 +282,26 @@ struct HybridOwner {
             airNs = -1;
         }
 
+        // Definitive ground contract: grip-held cancellation is the explicit
+        // exception above. Ground arm actions and passive attached webs do not
+        // require the OG body. Only an actually dispatched takeoff may defer.
+        const bool supported = f.state.grounded || f.state.wall == surfaceGame;
+        if (supported && f.state.wall != surfaceWall && !f.groundAction) {
+            if (domain == Domain::vr) goAnim(nowNs, EnterAnim::ground);
+            if (f.zipPress || f.state.zipping) {
+                jumpAskAtNs = -1;
+                zipNs = nowNs;
+                if (f.zipPress || zipPressNs < 0) zipPressNs = nowNs;
+                zipFromHold = false;
+                holdForZip();
+            } else {
+                clearZip();
+                const bool blocked = jumpBlocked(f.state, combatSticky || fighting);
+                if (f.jumpAsk) jumpAskAtNs = blocked ? -1 : nowNs;
+                if (jumpAskAtNs >= 0 && (blocked || nowNs-jumpAskAtNs > jumpAskNs)) jumpAskAtNs = -1;
+            }
+            return domain;
+        }
         // A web zip: remember the press. From animation, hold ANIM for that zip
         // (no land confirm). From VR while the swing or Spidy's wall still has
         // him, stay in VR until the game begins the move (the swing yields). A
@@ -389,22 +435,8 @@ struct HybridOwner {
             goAnim(nowNs, EnterAnim::mount);
             return domain;
         }
-        // VR -> ANIM: grounded and clear for landHoldNs, after the VR minimum.
-        // (A web zip the game began went to ANIM above; zip keys still held
-        // without a press seen are not clear.) Only
-        // Spidy's own wall keeps VR; the game's crawl / floor flag do not.
-        const bool clear =
-            f.state.grounded && !f.state.webbed && !f.state.zipping && f.state.wall != surfaceWall;
-        if (clear) {
-            if (groundedNs < 0)
-                groundedNs = nowNs;
-            if (nowNs - groundedNs >= landHoldNs && nowNs - sinceNs >= vrMinDwellNs) {
-                goAnim(nowNs, EnterAnim::land);
-                return domain;
-            }
-        } else {
-            groundedNs = -1;
-        }
+        // Eligible ground returned above on this very update. No landing
+        // confirm, VR minimum, run edge, neutral/repress or queue cooldown.
         return domain;
     }
 

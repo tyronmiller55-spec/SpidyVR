@@ -1,3 +1,9 @@
+> **NEW Native Animation action-frame gameplay playtest (0.8.5, unmerged).**
+> Read **ACTION_FRAME_BUILD.txt** for the exact source and **ACTION_FRAME_PLAYTEST.txt** before testing.
+> This is a new compiled hand/action-frame + no-shot grip + physical-contact punch repair, not the older diagnostic-only package.
+> Extract into a new folder; never mix v7 host/rays DLLs. Back up the shared %APPDATA%\Spidy settings/profiles.
+> Headset success is not claimed; the compatibility-build description below is retained as baseline history.
+
 > **Native Animation 0.8.5 compatibility playtest (modified community build).**
 > Preserves the four Nov 8 handoff/glove-frame/forearm-clamp fixes while integrating
 > upstream 0.8.5 presets and categorized settings. Native Animation has its own

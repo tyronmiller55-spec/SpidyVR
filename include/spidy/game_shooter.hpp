@@ -135,7 +135,10 @@ bool running();
 // or swings the player. record and feet: the player's actor and where it
 // stood for this sample; a shot leaves from where the hand was relative to
 // it when the main thread fires it.
-void update(float seconds, const Input&, uint32_t busy, uint64_t record, Vec3 feet, const WorldQueries&);
+void update(float seconds, const Input&, uint32_t busy, uint64_t record, Vec3 feet, const WorldQueries&,
+            uint64_t inputSerial = 0);
+// Accepted no-action owner switch: revoke queued/copied and late old-input shots.
+void invalidatePending(uint64_t inputSerial);
 // Whether Spidy's own web balls webbed this actor up lately: their webbing
 // (webbingPerHit a hit, wearing off at webbingDecay a second, as the game's
 // tracker wears off within seconds) reached webbedThreshold (a street

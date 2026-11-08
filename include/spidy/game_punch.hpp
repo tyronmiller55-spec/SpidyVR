@@ -122,6 +122,10 @@ struct Player {
     // none): a flight of his into the marked enemy dives at him
     // (WebStrike::dive).
     Vec3 velocity{};
+    // Animation-owned hands: real swept contacts only, no web-strike/lunge,
+    // dive, remote counter or automatic hang. Original VR leaves this false.
+    bool contactOnly{};
+    Quat physicalToContact[2]{};
 };
 // What a sample opened: a web strike, at the enemy the hand's own web held.
 // The swing lets its webs go, and the grab his.

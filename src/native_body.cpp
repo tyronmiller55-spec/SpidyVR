@@ -404,9 +404,11 @@ void solveHero(float* out, uintptr_t job, uintptr_t instance) {
     if (!cache.problem && cache.ik.ready)
         game_fp::setHeadAxes(cache.ik.headForward, cache.ik.headUp, cache.ik.eyesFromHead);
     Command wanted{};
+    uint64_t sampleDeadline{};
     animated_view::Targets view{};
     AcquireSRWLockShared(&commandLock);
     wanted = command;
+    sampleDeadline = commandDeadline;
     view = commandView;
     const bool live = GetTickCount64() < commandDeadline;
     ReleaseSRWLockShared(&commandLock);
@@ -677,6 +679,7 @@ void solveHero(float* out, uintptr_t job, uintptr_t instance) {
         }
         // Internal diagnostic snapshot: all values belong to this command + pose job.
         overlayTrackingSample.serial = wanted.serial;
+        overlayTrackingSample.deadlineMs = sampleDeadline;
         overlayTrackingSample.targetFrame = lastTargets.viewMapped ? view.frame : animated_view::Frame::none;
         for (unsigned i = 0; i < 2; ++i) {
             const auto& hand = lastTargets.hands[i];
@@ -687,6 +690,7 @@ void solveHero(float* out, uintptr_t job, uintptr_t instance) {
             overlayTrackingSample.requestedWeight[i] = overlayArmWeight[i];
             overlayTrackingSample.grip[i] = toWorld.rotate(hand.grip);
             overlayTrackingSample.gripOri[i] = toWorld * hand.orientation;
+            overlayTrackingSample.sourceGripOri[i] = wanted.hands[i].orientation;
             overlayTrackingSample.wrist[i] = toWorld.rotate(wrist);
             overlayTrackingSample.solvedWrist[i] = toWorld.rotate(pose.position(a.hand));
             overlayTrackingSample.elbow[i] = toWorld.rotate(pose.position(a.lower));
@@ -1055,6 +1059,16 @@ native_body::Forearms native_body::forearms() {
     AcquireSRWLockShared(&forearmLock);
     auto out = SpidyForearms;
     ReleaseSRWLockShared(&forearmLock);
+    return out;
+}
+native_body::ActionFrame native_body::actionFrame() {
+    // Same order as solveHero's publication: solve -> forearm. No reader or
+    // writer acquires solveLock while holding forearmLock.
+    AcquireSRWLockShared(&solveLock);
+    AcquireSRWLockShared(&forearmLock);
+    ActionFrame out{overlayTrackingSample, SpidyForearms};
+    ReleaseSRWLockShared(&forearmLock);
+    ReleaseSRWLockShared(&solveLock);
     return out;
 }
 void native_body::setHeadProbe(bool on) {

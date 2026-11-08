@@ -25524,7 +25524,7 @@ int main() {
         game_swing::Command c;
         c.focused = 1;
         c.serial = 1;
-        check(c.version == 6 && c.bytes == 272 && game_swing::valid(c), "a level version 6 command was rejected");
+        check(c.version == 7 && c.bytes == 304 && game_swing::valid(c), "a level version 7 command was rejected");
         check(length(game_swing::input(c).gaze) == 0 && !game_swing::input(c).gazeShots,
               "a command without a gaze aimed with the eyes");
         // EYE AIM (version 6): where the eyes look, and whether web balls go there.
@@ -27371,15 +27371,15 @@ int main() {
         near(body::angle(shownShooter.orientation * webShooter(shownGrip, 0).orientation.conjugate()), 0.f);
         Pose aim = webShooter(grip, 0);
         check(length(aim.position - shownShooter.position) > .5f, "rig and displayed frames were not apart");
-        check(mapAimToDisplayedGrip(aim, shownGrip, 0, 0.f), "free hand did not map");
+        check(mapAimToDisplayedGrip(aim, shownGrip, {}, 0, 0.f), "free hand did not map");
         check(length(aim.position - shownShooter.position) < 1e-4f, "mapped aim missed the displayed shooter");
         near(body::angle(aim.orientation * shownShooter.orientation.conjugate()), 0.f);
         Pose held = webShooter(grip, 1);
         const auto before = held;
-        check(!mapAimToDisplayedGrip(held, shownGrip, 1, .6f), "web-hold should keep the rig aim");
+        check(!mapAimToDisplayedGrip(held, shownGrip, {}, 1, .6f), "web-hold should keep the rig aim");
         check(length(held.position - before.position) < 1e-6f, "web-hold changed the aim");
         Pose bad{};
-        check(!mapAimToDisplayedGrip(bad, {{NAN, 0, 0}, {}}, 0, 0.f), "invalid grip mapped");
+        check(!mapAimToDisplayedGrip(bad, {{NAN, 0, 0}, {}}, {}, 0, 0.f), "invalid grip mapped");
     });
     test("HYBRID hands: idle is tracked at full weight; independent loss and entry/exit ramps", [] {
         animated_arms::State st;
@@ -28207,9 +28207,9 @@ int main() {
              f.state.playing = f.state.fresh = f.state.grounded = true;
              o.update(f, 0);
              // Ground grip press: leaves on that frame, not a fist.
-             f.webIntent = true;
+             f.cancelGrip = f.cancelGripHeld = true;
              int64_t t = 11'000'000;
-             check(o.update(f, t) == Domain::vr && o.enterVr && o.lastEnterVr == EnterVr::airWeb,
+             check(o.update(f, t) == Domain::vr && o.enterVr && o.lastEnterVr == EnterVr::cancel,
                    "ground grip did not leave");
              // Released and pressed again in the air: leaves on that press, no wait.
              o = {};
@@ -28374,71 +28374,27 @@ int main() {
                  check(o.update(f, 1 + i * 11'000'000) == Domain::anim, "under 15 m/s entered vr");
          });
 
-    test("ANIMATED HYBRID intent: vr min dwell + land confirm, no ping-pong", [] {
+    test("ANIMATED HYBRID ground: eligible support restores animation this update; no dwell", [] {
         using namespace hybrid_owner;
         HybridOwner o;
-        Frame f{};
-        f.state.playing = f.state.fresh = f.state.grounded = true;
-        o.update(f, 0);
-        f.state.grounded = false;
-        f.webRising = f.state.webbed = true;
-        check(o.update(f, 1'000'000'000) == Domain::vr && o.enterVr, "web not vr");
-        const int64_t tIn = o.sinceNs;
-        // Let go and touch down at once: land confirm 250 ms, but VR minimum 500 ms.
-        f.webRising = f.state.webbed = false;
-        f.state.grounded = true;
-        check(o.update(f, tIn + 10'000'000) == Domain::vr, "land clock start");
-        check(o.update(f, tIn + 10'000'000 + landHoldNs) == Domain::vr && !o.enterAnim,
-              "left vr under min dwell");
-        check(o.update(f, tIn + vrMinDwellNs - 1) == Domain::vr, "left vr 1 ns early");
-        check(o.update(f, tIn + vrMinDwellNs) == Domain::anim && o.enterAnim,
-              "land not confirmed after dwell");
-        // A bounce right after landing (hop, zip, floor flag) stays anim: no ping-pong.
-        const int64_t tLand = o.sinceNs;
-        f.state.grounded = false;
-        f.state.wall = surfaceFloor;
-        f.speedH = 11.f;
-        for (int i = 1; i < 60; ++i)
-            check(o.update(f, tLand + i * 11'000'000) == Domain::anim && !o.enterVr,
-                  "bounce flipped back to vr");
-        // Long VR flight landing: ungrounded frame resets the land clock.
-        o = {};
-        f = {};
-        f.state.playing = f.state.fresh = f.state.grounded = true;
-        o.update(f, 0);
-        f.state.grounded = false;
-        f.webRising = f.state.webbed = true;
-        o.update(f, 10'000'000);
-        f.webRising = f.state.webbed = false;
-        f.state.grounded = true;
-        o.update(f, 2'000'000'000);
-        f.state.grounded = false;
-        o.update(f, 2'100'000'000);
-        f.state.grounded = true;
-        check(o.update(f, 2'200'000'000) == Domain::vr, "land clock not reset by takeoff");
-        check(o.update(f, 2'200'000'000 + landHoldNs) == Domain::anim && o.enterAnim,
-              "second land not confirmed");
-        // Zip keys held in VR with no press seen (Frame::zipPress) stay VR until it lands.
-        o = {};
-        f = {};
-        f.state.playing = f.state.fresh = f.state.grounded = true;
-        o.update(f, 0);
-        f.state.grounded = false;
-        f.webRising = f.state.webbed = true;
-        o.update(f, 10'000'000);
-        f.webRising = f.state.webbed = false;
-        f.state.zipping = true;
-        f.state.grounded = true; // zip touching ground mid-way
-        for (int i = 1; i < 100; ++i)
-            check(o.update(f, 10'000'000 + i * 11'000'000) == Domain::vr, "zip in vr flipped to anim");
-        // Spidy's wall keeps VR; the game's crawl does not.
-        f.state.zipping = false;
-        f.state.wall = surfaceWall;
-        o.update(f, 2'000'000'000);
-        check(o.update(f, 2'000'000'000 + landHoldNs) == Domain::vr, "spidy wall let vr go");
-        f.state.wall = surfaceGame;
-        o.update(f, 3'000'000'000);
-        check(o.update(f, 3'000'000'000 + landHoldNs) == Domain::anim, "game crawl kept vr");
+        Frame f; f.state.playing=f.state.fresh=true;
+        f.webRising=f.state.webbed=true;
+        check(o.update(f,1)==Domain::vr,"air web not VR");
+        f.webRising=false; f.state.grounded=true;
+        // An attached web is an arm action, not a reason for OG ground body.
+        check(o.update(f,2)==Domain::anim && o.lastEnterAnim==EnterAnim::ground,"ground waited for dwell/web release");
+        f.cancelGrip=f.cancelGripHeld=true;
+        check(o.update(f,3)==Domain::vr,"ground cancel failed");
+        f.cancelGrip=false;
+        check(o.update(f,4)==Domain::vr,"held cancel auto-restored");
+        f.cancelGripHeld=false; f.groundAction=true;
+        check(o.update(f,5)==Domain::vr,"actual takeoff cut short");
+        f.groundAction=false;
+        check(o.update(f,6)==Domain::anim,"release/action completion delayed");
+        f.state.wall=surfaceWall;
+        check(o.update(f,7)==Domain::vr,"Spidy wall run forced native");
+        f.state.wall=surfaceGame; f.state.grounded=false;
+        check(o.update(f,8)==Domain::anim,"game crawl kept OG body");
     });
 
     test("ANIMATED HYBRID owner: combat sticky keeps anim through a launcher hop until web", [] {
@@ -28668,7 +28624,7 @@ int main() {
         check(o.zipNs < 0 && o.domain == Domain::anim, "cutscene kept the zip hold");
     });
 
-    test("ANIMATED HYBRID state pass: a zip back to anim steers nothing; landings still face your look", [] {
+    test("ANIMATED HYBRID state pass: zip and immediate ground restore add no forced facing push", [] {
         using namespace hybrid_owner;
         check(seedsFacing(EnterAnim::land) && !seedsFacing(EnterAnim::zip) && !seedsFacing(EnterAnim::none),
               "only a landing seeds the hero's facing");
@@ -28701,8 +28657,8 @@ int main() {
         int64_t t = 2'000'000'000;
         while (o.update(f, t += 11'000'000) == Domain::vr && t < 4'000'000'000) {
         }
-        check(o.enterAnim && o.lastEnterAnim == EnterAnim::land && seedsFacing(o.lastEnterAnim) &&
-                  o.lastVrNs == t - 2'000'000'000 && o.lastVrNs >= vrMinDwellNs,
+        check(o.enterAnim && o.lastEnterAnim == EnterAnim::ground && !seedsFacing(o.lastEnterAnim) &&
+                  o.lastVrNs == t - 2'000'000'000 && o.lastVrNs == 11'000'000,
               "land edge: VR stint not the real one (was always 0 ms in the log)");
     });
 
@@ -28909,11 +28865,11 @@ int main() {
                  f.state.grounded = false;
                  check(o.update(f, 120'000'000) == Domain::vr, "set-up: the jump was not adopted");
                  f.state.wall = surfaceGame;
-                 check(o.update(f, 200'000'000) == Domain::anim && o.lastEnterAnim == EnterAnim::mount &&
+                 check(o.update(f, 200'000'000) == Domain::anim && o.lastEnterAnim == EnterAnim::ground &&
                            !seedsFacing(o.lastEnterAnim) &&
                            std::strcmp(enterAnimName(EnterAnim::mount), "mount") == 0,
                        "a wall mount from a jump kept VR");
-                 // A web on the way is the player's: the wall keeps VR as before.
+                 // A web on the way is an arm action: native crawl still owns the body.
                  o = {};
                  f = {};
                  f.state.playing = f.state.fresh = f.state.grounded = true;
@@ -28927,49 +28883,25 @@ int main() {
                  o.update(f, 150'000'000);
                  f.webRising = f.state.webbed = false;
                  f.state.wall = surfaceGame;
-                 check(o.update(f, 200'000'000) == Domain::vr && o.vrBy == EnterVr::web,
-                       "a webbed jump onto a wall left VR as a mount");
+                 check(o.update(f, 200'000'000) == Domain::anim && o.lastEnterAnim == EnterAnim::ground,
+                       "native crawl retained an OG body because of an arm web");
              }
          });
 
-    test("ANIMATED HYBRID jump adopt: the landing goes back to anim by the land rules unless a web keeps VR",
-         [] {
-             using namespace hybrid_owner;
-             for (const bool webbed : {false, true}) {
-                 HybridOwner o;
-                 Frame f{};
-                 f.state.playing = f.state.fresh = f.state.grounded = true;
-                 o.update(f, 0);
-                 f.jumpAsk = true;
-                 o.update(f, 11'000'000);
-                 f.jumpAsk = false;
-                 f.state.grounded = false;
-                 const int64_t leave = 100'000'000;
-                 check(o.update(f, leave) == Domain::vr, "set-up: not adopted");
-                 int64_t t = leave;
-                 while ((t += 11'000'000) < leave + 300'000'000)
-                     check(o.update(f, t) == Domain::vr, "the leap left VR in the air");
-                 if (webbed)
-                     f.webRising = f.state.webbed = f.state.owned = true;
-                 o.update(f, t);
-                 f.webRising = false;
-                 f.state.grounded = true; // touch down 0.3 s in
-                 const int64_t land = t += 11'000'000;
-                 Domain d = o.update(f, land);
-                 while (d == Domain::vr && (t += 11'000'000) < leave + 3'000'000'000)
-                     d = o.update(f, t);
-                 if (webbed) {
-                     check(d == Domain::vr, "a web held on landing let the animation take him");
-                     continue;
-                 }
-                 check(d == Domain::anim && o.lastEnterAnim == EnterAnim::land &&
-                           seedsFacing(o.lastEnterAnim),
-                       "the landing did not go back to the animation");
-                 check(t - land >= landHoldNs && t - leave >= vrMinDwellNs &&
-                           t - std::max(land + landHoldNs, leave + vrMinDwellNs) <= 11'000'000,
-                       "the landing skipped the land confirm or the VR minimum");
-             }
-         });
+    test("ANIMATED HYBRID jump adopt: touchdown restores native immediately with or without arm webs", [] {
+        using namespace hybrid_owner;
+        for(bool webbed : {false,true}) {
+            HybridOwner o; Frame f;
+            f.state.playing=f.state.fresh=f.state.grounded=true;
+            o.update(f,0); f.jumpAsk=true; o.update(f,11'000'000);
+            f.jumpAsk=false; f.state.grounded=false;
+            check(o.update(f,100'000'000)==Domain::vr,"jump not adopted");
+            f.state.webbed=f.state.owned=webbed;
+            f.state.grounded=true;
+            check(o.update(f,111'000'000)==Domain::anim && o.lastEnterAnim==EnterAnim::ground,
+                  "touchdown retained OG body or inserted dwell");
+        }
+    });
 
     test("ANIMATED HYBRID air adopt: every mid-air takeover snapshots; a grounded non-jump does not", [] {
              using namespace spidy::hybrid_owner;
