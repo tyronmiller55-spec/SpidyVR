@@ -15,6 +15,14 @@ namespace {
 void check(bool ok, const char* what) {
     if (!ok) { std::fprintf(stderr, "FAIL: %s\n", what); std::exit(1); }
 }
+// acos(q.w) assumes an exactly unit quaternion. Even q * conjugate(q)
+// can have w slightly below 1 after MSVC float rounding, producing a false
+// milliradian mismatch for identical poses. Compare the actual basis instead.
+bool sameOrientation(Quat a, Quat b) {
+    for (const Vec3 axis : {Vec3{1,0,0}, Vec3{0,1,0}, Vec3{0,0,1}})
+        if (!(length(a.rotate(axis)-b.rotate(axis)) < 1e-5f)) return false;
+    return true;
+}
 struct Open : WorldQueries {
     std::optional<RayHit> raycast(Vec3, Vec3, float) const override { return {}; }
     bool exists(std::uint64_t) const override { return false; }
@@ -262,6 +270,8 @@ void cancellationTests() {
 }
 int main() {
     Open world;
+    check(sameOrientation({}, {0,0,0,.9999998f}), "roundoff identity rejected");
+    check(!sameOrientation({}, Quat::yaw(.01f)), "real orientation error accepted");
     Shooter shooter;
     const Vec3 anchors[] = {{-140, 35, 820}, {285, 91, -507}, {0, 0, 0}};
     // Exercise translated/rotated animation head frames and both mirrored
@@ -279,7 +289,7 @@ int main() {
         absoluteGrip.position += feet;
         const Pose expected = webShooter(absoluteGrip, hand);
         check(length(aim.position - expected.position) < 1e-4f, "feet translation missing/doubled");
-        check(web_aim::turnAngle(aim.orientation * expected.orientation.conjugate()) < .001f,
+        check(sameOrientation(aim.orientation, expected.orientation),
               "world orientation turned twice");
         const auto shot = shooter.aim(static_cast<int>(hand), aim, {}, world);
         check(length(shot.origin - (expected.position + shot.direction * ShooterConfig{}.muzzle)) < 1e-4f,
@@ -297,7 +307,7 @@ int main() {
         const Pose before = held;
         check(!mapAimToDisplayedGrip(held, grip, feet, hand, .6f), "grip-out remapped");
         check(length(held.position-before.position)<1e-6f, "grip-out position mutated");
-        check(web_aim::turnAngle(held.orientation*before.orientation.conjugate())<.001f,
+        check(sameOrientation(held.orientation, before.orientation),
               "grip-out orientation mutated");
         ++cases;
     }
@@ -320,7 +330,7 @@ int main() {
         const Pose renderedGrip=compose(Pose{feet,root},compose(anchor,local));
         const Pose expected=webShooter(renderedGrip,hand);
         check(length(aim.position-expected.position)<.0002f,"rendered mode lost/doubled root translation");
-        check(web_aim::turnAngle(aim.orientation*expected.orientation.conjugate())<.001f,"rendered mode doubled root turn");
+        check(sameOrientation(aim.orientation, expected.orientation),"rendered mode doubled root turn");
         ++renderedCases;
     }
     Pose untouched{{1,2,3}, {}};
