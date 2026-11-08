@@ -48,6 +48,7 @@
 #include "spidy/overlay_text.hpp"
 #include "spidy/punch.hpp"
 #include "spidy/shooter.hpp"
+#include "spidy/shooter_diagnostics.hpp"
 #include "spidy/slow_motion.hpp"
 #include "spidy/spectator_smoothing.hpp"
 #include "spidy/hand_pose.hpp"
@@ -23493,6 +23494,23 @@ int main() {
         check(bad([](ShooterConfig& c) { c.assistAngle = std::numeric_limits<float>::quiet_NaN(); }),
               "NaN assist accepted");
         check(!bad([](ShooterConfig&) {}), "defaults rejected");
+    });
+    test("shooter diagnostics separate dispatch success from returned object evidence", [] {
+        using namespace shooter_diagnostics;
+        Data d;
+        record(d, false, true, false);
+        check(d.callSuccess == 1 && d.objectUnknown == 1 && d.objectKnown == 0 &&
+                  d.outcome == static_cast<uint32_t>(Outcome::callOnly),
+              "call success falsely claimed a returned object");
+        record(d, false, true, true);
+        check(d.callSuccess == 2 && d.objectKnown == 1, "returned object not counted");
+        record(d, false, false, true);
+        check(d.rejected == 1 && d.objectKnown == 1 && d.callSuccess == 2,
+              "rejected call with stale object falsely counted as success");
+        record(d, true, true, true);
+        check(d.expired == 1 && d.callSuccess == 2 && d.objectKnown == 1,
+              "expired request falsely counted as a fire");
+        check(d.callSuccess == d.objectKnown + d.objectUnknown, "object observations do not partition success");
     });
     test("VR categories: every control once, bounded screens, stable row numbers", [] {
         using namespace vr_settings;

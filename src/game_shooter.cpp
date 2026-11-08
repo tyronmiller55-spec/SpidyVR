@@ -466,6 +466,8 @@ uintptr_t gameWebShooter();
 struct Fired {
     uint64_t shot{};
     bool resolved{}, gadget{}, empty{};
+    uint32_t gadgetCalls{}, fallbackCalls{};
+    Vec3 origin{}, direction{};
 };
 // The equipped gadget fired from the hand: with a charge to fire, as the
 // game asks before its own; its own event from the aim written into it; the
@@ -501,6 +503,7 @@ bool fireGadget(uintptr_t weapon, const Pending& p, Vec3 origin, Vec3 forward, F
     event[0xb] = 1;
     std::memcpy(event + 0xc, &id, 4);
     muzzleMatrix(origin, forward, firingMatrix);
+    ++out.gadgetCalls;
     if (!fire(weapon, event))
         return false;
     out.gadget = true;
@@ -516,6 +519,8 @@ bool fireNow(const Pending& p, Fired& out) {
     const Vec3 forward = normalized(p.shot.aimPoint - origin);
     if (!finite(origin) || !finite(p.shot.aimPoint) || length(forward) < .5f)
         return false;
+    out.origin = origin;
+    out.direction = forward;
     if (const auto gadget = equippedGadget())
         return fireGadget(gadget, p, origin, forward, out);
     // The game's own Web Shooter, where it is the gadget the game has equipped
@@ -531,7 +536,11 @@ bool fireNow(const Pending& p, Fired& out) {
         if (fireGadget(own, p, origin, forward, out))
             return true;
         const bool empty = out.empty;
+        const auto gadgetCalls = out.gadgetCalls;
         out = {};
+        out.gadgetCalls = gadgetCalls;
+        out.origin = origin;
+        out.direction = forward;
         out.empty = empty;
     }
     const auto weapon = gadgets.current();
@@ -567,6 +576,7 @@ bool fireNow(const Pending& p, Fired& out) {
     event[0x3a] = 0;
     event[0x3b] = 1;
     muzzleMatrix(origin, forward, firingMatrix);
+    ++out.fallbackCalls;
     if (!fire(weapon, event))
         return false;
     out.resolved = ref && (value<uint32_t>(weapon + 0x68) & 1);
@@ -868,10 +878,21 @@ void fireQueued() {
     for (unsigned i = 0; i < count; ++i) {
         const auto& p = batch[i];
         Fired fired;
-        const bool ok = now - p.queuedMs < leaseMs && fireNow(p, fired);
+        const bool expired = now - p.queuedMs >= leaseMs;
+        const bool ok = !expired && fireNow(p, fired);
         publish([&](Data& d) {
             // A gadget without a charge: its pull dropped, or for the game's
             // Web Shooter answered with the ball.
+            auto& debug = d.diagnostic;
+            shooter_diagnostics::record(debug, expired, ok, fired.shot != 0);
+            debug.gadgetCalls += fired.gadgetCalls;
+            debug.fallbackCalls += fired.fallbackCalls;
+            debug.route = fired.fallbackCalls ? 2 : fired.gadgetCalls ? 1 : 0;
+            debug.hand = static_cast<uint32_t>(p.shot.hand);
+            debug.target = p.shot.target;
+            debug.aimPoint = p.shot.aimPoint;
+            debug.origin = fired.origin;
+            debug.direction = fired.direction;
             d.emptyPulls += fired.empty;
             if (!ok) {
                 ++d.dropped;
@@ -925,6 +946,10 @@ bool enqueue(const Pending& p) {
     if (room)
         queue[queued++] = p;
     ReleaseSRWLockExclusive(&queueLock);
+    publish([&](Data& d) {
+        d.diagnostic.queued += room;
+        d.diagnostic.queueFull += !room;
+    });
     return room;
 }
 } // namespace

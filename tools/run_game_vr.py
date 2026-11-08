@@ -1393,6 +1393,21 @@ def gadgets_of(raw):
                 equip_result=equip_result, equips=equips, gadget_shots=gadget_shots, empty_pulls=empty_pulls)
 
 
+def shooter_dispatch_of(raw):
+    """v5 observations, not proof of projectile visibility/absence or damage."""
+    if len(raw) < 432:
+        return {}
+    names = ('queued', 'queue_full', 'expired', 'call_success', 'rejected',
+             'object_known', 'object_unknown', 'gadget_calls', 'fallback_calls')
+    result = dict(zip(names, struct.unpack_from('<9Q', raw, 296)))
+    result['target'] = hex(struct.unpack_from('<Q', raw, 368)[0])
+    result['origin'] = list(struct.unpack_from('<3f', raw, 376))
+    result['direction'] = list(struct.unpack_from('<3f', raw, 388))
+    result['aim_point'] = list(struct.unpack_from('<3f', raw, 400))
+    result['route'], result['outcome'], result['hand'] = struct.unpack_from('<3I', raw, 412)
+    return dict(dispatch=result)
+
+
 def shooter_snapshot(game, address):
     """Web-shooter shots (game_shooter::Data): pulls that asked for a shot, shots the game fired and requests it
     dropped, those aimed at a thug and those whose target the game took, the hero's gadget, the main-thread frames
@@ -1402,8 +1417,15 @@ def shooter_snapshot(game, address):
         raw = game.read(address, 296)
         if len(raw) != 296:
             return None
-        if struct.unpack_from('<3I', raw) != (0x53484f44, 4, 296):
+        header = struct.unpack_from('<3I', raw)
+        if header not in ((0x53484f44, 4, 296), (0x53484f44, 5, 432)):
             raise RuntimeError('Shooter protocol mismatch')
+        if header[1] == 5:
+            raw = game.read(address, 432)
+            if len(raw) != 432:
+                return None
+            if struct.unpack_from('<3I', raw) != header:
+                continue
         if struct.unpack_from('<Q', raw, 16)[0] & 1 or raw[16:24] != game.read(address+16, 8):
             continue
         status = struct.unpack_from('<I', raw, 12)[0]
@@ -1418,7 +1440,7 @@ def shooter_snapshot(game, address):
                     hands=hands, last_origin=[round(x, 3) for x in origin],
                     last_aim_point=[round(x, 3) for x in aim_point],
                     last_shot=hex(struct.unpack_from('<Q', raw, 152)[0]), collisions=collisions, webbed=webbed,
-                    pushed=pushed, last_hit=hex(last_hit), **gadgets_of(raw))
+                    pushed=pushed, last_hit=hex(last_hit), **gadgets_of(raw), **shooter_dispatch_of(raw))
     return None
 
 
