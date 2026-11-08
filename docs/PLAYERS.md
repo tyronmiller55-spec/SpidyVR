@@ -60,12 +60,13 @@ steering answers a bit more; legs out keep the swing you already had. Kick, wall
 crawl still use their own legs. The view uses the same 180 ms blend. You land back on the animation by the usual
 landing rules unless a web keeps you in SpidyVR. Parkour vaults and mantles, short
 hops, crawls, Y zips and fight launchers never do this, and a jump the game turns
-into a wall mount goes back to the animation for the climb. Web zips stay on the animation from the frame you press them: Y in
+into a wall mount goes back to the animation for the climb. Web zips stay on the animation once the game starts them: Y in
 the air (a web strike, a car in a chase) and the game's zip to a point (right stick
 up), from a swing or Spidy's wall too. Nothing hands that zip to SpidyVR until it
 ends (you land, or the game gives you back to your webs), unless you squeeze
 the web-hold button, which leaves the animation and shoots a SpidyVR web. A press the game does
-not take (nothing to strike or zip to) gives the swing back after 0.4 s. Y on the
+not take (nothing to strike or zip to) leaves you in SpidyVR — no flip to the
+animation and back. Y on the
 ground or on a wall is still interact. Switching between SpidyVR and the
 animation (starting or ending a swing, a zip, landing) keeps the same 180 ms
 blend, now from exactly the view you were seeing to exactly the view that

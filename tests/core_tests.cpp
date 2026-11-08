@@ -28374,7 +28374,7 @@ int main() {
               "fresh grip did not leave the zip");
     });
 
-    test("ANIMATED HYBRID web zip: pressed while swinging in vr switches to anim on the press frame", [] {
+    test("ANIMATED HYBRID web zip: pressed while swinging in vr switches to anim when the game takes it", [] {
         using namespace hybrid_owner;
         HybridOwner o;
         Frame f{};
@@ -28384,20 +28384,24 @@ int main() {
         f.webRising = f.state.webbed = f.state.owned = true;
         check(o.update(f, 1'000'000'000) == Domain::vr, "swing not vr");
         f.webRising = false;
-        // Well under the VR minimum and in the air: the press still switches now.
+        // Well under the VR minimum and in the air: the press stays VR until
+        // the game begins the zip (the swing yields).
         f.zipPress = true;
         int64_t t = 1'000'000'000 + 50'000'000;
-        check(o.update(f, t) == Domain::anim && o.enterAnim && o.lastEnterAnim == EnterAnim::zip &&
-                  !o.enterVr,
-              "zip press in vr not anim on the press frame");
+        check(o.update(f, t) == Domain::vr && !o.enterAnim && o.zipNs == t,
+              "zip press in vr left before the game took it");
         check(std::strcmp(enterAnimName(EnterAnim::zip), "zip") == 0 &&
                   std::strcmp(enterAnimName(EnterAnim::land), "land") == 0,
               "enter-anim names");
         f.zipPress = false;
+        check(o.update(f, t += 11'000'000) == Domain::vr && !o.enterAnim,
+              "zip press in vr left while still waiting");
         // The game takes him (game_swing::AirYield): the swing lets go and its webs too.
-        check(o.update(f, t += 11'000'000) == Domain::anim, "web still held the press frame after");
         f.state.webbed = f.state.owned = false;
         f.state.zipping = true; // its zip's keys still going out
+        check(o.update(f, t += 11'000'000) == Domain::anim && o.enterAnim &&
+                  o.lastEnterAnim == EnterAnim::zip && !o.enterVr,
+              "game zip start not anim");
         f.speedH = 28.f;
         for (int i = 0; i < 200; ++i) {
             if (i == 30)
@@ -28410,7 +28414,7 @@ int main() {
         check(o.update(f, t += 11'000'000) == Domain::anim && o.zipNs < 0 && !o.enterVr, "zip landing");
     });
 
-    test("ANIMATED HYBRID web zip: a press the game refuses gives the swing back after the ask window", [] {
+    test("ANIMATED HYBRID web zip: a press the game refuses never leaves vr", [] {
         using namespace hybrid_owner;
         for (int webbed = 0; webbed < 2; ++webbed) {
             HybridOwner o;
@@ -28424,18 +28428,18 @@ int main() {
             f.state.webbed = webbed != 0;
             const int64_t press = 2'000'000'000;
             f.zipPress = true;
-            check(o.update(f, press) == Domain::anim, "refused: press not anim");
+            check(o.update(f, press) == Domain::vr && !o.enterAnim && o.zipNs == press,
+                  "refused: press left vr");
             f.zipPress = false;
             // The swing goes on carrying him (no point, nothing to strike).
             int64_t t = press;
             while ((t += 11'000'000) < press + zipAskNs)
-                check(o.update(f, t) == Domain::anim, "refused: left anim inside the ask window");
-            check(o.update(f, press + zipAskNs) == Domain::vr && o.enterVr &&
-                      o.lastEnterVr == (webbed ? EnterVr::web : EnterVr::swing),
-                  "refused: swing not given back");
+                check(o.update(f, t) == Domain::vr && !o.enterAnim, "refused: left vr inside the ask window");
+            check(o.update(f, press + zipAskNs) == Domain::vr && !o.enterVr && !o.enterAnim && o.zipNs < 0,
+                  "refused: left vr or kept a pending zip");
         }
         check(std::strcmp(enterVrName(EnterVr::swing), "swing") == 0, "swing name");
-        // Spidy's wall: the game's zip from it refused, the wall run is back.
+        // Spidy's wall: the game's zip from it refused, the wall run never left.
         HybridOwner o;
         Frame f{};
         f.state.playing = f.state.fresh = true;
@@ -28443,11 +28447,31 @@ int main() {
         f.state.owned = true;
         check(o.update(f, 0) == Domain::vr && o.lastEnterVr == EnterVr::wallRun, "wall run");
         f.zipPress = true;
-        check(o.update(f, 10'000'000) == Domain::anim && o.lastEnterAnim == EnterAnim::zip, "wall zip press");
+        check(o.update(f, 10'000'000) == Domain::vr && !o.enterAnim && o.zipNs == 10'000'000,
+              "wall zip press left vr");
         f.zipPress = false;
-        check(o.update(f, 10'000'000 + zipAskNs / 2) == Domain::anim, "wall zip held");
-        check(o.update(f, 10'000'000 + zipAskNs) == Domain::vr && o.lastEnterVr == EnterVr::wallRun,
-              "refused wall zip not back on the wall");
+        check(o.update(f, 10'000'000 + zipAskNs / 2) == Domain::vr && !o.enterAnim, "wall zip waiting");
+        check(o.update(f, 10'000'000 + zipAskNs) == Domain::vr && !o.enterVr && o.zipNs < 0,
+              "refused wall zip left vr");
+    });
+
+    test("ANIMATED HYBRID web zip: a speed flight with no swing still yields on the press", [] {
+        using namespace hybrid_owner;
+        HybridOwner o;
+        Frame f{};
+        f.state.playing = f.state.fresh = f.state.grounded = true;
+        o.update(f, 0);
+        f.state.grounded = false;
+        f.speedH = 20.f;
+        int64_t t = 0;
+        while (o.update(f, t += 11'000'000) == Domain::anim && t < speedHoldNs + 100'000'000) {
+        }
+        check(o.domain == Domain::vr && o.lastEnterVr == EnterVr::speed && !f.state.owned,
+              "set-up: speed flight not vr");
+        f.zipPress = true;
+        check(o.update(f, t += 11'000'000) == Domain::anim && o.enterAnim &&
+                  o.lastEnterAnim == EnterAnim::zip,
+              "unowned speed zip press stayed vr");
     });
 
     test("ANIMATED HYBRID web zip: hold ends at the game's longest yield; cutscene clears it", [] {
@@ -28494,8 +28518,11 @@ int main() {
         check(o.update(f, 1'000'000'000) == Domain::vr, "swing not vr");
         f.webRising = false;
         f.zipPress = true;
-        check(o.update(f, 1'300'000'000) == Domain::anim && o.lastEnterAnim == EnterAnim::zip &&
-                  !seedsFacing(o.lastEnterAnim) && o.lastVrNs == 300'000'000,
+        check(o.update(f, 1'300'000'000) == Domain::vr && !o.enterAnim, "zip edge setup: press left vr");
+        f.zipPress = false;
+        f.state.webbed = f.state.owned = false;
+        check(o.update(f, 1'311'000'000) == Domain::anim && o.lastEnterAnim == EnterAnim::zip &&
+                  !seedsFacing(o.lastEnterAnim) && o.lastVrNs == 311'000'000,
               "zip edge: no facing seed, or VR stint not kept");
         // And a landing after a later swing: seeded, its own stint.
         o = {};

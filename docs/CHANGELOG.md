@@ -3,6 +3,14 @@
 Every build, newest first, with what changed, why, and what was measured.
 Per-check results are in [VALIDATION.md](VALIDATION.md).
 
+## Native Animation: no mid-air round trip on a Y the game doesn't take
+
+**Leave SpidyVR for a web zip only once the game actually starts it.**
+
+- A Y in the air or a zip to a point, pressed while swinging or on Spidy's wall, used to flip to the animation on the press itself. If the game refused that press (nothing to strike or zip to), SpidyVR took you back about 0.4 s later — a visible round trip. Those presses now stay in SpidyVR until the swing yields (the game began the move). A press it never takes never leaves.
+- A zip pressed while already on the animation, or during a speed or rotate flight with no swing to watch, still goes to the animation on the press, so the game can play the move. A fresh grip is still the way out of an animation zip. Ownership otherwise unchanged.
+- Tests: a swing or wall press stays in SpidyVR until the game takes it; a refused press never leaves; a speed flight with no swing still yields on the press. Not headset-tested.
+
 ## Native Animation: air adopt on every mid-air takeover
 
 **Taking over in the air now starts from the pose the animation left, the way a jump already did.**

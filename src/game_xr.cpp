@@ -4414,9 +4414,9 @@ DWORD WINAPI run(void*) {
                                     (walk.zip || walk.aim || walk.interact);
                         // ANIMATED HYBRID: a web zip asked of the game - its zip to a point
                         // (the stick up, LT + RT) or its Y in the air (a web strike; a car's
-                        // in a chase) - is the game's animation from this press frame on
-                        // (hybrid_owner zip hold). Y on the ground or on Spidy's wall is
-                        // interact, not a zip.
+                        // in a chase) - is noted this press frame (hybrid_owner zip hold).
+                        // The owner leaves SpidyVR only if the game then begins that zip.
+                        // Y on the ground or on Spidy's wall is interact, not a zip.
                         {
                             const bool yDown = steering && (origins.play() & buttonY) != 0;
                             // The floor-crawl flag lights in rooftop parkour: not a wall here.
