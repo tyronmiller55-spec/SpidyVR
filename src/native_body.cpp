@@ -686,6 +686,7 @@ void solveHero(float* out, uintptr_t job, uintptr_t instance) {
             const Vec3 wrist = hand.grip + hand.orientation.rotate(offset);
             overlayTrackingSample.requestedWeight[i] = overlayArmWeight[i];
             overlayTrackingSample.grip[i] = toWorld.rotate(hand.grip);
+            overlayTrackingSample.gripOri[i] = toWorld * hand.orientation;
             overlayTrackingSample.wrist[i] = toWorld.rotate(wrist);
             overlayTrackingSample.solvedWrist[i] = toWorld.rotate(pose.position(a.hand));
             overlayTrackingSample.elbow[i] = toWorld.rotate(pose.position(a.lower));

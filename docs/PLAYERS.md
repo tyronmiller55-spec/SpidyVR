@@ -40,9 +40,10 @@ The **Native Animation** master represents MOVES + HYBRID, not every companion:
 Existing ownership remains: animation default; SpidyVR on a web, squeezing the
 web-hold button (grip by default, or trigger if you swapped Web button) at any
 time, mid-air rotation, sustained 15 m/s speed or real wall run. Web balls fire
-from the tracked controllers during any animation and do not take you out of it.
-The aim markers stay up whenever Native Animation and AIM MARKERS are on,
-including while an animation is playing. Ground parkour and hops stay animated. A real jump or leap you ask for - A from the ground, a charged leap,
+during any animation and do not take you out of it. While the animation owns,
+they leave from the same place as the gloves you see, and the aim markers point
+along that same line. The aim markers stay up whenever Native Animation and AIM
+MARKERS are on, including while an animation is playing. Ground parkour and hops stay animated. A real jump or leap you ask for - A from the ground, a charged leap,
 SPIDY RUN JUMP - now plays the game's takeoff and hands the body to SpidyVR on the
 frame you leave the ground, starting from exactly the pose the takeoff left him in:
 your arms are on the controllers from that first frame, the rest of the body eases

@@ -3,6 +3,15 @@
 Every build, newest first, with what changed, why, and what was measured.
 Per-check results are in [VALIDATION.md](VALIDATION.md).
 
+## Native Animation: web balls aim from the gloves you see
+
+**While the animation owns, web balls and aim markers leave from the same place as the visible gloves.**
+
+- The gloves already sit in the hero's head-bone frame so they stay on your controllers in the view you are watching. Web balls and aim markers still aimed from the tracking rig, which at a takeover sat a median 0.82 m and 45° away from that view — so a ball left beside the thug you were looking at. They now use the same mapped grip the overlay placed, then the usual web-shooter offset on top.
+- Squeezing the web-hold button (grip by default) still leaves the animation and shoots a SpidyVR web from the tracking-rig controller, not from the remapped glove.
+- Diagnostics print a `web balls:` line about once a second: requested, fired, targeted, resolved, webbed, collisions, pushed, dropped, empty pulls, and each hand's shot count. That survives a crash that cuts off the launcher's closing summary.
+- Tests: a mapped grip's shooter matches mapping the shooter itself; a free hand's aim moves onto that displayed shooter; a web-hold keeps the rig aim. Not headset-tested.
+
 ## Native Animation: no mid-air round trip on a Y the game doesn't take
 
 **Leave SpidyVR for a web zip only once the game actually starts it.**

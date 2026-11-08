@@ -317,7 +317,7 @@ struct OverlayTracking {
     uint64_t serial{};
     animated_view::Frame targetFrame = animated_view::Frame::none;
     Vec3 grip[2]{}, wrist[2]{}, solvedWrist[2]{}, elbow[2]{};
-    Quat aim[2]{};
+    Quat gripOri[2]{}, aim[2]{};
     float residual[2]{-1, -1}, angle[2]{-1, -1};
     uint32_t valid[2]{}, reachClamped[2]{};
     float requestedWeight[2]{}, armWeight[2]{};

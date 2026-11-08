@@ -27239,6 +27239,30 @@ int main() {
              0.f);
         check(!animated_view::headFrame({}, {}, {}, {}, rebuilt), "invalid head accepted");
     });
+    test("Native Animation: web balls aim from the displayed glove, not the tracking rig", [] {
+        const Pose authored{{5, 9, 12}, Quat::yaw(-1.3f) * Quat::around({1, 0, 0}, .5f)};
+        const Pose ref{{.2f, 1.6f, -.1f}, Quat::yaw(.7f)};
+        const Pose grip{{.6f, 1.2f, -.4f}, Quat::yaw(.4f) * Quat::around({0, 0, 1}, -.3f)};
+        const Mat4 anchor = animated_view::toNative(authored);
+        const float turn = .35f;
+        const auto shownGrip = animated_view::resolve(anchor, animated_view::relative(grip, ref, turn));
+        const auto shownShooter =
+            animated_view::resolve(anchor, animated_view::relative(webShooter(grip, 0), ref, turn));
+        check(length(shownShooter.position - webShooter(shownGrip, 0).position) < 1e-4f,
+              "displayed shooter is not on the displayed grip");
+        near(body::angle(shownShooter.orientation * webShooter(shownGrip, 0).orientation.conjugate()), 0.f);
+        Pose aim = webShooter(grip, 0);
+        check(length(aim.position - shownShooter.position) > .5f, "rig and displayed frames were not apart");
+        check(mapAimToDisplayedGrip(aim, shownGrip, 0, 0.f), "free hand did not map");
+        check(length(aim.position - shownShooter.position) < 1e-4f, "mapped aim missed the displayed shooter");
+        near(body::angle(aim.orientation * shownShooter.orientation.conjugate()), 0.f);
+        Pose held = webShooter(grip, 1);
+        const auto before = held;
+        check(!mapAimToDisplayedGrip(held, shownGrip, 1, .6f), "web-hold should keep the rig aim");
+        check(length(held.position - before.position) < 1e-6f, "web-hold changed the aim");
+        Pose bad{};
+        check(!mapAimToDisplayedGrip(bad, {{NAN, 0, 0}, {}}, 0, 0.f), "invalid grip mapped");
+    });
     test("HYBRID hands: idle is tracked at full weight; independent loss and entry/exit ramps", [] {
         animated_arms::State st;
         animated_arms::Sample hands[2] = {{{.3f, 1.2f, 0}, true}, {{-.3f, 1.2f, 0}, true}};

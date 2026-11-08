@@ -1036,6 +1036,7 @@ DWORD WINAPI run(void*) {
         uint64_t forearmJob{};
         uint32_t forearmStaleFrames{};
         float forearmLogSeconds{};
+        float shooterLogSeconds{};
         diag_log::ChangeOnly forearmDiag[2];
         // STEADY STATES' RT (ground_state::RiseDelay), and the state changes'
         // lines in the diagnostics (ground_state::StateLog).
@@ -2986,6 +2987,25 @@ DWORD WINAPI run(void*) {
                             input.wallPositions[i] = motion.grips[i].position;
                             input.wallGrips[i] = hand.tracked ? frame.hands[i].squeeze : 0.f;
                         }
+                        // Native Animation: gloves sit in the head-bone frame while the
+                        // animation owns. Aim web balls and markers from those same
+                        // gloves. A web-hold on a hand is how you leave the animation —
+                        // that hand keeps the tracking-rig aim so the SpidyVR web leaves
+                        // the controller.
+                        if (values.animatedHybrid && values.animatedArms &&
+                            animatedMovesHandoff.yielding) {
+                            const auto overlay = native_body::overlayTracking();
+                            if (overlay.targetFrame != animated_view::Frame::none) {
+                                for (unsigned i = 0; i < 2; ++i) {
+                                    if (!overlay.valid[i] || !input.hands[i].tracked)
+                                        continue;
+                                    if (mapAimToDisplayedGrip(input.hands[i].aim,
+                                                              {overlay.grip[i], overlay.gripOri[i]}, i,
+                                                              input.hands[i].grip))
+                                        motion.swing.hands[i].aim = input.hands[i].aim;
+                                }
+                            }
+                        }
                         // WEB AIM: MODEL FOREARM (off by default): each hand's webs turn
                         // from the controller's line onto the body's forearm, carried on
                         // the controller's pose now (web_aim::forearmTurn), smoothed, and
@@ -3680,6 +3700,26 @@ DWORD WINAPI run(void*) {
                                     eyeShots += input.eyeAim != 0;
                                 }
                                 shotsBefore[i] = shots.hands[i].shots;
+                            }
+                            shooterLogSeconds +=
+                                std::isfinite(frame.seconds) && frame.seconds > 0 ? frame.seconds : 0;
+                            if (shooterLogSeconds >= 1.f) {
+                                shooterLogSeconds = 0;
+                                diag_log::writef(
+                                    "web balls: requested %llu fired %llu targeted %llu resolved %llu "
+                                    "webbed %llu collisions %llu pushed %llu dropped %llu empty %llu "
+                                    "(L %llu R %llu)",
+                                    static_cast<unsigned long long>(listed.requested),
+                                    static_cast<unsigned long long>(listed.fired),
+                                    static_cast<unsigned long long>(listed.targeted),
+                                    static_cast<unsigned long long>(listed.resolved),
+                                    static_cast<unsigned long long>(listed.webbed),
+                                    static_cast<unsigned long long>(listed.collisions),
+                                    static_cast<unsigned long long>(listed.pushed),
+                                    static_cast<unsigned long long>(listed.dropped),
+                                    static_cast<unsigned long long>(listed.emptyPulls),
+                                    static_cast<unsigned long long>(listed.hands[0].shots),
+                                    static_cast<unsigned long long>(listed.hands[1].shots));
                             }
                         }
                         fightNear = input.focused && ((fighting && strikes.cueTarget != 0) || punch.bots != 0);

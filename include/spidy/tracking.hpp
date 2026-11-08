@@ -78,4 +78,17 @@ inline Pose webShooter(Pose grip, unsigned hand) {
     const float palm = hand == 0 ? .01f : -.01f;
     return compose(grip, {{palm, .105f, 0}, {-.70710678f, 0, 0, .70710678f}});
 }
+// When the arms overlay has mapped a hand onto the head-bone frame, the
+// web shooter sits on that mapped grip — the glove the player sees. A
+// web-hold (the button that leaves the animation) keeps the caller's aim
+// so a grip-out still shoots a SpidyVR web from the tracking rig.
+inline bool mapAimToDisplayedGrip(Pose& aim, Pose mappedGrip, unsigned hand, float webHold) {
+    if (hand > 1 || webHold > .5f || !finite(mappedGrip.position))
+        return false;
+    const Pose next = webShooter(mappedGrip, hand);
+    if (!finite(next.position))
+        return false;
+    aim = next;
+    return true;
+}
 } // namespace spidy
