@@ -159,6 +159,56 @@ inline Quat forearmTurn(Vec3 inGrip, Quat gripNow, Quat aimNow, float limitDegre
         return {};
     return clampTurn(arc({0, 0, -1}, local), std::clamp(limitDegrees, 0.f, 180.f) * 3.14159265f / 180);
 }
+// Native Animation forearm clamp: the web follows the world's elbow→wrist
+// (not a forearm stored on the grip, which turns with the wrist). Palm out
+// — toward that hand's palm axis, left +X / right -X — never goes past the
+// forearm. Palm in may follow the controller up to forearmInwardDegrees.
+// Positive signedPalmAngle is toward the palm and is treated as out; the
+// diag's "forearm sign:" line records it so a playtest can flip the sense
+// if tilting palm-out reads the other way.
+constexpr float forearmInwardDegrees = 15.f;
+inline float signedPalmAngle(Vec3 forearmWorld, Quat aimNow, int hand) {
+    const Vec3 F = normalized(forearmWorld);
+    const Vec3 C = unitOr(aimNow).rotate({0, 0, -1});
+    if (!finite(F) || !finite(C) || length(F) < .5f || length(C) < .5f)
+        return 0;
+    const float palmSign = hand == 0 ? 1.f : -1.f;
+    const Vec3 palm = unitOr(aimNow).rotate({palmSign, 0, 0});
+    const Vec3 out = normalized(palm - F * dot(palm, F));
+    if (!finite(out) || length(out) < .5f)
+        return 0;
+    return std::atan2(dot(C, out), dot(C, F));
+}
+inline Vec3 clampedForearmDir(Vec3 forearmWorld, Quat aimNow, int hand,
+                              float inwardDegrees = forearmInwardDegrees) {
+    const Vec3 F = normalized(forearmWorld);
+    if (!finite(F) || length(F) < .5f)
+        return {};
+    float s = signedPalmAngle(forearmWorld, aimNow, hand);
+    const float cap = std::clamp(inwardDegrees, 0.f, 90.f) * 3.14159265f / 180;
+    const float t = std::clamp(s, -cap, 0.f);
+    if (std::abs(t) < 1e-6f)
+        return F;
+    const float palmSign = hand == 0 ? 1.f : -1.f;
+    const Vec3 palm = unitOr(aimNow).rotate({palmSign, 0, 0});
+    const Vec3 out = normalized(palm - F * dot(palm, F));
+    if (!finite(out) || length(out) < .5f)
+        return F;
+    const Vec3 axis = normalized(cross(F, -out));
+    if (!finite(axis) || length(axis) < .5f)
+        return F;
+    return normalized(Quat::around(axis, -t).rotate(F));
+}
+inline Quat forearmWorldTurn(Vec3 forearmWorld, Quat aimNow, int hand,
+                             float inwardDegrees = forearmInwardDegrees) {
+    const Vec3 web = clampedForearmDir(forearmWorld, aimNow, hand, inwardDegrees);
+    if (!finite(web) || length(web) < .5f)
+        return {};
+    const Vec3 local = normalized(unitOr(aimNow).conjugate().rotate(web));
+    if (!finite(local) || length(local) < .5f)
+        return {};
+    return arc({0, 0, -1}, local);
+}
 // One "forearm aim:" line (the diagnostics and the report's timeline), from
 // named fields rather than a long printf list in game_xr. v6 (78a43ed) passed
 // the turn and target twice there, two arguments more than the format had: every

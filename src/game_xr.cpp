@@ -3053,31 +3053,30 @@ DWORD WINAPI run(void*) {
                                         : aimNow;
                                 Quat target{};
                                 float alignDeg = -1.f;
-                                if (why == Fallback::none) {
+                                float signedDeg = 0.f;
+                                if (why == Fallback::none || f.valid) {
                                     const Vec3 forearmDir = normalized(f.wrist - f.elbow);
                                     alignDeg =
                                         std::acos(std::clamp(dot(forearmDir, solvedAim.rotate({0, 0, -1})),
                                                              -1.f, 1.f)) *
                                         57.29578f;
-                                    if (std::isfinite(alignDeg) && alignDeg > web_aim::forearmAlignDegrees)
-                                        why = Fallback::misaligned;
+                                    signedDeg =
+                                        web_aim::signedPalmAngle(forearmDir, aimNow, static_cast<int>(i)) *
+                                        57.29578f;
                                 }
-                                // ANIMATED ARMS yield: keep controller-line overlay
-                                // fallback until softlock remap makes forearms healthy.
-                                // Drop fallback only when overlay weight is high and
-                                // forearm vs controller is under the align threshold.
+                                // A large forearm-vs-controller angle is no longer a
+                                // fallback: the world-frame clamp keeps the web on the
+                                // forearm instead of snapping to the controller.
+                                // ANIMATED ARMS yield: wait only until the overlay
+                                // weight is up; do not require the old 45° align check.
                                 if (why == Fallback::none && animatedMovesHandoff.yielding &&
                                     values.animatedArms) {
-                                    const float w = animatedArmsState.arms[i].weight;
-                                    const bool healthy = w > .85f && std::isfinite(alignDeg) &&
-                                                         alignDeg <= web_aim::forearmAlignDegrees;
-                                    if (!healthy)
+                                    if (animatedArmsState.arms[i].weight <= .85f)
                                         why = Fallback::armsOverlay;
                                 }
                                 if (why == Fallback::none) {
-                                    target =
-                                        web_aim::forearmTurn(web_aim::forearmInGrip(f.elbow, f.wrist, f.grip),
-                                                             motion.grips[i].orientation, aimNow, 180.f);
+                                    target = web_aim::forearmWorldTurn(f.wrist - f.elbow, aimNow,
+                                                                      static_cast<int>(i));
                                     if (forearmAims[i].primed)
                                         forearmJitter[i] = std::max(
                                             forearmJitter[i],
@@ -3085,10 +3084,11 @@ DWORD WINAPI run(void*) {
                                                 57.29578f);
                                     forearmTargets[i] = target;
                                 }
-                                const float limit = static_cast<float>(values.forearmAimLimit);
+                                const float limit = web_aim::forearmInwardDegrees;
                                 const bool clamped =
-                                    why == Fallback::none && web_aim::turnAngle(target) * 57.29578f > limit + .05f;
-                                forearmAims[i].update(why == Fallback::none, target, dt, limit);
+                                    why == Fallback::none && signedDeg < -limit + .05f;
+                                // 180: do not pull the turn back toward the controller.
+                                forearmAims[i].update(why == Fallback::none, target, dt, 180.f);
                                 // WRIST SHOOTERS without MODEL FOREARM takes all of it.
                                 webTurnsNow[i] = forearmAims[i].turn(
                                     values.webAimSource == static_cast<int>(web_aim::Source::forearm)
@@ -3140,6 +3140,13 @@ DWORD WINAPI run(void*) {
                                         game_prompts::note(line, false);
                                     if (diagNow)
                                         diag_log::write(line);
+                                    if (logNow || diagNow)
+                                        diag_log::writef(
+                                            "forearm sign: %s %+.1f deg (positive toward palm, treated as "
+                                            "out; inward cap %.0f)%s",
+                                            i ? "R" : "L", static_cast<double>(signedDeg),
+                                            static_cast<double>(web_aim::forearmInwardDegrees),
+                                            clamped ? ", inward capped" : "");
                                     if (logNow)
                                         forearmJitter[i] = 0;
                                 }

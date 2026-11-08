@@ -1166,13 +1166,16 @@ VR settings
                    say (body off, a cutscene, an arm it cannot reach) they
                    go back to the controller's line. WEB ANGLE and WRIST
                    SHOOTERS still turn on top; punches keep the controller.
-                   The line is the forearm's own (elbow to wrist); FOREARM
-                   AIM LIMIT can hold it nearer the controller.
+                   The line is the forearm's own (elbow to wrist). Tilting
+                   a palm out never pulls it past that forearm; tilting
+                   inward angles it a little toward your midline (about 15
+                   degrees). It no longer snaps back to the controller when
+                   your wrist and forearm differ a lot.
   FOREARM BLEND    (100% until you change it) how much of the forearm's
                    line MODEL FOREARM takes, from 0% (the controller's).
-  FOREARM AIM LIMIT (NO LIMIT until you change it) how far MODEL FOREARM
-                   and WRIST SHOOTERS may turn your webs off the
-                   controller's line: 35 DEG, 60, 90 or NO LIMIT.
+  FOREARM AIM LIMIT (NO LIMIT until you change it) no longer pulls the
+                   line back toward the controller. The inward allowance
+                   is fixed (about 15 degrees).
   SMOOTH WEB LANDING (off until you switch it on) land while you hold a
                    web, slower than WEB LANDING IMPACT, and your fall eases
                    over the last metres, your speed carries on across the

@@ -27425,6 +27425,28 @@ int main() {
         const Quat id = web_aim::forearmTurn({0, 0, -1}, {}, {}, 180.f);
         check(web_aim::turnAngle(id) < .01f, "aligned forearm should be near identity");
     });
+    test("Native Animation: forearm clamp stays on the world forearm, palm-in a little", [] {
+        const Vec3 F{0, 0, -1};
+        const float deg = 3.14159265f / 180;
+        check(web_aim::turnAngle(web_aim::forearmWorldTurn(F, {}, 0)) < 1e-3f, "neutral left turned");
+        check(web_aim::turnAngle(web_aim::forearmWorldTurn(F, {}, 1)) < 1e-3f, "neutral right turned");
+        const Quat out20 = Quat::around({0, 1, 0}, -20 * deg);
+        const Vec3 webOut = (out20 * web_aim::forearmWorldTurn(F, out20, 0)).rotate({0, 0, -1});
+        check(length(webOut - F) < 1e-3f, "palm-out left left the forearm");
+        check(web_aim::signedPalmAngle(F, out20, 0) > .2f, "palm-out left was not positive");
+        const Quat in20 = Quat::around({0, 1, 0}, 20 * deg);
+        const Vec3 webIn = (in20 * web_aim::forearmWorldTurn(F, in20, 0)).rotate({0, 0, -1});
+        check(web_aim::signedPalmAngle(F, in20, 0) < -.2f, "palm-in left was not negative");
+        const float inDeg = std::acos(std::clamp(dot(normalized(webIn), F), -1.f, 1.f)) * 57.29578f;
+        check(std::abs(inDeg - web_aim::forearmInwardDegrees) < .25f, "palm-in was not capped at 15");
+        const Quat roll = Quat::around({0, 0, -1}, .7f);
+        check(web_aim::turnAngle(web_aim::forearmWorldTurn(F, roll, 0)) < 1e-3f,
+              "a roll around the forearm steered the web");
+        const Quat rightOut = Quat::around({0, 1, 0}, 20 * deg);
+        const Vec3 webR = (rightOut * web_aim::forearmWorldTurn(F, rightOut, 1)).rotate({0, 0, -1});
+        check(length(webR - F) < 1e-3f, "palm-out right left the forearm");
+        check(web_aim::signedPalmAngle(F, rightOut, 1) > .2f, "palm-out right was not positive");
+    });
 
 
     test("ANIMATED TORSO: demand clamps, opposition cancels yaw, spine shares", [] {

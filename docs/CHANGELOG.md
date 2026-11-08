@@ -3,6 +3,15 @@
 Every build, newest first, with what changed, why, and what was measured.
 Per-check results are in [VALIDATION.md](VALIDATION.md).
 
+## Native Animation: forearm-clamped web shooters
+
+**MODEL FOREARM stays on the world's elbow-to-wrist line. Tilting a palm out never pulls the web past it; tilting inward angles it a little toward your midline.**
+
+- The forearm was stored on the controller and re-applied as you moved, so the shot turned with your wrist. It also snapped back to the controller whenever the two lines differed by more than 45° — about a third of the Nov 8 session.
+- The web now follows the solved elbow→wrist in world space (it moves with the hand, not the wrist's rotation). Palm-out (toward that hand's palm) is clamped to the forearm. Palm-in may follow up to 15°. The old 45° snap is gone, and animation ownership no longer falls back just because the forearm and controller differ.
+- Diagnostics print a `forearm sign:` line with the signed palm angle (positive toward the palm, treated as out) so a tilt each way can confirm the sense. FOREARM AIM LIMIT no longer pulls the line back toward the controller.
+- Tests: neutral and a roll around the forearm stay put; left and right palm-out stay on the forearm; a 20° palm-in caps at 15°. Not headset-tested.
+
 ## Native Animation: web balls aim from the gloves you see
 
 **While the animation owns, web balls and aim markers leave from the same place as the visible gloves.**
