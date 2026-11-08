@@ -57,6 +57,16 @@ Expand-Archive -LiteralPath $pythonZip -DestinationPath (Join-Path $stage 'pytho
 # The embeddable Python ignores the script's folder; the tools import each other.
 Add-Content -LiteralPath (Join-Path $stage 'python\python312._pth') -Value '..\tools' -Encoding ascii
 Copy-Item -LiteralPath (Join-Path $root 'docs\PLAYERS.md') -Destination (Join-Path $stage 'README.txt')
+Copy-Item -LiteralPath (Join-Path $root 'docs\WEB_BALL_DIAGNOSTICS.md') -Destination (Join-Path $stage 'WEB_BALL_DIAGNOSTICS.txt')
+$sourceCommit = (git -C $root rev-parse HEAD).Trim()
+@(
+    "Web-ball DIAGNOSTIC build, version $version, source $sourceCommit"
+    'Diagnostics only: not a web-ball gameplay fix; not headset-tested.'
+    'Extract the entire archive into a NEW writable folder; preserve layout.'
+    'Keep the delivered 78eabb8 compatibility build and personal settings separately.'
+    'Launch Spidy Launcher.exe; do not mix DLLs/tools between builds.'
+    'Read WEB_BALL_DIAGNOSTICS.txt for counter caveats and the short test sequence.'
+) | Set-Content -LiteralPath (Join-Path $stage 'DIAGNOSTIC_BUILD.txt') -Encoding utf8
 Copy-Item -LiteralPath (Join-Path $root 'docs\LINUX.md') -Destination $stage
 Copy-Item -LiteralPath (Join-Path $root 'LICENSE') -Destination (Join-Path $stage 'LICENSE.txt')
 Copy-Item -LiteralPath (Join-Path $root 'THIRD_PARTY_NOTICES.md') -Destination $stage

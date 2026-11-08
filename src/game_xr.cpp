@@ -3727,6 +3727,28 @@ DWORD WINAPI run(void*) {
                                     static_cast<unsigned long long>(listed.emptyPulls),
                                     static_cast<unsigned long long>(listed.hands[0].shots),
                                     static_cast<unsigned long long>(listed.hands[1].shots));
+                                const auto& d = listed.diagnostic;
+                                diag_log::writef(
+                                    "wb dispatch: q%llu full%llu exp%llu call%llu rej%llu obj%llu unk%llu g%llu f%llu",
+                                    (unsigned long long)d.queued, (unsigned long long)d.queueFull,
+                                    (unsigned long long)d.expired, (unsigned long long)d.callSuccess,
+                                    (unsigned long long)d.rejected, (unsigned long long)d.objectKnown,
+                                    (unsigned long long)d.objectUnknown, (unsigned long long)d.gadgetCalls,
+                                    (unsigned long long)d.fallbackCalls);
+                                // Snapshot, not a record of every shot: bounded by the existing one-second cadence.
+                                const auto event = d.expired + d.callSuccess + d.rejected;
+                                static uint64_t lastDispatchEvent{};
+                                if (event && event != lastDispatchEvent) {
+                                    lastDispatchEvent = event;
+                                    diag_log::writef(
+                                        "wb event %llu: hand%u route%u outcome%u muzzle %.3g %.3g %.3g dir %.3g %.3g %.3g",
+                                        (unsigned long long)event, d.hand, d.route, d.outcome,
+                                        d.origin.x, d.origin.y, d.origin.z, d.direction.x, d.direction.y, d.direction.z);
+                                    diag_log::writef(
+                                        "wb aim %llu: point %.3g %.3g %.3g target %llx last-hit %llx (not hit/visibility proof)",
+                                        (unsigned long long)event, d.aimPoint.x, d.aimPoint.y, d.aimPoint.z,
+                                        (unsigned long long)d.target, (unsigned long long)listed.lastHit);
+                                }
                             }
                         }
                         fightNear = input.focused && ((fighting && strikes.cueTarget != 0) || punch.bots != 0);

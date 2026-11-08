@@ -1,4 +1,5 @@
 #pragma once
+#include "shooter_diagnostics.hpp"
 #include "shooter.hpp"
 #include "swing.hpp"
 #include <cstdint>
@@ -83,7 +84,7 @@ struct Owned {
     uint16_t pad{};
 };
 struct Data {
-    uint32_t magic = 0x53484f44, version = 4, bytes = sizeof(Data), status{};
+    uint32_t magic = 0x53484f44, version = 5, bytes = sizeof(Data), status{};
     int64_t sequence{};
     // Input samples seen; pulls that asked for a shot; shots the game fired;
     // requests dropped (no web shooter, no player, stale, refused); shots
@@ -121,8 +122,10 @@ struct Data {
     uint32_t equips{};
     Owned gadgets[8]{};
     uint64_t gadgetShots{}, emptyPulls{};
+    shooter_diagnostics::Data diagnostic; // v5; original 296-byte prefix unchanged
 };
-static_assert(sizeof(Hand) == 16 && sizeof(Owned) == 8 && sizeof(Data) == 296);
+static_assert(sizeof(Hand) == 16 && sizeof(Owned) == 8 && sizeof(Data) == 432 &&
+              offsetof(Data, diagnostic) == 296);
 // Starts the bot and gadget watches and the main-thread hooks.
 uint32_t start(uintptr_t base);
 uint32_t stop();
