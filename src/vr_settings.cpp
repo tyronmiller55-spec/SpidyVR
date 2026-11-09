@@ -752,7 +752,7 @@ const std::array<Row, 109>& rows() {
          {}},
         {Item::animatedTorso,
          "TORSO",
-         "Upper-body reach assist; head, root and legs keep their animation.",
+         "Player-controlled spine, head and tracked arms; native root and legs stay animated.",
          {}},
         {Item::animatedModelYaw, "MODEL YAW", "Turn with the right stick while running with the left.", {}},
         {Item::animatedHybridSpeed, "HYBRID SPEED",
