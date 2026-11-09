@@ -7117,7 +7117,7 @@ DWORD WINAPI run(void*) {
                         runtime.headLocked(saved->headLocked);
                         // A first-person scene gets none of Spidy's own marks, webs or hands over it.
                         const bool bare = saved->flatScreen || saved->scene;
-                        const bool feedback = gameplayFeedback(saved->flatScreen, saved->scene,
+                        bool feedback = gameplayFeedback(saved->flatScreen, saved->scene,
                                                                saved->animation);
                         // STEADY HUD: the panel as a layer of its own, placed for this headset frame; the
                         // eyes leave it out while it shows (native_hud::layered).
@@ -7155,9 +7155,13 @@ DWORD WINAPI run(void*) {
                         // What the player holds stays with the head: turned the other
                         // way in the world, about the eyes' middle, before it is drawn.
                         // The eyes' own views stay as rendered, as the image is.
-                        const GameMotionFrame rendered =
+                        GameMotionFrame rendered =
                             reprojection.applied ? flip_reprojection::held(saved->motion, reprojection.world)
                                                  : saved->motion;
+                        std::array<Mat4,2> nativeFeedbackEyes{};
+                        const bool nativeFeedback = saved->animation &&
+                            native_eyes::renderEyes(imageGeneration, imageSerial, nativeFeedbackEyes);
+                        if (saved->animation && !nativeFeedback) feedback = false;
                         const Vec3 heldAbout = flip_reprojection::eyesMiddle(saved->motion);
                         const auto heldPose = [&](Pose p) {
                             return reprojection.applied
@@ -7200,6 +7204,14 @@ DWORD WINAPI run(void*) {
                         // world-space web anchors line up with the rendered city.
                         Vec3 travel{};
                         native_eyes::renderOffset(imageGeneration, travel);
+                        if (nativeFeedback) {
+                            rendered.eyes = native_eyes::overlayEyes(nativeFeedbackEyes, travel);
+                            rendered.headPose = animated_view::fromNative(rendered.eyes[0]);
+                            rendered.headPose.position =
+                                Vec3{(rendered.eyes[0][12]+rendered.eyes[1][12])*.5f,
+                                     (rendered.eyes[0][13]+rendered.eyes[1][13])*.5f,
+                                     (rendered.eyes[0][14]+rendered.eyes[1][14])*.5f};
+                        }
                         const Vec3 viewer =
                             Vec3{(rendered.eyes[0][12] + rendered.eyes[1][12]) / 2,
                                  (rendered.eyes[0][13] + rendered.eyes[1][13]) / 2,

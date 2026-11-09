@@ -6,6 +6,7 @@
 #include "spidy/run_update.hpp"
 #include "spidy/punch.hpp"
 #include "spidy/presentation_gate.hpp"
+#include "spidy/native_eye_frame.hpp"
 #include <cstring>
 #include "spidy/shooter.hpp"
 #include "spidy/tracking.hpp"
@@ -97,6 +98,20 @@ void punchDiscontinuityTests() {
     std::puts("PASS: both-hand rotated phantom-sweep, residual-speed, reacquisition/owner-history and simultaneous cancel regressions");
 }
 void feedbackAndCancelPipelineTests() {
+    for(const Vec3 root : {Vec3{145,20,-735},Vec3{-350,90,510}})
+      for(const Quat turn : {Quat::yaw(1.3f),Quat::yaw(-2.2f)*Quat::around({1,0,0},.4f)}) {
+        std::array<Mat4,2> actual;
+        const auto head=animated_view::toNative({root,turn});
+        for(unsigned i=0;i<2;++i)
+            actual[i]=native_eyes::onHead(animated_view::toNative({{i?.032f:-.032f,0,0},{}}),head);
+        const Vec3 travel{.3f,-.2f,.5f};
+        const auto overlay=native_eyes::overlayEyes(actual,travel);
+        for(unsigned i=0;i<2;++i) {
+            const auto a=animated_view::fromNative(actual[i]),b=animated_view::fromNative(overlay[i]);
+            check(length(b.position+travel-a.position)<.0001f,"native indicator camera translated twice");
+            check(sameOrientation(a.orientation,b.orientation),"native indicator camera lost render rotation");
+        }
+      }
     check(gameplayFeedback(false,false,false), "OG feedback hidden");
     check(gameplayFeedback(false,true,true), "native feedback hidden with duplicate geometry");
     check(!gameplayFeedback(false,true,false), "cinematic feedback leaked");

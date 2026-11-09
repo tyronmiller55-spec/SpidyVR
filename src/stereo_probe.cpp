@@ -167,6 +167,9 @@ struct RenderOffset {
     // Game rope starts of the same frame (bit per hand in `ropes`).
     Vec3 ropeStarts[2]{};
     uint32_t ropes{};
+    uint64_t serial{};
+    std::array<Mat4,2> eyes{}; // exact resolved world poses submitted for this generation
+    bool eyesValid{};
 };
 std::array<RenderOffset, 64> offsets{};
 SRWLOCK offsetLock = SRWLOCK_INIT;
@@ -1838,6 +1841,17 @@ void placeEyes() {
         if (activePlaced)
             activeLag = length(activeHeroPosition - rendered);
     }
+    if (controlled && desired.enabled == 1) {
+        placed.serial = desired.serial;
+        placed.eyesValid = true;
+        for (unsigned i=0;i<2;++i) {
+            placed.eyes[i] = desired.eyes[i].world;
+            placed.eyes[i][12] += placed.offset.x;
+            placed.eyes[i][13] += placed.offset.y;
+            placed.eyes[i][14] += placed.offset.z;
+            placed.eyesValid = placed.eyesValid && native_view::validPose(placed.eyes[i]);
+        }
+    }
     recordOffset(placed, anchored, rejected, lag, activeLag);
     if (latchedImmersive && frameHead.frame == frameIndex && frameHead.viewed) {
         // The HUD and the eyes should have moved with the player alike.
@@ -2880,6 +2894,15 @@ bool spidy::native_eyes::renderOffset(uint64_t frame, Vec3& offset) {
     ReleaseSRWLockShared(&offsetLock);
     offset = entry.generation == frame ? entry.offset : Vec3{};
     return frame && entry.generation == frame;
+}
+bool spidy::native_eyes::renderEyes(uint64_t frame, uint64_t serial, std::array<Mat4,2>& eyes) {
+    AcquireSRWLockShared(&offsetLock);
+    const auto entry = offsets[frame % offsets.size()];
+    ReleaseSRWLockShared(&offsetLock);
+    if (!frame || !serial || entry.generation != frame || entry.serial != serial || !entry.eyesValid)
+        return false;
+    eyes = entry.eyes;
+    return true;
 }
 bool spidy::native_eyes::renderWebStart(uint64_t frame, unsigned hand, Vec3& start) {
     AcquireSRWLockShared(&offsetLock);
