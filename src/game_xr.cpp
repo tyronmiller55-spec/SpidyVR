@@ -5747,9 +5747,7 @@ DWORD WINAPI run(void*) {
                         NativeEyeFrame saved;
                         saved.serial = eyes.serial;
                         saved.motion.predictedDisplayTime = frame.predictedDisplayTime;
-                        feedback_frame::hands(saved.motion, saved.animation,
-                                          captureActionFrame ? actionGripMask : 0u);
-                    saved.trackingEyes = frame.eyes;
+                        saved.trackingEyes = frame.eyes;
                         saved.scene = true;
                         saved.uiStyle = values.uiStyle == 1 ? UiStyle::tech : UiStyle::comic;
                         saved.screenAspect = SpidyFlatAspect();
@@ -6959,6 +6957,8 @@ DWORD WINAPI run(void*) {
                         saved.motion.grips[i] = actionGrips[i];
                         saved.motion.hands[i] = actionGrips[i];
                     }
+                    feedback_frame::hands(saved.motion, saved.animation,
+                                          captureActionFrame ? actionGripMask : 0u);
                     saved.trackingEyes = frame.eyes;
                     // Same as finishers: placeEyes re-resolves the head each frame
                     // (stereo_probe) instead of keeping a latched gameplay head.
