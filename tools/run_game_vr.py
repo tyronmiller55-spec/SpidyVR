@@ -32,6 +32,7 @@ from vr_launcher import (LauncherLock, alive, exit_status, bring_to_front, wait_
                          RENDER_MEMORY_HOOKS, NeedsAdministrator, NEEDS_ADMINISTRATOR_EXIT, CLOSE_GAME_EXIT,
                          close_game)
 import game_freeze
+from session_summary import write_summary
 import vr_display
 import xr_runtime
 
@@ -2782,6 +2783,8 @@ def session(a, startup):
                 lost_device.update(reason=reason, frames=(result.get('final') or {}).get('tracked'))
             a.output.write_text(json.dumps(result, indent=2)+'\n')
             report_written = startup.reported = True
+            # SHAREABLE SESSION SUMMARY: a compact copy under 20 MB beside it (session_summary.py).
+            write_summary(result, a.output, diag_path(a.output))
 
         def tell_device_lost():
             # Once, after the report that found it.
@@ -3112,7 +3115,8 @@ def session(a, startup):
                 diag_log._out(crashed)
             if diag_log.lines:
                 print(f'Diagnostics: {diag_log.path.resolve()}', flush=True)
-            print(f'Game closed. Session report: {a.output.resolve()}',flush=True)
+            print(f'Game closed. Session report: {a.output.resolve()} (shareable summary: '
+                  f'{a.output.with_name(a.output.stem + "-summary.json").name})',flush=True)
             return 0
         if loop_error is not None:
             write_report(session_report(game_exited=False, error=str(loop_error)))
