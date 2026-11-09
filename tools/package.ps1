@@ -36,7 +36,8 @@ if ((Get-FileHash -LiteralPath $pythonZip -Algorithm SHA256).Hash -ne $pythonHas
     throw "The Python download does not match the pinned hash. Delete $pythonZip and try again."
 }
 
-$name = "Spidy-$version"
+$shortCommit = (git -C $root rev-parse --short=7 HEAD).Trim()
+$name = "Spidy-$version-feedback-cancel-$shortCommit"
 $dist = Join-Path $root 'dist'
 # Staged under build\, never dist\: players extract the zip into dist\Spidy-<version>
 # and play from there, and the line below would wipe that folder.
@@ -85,7 +86,7 @@ if ($LASTEXITCODE -or "$check" -ne '42') { throw 'The packaged Python cannot loa
 
 # A fresh checkout (the release workflow's) has no dist\, and Compress-Archive will not make it.
 New-Item -ItemType Directory -Force $dist | Out-Null
-$zip = Join-Path $dist "$name-win64.zip"
+$zip = Join-Path $dist "Spidy-$version-win64.zip"
 if (Test-Path -LiteralPath $zip) { Remove-Item -LiteralPath $zip -Force }
 Compress-Archive -LiteralPath $stage -DestinationPath $zip -CompressionLevel Optimal
 if (-not $KeepFolder) { Remove-Item -LiteralPath $stage -Recurse -Force }
