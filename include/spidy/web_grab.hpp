@@ -31,8 +31,20 @@ class TargetQueries {
         return {};
     }
 };
+// SOFT LOCK (the user, November 8 21:58): when a grip web's aim ray takes no
+// target in the normal narrow cone (GrabConfig::aimCone), a second pick in this
+// wider cone, only within GrabConfig::softLock metres, takes the best target by
+// lockScore: the angle off the ray and the distance both count, so a closer one
+// wins over a farther one at a similar angle. The marker (the grab's preview)
+// and the press use the same pick, so the marker is where the web goes.
+constexpr float softLockCone = .21f; // about 12 degrees
+// Lower is better: `miss` radians off the ray (of `cone`), `away` metres (of `distance`).
+inline float lockScore(float miss, float cone, float away, float distance) {
+    return miss / std::max(cone, 1e-4f) + away / std::max(distance, 1e-3f);
+}
 struct GrabConfig {
     float maxRange = 60, aimCone = .07f, maxMass = 400;
+    float softLock = 0; // SOFT LOCK distance in metres; 0 is off
     // Every web is a rope: it only pulls, and the target keeps its weight. A
     // held target hangs from the wrist on a web this much longer than its
     // radius, below the hand, and swings as the hand moves. Until October 6
@@ -210,6 +222,10 @@ class WebGrab {
     // GrabConfig::yankOnlyCharacters, switched during play.
     void yankOnlyCharacters(bool on) {
         config_.yankOnlyCharacters = on;
+    }
+    // GrabConfig::softLock, switched during play (non-finite or negative: off).
+    void softLock(float metres) {
+        config_.softLock = std::isfinite(metres) && metres > 0 ? std::min(metres, config_.maxRange) : 0.f;
     }
 
   private:

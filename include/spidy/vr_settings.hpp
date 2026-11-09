@@ -338,6 +338,21 @@ struct Values {
     // ease the view toward the headset's look. Translation stays current, so
     // leaning and travel do not trail. Not a Settings / Command field.
     int animatedHeadsetSmooth = 0;
+    // RUN SPEED, percent (the tab's RUN SPEED; Swing::setRunSpeedPercent):
+    // scales the speed SpidyVR's OWN ground run (SPIDY RUN and RUN FROM
+    // STANDING) puts the body at, 50 to 200. The game's native run/sprint is
+    // its own animation and mover: not changed. 100 by default (as before).
+    int runSpeedPercent = 100;
+    // SLOW-MO LENGTH, seconds (the tab's SLOW-MO LENGTH; SlowMotion::
+    // setDrainSeconds): how long a full Focus meter of L3 slow motion lasts,
+    // 3 to 90; slowMotionEndless (91) lasts until L3 toggles it off. 12 by
+    // default (as before). Refill time is unchanged.
+    int slowMotionSeconds = 12;
+    // SOFT LOCK, metres (the tab's SOFT LOCK; GrabConfig::softLock): a grip
+    // web aimed near an enemy or a throwable prop within this distance snaps
+    // to it (marker and web alike); the closer and the nearer the ray, the
+    // better. 0 is off; 0 to 40. 15 by default.
+    int softLockMetres = 15;
     // ANIMATED AIR (the tab's ANIMATED AIR; off by default): pose yield for
     // freefall / swing / web-hold air. Physics stays with the mod; no cutscene
     // worker. Off leaves air body with the VR IK (animated_moves.hpp).
@@ -528,8 +543,17 @@ enum class Item : uint8_t {
     nativeAnimation,
     webLines,
     animatedHeadsetSmooth,
+    runSpeed,
+    slowMotionLength,
+    softLock,
 };
-inline constexpr Item lastItem = Item::animatedHeadsetSmooth;
+inline constexpr Item lastItem = Item::softLock;
+// SLOW-MO LENGTH's last step: no time limit (until L3 toggles it off).
+inline constexpr int slowMotionEndless = 91;
+// Real seconds a full meter lasts for a SLOW-MO LENGTH value; 0 = endless.
+inline float slowMotionDrainSeconds(int value) {
+    return value >= slowMotionEndless ? 0.f : static_cast<float>(value < 3 ? 3 : value);
+}
 // Where a row shows: in the tab; on the pause menu's first page instead,
 // under RESUME: VR VIEW (the user, October 15: "move the VIEW: GAME SCREEN to
 // the first menu (the one with resume)"); or only in the launcher's options:
@@ -553,7 +577,7 @@ struct Row {
     Place place{};
 };
 // Stable row/setting numbers; categories below determine presentation order.
-const std::array<Row, 109>& rows();
+const std::array<Row, 112>& rows();
 const Row* rowFor(Item);
 enum class Category : uint8_t { setup, webs, swinging, movement, flips, feedback, display, nativeAnimation, count };
 inline constexpr size_t categoryCount = static_cast<size_t>(Category::count);

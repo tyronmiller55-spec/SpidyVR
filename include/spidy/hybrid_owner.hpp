@@ -8,9 +8,11 @@
 // player asked for (Frame::jumpAsk), on the frame he leaves the ground: the
 // game's takeoff plays, and SpidyVR picks the body up from that pose (jump
 // adopt; native_body::beginJumpAdopt). Grip cancel is a consumed, no-shot
-// VR override while held. On release, eligible ground support (idle/walk/run)
-// restores ANIM this very update, without dwell; only a dispatched takeoff
-// can finish first. Back to ANIM also once a web zip the player asked for (Y in the air or
+// switch to VR (the user, November 8 21:51: it supersedes "release restores
+// animation"): VR then STAYS - full OG SpidyVR, webs on the ground included -
+// until another native animation starts on its own (nativeStarts: the game's
+// fight or dodge, its parkour, its crawl, or a game zip begins). That start
+// hands back to ANIM; nothing lingers afterwards. Back to ANIM also once a web zip the player asked for (Y in the air or
 // the game's zip to a point) actually begins: that zip is the game's animation
 // until it ends. A press the game does not take never leaves VR. Pure domain
 // FSM — no Windows.
@@ -81,6 +83,7 @@ enum class EnterAnim : uint8_t {
     // VR (no web). That climb is the game's animation, as any wall mount is.
     mount,
     ground, // eligible standing/walking/running/crawl: native immediately
+    native, // after a grip cancel: another native animation started on its own
 };
 
 inline const char* enterAnimName(EnterAnim e) {
@@ -93,6 +96,8 @@ inline const char* enterAnimName(EnterAnim e) {
         return "mount";
     case EnterAnim::ground:
         return "ground";
+    case EnterAnim::native:
+        return "native";
     default:
         return "none";
     }
@@ -184,6 +189,19 @@ inline bool jumpBlocked(const head_probe::StateInputs& s, bool sticky) {
            head_probe::classify(s) == head_probe::State::parkour;
 }
 
+// The native animations that end a grip cancel's VR stay, as bits: the game's
+// fight (1), its dodge (2), its parkour under NATIVE RUN (4), its crawl (8).
+// Only a bit that rises after the cancel counts (one already on at the cancel
+// must end and start again). A game zip ends it through the zip path.
+inline unsigned nativeAnimations(const head_probe::StateInputs& s) {
+    return (s.fighting ? 1u : 0u) | (s.dodging ? 2u : 0u) |
+           (head_probe::classify(s) == head_probe::State::parkour ? 4u : 0u) |
+           (s.wall == 2u /* surfaceGame */ ? 8u : 0u);
+}
+inline unsigned nativeStarts(unsigned before, unsigned now) {
+    return now & ~before;
+}
+
 struct HybridOwner {
     Domain domain = Domain::anim;
     int64_t sinceNs{};
@@ -221,6 +239,11 @@ struct HybridOwner {
     bool groundedWas{}, groundedWasSet{};
     bool enterVr{};
     bool enterAnim{};
+    // Grip cancel's VR stay (see the top): set on EnterVr::cancel, cleared on
+    // any return to ANIM. nativeWas: nativeAnimations() last update.
+    bool cancelSticky{};
+    unsigned nativeWas{};
+    unsigned lastNativeStart{}; // the bits that ended the stay (diagnostics)
 
     Domain update(const Frame& f, int64_t nowNs) {
         enterVr = enterAnim = false;
@@ -240,10 +263,14 @@ struct HybridOwner {
         }
         // Explicit cancel wins over a stale zip/jump/web edge, including combat
         // and grounded animation. Existing pose adoption/blend handles continuity.
+        const unsigned nativeNow = nativeAnimations(f.state);
+        const unsigned started = nativeStarts(nativeWas, nativeNow);
+        nativeWas = nativeNow;
         if (f.cancelGrip && domain == Domain::anim) {
             clearZip();
             webIntentWas = false;
             goVr(EnterVr::cancel, nowNs);
+            cancelSticky = true;
             return domain;
         }
         if (domain == Domain::vr && f.cancelGripHeld) {
@@ -251,6 +278,11 @@ struct HybridOwner {
             clearZip();
             jumpAskAtNs = -1;
             webIntentWas = false;
+            return domain;
+        }
+        if (domain == Domain::vr && cancelSticky && started) {
+            lastNativeStart = started;
+            goAnim(nowNs, EnterAnim::native);
             return domain;
         }
         // The frame he leaves the ground (the swing's sample of the game's contact).
@@ -286,7 +318,7 @@ struct HybridOwner {
         // exception above. Ground arm actions and passive attached webs do not
         // require the OG body. Only an actually dispatched takeoff may defer.
         const bool supported = f.state.grounded || f.state.wall == surfaceGame;
-        if (supported && f.state.wall != surfaceWall && !f.groundAction) {
+        if (supported && f.state.wall != surfaceWall && !f.groundAction && !cancelSticky) {
             if (domain == Domain::vr) goAnim(nowNs, EnterAnim::ground);
             if (f.zipPress || f.state.zipping) {
                 jumpAskAtNs = -1;
@@ -520,6 +552,7 @@ struct HybridOwner {
         resetClocks();
         combatSticky = false;
         combatIdleNs = -1;
+        cancelSticky = false;
     }
 };
 

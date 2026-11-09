@@ -203,15 +203,24 @@ void activationTests() {
         owner.update(f,3);
         check(owner.domain==hybrid_owner::Domain::vr,"held ground cancel bounced");
         f.cancelGripHeld=false; f.speedH=stick*20;
-        owner.update(f,4); // only 2ns after cancel, deliberately no dwell
+        // GRIP CANCEL STAYS IN SPIDYVR (November 8 21:51): idle, walking and
+        // running on the ground keep SpidyVR after release; no handback.
+        owner.update(f,4);
         animated_moves::Handoff handoff;
         handoff.update(false);
         handoff.update(owner.animOwns(true,f.state));
-        check(handoff.enter && handoff.yielding,"owner returned but production handoff deferred native ownership");
-        check(owner.enterAnim && owner.lastEnterAnim==hybrid_owner::EnterAnim::ground,
-              "ground release delayed native reactivation");
+        check(!handoff.enter && !handoff.yielding && owner.domain==hybrid_owner::Domain::vr && !owner.enterAnim,
+              "ground release after cancel handed back to animation");
         owner.update(f,5);
-        check(!owner.enterVr && !owner.enterAnim,"ground release synthesized another edge");
+        check(!owner.enterVr && !owner.enterAnim,"cancel stay synthesized an edge");
+        f.state.fighting=true; // the game's own fight starts: the handback
+        owner.update(f,6);
+        handoff.update(owner.animOwns(true,f.state));
+        check(owner.enterAnim && owner.lastEnterAnim==hybrid_owner::EnterAnim::native,
+              "native start did not hand back");
+        check(handoff.enter && handoff.yielding,"owner returned but production handoff deferred native ownership");
+        owner.update(f,7);
+        check(!owner.enterVr && !owner.enterAnim,"native handback synthesized another edge");
     }
     web_aim::ForearmAim correction;
     for(unsigned i=0;i<30;++i)correction.update(true,Quat::yaw(1.2f),.02f,180.f);
@@ -229,7 +238,11 @@ void activationTests() {
     check(owner.domain==hybrid_owner::Domain::vr,"active takeoff was cut short");
     f.groundAction=false;
     owner.update(f,3);
-    check(owner.enterAnim,"cleared action retained artificial queue delay");
+    check(owner.domain==hybrid_owner::Domain::vr,"cleared action ended the cancel stay");
+    f.state.wall=hybrid_owner::surfaceGame; // the game's crawl starts
+    owner.update(f,4);
+    check(owner.enterAnim && owner.lastEnterAnim==hybrid_owner::EnterAnim::native,"crawl start did not hand back");
+    f.state.wall=0;
     owner={}; f={}; f.state.playing=f.state.fresh=true;
     owner.update(f,1);
     check(owner.domain==hybrid_owner::Domain::anim,"all air was incorrectly forced OG");
@@ -240,7 +253,7 @@ void activationTests() {
     f.state.wall=hybrid_owner::surfaceGame; f.state.grounded=false;
     owner.update(f,3);
     check(owner.enterAnim,"native crawl wrongly retained OG body");
-    std::printf("PASS: exact-frame idle/walk/run release, actual-action deferral and air/wall policy\n");
+    std::printf("PASS: cancel stay through idle/walk/run until a native start, actual-action deferral and air/wall policy\n");
 }
 void cancellationTests() {
     using namespace animation_cancel;
@@ -309,24 +322,29 @@ void cancellationTests() {
         check(step(d,false,false)==0,"release fired a ball");
         f.cancelGripHeld=false; f.zipPress=f.jumpAsk=false;
         owner.update(f,19'000'000'000);
-        if (grounded) {
-            check(owner.enterAnim,"standing release did not restore native that frame");
-            d=gate.update(true,true,true,web,3);
-            check(d.cancel && step(d,true,true)==0,"fresh ground grip was not another consumed cancel");
-        } else {
-            check(owner.domain==hybrid_owner::Domain::vr,"air release unexpectedly forced animation");
-            d=gate.update(true,false,true,web,3);
-            check(!d.cancel && !d.webBlocked && !d.shotBlocked,"ordinary VR press intercepted");
-            check(step(d,true,true)==3,"ordinary VR trigger press no longer fires");
-            check(solver.webs()[hand].attached,"ordinary VR grip release/repress no longer shoots");
-        }
-        // Exact-frame eligible release is the owner's contract, not a delayed
-        // landing confirmation. Arm actions above do not change that policy.
+        // GRIP CANCEL STAYS IN SPIDYVR (the user, November 8 21:51): release
+        // no longer hands back on the ground; full OG play, web lines on the
+        // ground included, until another native animation starts on its own.
+        check(owner.domain==hybrid_owner::Domain::vr && !owner.enterAnim && owner.cancelSticky,
+              "release after cancel left SpidyVR");
+        d=gate.update(true,false,true,web,3);
+        check(!d.cancel && !d.webBlocked && !d.shotBlocked,"press after cancel still intercepted");
+        check(step(d,true,true)==3,"trigger press after cancel no longer fires");
+        check(solver.webs()[hand].attached,"grip after cancel shot no web (lingering suppression)");
         f.cancelGripHeld=false; f.zipPress=f.jumpAsk=false;
         f.state.fighting=false; f.state.grounded=true;
-        owner.update(f,20'000'000'000);
-        check(owner.domain==hybrid_owner::Domain::anim,
-              "ground release failed same-update native handback");
+        for (unsigned i=0;i<5;++i) {
+            owner.update(f,20'000'000'000+static_cast<int64_t>(i)*1'000'000'000);
+            check(owner.domain==hybrid_owner::Domain::vr,"standing still/walking ended the cancel stay");
+        }
+        f.state.dodging=true; // the game's own dodge starts: the handback
+        owner.update(f,26'000'000'000);
+        check(owner.domain==hybrid_owner::Domain::anim && owner.enterAnim &&
+              owner.lastEnterAnim==hybrid_owner::EnterAnim::native && !owner.cancelSticky,
+              "native start did not end the cancel stay");
+        f.state.dodging=false;
+        owner.update(f,27'000'000'000);
+        check(owner.domain==hybrid_owner::Domain::anim,"handback did not hold (ground native)");
     }
     Gate disabled;
     check(!disabled.update(false,true,true,1,0).cancel,"disabled hybrid consumed ordinary grip");

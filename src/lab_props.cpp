@@ -92,6 +92,8 @@ void LabProps::reset() {
 std::optional<GrabTarget> LabProps::pick(Vec3 origin, Vec3 direction, float distance, float cone) const {
     const LabProp* best{};
     float bestMiss = cone, bestDistance = std::numeric_limits<float>::infinity();
+    const bool soft = cone > .1f; // SOFT LOCK's wider pick: angle and distance both count
+    float bestScore = std::numeric_limits<float>::infinity();
     for (const auto& p : props_) {
         // A standing thug is a tall target: its sphere covers head to knees.
         const float radius = p.kind == TargetKind::Character && p.stance != LabProp::Stance::Tumbling
@@ -99,7 +101,12 @@ std::optional<GrabTarget> LabProps::pick(Vec3 origin, Vec3 direction, float dist
                                  : p.radius;
         const float miss = rayMiss(origin, direction, distance, p.position, radius);
         const float far = length(p.position - origin);
-        if (miss > bestMiss + 1e-4f || (miss > bestMiss - 1e-4f && far >= bestDistance))
+        if (soft) {
+            const float score = lockScore(miss, cone, far, distance);
+            if (miss > cone || score >= bestScore)
+                continue;
+            bestScore = score;
+        } else if (miss > bestMiss + 1e-4f || (miss > bestMiss - 1e-4f && far >= bestDistance))
             continue;
         best = &p;
         bestMiss = miss;

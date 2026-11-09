@@ -333,7 +333,7 @@ inline bool gameOwnsGround(bool fresh, const Data& d) {
 // Version 8 appends handClimb without changing the upstream phone or arcade
 // fields. Older official settings keep their original layout and meaning.
 struct Settings {
-    uint32_t magic = 0x53575354, version = 39, bytes = sizeof(Settings), grab = 1;
+    uint32_t magic = 0x53575354, version = 40, bytes = sizeof(Settings), grab = 1;
     float maxSpeed = 32;
     uint32_t airWebs = 1;
     float gravity = 6;
@@ -398,6 +398,13 @@ struct Settings {
     // Version 38 (ANIMATED MODEL YAW): R-stick hero turn via walk facing while
     // yielding. Off by default (animated_model_yaw.hpp).
     uint32_t animatedModelYaw{};
+    // Version 40 (RUN SPEED, vr_settings::Values::runSpeedPercent): 50 to 200,
+    // the speed SpidyVR's own ground run puts the body at (Swing::
+    // setRunSpeedPercent). 100 as before; a v39 packet keeps 100.
+    uint32_t runSpeedPercent = 100;
+    // Version 40 too (SOFT LOCK, vr_settings::Values::softLockMetres): 0 to
+    // 40 metres, GrabConfig::softLock (0 off). A v39 packet keeps it off.
+    uint32_t softLockMetres = 15;
 };
 constexpr uint32_t settingsBytesV3 = 28, settingsBytesV4 = 32, settingsBytesV5 = 36, settingsBytesV6 = 40,
                    settingsBytesV7 = 44, settingsBytesV8 = 48, settingsBytesV9 = 52, settingsBytesV10 = 56,
@@ -409,9 +416,10 @@ constexpr uint32_t settingsBytesV3 = 28, settingsBytesV4 = 32, settingsBytesV5 =
                    settingsBytesV28 = 132, settingsBytesV29 = 136, settingsBytesV30 = 144,
                    settingsBytesV31 = 148, settingsBytesV32 = 152, settingsBytesV33 = 156,
                    settingsBytesV34 = 160, settingsBytesV35 = 164, settingsBytesV36 = 168,
-                   settingsBytesV37 = 172, settingsBytesV38 = 176;
+                   settingsBytesV37 = 172, settingsBytesV38 = 176, settingsBytesV39 = 180;
 static_assert(
-    sizeof(Settings) == 180 && offsetof(Settings, walls) == settingsBytesV3 &&
+    sizeof(Settings) == 188 && offsetof(Settings, runSpeedPercent) == settingsBytesV39 &&
+    offsetof(Settings, walls) == settingsBytesV3 &&
     offsetof(Settings, physical) == settingsBytesV4 && offsetof(Settings, noBlows) == settingsBytesV5 &&
     offsetof(Settings, arcade) == settingsBytesV6 && offsetof(Settings, handClimb) == settingsBytesV7 &&
     offsetof(Settings, webSlingshot) == settingsBytesV8 &&
@@ -621,7 +629,8 @@ inline bool validSettings(const Settings& s) {
             (s.version == 29 && s.bytes == settingsBytesV29) ||
             (s.version == 30 && s.bytes == settingsBytesV30) ||
             (s.version == 31 && s.bytes == settingsBytesV31) ||
-            (s.version == 39 && s.bytes == sizeof(Settings))) &&
+            (s.version == 39 && s.bytes == settingsBytesV39) ||
+            (s.version == 40 && s.bytes == sizeof(Settings))) &&
            s.grab <= 1 && std::isfinite(s.maxSpeed) && s.maxSpeed > 0 && s.maxSpeed <= motionSpeedLimit &&
            s.airWebs <= 1 && std::isfinite(s.gravity) && s.gravity >= 0 && s.gravity <= maxGravity &&
            s.walls <= 4 && s.physical <= 1 && s.noBlows <= 3 && s.arcade <= 1 && s.handClimb <= 1 &&
@@ -641,7 +650,8 @@ inline bool validSettings(const Settings& s) {
            (s.version < 39 || s.animatedHead <= 2) && (s.version < 39 || s.animatedAir <= 1) &&
            (s.version < 39 || s.animatedSteering <= 1) && (s.version < 39 || s.animatedArms <= 1) &&
            (s.version < 39 || s.animatedTorso <= 1) && (s.version < 39 || s.animatedModelYaw <= 1) &&
-           (s.version < 31 || s.webLines <= 1);
+           (s.version < 31 || s.webLines <= 1) &&
+           (s.version < 40 || (s.runSpeedPercent >= 50 && s.runSpeedPercent <= 200 && s.softLockMetres <= 40));
 }
 static_assert(sizeof(WebState) == 28 && sizeof(Data) == 272 && offsetof(Data, wall) == 240);
 // The player is in the air: Spidy's own flight, or the game's jump or fall,

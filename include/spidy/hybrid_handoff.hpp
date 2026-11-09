@@ -83,6 +83,27 @@ inline float adoptEyesRigYaw(float worldLookYaw, Vec3 trackedLook) {
     return wrapPi(worldLookYaw - tracked);
 }
 
+// POSITION LOCK (November 8): the one authoritative place is the game actor's
+// feet (the physics body both owners move). Every ANIM -> VR switch puts the
+// tracking origin over those feet - the tracked head's floor point exactly on
+// them, the yaw continuing the look the player had - instead of under the
+// animated head-bone view, whose offset from the feet (a lean, a roll, root
+// motion: 0.7 m median, up to 2 m in the 19:16 session) adoptEyesOrigin used
+// to bake into the whole VR stint. The 180 ms eye blend covers the change.
+inline Vec3 lockedOrigin(Vec3 feet, float rigYaw, Vec3 trackedHead) {
+    if (!finite(feet) || !finite(trackedHead) || !std::isfinite(rigYaw))
+        return {};
+    return feet - Quat::yaw(rigYaw).rotate({trackedHead.x, 0, trackedHead.z});
+}
+// The tracked head's floor point minus the feet, across the ground: what the
+// lock leaves (0 at the switch; later physical steps/leans by the player).
+inline float residualAcross(Vec3 origin, float rigYaw, Vec3 trackedHead, Vec3 feet) {
+    if (!finite(origin) || !finite(trackedHead) || !finite(feet) || !std::isfinite(rigYaw))
+        return -1.f;
+    const Vec3 d = origin + Quat::yaw(rigYaw).rotate({trackedHead.x, 0, trackedHead.z}) - feet;
+    return std::hypot(d.x, d.z);
+}
+
 // Predicted world eye position after adoptEyesOrigin (for the unit test).
 inline Vec3 predictedEyes(Vec3 origin, float rigYaw, Vec3 trackedHead, Vec3 standOff, Vec3 headDrop,
                           Vec3 runViewOffset = {}) {

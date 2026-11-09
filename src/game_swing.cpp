@@ -1805,6 +1805,8 @@ extern "C" __declspec(dllexport) DWORD WINAPI SpidySwingSettings(void* input) {
         solver.allowSoftLanding(s.version >= 27 && s.softLanding != 0);
         solver.allowGroundRun(s.version >= 28 && s.spidyRun != 0);
         solver.allowGroundRunFromStanding(s.version >= 29 && s.spidyRunStanding != 0);
+        solver.setRunSpeedPercent(s.version >= 40 ? static_cast<int>(s.runSpeedPercent) : 100);
+        game_grab::softLock(s.version >= 40 ? static_cast<float>(s.softLockMetres) : 0.f);
         solver.allowWebLandingSmooth(s.version >= 30 && s.webLandingSmooth != 0,
                                      s.version >= 30 ? s.webLandingImpact
                                                      : static_cast<float>(web_landing::impactDefault));

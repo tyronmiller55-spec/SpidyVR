@@ -412,6 +412,15 @@ class Swing {
     // run_update::GroundRun::standTilt for standHold seconds, and builds past
     // the sprint while it stays held (run_update::standRunStep). Off: the run
     // starts only from a fast landing, as before.
+    // RUN SPEED (vr_settings::Values::runSpeedPercent): the ground run's
+    // applied speed, 50% to 200% of the run's own. Its entry, decay, turn and
+    // hand-back to the game keep their thresholds (in the run's own speed).
+    void setRunSpeedPercent(int percent) {
+        runSpeedScale_ = static_cast<float>(percent < 50 ? 50 : percent > 200 ? 200 : percent) / 100.f;
+    }
+    float runSpeedScale() const {
+        return runSpeedScale_;
+    }
     void allowGroundRunFromStanding(bool on) {
         standRunEnabled_ = on;
         standHold_ = 0;
@@ -818,6 +827,7 @@ class Swing {
     bool slingshotTaut(int i) const;
     Vec3 slingshotHands_[2]{}, slingshotEnds_[2]{};
     uint64_t slingshotSurfaces_[2]{};
+    float runSpeedScale_ = 1;
     float slingshotCharge_{}, slingshotHold_{}, slingshotRelease_{}, slingshotYaw_{};
     bool betterClimbing_{};
     bool smartAnchor_{};

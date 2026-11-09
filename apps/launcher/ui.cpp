@@ -1824,6 +1824,52 @@ void App::nativeAnimation(ImVec2 origin, ImVec2 size) {
                "Keep SpidyVR's ground run and speed carry where it owns movement. "
                "Independent of the Native Animation switch.",
                S(42), [&] { tabToggle("##spidyrun", Item::spidyRun); });
+        option("Run speed",
+               "Scales SpidyVR's own ground run (Spidy run, run from standing): 50% to 200%. "
+               "The game's native run and sprint animation keep the game's speed. Default: 100%.",
+               S(150), [&] {
+                   int percent = tabOnly_.runSpeedPercent;
+                   ImGui::PushFont(fonts_.semibold, 14);
+                   if (slider("##runspeed", &percent, 50, 200, "%d%%")) {
+                       percent = std::clamp((percent + 2) / 5 * 5, 50, 200);
+                       if (percent != tabOnly_.runSpeedPercent) {
+                           tabOnly_.runSpeedPercent = percent;
+                           tabChanged = true;
+                       }
+                   }
+                   ImGui::PopFont();
+               });
+        option("Slow-mo length",
+               "How long L3 slow motion lasts on a full meter, up to 1:30. The last step is Infinite: "
+               "it lasts until you click L3 again. Default: 12 s.",
+               S(150), [&] {
+                   int seconds = tabOnly_.slowMotionSeconds;
+                   ImGui::PushFont(fonts_.semibold, 14);
+                   if (slider("##slowmolength", &seconds, 3, spidy::vr_settings::slowMotionEndless,
+                              seconds >= spidy::vr_settings::slowMotionEndless ? "Infinite" : "%d s")) {
+                       seconds = std::clamp(seconds, 3, spidy::vr_settings::slowMotionEndless);
+                       if (seconds != tabOnly_.slowMotionSeconds) {
+                           tabOnly_.slowMotionSeconds = seconds;
+                           tabChanged = true;
+                       }
+                   }
+                   ImGui::PopFont();
+               });
+        option("Soft lock",
+               "Grip webs (and their aim marker) snap to an enemy or throwable prop near your aim, within "
+               "this distance; closer and nearer the aim wins. 0 is off. Default: 15 m.",
+               S(150), [&] {
+                   int metres = tabOnly_.softLockMetres;
+                   ImGui::PushFont(fonts_.semibold, 14);
+                   if (slider("##softlock", &metres, 0, 40, metres <= 0 ? "Off" : "%d m")) {
+                       metres = std::clamp(metres, 0, 40);
+                       if (metres != tabOnly_.softLockMetres) {
+                           tabOnly_.softLockMetres = metres;
+                           tabChanged = true;
+                       }
+                   }
+                   ImGui::PopFont();
+               });
     });
     group(1, "Advanced", [&] {
         option("Air", "Legacy animation in the air. Hybrid ignores this setting.", S(42),

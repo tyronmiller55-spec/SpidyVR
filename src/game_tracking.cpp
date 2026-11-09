@@ -259,6 +259,20 @@ void GameTrackingRig::adoptEyes(Vec3 worldEyes, float worldLookYaw, const Pose& 
     lastHead_ = head;
     // Do not set pendingAdopt_ — that path is the rested feet snap.
 }
+float GameTrackingRig::lockToFeet(Vec3 feet, Vec3 worldEyes, float worldLookYaw, const Pose& head) {
+    if (!finite(feet) || !std::isfinite(worldLookYaw) || !validTrackedPose(head))
+        return -1.f;
+    rig_.yaw = hybrid_handoff::adoptEyesRigYaw(worldLookYaw, head.orientation.rotate({0, 0, -1}));
+    adoptFeet(feet, head);
+    rig_.origin = hybrid_handoff::lockedOrigin(feet, rig_.yaw, head.position);
+    lastHead_ = head;
+    if (!finite(worldEyes))
+        return 0.f;
+    return std::hypot(worldEyes.x - feet.x, worldEyes.z - feet.z);
+}
+float GameTrackingRig::residualAcross(const Pose& head, Vec3 feet) const {
+    return hybrid_handoff::residualAcross(rig_.origin, rig_.yaw, head.position, feet);
+}
 void GameTrackingRig::reset() {
     const float snap = snap_, smooth = smooth_, wallDistance = wallDistance_;
     const float runDistance = runCameraDistance_;

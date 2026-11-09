@@ -184,6 +184,8 @@ void tieArmed(bool);
 // start): no tie, an enemy comes as before, and the ties there are let go,
 // as at a fight's end.
 void allowTies(bool on);
+// SOFT LOCK distance in metres (GrabConfig::softLock; 0 off).
+void softLock(float metres);
 TieData tieData();
 // The kinds this build can move.
 constexpr uint32_t movableKinds = 1u << static_cast<unsigned>(game_targets::Kind::throwable) |

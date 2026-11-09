@@ -57,8 +57,8 @@ class ProtocolTests(unittest.TestCase):
         root = pathlib.Path(__file__).resolve().parents[1]
         header = (root / 'include/spidy/game_swing.hpp').read_text(encoding='utf-8')
         settings = header.split('struct Settings {', 1)[1].split('\n};', 1)[0]
-        self.assertRegex(settings, r'version = 39, bytes = sizeof\(Settings\)')
-        self.assertIn('sizeof(Settings) == 180', header)
+        self.assertRegex(settings, r'version = 40, bytes = sizeof\(Settings\)')
+        self.assertIn('sizeof(Settings) == 188', header)
         self.assertLess(settings.index('uint32_t webLines'), settings.index('uint32_t headProbe'))
         fields = ['headProbe', 'animatedMoves', 'animatedHead', 'animatedAir',
                   'animatedSteering', 'animatedArms', 'animatedTorso', 'animatedModelYaw']
@@ -69,7 +69,8 @@ class ProtocolTests(unittest.TestCase):
         for field in fields:
             self.assertRegex(producer, r's\.' + field + r' = (?:static_cast<uint32_t>\()?values\.' + field)
         self.assertIn('(s.version == 31 && s.bytes == settingsBytesV31)', header)
-        self.assertIn('(s.version == 39 && s.bytes == sizeof(Settings))', header)
+        self.assertIn('(s.version == 39 && s.bytes == settingsBytesV39)', header)
+        self.assertIn('(s.version == 40 && s.bytes == sizeof(Settings))', header)
 
     def test_wall_roll_flag_uses_version_5_and_does_not_change_legacy_commands(self):
         old = swing_command(1, (0, 0, 0))

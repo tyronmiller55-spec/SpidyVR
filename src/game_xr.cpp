@@ -44,6 +44,8 @@
 #include "spidy/game_warp.hpp"
 #include "spidy/hand_pose.hpp"
 #include "spidy/headset_smoothing.hpp"
+#include "spidy/launch_facing.hpp"
+#include "spidy/aim_filter.hpp"
 #include "spidy/impact_sound.hpp"
 #include "spidy/native_eye_frame.hpp"
 #include "spidy/native_eye_gpu.hpp"
@@ -1076,6 +1078,10 @@ DWORD WINAPI run(void*) {
         // body was adopted in the air (its legs keep that pose, body::Targets::airborne). The
         // adopt's first-frame diag waits on native_body::jumpAdopt's count.
         bool hybridJumpAsk{};
+        int64_t positionLockCheckNs{-1}; // POSITION LOCK residual check time
+        launch_facing::Tracker launchFacing; // LAUNCH FACING: face momentum after a launch
+        std::array<aim_filter::Direction, 2> aimSteady; // WRIST MARKER SMOOTHING (shot = marker)
+        bool launchFacingWas{};
         bool hybridLeapAir{};
         bool hybridAdoptWaiting{};
         uint64_t hybridAdoptSeen{};
@@ -1507,6 +1513,8 @@ DWORD WINAPI run(void*) {
         auto stepSlowMotion = [&](float seconds, bool pressed, bool allowed) {
             using Event = SlowMotion::Event;
             const bool before = slowMotion.active();
+            // SLOW-MO LENGTH: the menu may change it mid-session.
+            slowMotion.setDrainSeconds(vr_settings::slowMotionDrainSeconds(values.slowMotionSeconds));
             const auto event = slowMotion.update(seconds, pressed, allowed);
             // A landed blow stops the game's time for a moment, in slow motion too.
             hitStop.update(seconds);
@@ -1612,6 +1620,8 @@ DWORD WINAPI run(void*) {
             s.spidyRun = values.spidyRun;
             // SPIDY RUN FROM STANDING: only with SPIDY RUN itself.
             s.spidyRunStanding = values.spidyRun && values.spidyRunFromStanding;
+            s.runSpeedPercent = static_cast<uint32_t>(std::clamp(values.runSpeedPercent, 50, 200));
+            s.softLockMetres = static_cast<uint32_t>(std::clamp(values.softLockMetres, 0, 40));
             s.webLandingSmooth = values.webLandingSmooth;
             s.webLines = values.webLines;
             s.headProbe = values.headProbe;
@@ -3034,7 +3044,8 @@ DWORD WINAPI run(void*) {
                         }
                         const bool nativeGroundNext = swingFresh &&
                             (swingState.grounded || swingState.wall == hybrid_owner::surfaceGame) &&
-                            swingState.wall != hybrid_owner::surfaceWall && !gripCancel.holdVr;
+                            swingState.wall != hybrid_owner::surfaceWall && !gripCancel.holdVr &&
+                            !hybridOwner.cancelSticky; // a cancel's VR stay is full OG, ground too
                         const bool animationActions = animation_cancel::nativeActions(
                             values.animatedHybrid && values.animatedMoves,
                             animatedMovesHandoff.yielding, gripCancel.holdVr, nativeGroundNext);
@@ -3289,6 +3300,27 @@ DWORD WINAPI run(void*) {
                             if (swingWebTurns)
                                 swingWebTurns(&turns);
                             webTurnsOn = false;
+                        }
+                        // WRIST MARKER SMOOTHING: the final aim of each free hand (OG rig or
+                        // the animation's gloves, whichever was written above) is steadied
+                        // here, once, so the swing's previews (the markers) and its shots
+                        // and web balls come from the same steadied line. A held web keeps
+                        // its raw aim (its pull is force, not a shot).
+                        {
+                            const Quat aimTurn = Quat::yaw(input.trackingYaw) * input.tilt;
+                            for (unsigned i = 0; i < 2; ++i) {
+                                if (!input.focused || !input.hands[i].tracked) {
+                                    aimSteady[i].reset();
+                                    continue;
+                                }
+                                const Vec3 steadied = aimSteady[i].update(
+                                    input.hands[i].aim.orientation.rotate({0, 0, -1}), aimTurn,
+                                    input.sampleSeconds);
+                                if (swingState.webs[i].attached)
+                                    continue;
+                                input.hands[i].aim = aim_filter::steer(input.hands[i].aim, steadied);
+                                motion.swing.hands[i].aim = input.hands[i].aim;
+                            }
                         }
                         check(submitSwing(&input), "Tracked swing input");
                         check(sampleSwing(&swingState), "Native swing feedback");
@@ -5030,7 +5062,29 @@ DWORD WINAPI run(void*) {
                                     walk.forward = seeded.forward;
                                 }
                             }
-                            if (modelYawOwns) {
+                            // LAUNCH FACING: a launch the player asked for faces its momentum
+                            // for its first 0.6 s (the game's walk-facing turn; no facing write).
+                            Vec3 launchWay{};
+                            const bool launchFaces =
+                                hybridSteer && swingFresh &&
+                                launchFacing.update(blendNowNs, hybridJumpAsk, swingState.grounded != 0,
+                                                    swingState.velocity, launchWay);
+                            if (launchFaces) {
+                                const auto faced = animated_model_yaw::worldToStick(
+                                    launchWay, motion.walkForwardAxis, motion.walkRightAxis,
+                                    animated_model_yaw::turnTilt);
+                                if (faced.right != 0.f || faced.forward != 0.f) {
+                                    walk.right = faced.right;
+                                    walk.forward = faced.forward;
+                                }
+                                if (!launchFacingWas)
+                                    diag_log::writef("launch facing: momentum %.0f deg, %.1f m/s, owner %s",
+                                                     hybrid_handoff::lookYaw(launchWay) * (180.f / 3.14159265f),
+                                                     length(Vec3{swingState.velocity.x, 0, swingState.velocity.z}),
+                                                     hybrid_owner::domainName(hybridOwner.domain));
+                            }
+                            launchFacingWas = launchFaces;
+                            if (modelYawOwns && !launchFaces) {
                                 const float rStickX =
                                     frame.hands[1].valid && std::isfinite(frame.hands[1].stickX)
                                         ? frame.hands[1].stickX
@@ -5964,8 +6018,26 @@ DWORD WINAPI run(void*) {
                                     const float preYaw = hybrid_handoff::lookYaw(
                                         motion.headPose.orientation.rotate({0, 0, -1}));
                                     dYaw = hybrid_handoff::wrapPi(worldYaw - preYaw) * (180.f / 3.14159265f);
-                                    if (validTrackedPose(frame.head))
+                                }
+                                // POSITION LOCK: one authority, the actor's feet. The tracking
+                                // origin goes over them (look yaw kept); the anim head's offset
+                                // is not baked into the VR stint. The eye blend covers the move.
+                                if (validTrackedPose(frame.head)) {
+                                    const Vec3 lockFeet{body[12], body[13], body[14]};
+                                    if (finite(lockFeet)) {
+                                        const float discarded = rig.lockToFeet(
+                                            lockFeet, eyesOk ? worldEyes : Vec3{NAN, NAN, NAN},
+                                            eyesOk ? worldYaw : hybrid_handoff::lookYaw(
+                                                motion.headPose.orientation.rotate({0, 0, -1})),
+                                            frame.head);
+                                        positionLockCheckNs = handoffNs + 1'000'000'000ll;
+                                        diag_log::writef("position lock: G->T origin on actor feet (%.1f, %.1f, "
+                                                         "%.1f), anim-view offset discarded %.2f m",
+                                                         lockFeet.x, lockFeet.y, lockFeet.z, discarded);
+                                    } else if (eyesOk) {
                                         rig.adoptEyes(worldEyes, worldYaw, frame.head);
+                                        diag_log::write("position lock: no actor feet; anim view adopted");
+                                    }
                                 }
                                 // A real jump or leap, or any other takeover while the hero is in
                                 // the air (web, grip, rotate, speed, swing, wallrun): snapshot the
@@ -6137,6 +6209,10 @@ DWORD WINAPI run(void*) {
                                 cameraPitch.reset();
                                 game_fp::relatchHeadFrame();
                                 const char* why = hybrid_owner::enterAnimName(hybridOwner.lastEnterAnim);
+                                if (hybridOwner.lastEnterAnim == hybrid_owner::EnterAnim::native)
+                                    diag_log::writef("hybrid: grip-cancel stay ended by native start bits %u "
+                                                     "(1 fight 2 dodge 4 parkour 8 crawl)",
+                                                     hybridOwner.lastNativeStart);
                                 // The head is often not sampled yet on the edge frame (head follow
                                 // turns on below): say so rather than log a 0.00 m that never was.
                                 if (headDPos >= 0.f)
@@ -6175,6 +6251,19 @@ DWORD WINAPI run(void*) {
                         // An adopted jump's legs keep its shape only in the air.
                         if (swingState.grounded)
                             hybridLeapAir = false;
+                        // POSITION LOCK residual: 1 s into a VR stint, and as it ends.
+                        // Across-ground head floor point vs actor feet; it includes
+                        // the player's own physical steps/leans since the switch.
+                        if (hybridOn && validTrackedPose(frame.head) &&
+                            ((positionLockCheckNs > 0 && handoffNs >= positionLockCheckNs &&
+                              hybridOwner.domain == hybrid_owner::Domain::vr) ||
+                             hybridOwner.enterAnim)) {
+                            const Vec3 feetNow{body[12], body[13], body[14]};
+                            diag_log::writef("position lock: residual %.2f m %s",
+                                             rig.residualAcross(frame.head, feetNow),
+                                             hybridOwner.enterAnim ? "at VR->anim" : "1 s into VR");
+                            positionLockCheckNs = -1;
+                        }
                         hybridZipPress = false;
                         hybridJumpAsk = false;
                         hybridWebWas = webNow;

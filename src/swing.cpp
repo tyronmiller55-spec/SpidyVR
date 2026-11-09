@@ -1555,7 +1555,8 @@ void Swing::step(float dt, const Input& in, const WorldQueries& world, const Wor
                                  : run_update::groundRunStep(groundAlong_, in.move, dt);
         const bool stick = finite(in.move) && std::hypot(in.move.x, in.move.z) > .05f;
         groundIdle_ = stick ? 0 : groundIdle_ + dt;
-        body_.velocity = limited(groundAlong_ + Vec3{0, -run_update::groundRun.press, 0}, speedLimit());
+        body_.velocity = limited(groundAlong_ * runSpeedScale_ + Vec3{0, -run_update::groundRun.press, 0},
+                                 speedLimit());
     } else {
         Vec3 steering = finite(in.move) ? limited(Vec3{in.move.x, 0, in.move.z}, 1) : Vec3{};
         body_.velocity +=

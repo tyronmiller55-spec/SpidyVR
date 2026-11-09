@@ -469,6 +469,14 @@ class GameTrackingRig {
     // surface / headDrop (no rested snap). Pitch/roll of the anim head are
     // discarded — level settle is the 180 ms hybrid blend's job.
     void adoptEyes(Vec3 worldEyes, float worldLookYaw, const Pose& head);
+    // POSITION LOCK (hybrid_handoff::lockedOrigin): ANIM -> VR. Yaw as
+    // adoptEyes (the look continues), origin over the actor's feet as
+    // adoptFeet (anim-view offsets cleared). Returns how far, across the
+    // ground, the old adoptEyes placement would have put the head from the
+    // feet (the offset now discarded); -1 when nothing was done.
+    float lockToFeet(Vec3 feet, Vec3 worldEyes, float worldLookYaw, const Pose& head);
+    // Across-ground distance of the tracked head's floor point from `feet`.
+    float residualAcross(const Pose& head, Vec3 feet) const;
     void reset();
 
   private:

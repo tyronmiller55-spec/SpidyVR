@@ -137,6 +137,9 @@ std::optional<GrabTarget> WebGrab::preview(Pose aim, const WorldQueries& world,
     const float reach = wall ? length(wall->point - aim.position) + .75f : config_.maxRange;
     if (!target)
         target = targets.pick(aim.position, direction, std::min(reach, config_.maxRange), config_.aimCone);
+    if (!target && config_.softLock > 0)
+        target = targets.pick(aim.position, direction, std::min({reach, config_.maxRange, config_.softLock}),
+                              std::max(softLockCone, config_.aimCone));
     if (!target || !finite(target->position) || !finite(target->velocity) || target->mass > config_.maxMass ||
         !std::isfinite(target->radius) || target->radius < 0)
         return {};

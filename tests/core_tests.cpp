@@ -86,6 +86,9 @@
 #include "spidy/hybrid_owner.hpp"
 #include "spidy/hybrid_steer.hpp"
 #include "spidy/hybrid_handoff.hpp"
+#include "spidy/aim_filter.hpp"
+#include "spidy/animation_cancel.hpp"
+#include "spidy/launch_facing.hpp"
 #include "spidy/animated_steering.hpp"
 #include "spidy/animated_arms.hpp"
 #include "spidy/animated_torso.hpp"
@@ -1852,7 +1855,7 @@ int main() {
     });
     test("slingshot settings append to the old wire format and default off", [] {
         game_swing::Settings s;
-        check(s.version == 39 && s.bytes == 180 && !s.webSlingshot, "wrong slingshot defaults");
+        check(s.version == 40 && s.bytes == 188 && !s.webSlingshot, "wrong slingshot defaults");
         check(offsetof(game_swing::Settings, webSlingshot) == 48, "old settings moved");
         s.webSlingshot = 1; check(game_swing::validSettings(s), "ON refused");
         s.webSlingshot = 2; check(!game_swing::validSettings(s), "invalid switch accepted");
@@ -2515,7 +2518,7 @@ int main() {
         check(vr_settings::choose(vr_settings::Item::betterClimbing, 1, v), "ON failed");
         check(vr_settings::withTabOnly({}, vr_settings::tabOnlyText(v)).betterClimbing, "switch not saved");
         game_swing::Settings s;
-        check(s.version == 39 && s.bytes == 180 && offsetof(game_swing::Settings, betterClimbing) == 52,
+        check(s.version == 40 && s.bytes == 188 && offsetof(game_swing::Settings, betterClimbing) == 52,
               "settings moved old fields");
         s.betterClimbing = 1; check(game_swing::validSettings(s), "ON refused");
         s.betterClimbing = 2; check(!game_swing::validSettings(s), "invalid switch accepted");
@@ -3871,7 +3874,7 @@ int main() {
     test("merged settings keep phone suppression, arcade webs and hand climbing independent", [] {
         using namespace game_swing;
         Settings s;
-        check(s.version == 39 && s.bytes == 180, "updated settings did not append the climbing field");
+        check(s.version == 40 && s.bytes == 188, "updated settings did not append the climbing field");
         check(offsetof(Settings, noBlows) == 36 && offsetof(Settings, arcade) == 40 &&
               offsetof(Settings, handClimb) == 44, "upstream phone or arcade fields moved");
         s.noBlows = 3;
@@ -10089,7 +10092,7 @@ int main() {
         Swing fresh(inert());
         check(!fresh.webLandingSmoothEnabled() && !fresh.landCarrying(), "SMOOTH WEB LANDING on by default");
         game_swing::Settings packet;
-        check(packet.version == 39 && packet.bytes == 180 && !packet.webLandingSmooth &&
+        check(packet.version == 40 && packet.bytes == 188 && !packet.webLandingSmooth &&
                   packet.webLandingImpact == 24 &&
                   offsetof(game_swing::Settings, webLandingSmooth) == game_swing::settingsBytesV29,
               "SMOOTH WEB LANDING not appended, or on by default");
@@ -10243,7 +10246,7 @@ int main() {
         Swing fresh(inert());
         check(!fresh.groundRunEnabled() && !fresh.groundRunning(), "SPIDY RUN on by default");
         game_swing::Settings packet;
-        check(packet.version == 39 && packet.bytes == 180 && !packet.spidyRun &&
+        check(packet.version == 40 && packet.bytes == 188 && !packet.spidyRun &&
                   offsetof(game_swing::Settings, spidyRun) == game_swing::settingsBytesV27,
               "SPIDY RUN not appended, or on by default");
         packet.spidyRun = 2;
@@ -10381,7 +10384,7 @@ int main() {
             check(!sw.groundRunning(), "the air started a run from standing");
         }
         game_swing::Settings packet;
-        check(packet.version == 39 && packet.bytes == 180 && !packet.spidyRunStanding &&
+        check(packet.version == 40 && packet.bytes == 188 && !packet.spidyRunStanding &&
                   offsetof(game_swing::Settings, spidyRunStanding) == game_swing::settingsBytesV28,
               "SPIDY RUN FROM STANDING not appended, or on by default");
         packet.spidyRunStanding = 2;
@@ -22919,7 +22922,7 @@ int main() {
     test("free combat: settings default to called combat and preserve older packet layouts", [] {
         using namespace game_swing;
         Settings s;
-        check(s.version == 39 && s.bytes == 180 && s.combatVisuals == 1 &&
+        check(s.version == 40 && s.bytes == 188 && s.combatVisuals == 1 &&
                   offsetof(Settings, combatVisuals) == 56,
               "free combat broke the settings defaults or layout");
         s.combatVisuals = 0;
@@ -22966,7 +22969,7 @@ int main() {
         check(withTabOnly(Values{}, "single_hand_yank_percent=999\n").singleHandYankPercent == 300,
               "saved single-hand yank strength was not clamped");
         game_swing::Settings packet;
-        check(packet.version == 39 && packet.bytes == 180 && !packet.halfPunchDamage &&
+        check(packet.version == 40 && packet.bytes == 188 && !packet.halfPunchDamage &&
                   packet.singleHandYankPercent == 100 &&
                   offsetof(game_swing::Settings, halfPunchDamage) == 96 &&
                   offsetof(game_swing::Settings, singleHandYankPercent) == 100,
@@ -23684,7 +23687,7 @@ int main() {
                                   Item::automaticHandStrength, Item::automaticFalloff,     Item::automaticHandThreshold,
                                   Item::automaticAirBrake,     Item::automaticCombat};
         // The realistic flips' rows come last, after the EXPERIMENTAL rows before them.
-        constexpr size_t firstRealistic = 98;
+        constexpr size_t firstRealistic = 101; // RUN SPEED, SLOW-MO LENGTH, SOFT LOCK before them
         check(all.size() == firstRealistic + std::size(realistic), "the realistic flips' rows are not the last");
         for (size_t i = 0; i < std::size(realistic); ++i)
             check(all[firstRealistic + i].item == realistic[i], "the realistic flips' rows out of order");
@@ -23899,7 +23902,7 @@ int main() {
                   "a row in the wrong place");
         }
         check(std::count_if(all.begin(), all.end(), [](const Row& r) { return r.place == Place::tab; }) ==
-                  104,
+                  107,
               "the tab's own rows");
         check(all[1].item == Item::webStyle && std::strcmp(all[1].title, "WEB STYLE") == 0 &&
                   all[1].choices.size() == 2 && std::strcmp(all[1].choices[0], "REALISTIC") == 0 &&
@@ -23971,7 +23974,7 @@ int main() {
               "spidy_vr.ini does not keep WEB LINES as web_lines");
         game_swing::Settings s;
         check(!s.webLines && offsetof(game_swing::Settings, webLines) == game_swing::settingsBytesV30 &&
-                  s.version == 39 && s.bytes == sizeof(game_swing::Settings),
+                  s.version == 40 && s.bytes == sizeof(game_swing::Settings),
               "web lines on in a new packet, or not appended");
         s.webLines = 1;
         check(game_swing::validSettings(s), "a packet with web lines refused");
@@ -24184,7 +24187,7 @@ int main() {
                   "flip_reprojection=0\nsteady_hud=0\nreel_haptics=0\nswing_haptics=0\n"
                   "pc_media=0\nsingle_hand_yank_percent=100\nweb_tie=0\nnative_run=1\nair_slingshot=0\nweb_angle_"
                   "degrees=0\nwrist_shooters=0\n"
-                  "dodge_tumble=0\nrun_curve=0\nnative_run_at_percent=70\nrun_logs=0\nrunning_leap=0\nearly_jump=0\nsoft_landing=0\nspidy_run=1\nspidy_run_from_standing=0\nweb_aim_source=0\nforearm_blend=100\nweb_landing_smooth=0\nweb_landing_impact_speed=24\nsteady_states=0\ncombat_responsive=0\nspidy_run_jump=1\nforearm_aim_limit=180\npalm_shooters=0\nhead_probe=0\nanimated_moves=1\nanimated_head=2\nanimated_headset_smooth=0\nanimated_air=0\nanimated_steering=0\nanimated_arms=1\nanimated_torso=1\nanimated_model_yaw=1\nanimated_only=0\nanimated_air_spin=0\nanimated_hybrid=1\nanimated_hybrid_speed_ms=200\nweb_lines=0\n",
+                  "dodge_tumble=0\nrun_curve=0\nnative_run_at_percent=70\nrun_logs=0\nrunning_leap=0\nearly_jump=0\nsoft_landing=0\nspidy_run=1\nspidy_run_from_standing=0\nweb_aim_source=0\nforearm_blend=100\nweb_landing_smooth=0\nweb_landing_impact_speed=24\nsteady_states=0\ncombat_responsive=0\nspidy_run_jump=1\nforearm_aim_limit=180\npalm_shooters=0\nhead_probe=0\nanimated_moves=1\nanimated_head=2\nanimated_headset_smooth=0\nrun_speed_percent=100\nslow_motion_seconds=12\nsoft_lock_metres=15\nanimated_air=0\nanimated_steering=0\nanimated_arms=1\nanimated_torso=1\nanimated_model_yaw=1\nanimated_only=0\nanimated_air_spin=0\nanimated_hybrid=1\nanimated_hybrid_speed_ms=200\nweb_lines=0\n",
               "the defaults' text");
         Values changed = defaults;
         changed.recordingFov = 140;
@@ -27796,7 +27799,8 @@ int main() {
                   all[89].choices.size() == 9 && std::strcmp(all[89].choices[0], "OFF") == 0 &&
                   std::strcmp(all[89].choices[8], "500 MS") == 0 && all[89].place == Place::tab,
               "ANIMATED HYBRID SPEED row");
-        check(lastItem == Item::animatedHeadsetSmooth, "SMOOTHING not included in the last Item bound");
+        check(lastItem == Item::softLock && Item::animatedHeadsetSmooth < lastItem,
+              "SMOOTHING not included in the last Item bound");
     });
 
     test("ANIMATED ONLY: every gameplay state yields, no web interrupt, cutscene grace", [] {
@@ -28390,11 +28394,18 @@ int main() {
         f.cancelGripHeld=false; f.groundAction=true;
         check(o.update(f,5)==Domain::vr,"actual takeoff cut short");
         f.groundAction=false;
-        check(o.update(f,6)==Domain::anim,"release/action completion delayed");
+        // GRIP CANCEL STAYS IN SPIDYVR (November 8 21:51): no handback on
+        // the ground after a cancel until a native animation starts itself.
+        check(o.update(f,6)==Domain::vr && o.cancelSticky,"cancel stay ended on plain ground");
+        f.state.fighting=true;
+        check(o.update(f,7)==Domain::anim && o.lastEnterAnim==EnterAnim::native && !o.cancelSticky,
+              "native start did not end the cancel stay");
+        f.state.fighting=false;
+        check(o.update(f,8)==Domain::anim,"ground native did not hold after the handback");
         f.state.wall=surfaceWall;
-        check(o.update(f,7)==Domain::vr,"Spidy wall run forced native");
+        check(o.update(f,9)==Domain::vr,"Spidy wall run forced native");
         f.state.wall=surfaceGame; f.state.grounded=false;
-        check(o.update(f,8)==Domain::anim,"game crawl kept OG body");
+        check(o.update(f,10)==Domain::anim,"game crawl kept OG body");
     });
 
     test("ANIMATED HYBRID owner: combat sticky keeps anim through a launcher hop until web", [] {
@@ -30067,10 +30078,243 @@ int main() {
         v.swingSpeed = Values{}.swingSpeed; // not a tab-only key
         check(withTabOnly({}, tabOnlyText(v)) == v, "concrete mode settings did not round-trip");
     });
+    test("GRIP CANCEL STAY: SpidyVR until a native animation starts; no lingering suppression", [] {
+        using namespace hybrid_owner;
+        check(nativeStarts(0, 1) == 1 && nativeStarts(1, 1) == 0 && nativeStarts(1, 3) == 2 && nativeStarts(3, 0) == 0,
+              "native starts are not rising edges");
+        head_probe::StateInputs st;
+        st.fighting = true;
+        check(nativeAnimations(st) & 1u, "fight is not a native animation");
+        st = {};
+        st.dodging = true;
+        check(nativeAnimations(st) & 2u, "dodge is not a native animation");
+        st = {};
+        st.wall = surfaceGame;
+        check(nativeAnimations(st) & 8u, "game crawl is not a native animation");
+        HybridOwner o;
+        Frame f;
+        f.state.playing = f.state.fresh = f.state.grounded = true;
+        o.update(f, 1);
+        f.cancelGrip = f.cancelGripHeld = true;
+        check(o.update(f, 2) == Domain::vr && o.lastEnterVr == EnterVr::cancel && o.cancelSticky, "no cancel");
+        f.cancelGrip = f.cancelGripHeld = false;
+        int64_t t = 3;
+        // Walking, running, a web on the ground: all SpidyVR, many seconds on.
+        for (float speed : {0.f, 3.f, 9.f}) {
+            f.speedH = speed;
+            for (int i = 0; i < 50; ++i)
+                check(o.update(f, t += 100'000'000) == Domain::vr && !o.enterAnim, "the stay ended without a native start");
+        }
+        f.webRising = f.state.webbed = true;
+        check(o.update(f, t += 1'000'000) == Domain::vr, "a ground web line ended the stay");
+        f.webRising = f.state.webbed = false;
+        // Animation ownership, the swing's own gate: nothing blocks lines once released.
+        animation_cancel::Gate gate;
+        gate.update(true, false, true, 0, 0);
+        const auto d = gate.update(true, o.animOwns(true, f.state), true, 1, 1);
+        check(!d.cancel && !d.webBlocked && !d.shotBlocked && !d.holdVr, "a press in the stay was consumed");
+        f.state.dodging = true;
+        check(o.update(f, t += 1'000'000) == Domain::anim && o.lastEnterAnim == EnterAnim::native &&
+                  o.lastNativeStart == 2u && !o.cancelSticky,
+              "a dodge did not hand back");
+        // Without a cancel, plain ground still restores animation at once (unchanged).
+        HybridOwner plain;
+        Frame g;
+        g.state.playing = g.state.fresh = true;
+        g.webRising = g.state.webbed = true;
+        plain.update(g, 1);
+        g.webRising = false;
+        g.state.grounded = true;
+        check(plain.update(g, 2) == Domain::anim && plain.lastEnterAnim == EnterAnim::ground,
+              "ordinary ground handback changed");
+    });
+    test("POSITION LOCK: the VR origin is put on the actor's feet; the residual is measured", [] {
+        const Vec3 feet{10, 2, -4}, head{.3f, 1.7f, -.2f};
+        for (const float yaw : {0.f, 1.f, -2.5f}) {
+            const Vec3 origin = hybrid_handoff::lockedOrigin(feet, yaw, head);
+            const Vec3 eyes = origin + Quat::yaw(yaw).rotate(head);
+            near(eyes.x, feet.x, 1e-4f);
+            near(eyes.z, feet.z, 1e-4f);
+            near(hybrid_handoff::residualAcross(origin, yaw, head, feet), 0, 1e-4f);
+            // An animated head view 0.8 m off the feet is discarded, not baked in.
+            near(hybrid_handoff::residualAcross(origin + Vec3{.8f, 0, 0}, yaw, head, feet), .8f, 1e-4f);
+        }
+        check(hybrid_handoff::residualAcross({NAN, 0, 0}, 0, head, feet) < 0, "no number gave a residual");
+    });
+    test("LAUNCH FACING: an asked launch faces its horizontal momentum, briefly", [] {
+        launch_facing::Tracker tr;
+        Vec3 way{};
+        check(!tr.update(0, false, true, {0, 0, -8}, way), "facing on the ground");
+        check(!tr.update(10'000'000, true, true, {0, 0, -8}, way), "facing before leaving");
+        check(tr.update(20'000'000, false, false, {6, 3, -8}, way), "no facing after an asked launch");
+        near(way.x, .6f, 1e-4f);
+        near(way.z, -.8f, 1e-4f);
+        near(way.y, 0);
+        check(!tr.update(20'000'000 + launch_facing::windowNs + 1, false, false, {6, 3, -8}, way),
+              "facing outlived its window");
+        launch_facing::Tracker slow;
+        slow.update(0, true, true, {}, way);
+        check(!slow.update(10'000'000, false, false, {1, 5, 1}, way), "a slow launch faced a direction");
+        launch_facing::Tracker unasked;
+        unasked.update(0, false, true, {}, way);
+        check(!unasked.update(10'000'000, false, false, {0, 0, -12}, way), "a fall off a ledge was turned");
+    });
+    test("RUN SPEED: scales SpidyVR's own ground run only; 100% as before; v40 settings", [] {
+        using namespace vr_settings;
+        Values v;
+        check(v.runSpeedPercent == 100 && choice(Item::runSpeed, v) == 2, "run speed default not 100%");
+        check(choose(Item::runSpeed, 6, v) && v.runSpeedPercent == 200, "run speed 200% not chosen");
+        check(withTabOnly({}, "run_speed_percent=150\n").runSpeedPercent == 150 &&
+                  withTabOnly({}, "run_speed_percent=900\n").runSpeedPercent == 200,
+              "run speed not kept or not sanitized");
+        TestWorld w;
+        w.enabled = false;
+        Input in;
+        in.focused = true;
+        in.move = {0, 0, -1};
+        const Body air{{0, 1.5f, 0}, {0, -8, -20}, false};
+        const Body landed{{0, 1, -.3f}, {0, -8, -20}, true};
+        const auto run = [&](int percent) {
+            spidy::Swing sw(inert());
+            sw.allowGroundRun(true);
+            sw.setRunSpeedPercent(percent);
+            sw.predictNativeStep(1.f / 90, in, w, air);
+            const auto out = sw.predictNativeStep(1.f / 90, in, w, landed);
+            check(sw.groundRunning(), "no run");
+            return std::hypot(out.velocity.x, out.velocity.z);
+        };
+        const float base = run(100);
+        near(run(150) / base, 1.5f, .01f);
+        near(run(50) / base, .5f, .01f);
+        near(run(1000) / base, 2.f, .01f);
+        game_swing::Settings s;
+        check(s.version == 40 && s.runSpeedPercent == 100 && game_swing::validSettings(s), "v40 default");
+        s.runSpeedPercent = 201;
+        check(!game_swing::validSettings(s), "run speed over 200% accepted");
+        s = {};
+        s.version = 39;
+        s.bytes = game_swing::settingsBytesV39;
+        s.runSpeedPercent = 0;
+        s.softLockMetres = 999;
+        check(game_swing::validSettings(s), "a v39 packet refused for the new fields");
+    });
+    test("SLOW-MO LENGTH: 6 s to 1:30 and INFINITE; 12 s as before; the toggle unchanged", [] {
+        using namespace vr_settings;
+        Values v;
+        check(v.slowMotionSeconds == 12 && choice(Item::slowMotionLength, v) == 1, "slow-mo default not 12 s");
+        check(choose(Item::slowMotionLength, 7, v) && v.slowMotionSeconds == 90, "1:30 missing");
+        check(choose(Item::slowMotionLength, 8, v) && v.slowMotionSeconds == slowMotionEndless &&
+                  slowMotionDrainSeconds(v.slowMotionSeconds) == 0,
+              "INFINITE missing");
+        check(rowFor(Item::slowMotionLength)->choices.size() <= maxChoices, "too many choices");
+        near(slowMotionDrainSeconds(30), 30);
+        check(withTabOnly({}, "slow_motion_seconds=91\n").slowMotionSeconds == slowMotionEndless &&
+                  withTabOnly({}, "slow_motion_seconds=500\n").slowMotionSeconds == slowMotionEndless,
+              "slow-mo length not kept or not sanitized");
+        for (const float length : {30.f, 90.f}) {
+            SlowMotion slow;
+            slow.setDrainSeconds(length);
+            slow.update(.01f, true, true);
+            float seconds = .01f;
+            while (slow.active() && seconds < 200) {
+                slow.update(.01f, false, true);
+                seconds += .01f;
+            }
+            near(seconds, length, .05f);
+        }
+        SlowMotion endless;
+        endless.setDrainSeconds(0);
+        check(endless.endless(), "0 is not endless");
+        endless.update(.01f, true, true);
+        for (int i = 0; i < 30000; ++i) // 5 minutes
+            endless.update(.01f, false, true);
+        check(endless.active() && endless.focus() > .99f, "INFINITE slow motion ran out");
+        check(endless.update(.01f, true, true) == SlowMotion::Event::stopped && !endless.active(),
+              "L3 did not end INFINITE slow motion");
+        SlowMotion defaults;
+        near(defaults.tuning().drainSeconds, 12);
+    });
+    test("WRIST MARKER SMOOTHING: steady at rest, no lag on a flick, a snap turn is no motion", [] {
+        aim_filter::Direction f;
+        const Quat turn{};
+        // Tremor of +-0.3 degrees at rest is cut down.
+        float worst = 0;
+        for (int i = 0; i < 400; ++i) {
+            const float wob = (i % 2 ? 1 : -1) * .3f * 3.14159265f / 180;
+            const Vec3 raw = normalized(Vec3{std::sin(wob), 0, -std::cos(wob)});
+            const Vec3 out = f.update(raw, turn, 1.f / 90);
+            if (i > 50)
+                worst = std::max(worst, std::acos(std::clamp(-out.z, -1.f, 1.f)));
+        }
+        check(worst < .3f * 3.14159265f / 180 * .5f, "tremor at rest not steadied");
+        // A 90 degree flick in 100 ms: within 3 degrees of the hand 50 ms after it stops.
+        float behind = 0;
+        for (int i = 0; i <= 9 + 4; ++i) {
+            const float a = std::min(i, 9) / 9.f * 1.5707963f;
+            const Vec3 raw{std::sin(a), 0, -std::cos(a)};
+            const Vec3 out = f.update(raw, turn, 1.f / 90);
+            behind = std::acos(std::clamp(dot(out, raw), -1.f, 1.f));
+        }
+        check(behind < 3 * 3.14159265f / 180, "a fast flick lags visibly");
+        // A snap turn of the tracking space moves nothing.
+        aim_filter::Direction g;
+        const Vec3 local{0, 0, -1};
+        g.update(local, Quat::yaw(0), 1.f / 90);
+        const Vec3 after = g.update(Quat::yaw(.785f).rotate(local), Quat::yaw(.785f), 1.f / 90);
+        near(dot(after, Quat::yaw(.785f).rotate(local)), 1, 1e-5f);
+        // The steered pose keeps its place and points along the steady line.
+        const Pose p{{1, 2, 3}, Quat::yaw(.3f)};
+        const Vec3 want = normalized(Vec3{.1f, .2f, -1});
+        const Pose s = aim_filter::steer(p, want);
+        near(length(s.position - p.position), 0);
+        near(dot(s.orientation.rotate({0, 0, -1}), want), 1, 1e-5f);
+        check(!finite(f.update({NAN, 0, 0}, turn, .01f)) && !f.filtering, "no number did not reset the filter");
+    });
+    test("SOFT LOCK: grip webs snap to a near target within the lock distance; marker = press", [] {
+        using namespace vr_settings;
+        Values v;
+        check(v.softLockMetres == 15 && choice(Item::softLock, v) == 3, "soft lock default not 15 m");
+        check(choose(Item::softLock, 0, v) && v.softLockMetres == 0, "soft lock OFF missing");
+        check(withTabOnly({}, "soft_lock_metres=25\n").softLockMetres == 25 &&
+                  withTabOnly({}, "soft_lock_metres=99\n").softLockMetres == 40,
+              "soft lock not kept or not sanitized");
+        check(lockScore(.05f, .21f, 5, 15) < lockScore(.05f, .21f, 12, 15) &&
+                  lockScore(.02f, .21f, 8, 15) < lockScore(.15f, .21f, 8, 15),
+              "the score does not prefer closer and nearer the ray");
+        TestWorld world;
+        world.enabled = false;
+        const Pose aim{{0, 1, 0}, {}}; // along -Z
+        // 8 degrees off the ray: outside the narrow cone, inside the soft one.
+        const auto off = [](float d) { return Vec3{d * std::tan(.14f), 1, -d}; };
+        LabProps props({LabProp{7, TargetKind::Character, off(10), {}, {}, {}, 80, .3f}});
+        WebGrab grab;
+        check(!grab.preview(aim, world, props), "the narrow cone took a target 8 degrees off");
+        grab.softLock(15);
+        const auto locked = grab.preview(aim, world, props);
+        check(locked && locked->id == 7, "soft lock did not take the near enemy");
+        grab.softLock(8);
+        check(!grab.preview(aim, world, props), "soft lock reached past its distance");
+        grab.softLock(15);
+        // Two at the same angle: the closer one wins; a far one dead ahead loses to a near one slightly off.
+        LabProps two({LabProp{1, TargetKind::Object, off(12), {}, {}, {}, 20, .3f},
+                      LabProp{2, TargetKind::Object, off(5), {}, {}, {}, 20, .3f}});
+        check(grab.preview(aim, world, two)->id == 2, "the farther of two took the lock");
+        // The marker (preview) is what the press takes.
+        Input in;
+        in.hands[0] = {aim, {}, true, 0, 1};
+        Body player{{0, 1, 0}, {}, true};
+        grab.claim(1.f / 90, in, world, props, player);
+        check(grab.grabs()[0].phase != GrabPhase::None && grab.grabs()[0].target == 7,
+              "the press did not take the marked target");
+        game_swing::Settings s;
+        check(s.softLockMetres == 15 && game_swing::validSettings(s), "v40 soft lock default");
+        s.softLockMetres = 41;
+        check(!game_swing::validSettings(s), "soft lock over 40 m accepted");
+    });
     test("Native Animation: combined menu inventory and upstream-compatible v39 settings packet", [] {
         using namespace vr_settings;
         const auto& all = rows();
-        check(all.size() == 109 && static_cast<unsigned>(lastItem) < 256, "row/Item bounds");
+        check(all.size() == 112 && static_cast<unsigned>(lastItem) < 256, "row/Item bounds");
         std::array<unsigned, 256> seen{};
         size_t start = all.size();
         for (size_t i = 0; i < all.size(); ++i) {
@@ -30092,7 +30336,7 @@ int main() {
         for (unsigned i = 1; i <= static_cast<unsigned>(lastItem); ++i)
             check(seen[i] == 1, "Item has no menu row");
         game_swing::Settings s;
-        check(s.version == 39 && s.bytes == 180 && offsetof(game_swing::Settings, webLines) == 144 &&
+        check(s.version == 40 && s.bytes == 188 && offsetof(game_swing::Settings, webLines) == 144 &&
                   offsetof(game_swing::Settings, headProbe) == 148 &&
                   offsetof(game_swing::Settings, animatedModelYaw) == 176 && game_swing::validSettings(s),
               "v39 layout or validation");

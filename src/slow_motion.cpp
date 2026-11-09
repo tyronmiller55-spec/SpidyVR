@@ -45,7 +45,8 @@ SlowMotion::Event SlowMotion::update(float seconds, bool pressed, bool allowed) 
         }
     }
     if (active_) {
-        focus_ = std::max(0.f, focus_ - dt / tuning_.drainSeconds);
+        if (!endless_)
+            focus_ = std::max(0.f, focus_ - dt / tuning_.drainSeconds);
         if (focus_ <= 0) {
             end(Event::emptied);
             sinceWarning_ = 0;

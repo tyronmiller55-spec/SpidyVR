@@ -123,6 +123,16 @@ static_assert(std::size(animatedHeadChoices) == std::size(animatedHeads));
 constexpr int animatedHeadsetSmooths[] = {0, 1, 2, 3, 4};
 constexpr const char* animatedHeadsetSmoothChoices[] = {"OFF", "LOW", "MEDIUM", "HIGH", "MAX"};
 static_assert(std::size(animatedHeadsetSmoothChoices) == std::size(animatedHeadsetSmooths));
+constexpr int runSpeeds[] = {50, 75, 100, 125, 150, 175, 200};
+constexpr const char* runSpeedChoices[] = {"50%", "75%", "100%", "125%", "150%", "175%", "200%"};
+static_assert(std::size(runSpeedChoices) == std::size(runSpeeds));
+constexpr int slowMotionLengths[] = {6, 12, 20, 30, 45, 60, 75, 90, slowMotionEndless};
+constexpr const char* slowMotionLengthChoices[] = {"6 S",  "12 S", "20 S", "30 S",    "45 S",
+                                                   "60 S", "75 S", "1:30", "INFINITE"};
+static_assert(std::size(slowMotionLengthChoices) == std::size(slowMotionLengths));
+constexpr int softLocks[] = {0, 5, 10, 15, 20, 25, 30, 40};
+constexpr const char* softLockChoices[] = {"OFF", "5 M", "10 M", "15 M", "20 M", "25 M", "30 M", "40 M"};
+static_assert(std::size(softLockChoices) == std::size(softLocks));
 constexpr int animatedAirSpins[] = {0, 1, 2};
 constexpr const char* animatedAirSpinChoices[] = {"OFF", "FLIPS", "FLIPS + MOMENTUM"};
 static_assert(std::size(animatedAirSpinChoices) == std::size(animatedAirSpins));
@@ -193,6 +203,12 @@ std::span<const int> steps(Item item) {
         return animatedHeads;
     case Item::animatedHeadsetSmooth:
         return animatedHeadsetSmooths;
+    case Item::runSpeed:
+        return runSpeeds;
+    case Item::slowMotionLength:
+        return slowMotionLengths;
+    case Item::softLock:
+        return softLocks;
     case Item::animatedAirSpin:
         return animatedAirSpins;
     case Item::animatedHybridSpeed:
@@ -284,6 +300,12 @@ float numberOf(Item item, const Values& v) {
         return static_cast<float>(v.animatedHead);
     case Item::animatedHeadsetSmooth:
         return static_cast<float>(v.animatedHeadsetSmooth);
+    case Item::runSpeed:
+        return static_cast<float>(v.runSpeedPercent);
+    case Item::slowMotionLength:
+        return static_cast<float>(v.slowMotionSeconds);
+    case Item::softLock:
+        return static_cast<float>(v.softLockMetres);
     case Item::animatedAirSpin:
         return static_cast<float>(v.animatedAirSpin);
     case Item::animatedHybridSpeed:
@@ -477,6 +499,9 @@ Values sanitized(Values v) {
     v.dodgeTumble = std::clamp(v.dodgeTumble, 0, 2);
     v.animatedHead = std::clamp(v.animatedHead, 0, 2);
     v.animatedHeadsetSmooth = std::clamp(v.animatedHeadsetSmooth, 0, 4);
+    v.runSpeedPercent = std::clamp(v.runSpeedPercent, 50, 200);
+    v.slowMotionSeconds = std::clamp(v.slowMotionSeconds, 3, slowMotionEndless);
+    v.softLockMetres = std::clamp(v.softLockMetres, 0, 40);
     v.animatedAirSpin = std::clamp(v.animatedAirSpin, 0, 2);
     v.animatedHybridSpeedMs = v.animatedHybridSpeedMs <= 0 ? 0 : std::clamp(v.animatedHybridSpeedMs, 5, 500);
     v.earlyJump = std::clamp(v.earlyJump, 0, 2);
@@ -501,9 +526,9 @@ Values sanitized(Values v) {
     v.automaticHandThreshold = std::clamp(v.automaticHandThreshold, 50, 300);
     return v;
 }
-const std::array<Row, 109>& rows() {
+const std::array<Row, 112>& rows() {
     // The help fits the game's description column beside the rows.
-    static const std::array<Row, 109> all{{
+    static const std::array<Row, 112> all{{
         {Item::none, "WEBS", nullptr, {}},
         {Item::webStyle, "WEB STYLE",
          "Arcade: webs pass lamp posts, signs and cars, and swings stay above the street.", webStyleChoices},
@@ -785,6 +810,12 @@ const std::array<Row, 109>& rows() {
          {}},
         {Item::animatedAirSpin, "AIR SPIN (ADVANCED)", "Legacy animated flips. Ignored while Hybrid is on.",
          animatedAirSpinChoices},
+        {Item::runSpeed, "RUN SPEED", "Scales SpidyVR's own ground run (SPIDY RUN). The game's run is unchanged.",
+         runSpeedChoices},
+        {Item::slowMotionLength, "SLOW-MO LENGTH", "L3 slow motion on a full meter. INFINITE: until L3 again.",
+         slowMotionLengthChoices},
+        {Item::softLock, "SOFT LOCK", "Grip webs snap to an enemy or prop this near your aim. Closer wins.",
+         softLockChoices},
         {Item::realisticFlips,
          "REALISTIC FLIPS",
          "Momentum rotation from arms and webs. FLIPS also enables left-stick steering.",
@@ -870,7 +901,8 @@ const std::array<Screen, categoryCount>& screens() {
         Item::nativeAnimation, Item::animatedHead, Item::animatedHeadsetSmooth,
         Item::animatedArms, Item::animatedTorso, Item::animatedModelYaw, Item::animatedHybridSpeed,
         Item::animatedMoves, Item::animatedHybrid, Item::animatedAir, Item::animatedOnly,
-        Item::animatedSteering, Item::animatedAirSpin, Item::headProbe,
+        Item::animatedSteering, Item::animatedAirSpin, Item::headProbe, Item::runSpeed,
+        Item::slowMotionLength, Item::softLock,
     };
     static const std::array<Screen, categoryCount> all{{
         {"Setup", "VR SETUP", setup},
@@ -1058,6 +1090,15 @@ bool choose(Item item, int index, Values& v) {
     case Item::animatedHeadsetSmooth:
         v.animatedHeadsetSmooth = s[index];
         break;
+    case Item::runSpeed:
+        v.runSpeedPercent = s[index];
+        break;
+    case Item::slowMotionLength:
+        v.slowMotionSeconds = s[index];
+        break;
+    case Item::softLock:
+        v.softLockMetres = s[index];
+        break;
     case Item::animatedAirSpin:
         v.animatedAirSpin = s[index];
         break;
@@ -1210,6 +1251,9 @@ constexpr TabOnly tabOnly[] = {
     {"animated_moves", &Values::animatedMoves, nullptr},
     {"animated_head", nullptr, &Values::animatedHead},
     {"animated_headset_smooth", nullptr, &Values::animatedHeadsetSmooth},
+    {"run_speed_percent", nullptr, &Values::runSpeedPercent},
+    {"slow_motion_seconds", nullptr, &Values::slowMotionSeconds},
+    {"soft_lock_metres", nullptr, &Values::softLockMetres},
     {"animated_air", &Values::animatedAir, nullptr},
     {"animated_steering", &Values::animatedSteering, nullptr},
     {"animated_arms", &Values::animatedArms, nullptr},

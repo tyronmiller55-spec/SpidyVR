@@ -243,6 +243,9 @@ Tracked* follow(const Candidate& c, Vec3 centre) {
 const Candidate* nearest(Vec3 origin, Vec3 direction, float distance, float cone, Vec3& centre) {
     const Candidate* best{};
     float bestMiss = cone, bestDistance = 1e9f;
+    // SOFT LOCK's wider pick (WebGrab::preview): angle and distance both count.
+    const bool soft = cone > .1f;
+    float bestScore = 1e9f;
     for (const auto& c : candidates) {
         if (!takes(c))
             continue;
@@ -255,7 +258,12 @@ const Candidate* nearest(Vec3 origin, Vec3 direction, float distance, float cone
         const float radius = s.core == TargetKind::Character ? s.radius * 2 : s.radius;
         const float miss = rayMiss(origin, direction, distance, at, radius);
         const float away = length(at - origin);
-        if (miss > bestMiss + 1e-4f || (miss > bestMiss - 1e-4f && away >= bestDistance) || !movable(c))
+        if (soft) {
+            const float score = lockScore(miss, cone, away, distance);
+            if (miss > cone || score >= bestScore || !movable(c))
+                continue;
+            bestScore = score;
+        } else if (miss > bestMiss + 1e-4f || (miss > bestMiss - 1e-4f && away >= bestDistance) || !movable(c))
             continue;
         best = &c;
         centre = at;
@@ -1212,6 +1220,9 @@ bool game_grab::offering() {
 }
 void game_grab::allow(bool on) {
     allowed = on;
+}
+void game_grab::softLock(float metres) {
+    core.softLock(metres);
 }
 void game_grab::allowTies(bool on) {
     tiesAllowed = on;
