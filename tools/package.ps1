@@ -60,14 +60,16 @@ Copy-Item -LiteralPath (Join-Path $root 'docs\PLAYERS.md') -Destination (Join-Pa
 Copy-Item -LiteralPath (Join-Path $root 'docs\WEB_BALL_DIAGNOSTICS.md') -Destination (Join-Path $stage 'WEB_BALL_DIAGNOSTICS.txt')
 $sourceCommit = (git -C $root rev-parse HEAD).Trim()
 @(
-    "Native Animation ACTION-FRAME PLAYTEST, version $version, source $sourceCommit"
-    'New gameplay repair: animated world muzzle, physical contact punches and no-shot grip handoff.'
-    'Unmerged test build; no headset success claim. Read ACTION_FRAME_PLAYTEST.txt.'
+    "Native Animation FEEDBACK + CANCEL PLAYTEST, version $version, source $sourceCommit"
+    'New slice: native gameplay indicator parity and stale-input cancellation bypass; inherited world muzzle/physical punches.'
+    'Unmerged test build; no headset success claim. Read FEEDBACK_CANCEL_PLAYTEST.txt and ACTION_FRAME_PLAYTEST.txt.'
+    'Full upper-torso rig overhaul is NOT in this slice; active separate work.'
     'Matching Command v7 host/rays: extract entire archive into a NEW writable folder; never mix DLLs/tools.'
     'Preserve older builds and back up shared %APPDATA%\Spidy settings/profiles before testing.'
     'Read WEB_BALL_DIAGNOSTICS.txt for counter caveats; fired is not proof of a visible projectile or damage.'
 ) | Set-Content -LiteralPath (Join-Path $stage 'ACTION_FRAME_BUILD.txt') -Encoding utf8
 Copy-Item -LiteralPath (Join-Path $root 'docs\ACTION_FRAME_PLAYTEST.md') -Destination (Join-Path $stage 'ACTION_FRAME_PLAYTEST.txt')
+Copy-Item -LiteralPath (Join-Path $root 'docs\FEEDBACK_CANCEL_PLAYTEST.md') -Destination (Join-Path $stage 'FEEDBACK_CANCEL_PLAYTEST.txt')
 Copy-Item -LiteralPath (Join-Path $root 'docs\LINUX.md') -Destination $stage
 Copy-Item -LiteralPath (Join-Path $root 'LICENSE') -Destination (Join-Path $stage 'LICENSE.txt')
 Copy-Item -LiteralPath (Join-Path $root 'THIRD_PARTY_NOTICES.md') -Destination $stage

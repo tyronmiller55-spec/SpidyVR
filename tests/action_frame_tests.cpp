@@ -5,6 +5,8 @@
 #include "spidy/game_pad.hpp"
 #include "spidy/run_update.hpp"
 #include "spidy/punch.hpp"
+#include "spidy/presentation_gate.hpp"
+#include <cstring>
 #include "spidy/shooter.hpp"
 #include "spidy/tracking.hpp"
 #include "spidy/web_aim.hpp"
@@ -93,6 +95,79 @@ void punchDiscontinuityTests() {
     Swing swing;OpenMotion world;swing.reset({{0,1,0},{},true});swing.update(.02f,in,world);
     check(!swing.webs()[0].attached&&!swing.webs()[1].attached,"two-hand cancel dispatched a web");
     std::puts("PASS: both-hand rotated phantom-sweep, residual-speed, reacquisition/owner-history and simultaneous cancel regressions");
+}
+void feedbackAndCancelPipelineTests() {
+    check(gameplayFeedback(false,false,false), "OG feedback hidden");
+    check(gameplayFeedback(false,true,true), "native feedback hidden with duplicate geometry");
+    check(!gameplayFeedback(false,true,false), "cinematic feedback leaked");
+    for(bool scene : {false,true}) for(bool animation : {false,true})
+        check(!gameplayFeedback(true,scene,animation), "flat-screen feedback leaked");
+    check(!animation_cancel::enabled(false,true,true,false), "absent body enabled cancel");
+    check(!animation_cancel::enabled(true,false,true,false), "nonhybrid cancel changed");
+    check(!animation_cancel::enabled(true,true,false,false), "MOVES-off cancel changed");
+    check(!animation_cancel::enabled(true,true,true,true), "calibration enabled cancel");
+    animation_cancel::Gate unfocused;
+    check(!unfocused.update(true,true,false,3,3).cancel,"unfocused input canceled ownership");
+    for(unsigned mask : {1u,2u,3u}) {
+        // Negative control: the previous XR predicate disabled the Gate when
+        // mover freshness was false although focused controller input was live.
+        animation_cancel::Gate old;
+        Input escaped;escaped.focused=true;
+        for(unsigned i=0;i<2;++i) {
+            escaped.hands[i].tracked=true;escaped.hands[i].aim={{i?.2f:-.2f,2,0},{}};
+            escaped.hands[i].grip=(mask>>i)&1;
+        }
+        const auto missed=old.update(false,true,true,mask,0);
+        animation_cancel::suppress(escaped.hands,missed);
+        Swing oldSwing;OpenMotion oldWorld;oldSwing.reset({{0,2,0},{},false});
+        oldSwing.update(.011f,escaped,oldWorld);
+        for(unsigned i=0;i<2;++i) check(oldSwing.webs()[i].attached==bool(mask&(1u<<i)),
+                                      "stale cancellation bypass negative control did not emit web");
+        check(!old.update(true,true,true,mask,0).cancel,"old gate unexpectedly recovered held cancel edge");
+        animation_cancel::Gate gate;
+        Swing swing;OpenMotion world;swing.reset({{0,2,0},{},false});
+        game_swing::InputHold hold;
+        unsigned token=0,seen=0;uint64_t serial=0;
+        const auto sample=[&](bool fresh,bool anim,unsigned web,unsigned shot) {
+            // Production XR policy deliberately does not use mover freshness.
+            // It may freeze the later owner FSM, never the input consumption.
+            const auto decision=gate.update(animation_cancel::enabled(true,true,true,false),
+                                             anim,true,web,shot);
+            Input raw;raw.focused=true;
+            for(unsigned i=0;i<2;++i) {
+                raw.hands[i].tracked=true;raw.hands[i].aim={{i?.2f:-.2f,2,0},{}};
+                raw.hands[i].grip=(web>>i)&1;raw.hands[i].trigger=(shot>>i)&1;
+            }
+            animation_cancel::suppress(raw.hands,decision);
+            game_swing::Command sent;sent.focused=1;sent.serial=++serial;sent.sampleTimeNs=serial;
+            if(decision.cancel) ++token;
+            sent.animationCancel=token;
+            for(unsigned i=0;i<2;++i) {
+                const auto& h=raw.hands[i];
+                sent.hands[i]={h.aim,h.gripRelativeToHead,1,h.trigger,h.grip};
+            }
+            game_swing::Command received;
+            check(game_swing::decodeCommand(received,[&](void* dst,size_t n){
+                if(n>sizeof(sent)) return false;std::memcpy(dst,&sent,n);return true;
+            }), "cancel producer packet rejected by real decoder");
+            check(hold.update(received,true,serial*11), "cancel command not retained");
+            if(animation_cancel::consumeToken(received.animationCancel,seen)) swing.releaseAll();
+            const auto input=game_swing::input(received);
+            swing.update(.011f,input,world);
+            (void)fresh; // source-derived stale-mover case: owner update is later
+            return decision;
+        };
+        check(sample(false,true,mask,mask).cancel, "stale mover swallowed native cancel edge");
+        check(!swing.webs()[0].attached&&!swing.webs()[1].attached,"stale cancel fired through command pipeline");
+        check(sample(true,false,mask,mask).holdVr,"held cancel override lost after freshness restored");
+        check(!swing.webs()[0].attached&&!swing.webs()[1].attached,"held cancel fired through receiver");
+        check(!sample(true,false,0,0).holdVr,"release did not end cancel hold");
+        // Independent repress in airborne OG must still use the original solver.
+        sample(true,false,mask,0);
+        for(unsigned i=0;i<2;++i) check(swing.webs()[i].attached==bool(mask&(1u<<i)),
+                                      "ordinary OG web no longer works after cancel release");
+    }
+    std::puts("PASS: presentation parity and stale-mover cancel producer/decoder/hold/input/actual-swing pipeline");
 }
 void activationTests() {
     for (const float stick : {0.f,.2f,.8f}) {
@@ -269,6 +344,7 @@ void cancellationTests() {
 }
 }
 int main() {
+    feedbackAndCancelPipelineTests();
     Open world;
     check(sameOrientation({}, {0,0,0,.9999998f}), "roundoff identity rejected");
     check(!sameOrientation({}, Quat::yaw(.01f)), "real orientation error accepted");

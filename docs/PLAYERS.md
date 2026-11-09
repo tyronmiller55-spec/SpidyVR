@@ -1,3 +1,5 @@
+> **NEW FEEDBACK + CANCEL FOLLOW-UP PLAYTEST:** Read FEEDBACK_CANCEL_PLAYTEST.txt first. Native indicators restored and stale-input cancel bypass repaired; full upper-torso alignment work is NOT included yet. No headset outcome claimed. Historical action-frame and diagnostic notes below remain for context.
+
 > **NEW Native Animation action-frame gameplay playtest (0.8.5, unmerged).**
 > Read **ACTION_FRAME_BUILD.txt** for the exact source and **ACTION_FRAME_PLAYTEST.txt** before testing.
 > This is a new compiled hand/action-frame + no-shot grip + physical-contact punch repair, not the older diagnostic-only package.

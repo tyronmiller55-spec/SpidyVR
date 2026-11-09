@@ -2937,8 +2937,8 @@ DWORD WINAPI run(void*) {
                             trackedHands |= (h.tracked ? 1u : 0u) << i;
                         }
                         gripCancel = gripCancelGate.update(
-                            bodyStarted && values.animatedHybrid && values.animatedMoves &&
-                                !calibrationInput && swingFresh,
+                            animation_cancel::enabled(bodyStarted, values.animatedHybrid,
+                                                      values.animatedMoves, calibrationInput),
                             hybridOwner.domain == hybrid_owner::Domain::anim,
                             motion.active && !flatScreen && controlsVisible && spiderMan,
                             webButtons, shotButtons, trackedHands);
@@ -2947,7 +2947,9 @@ DWORD WINAPI run(void*) {
                             hybridZipPress = hybridJumpAsk = false;
                             stickPush.cancel();
                             zipPress.cancel();
-                            diag_log::writef("hybrid: grip cancel consumed (no action), token %u", gripCancelToken);
+                            diag_log::writef("hybrid: grip cancel consumed (no action), token %u fresh %u web %u shot %u tracked %u",
+                                             gripCancelToken, swingFresh ? 1u : 0u, webButtons,
+                                             shotButtons, trackedHands);
                         }
                         // Suppress before submitSwing: ownership is evaluated later in
                         // this loop, too late to prevent an outgoing grip web otherwise.
@@ -6899,6 +6901,7 @@ DWORD WINAPI run(void*) {
                     // Same as finishers: placeEyes re-resolves the head each frame
                     // (stereo_probe) instead of keeping a latched gameplay head.
                     saved.scene = headFollowEyes;
+                    saved.animation = headFollowEyes;
                     if (motion.active)
                         saved.rigTurn =
                             flip_reprojection::trackingTurn(motion.headPose.orientation, frame.head.orientation);
@@ -7114,6 +7117,8 @@ DWORD WINAPI run(void*) {
                         runtime.headLocked(saved->headLocked);
                         // A first-person scene gets none of Spidy's own marks, webs or hands over it.
                         const bool bare = saved->flatScreen || saved->scene;
+                        const bool feedback = gameplayFeedback(saved->flatScreen, saved->scene,
+                                                               saved->animation);
                         // STEADY HUD: the panel as a layer of its own, placed for this headset frame; the
                         // eyes leave it out while it shows (native_hud::layered).
                         uint32_t hudWidth{}, hudHeight{};
@@ -7422,7 +7427,7 @@ DWORD WINAPI run(void*) {
                                             saved->uiStyle);
                         // Slow motion's focus meter over the back of the left wrist, moved
                         // with the player to this image as the glove is.
-                        if (!bare && saved->slow.meter > 0 && rendered.swing.hands[0].tracked) {
+                        if (feedback && saved->slow.meter > 0 && rendered.swing.hands[0].tracked) {
                             auto wrist = rendered.hands[0];
                             wrist.position += travel;
                             const double clock = std::fmod(static_cast<double>(shown) * 1e-9, 3600.);
@@ -7431,13 +7436,13 @@ DWORD WINAPI run(void*) {
                         }
                         // The pad layer's sign over the back of the right wrist while
                         // it is on: until October 25 only a buzz said so.
-                        if (!bare && saved->padLayer && rendered.swing.hands[1].tracked) {
+                        if (feedback && saved->padLayer && rendered.swing.hands[1].tracked) {
                             auto wrist = rendered.hands[1];
                             wrist.position += travel;
                             appendPadLayerSign(translucent, wrist, viewer, pixelAngle, saved->uiStyle);
                         }
                         // Hide combat artwork only; targeting, damage, counters and haptics still update.
-                        const bool combatVisuals = values.combatVisuals && saved->combatVisuals && !bare;
+                        const bool combatVisuals = values.combatVisuals && saved->combatVisuals && feedback;
                         // The bursts where the latest blows landed: fixed in the world.
                         if (combatVisuals)
                             for (const auto& burst : bursts) {
@@ -7466,7 +7471,7 @@ DWORD WINAPI run(void*) {
                         // Spider-Sense's marks: over each attacker's head, and for one out of
                         // view in the sightline as well, moved with the player as the eyes are.
                         // Attack warnings remain visible independently of optional combat artwork.
-                        if (!bare && validTrackedPose(rendered.headPose)) {
+                        if (feedback && validTrackedPose(rendered.headPose)) {
                             Pose eyes = rendered.headPose;
                             eyes.position += travel;
                             bool marked{}, sighted{};
@@ -7498,7 +7503,7 @@ DWORD WINAPI run(void*) {
                         // The T-pose calibration's panel and controller rings, moved with
                         // the player to this image as the hands are. The tech style's
                         // panel is translucent, as the game's menus are.
-                        if (!bare && saved->calibration.phase != body_calibration::Phase::idle) {
+                        if (feedback && saved->calibration.phase != body_calibration::Phase::idle) {
                             auto view = saved->calibration;
                             view.panel = heldPose(view.panel);
                             view.panel.position += travel;
@@ -7512,7 +7517,7 @@ DWORD WINAPI run(void*) {
                         // The gadget wheel in front of its hand, moved with the
                         // player to this image as the hands are: printed, so
                         // laid down in order over all the rest.
-                        if (!bare && saved->gadgetWheel.open) {
+                        if (feedback && saved->gadgetWheel.open) {
                             auto view = saved->gadgetWheel;
                             if (reprojection.applied) {
                                 auto& w = view.frame;
@@ -7547,7 +7552,7 @@ DWORD WINAPI run(void*) {
                         // apart stay so.
                         std::vector<Vertex> phoneScreen;
                         D3D12Renderer::Picture phonePicture;
-                        if (!bare && saved->phone.open) {
+                        if (feedback && saved->phone.open) {
                             auto view = phoneShown;
                             const Pose toWorld = heldPose(saved->phone.toWorld);
                             const auto& f = phone.place();
@@ -7589,8 +7594,9 @@ DWORD WINAPI run(void*) {
                         if (!bare)
                             overlay.renderViews(overlayViews, vertices, true, false, translucent, &grade,
                                                 &phonePicture);
-                        else if (!saved->flatScreen && !translucent.empty())
-                            overlay.renderViews(overlayViews, vertices, true, false, translucent);
+                        else if (feedback && (!vertices.empty() || !translucent.empty() || !phoneScreen.empty()))
+                            overlay.renderViews(overlayViews, vertices, true, false, translucent, nullptr,
+                                                &phonePicture);
                         overlayMs = std::chrono::duration<double, std::milli>(
                                         std::chrono::steady_clock::now() - overlayStart)
                                         .count();

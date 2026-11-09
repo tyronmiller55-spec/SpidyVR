@@ -1,6 +1,11 @@
 #pragma once
 #include <cstdint>
 namespace spidy::animation_cancel {
+// Cancellation is an INPUT decision. A stale mover sample may freeze the owner
+// transaction later, but must never permit this gesture to escape as a web.
+inline bool enabled(bool bodyStarted, bool hybrid, bool moves, bool calibration) {
+    return bodyStarted && hybrid && moves && !calibration;
+}
 struct Decision {
     bool cancel{}, holdVr{};
     unsigned webBlocked{}, shotBlocked{};
