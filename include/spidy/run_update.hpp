@@ -285,6 +285,17 @@ inline Vec3 groundRunEntry(Vec3 velocity, const GroundRun& k = groundRun) {
 }
 // One step of the run: `along` its velocity across the ground, `move` the
 // stick in the world (Input::move), dt the step. Returns the new velocity.
+// RUN SPEED at the hand-back (Swing::setRunSpeedPercent): the run's speed
+// scale fades to 1 over the last runScaleFade m/s above the sprint, so the
+// body reaches the game's own sprint speed exactly where the run hands back
+// (no speed step at 50% or 200%). The native run itself is not touched.
+constexpr float runScaleFade = 3;
+inline float runSpeedScaleAt(float scale, float speed, const GroundRun& k = groundRun) {
+    if (!std::isfinite(scale) || !std::isfinite(speed))
+        return 1;
+    const float w = std::clamp((speed - k.sprint) / runScaleFade, 0.f, 1.f);
+    return 1 + (scale - 1) * w;
+}
 inline Vec3 groundRunStep(Vec3 along, Vec3 move, float dt, const GroundRun& k = groundRun) {
     along.y = 0;
     if (!finite(along) || !std::isfinite(dt) || !(dt > 0))

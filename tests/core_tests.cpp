@@ -20863,6 +20863,98 @@ int main() {
         for(int i=0;i<20;++i){pose=b.rest;body::solve(view,b.rig,t,{},s,true,.02f);}
         check(s.yaw>1.75f-.65f&&s.yaw<1.75f,"the hips did not follow the head");
     });
+    test("body: LAUNCH FACING holds the body on the momentum way while the head turns", [] {
+        auto b = testBody();
+        auto t = lookingAhead({0, 1.7f, .08f});
+        t.airborne = true;
+        std::vector<float> pose = b.rest;
+        body::Pose view(pose.data(), static_cast<int>(b.rig.parent.size()));
+        const Vec3 way{0, 0, -1};
+        t.faceAhead = way;
+        body::State s;
+        body::solve(view, b.rig, t, {}, s, true, .02f);
+        const float held = s.yaw;
+        // The head turns 100 degrees: the body stays on the launch way.
+        t.facing = Quat::yaw(3.14159265f + 1.75f);
+        for (int i = 0; i < 30; ++i) {
+            pose = b.rest;
+            body::solve(view, b.rig, t, {}, s, true, .02f);
+        }
+        near(s.yaw, held, 1e-4f);
+        // Another way turns it by that much at once.
+        t.faceAhead = Quat::yaw(.8f).rotate(way);
+        pose = b.rest;
+        body::solve(view, b.rig, t, {}, s, true, .02f);
+        near(std::abs(std::remainder(s.yaw - held, 6.2831853f)), .8f, 1e-3f);
+        // The window over (zero): the body follows the head again.
+        t.faceAhead = {};
+        for (int i = 0; i < 60; ++i) {
+            pose = b.rest;
+            body::solve(view, b.rig, t, {}, s, true, .02f);
+        }
+        check(std::abs(std::remainder(s.yaw - held, 6.2831853f)) > .9f, "the body no longer follows the head");
+    });
+    test("RUN SPEED hand-back: the scale fades to 1 at the sprint, so no speed step", [] {
+        using namespace run_update;
+        const float sprint = groundRun.sprint;
+        for (const float scale : {.5f, 1.5f, 2.f}) {
+            near(runSpeedScaleAt(scale, sprint), 1);
+            near(runSpeedScaleAt(scale, sprint - 2), 1);
+            near(runSpeedScaleAt(scale, sprint + runScaleFade), scale);
+            near(runSpeedScaleAt(scale, 25), scale);
+            // Continuous: no jump in applied speed anywhere across the fade.
+            float before = sprint * runSpeedScaleAt(scale, sprint);
+            for (float v = sprint; v <= sprint + runScaleFade + 1; v += .01f) {
+                const float applied = v * runSpeedScaleAt(scale, v);
+                check(std::abs(applied - before) < .1f, "a speed step inside the fade");
+                before = applied;
+            }
+        }
+        near(runSpeedScaleAt(1, 20), 1);
+        near(runSpeedScaleAt(NAN, 20), 1);
+        // The swing: the run eases out and hands back at the game's own sprint speed.
+        TestWorld w;
+        w.enabled = false;
+        Input in;
+        in.focused = true;
+        in.move = {0, 0, -1};
+        for (const int percent : {50, 200}) {
+            spidy::Swing sw(inert());
+            sw.allowGroundRun(true);
+            sw.setRunSpeedPercent(percent);
+            sw.predictNativeStep(1.f / 90, in, w, {{0, 1.5f, 0}, {0, -8, -20}, false});
+            auto out = sw.predictNativeStep(1.f / 90, in, w, {{0, 1, -.3f}, {0, -8, -20}, true});
+            check(sw.groundRunning(), "no run");
+            float last = std::hypot(out.velocity.x, out.velocity.z);
+            for (int i = 0; i < 2000 && sw.groundRunning(); ++i) {
+                out = sw.predictNativeStep(1.f / 90, in, w, {{0, 1, 0}, out.velocity, true});
+                if (sw.groundRunning())
+                    last = std::hypot(out.velocity.x, out.velocity.z);
+            }
+            check(!sw.groundRunning(), "the run never handed back");
+            near(last, sprint, .2f); // without the fade: 4.5 (50%) or 18 (200%)
+        }
+    });
+    test("SOFT LOCK web balls: the marker's enemy takes the ball", [] {
+        Shooter balls;
+        const ShooterTarget enemies[] = {{7, {2, 1, -10}, .45f}, {9, {-3, 1, -12}, .45f}};
+        check(Shooter::find(enemies, 9) == &enemies[1] && !Shooter::find(enemies, 4) && !Shooter::find(enemies, 0),
+              "find");
+        const Pose aim{{0, 1, 0}, {}};
+        const auto shot = balls.toward(1, aim, enemies[0]);
+        check(shot.target == 7 && shot.hand == 1 && !shot.gazed, "not the marked enemy");
+        near(length(shot.aimPoint - enemies[0].centre), 0);
+        near(dot(shot.direction, normalized(enemies[0].centre - shot.origin)), 1, 1e-5f);
+        // Same pick as the marker: a soft-locked grab preview names this enemy.
+        TestWorld world;
+        world.enabled = false;
+        LabProps props({LabProp{7, TargetKind::Character, {10 * std::tan(.14f), 1, -10}, {}, {}, {}, 80, .3f}});
+        WebGrab grab;
+        grab.softLock(15);
+        const auto marked = grab.preview(aim, world, props);
+        const ShooterTarget live[] = {{7, {10 * std::tan(.14f), 1, -10}, .45f}};
+        check(marked && Shooter::find(live, marked->id), "the marker's enemy is not a ball target");
+    });
     test("body: a frozen native pose still runs with alternating feet in all wall travel directions", [] {
         for (const auto b : {testBody(), testBody(true), splitPelvisBody()}) {
             for (Vec3 direction : {Vec3{1, 0, 0}, Vec3{-1, 0, 0}, Vec3{0, 1, 0},

@@ -39,6 +39,16 @@ std::uint32_t Shooter::update(float seconds, const std::array<ShooterHand, 2>& h
     }
     return shots;
 }
+ShotRequest Shooter::toward(int hand, Pose pose, const ShooterTarget& target) const {
+    const Vec3 forward = normalized(pose.orientation.rotate({0, 0, -1}));
+    ShotRequest shot;
+    shot.hand = hand;
+    shot.origin = pose.position + forward * config_.muzzle;
+    shot.direction = normalized(target.centre - shot.origin);
+    shot.aimPoint = target.centre;
+    shot.target = target.id;
+    return shot;
+}
 ShotRequest Shooter::aim(int hand, Pose pose, std::span<const ShooterTarget> targets, const WorldQueries& world,
                          const ShooterGaze* gaze) const {
     const Vec3 forward = normalized(pose.orientation.rotate({0, 0, -1}));

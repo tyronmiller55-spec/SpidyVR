@@ -190,6 +190,9 @@ struct Targets {
     // Directional running cycle; head and arms remain tracked.
     bool wallRun{};
     Vec3 runNormal{}, runAhead{};
+    // LAUNCH FACING (model space; zero: none): while set, the body faces it
+    // instead of turning after the headset (a point launch faces momentum).
+    Vec3 faceAhead{};
     float runPhase{}, runSpeed{}, runTorsoAngle = .85f;
     float runBank = .85f, runLean = .5f, runStride = 1.f;
     // The player's up in model space: the way he stands. The world's up on

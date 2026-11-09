@@ -92,6 +92,8 @@ body::Targets lastBodyTargets;
 // onto Targets::airVelocity when airborne. Cleared when the call is empty.
 Vec3 airWorldVel{};
 bool airWorldVelSet{};
+// LAUNCH FACING (setFaceAhead): world way the airborne body faces; zero none.
+Vec3 faceWorldAhead{};
 // Visual tuck hold (setTuck): mapped onto Targets::tuck when airborne.
 bool airTuckHeld{};
 // ANIMATED HYBRID jump / air adopt (beginJumpAdopt): wanted since this tick (0 none), the live
@@ -579,6 +581,9 @@ void solveHero(float* out, uintptr_t job, uintptr_t instance) {
                 t.airVelocity = toModel.rotate(airWorldVel);
             }
             t.tuck = t.airborne && !t.kick && !t.wallRun && !t.crawl && airTuckHeld;
+            if (t.airborne && !t.kick && !t.wallRun && !t.crawl && finite(faceWorldAhead) &&
+                length(faceWorldAhead) > .5f)
+                t.faceAhead = toModel.rotate(faceWorldAhead);
             t.eyes = toModel.rotate(wanted.eyes);
             t.facing = toModel * wanted.facing;
             if (const Quat tilt = wanted.tilt; tilt.x != 0 || tilt.y != 0 || tilt.z != 0)
@@ -1044,6 +1049,12 @@ void native_body::setAirMomentum(const Vec3& worldVelocity) {
         airWorldVel = {};
         airWorldVelSet = false;
     }
+    ReleaseSRWLockExclusive(&solveLock);
+}
+
+void native_body::setFaceAhead(const Vec3& worldAhead) {
+    AcquireSRWLockExclusive(&solveLock);
+    faceWorldAhead = finite(worldAhead) && length(worldAhead) > .5f ? worldAhead : Vec3{};
     ReleaseSRWLockExclusive(&solveLock);
 }
 

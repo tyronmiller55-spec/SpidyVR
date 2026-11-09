@@ -3,6 +3,7 @@
 // game's own web-shooter shots fired through the hero's gadget on the main
 // thread, and what they do where they land (game_shooter.hpp).
 #include "spidy/game_shooter.hpp"
+#include "spidy/game_grab.hpp"
 #include "spidy/game_focus.hpp"
 #include "spidy/game_sound.hpp"
 #include "spidy/game_warp.hpp"
@@ -1219,6 +1220,13 @@ void game_shooter::update(float seconds, const Input& in, uint32_t busy, uint64_
                 continue;
             const auto& aim = in.hands[static_cast<size_t>(i)].aim;
             auto shot = shooter.aim(i, aim, targets, world, gaze);
+            // SOFT LOCK / MARKER = SHOT: the enemy the grip marker shows for this hand
+            // (game_grab::preview: the same pick, soft lock included) takes the ball.
+            if (!gaze)
+                if (const auto marked = game_grab::preview(static_cast<unsigned>(i), aim, world);
+                    marked && marked->kind == TargetKind::Character)
+                    if (const auto* t = Shooter::find(targets, marked->id))
+                        shot = shooter.toward(i, aim, *t);
             if (shot.target) {
                 // One the game has let go of meanwhile is no target.
                 bool live{};

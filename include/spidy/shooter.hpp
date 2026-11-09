@@ -69,6 +69,18 @@ class Shooter {
     std::uint32_t update(float seconds, const std::array<ShooterHand, 2>& hands);
     // Where a shot along this aim goes (the choice a pull makes); with a
     // gaze, where the eyes pick, from this aim's hand.
+    // SOFT LOCK for web balls: the shot from the hand at `pose` straight to
+    // `target` (the character the grip marker shows), as aim() sends one.
+    ShotRequest toward(int hand, Pose pose, const ShooterTarget& target) const;
+    // The entry of `targets` with `id`, if any (0: none).
+    static const ShooterTarget* find(std::span<const ShooterTarget> targets, std::uint64_t id) {
+        if (!id)
+            return nullptr;
+        for (const auto& t : targets)
+            if (t.id == id && finite(t.centre))
+                return &t;
+        return nullptr;
+    }
     ShotRequest aim(int hand, Pose aim, std::span<const ShooterTarget> targets, const WorldQueries& world,
                     const ShooterGaze* gaze = nullptr) const;
     void reset();

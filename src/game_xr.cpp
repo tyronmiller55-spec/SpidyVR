@@ -1082,6 +1082,7 @@ DWORD WINAPI run(void*) {
         launch_facing::Tracker launchFacing; // LAUNCH FACING: face momentum after a launch
         std::array<aim_filter::Direction, 2> aimSteady; // WRIST MARKER SMOOTHING (shot = marker)
         bool launchFacingWas{};
+        Vec3 launchFaceWay{}; // while launch facing applies (zero: not), for the OG body
         bool hybridLeapAir{};
         bool hybridAdoptWaiting{};
         uint64_t hybridAdoptSeen{};
@@ -4917,6 +4918,7 @@ DWORD WINAPI run(void*) {
                         // through left-stick walk facing (VALIDATION / InteractStep)
                         // — not a facing RVA write, and not CameraLook view yaw.
                         // Basic flips that own the right stick keep that ownership.
+                        launchFaceWay = {}; // set below only while launch facing applies
                         if ((values.animatedSteering || values.animatedModelYaw ||
                              (values.animatedHybrid && values.animatedMoves)) &&
                             !walk.dodge && !calibrationInput && mapping == game_pad::Mapping::gameplay) {
@@ -5084,6 +5086,7 @@ DWORD WINAPI run(void*) {
                                                      hybrid_owner::domainName(hybridOwner.domain));
                             }
                             launchFacingWas = launchFaces;
+                            launchFaceWay = launchFaces ? launchWay : Vec3{};
                             if (modelYawOwns && !launchFaces) {
                                 const float rStickX =
                                     frame.hands[1].valid && std::isfinite(frame.hands[1].stickX)
@@ -6484,6 +6487,12 @@ DWORD WINAPI run(void*) {
                         // Slice T: hold B (dodge) to tuck. Triggers and grips stay
                         // web. Not while the pad layer is latched, or during a kick.
                         // Isolated here so a later remap can point at another button.
+                        // LAUNCH FACING in SpidyVR: the body keeps the momentum way for the
+                        // window instead of turning after the headset.
+                        native_body::setFaceAhead((pose.flags & native_body::airborne) &&
+                                                          !(pose.flags & native_body::kick)
+                                                      ? launchFaceWay
+                                                      : Vec3{});
                         native_body::setTuck((pose.flags & native_body::airborne) &&
                                              !(pose.flags & native_body::kick) &&
                                              (frame.buttons & buttonB) && !calibrationInput &&

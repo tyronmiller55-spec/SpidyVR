@@ -308,6 +308,9 @@ void setAirMomentum(const Vec3& worldVelocity);
 // Side channel: no Command layout or version change. Triggers and grips
 // are not this control.
 void setTuck(bool held);
+// LAUNCH FACING: while airborne in SpidyVR, the body faces this world way
+// (horizontal unit) instead of following the headset; zero clears it.
+void setFaceAhead(const Vec3& worldAhead);
 // Eased visual tuck 0..1 from the last pose job (0 if none).
 float tuckWeight();
 // Slice C tracking-lock diag (side channel; no Command / Forearms layout change).

@@ -883,15 +883,20 @@ Result solve(Pose& pose, const Rig& rig, const Targets& targets, const Config& c
     } else if (t.crawl) {
         state.yaw = yawOf(-t.crawlNormal);
         state.yawSet = true;
+    } else if (const float a = dot(t.faceAhead, quarter), b = dot(t.faceAhead, reference);
+               std::isfinite(a) && std::isfinite(b) && std::hypot(a, b) > .5f) {
+        state.yaw = std::atan2(a, b); // launch facing: the head does not turn the body
+        state.yawSet = true;
     } else if (!state.yawSet) {
         state.yaw = headYaw;
         state.yawSet = true;
     }
+    const bool faced = finite(t.faceAhead) && std::hypot(dot(t.faceAhead, quarter), dot(t.faceAhead, reference)) > .5f;
     float behind = wrap(headYaw - state.yaw);
-    if (const float excess = std::abs(behind) - c.yawDeadZone; !t.crawl && !t.wallRun && excess > 0)
+    if (const float excess = std::abs(behind) - c.yawDeadZone; !t.crawl && !t.wallRun && !faced && excess > 0)
         state.yaw = wrap(state.yaw + std::copysign(std::min(excess, c.yawSpeed * dt), behind));
     behind = wrap(headYaw - state.yaw);
-    if (!t.crawl && !t.wallRun)
+    if (!t.crawl && !t.wallRun && !faced)
         state.yaw = wrap(state.yaw + behind * std::min(1.f, c.yawDrift * dt));
     r.yaw = state.yaw;
     const Vec3 forward = reference * std::cos(state.yaw) + quarter * std::sin(state.yaw);
