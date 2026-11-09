@@ -16,6 +16,11 @@ struct Anchor {
     uint64_t serial{}, deadline{};
     Mat4 model{};
     bool active{};
+    void begin(uintptr_t actor) {
+        *this = {};
+        instance = actor;
+        active = true; // pending is managed-but-missing, never authored fallback
+    }
     int read(uintptr_t actor, uint64_t now, const Mat4& root, Mat4& out) const {
         if (!active || actor != instance) return 0;
         if (!serial || now >= deadline || !native_view::validPose(root)) return -1;

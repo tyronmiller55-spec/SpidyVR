@@ -472,7 +472,12 @@ void solveHero(float* out, uintptr_t job, uintptr_t instance) {
     if (playerTorso && probeHead >= 0 && probeHead < static_cast<int>(cache.joints))
         std::memcpy(authored.model.data(), out + probeHead * 16, 16 * sizeof(float));
     AcquireSRWLockExclusive(&anchorLock);
-    originalHead = authored;
+    // A native activation can precede its first matching pose command. Keep
+    // that pending camera boundary across an old-owner writer/missing view;
+    // otherwise it would briefly anchor to the modified OG/HMD render head.
+    if (!(originalHead.active && !originalHead.serial && overlayTorsoAssist &&
+          !spinOn && !playerTorso))
+        originalHead = authored;
     ReleaseSRWLockExclusive(&anchorLock);
     body::Result result;
     float scale = 1, armScale = 1;
@@ -992,6 +997,12 @@ void native_body::setArmOverlay(float left, float right) {
 
 void native_body::setTorsoAssist(bool on) {
     AcquireSRWLockExclusive(&solveLock);
+    if (on && !overlayTorsoAssist) {
+        const auto hero = record.load();
+        AcquireSRWLockExclusive(&anchorLock);
+        originalHead.begin(hero ? pointer(hero) : 0);
+        ReleaseSRWLockExclusive(&anchorLock);
+    }
     overlayTorsoAssist = on;
     ReleaseSRWLockExclusive(&solveLock);
 }

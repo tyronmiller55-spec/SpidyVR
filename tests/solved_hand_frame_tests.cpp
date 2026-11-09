@@ -178,6 +178,9 @@ void upperBodyCases() {
  check(saved.read(43,199,root,result)==0,"different actor used our authored head");
  saved.serial=0;check(saved.read(42,100,root,result)==-1,"unversioned camera anchor accepted");
  saved.active=false;check(saved.read(42,100,root,result)==0,"OG/cinematic anchor was intercepted");
+ saved.begin(42);check(saved.read(42,100,root,result)==-1,
+    "native activation before first writer read its own modified OG head");
+ check(saved.read(43,100,root,result)==0,"pending native anchor hijacked another actor");
  std::printf("max tracked-head residual %.4fm\n",maxHeadError);
  std::printf("PASS: %u production mapped upper-body cases (Full/Level/World, mirrored rigs, actor/HMD turns); rooted bone/lower matrices and camera lease gates\n",cases);
 }
