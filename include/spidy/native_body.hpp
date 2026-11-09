@@ -325,6 +325,8 @@ struct OverlayTracking {
     float headError{}, rootDrift{};
     uint32_t playerTorso{};
     Vec3 root{}; // actual CURRENT actor origin for this internal snapshot
+    Pose mappedHead{}; // same-job HMD target, relative to root in WORLD axes
+    uint32_t headValid{};
     Pose actualGrip[2]{};
     uint32_t actualValid[2]{};
     uint64_t deadlineMs{}; // originating body command lease, not last read time

@@ -2,6 +2,8 @@
 #include "spidy/tracking.hpp"
 #include "spidy/web_aim.hpp"
 #include "spidy/upper_frame.hpp"
+#include "spidy/feedback_frame.hpp"
+#include "spidy/animation_cancel.hpp"
 #include "spidy/punch.hpp"
 #include <cstring>
 #include <algorithm>
@@ -243,7 +245,85 @@ void articulatedPunchCases() {
  std::puts("PASS: both-hand actual articulated-pose physical contact events, passive-animation rejection and pose-gap history");
 }
 
+void feedbackConsumerCases() {
+ unsigned cases{};
+ for(auto mode : {animated_view::Frame::full, animated_view::Frame::level, animated_view::Frame::world})
+  for(Vec3 root : {Vec3{145,20,-735},Vec3{-350,90,510}})
+   for(float yaw : {-.9f,.7f}) {
+    const Quat actor=Quat::yaw(yaw)*Quat::around({1,0,0},.12f);
+    const spidy::Pose rawHead{{30,2,-40},Quat::yaw(-.4f)};
+    const spidy::Pose sourceHead{{0,1.7f,0},Quat::yaw(.6f)*Quat::around({1,0,0},.2f)};
+    const auto anchor=animated_view::toNative({{.2f,1.8f,-.1f},actor});
+    animated_view::Targets view; view.frame=mode;
+    Mat4 mapped{};
+    check(animated_view::modelAnchor(view,actor,anchor,mapped,root),"feedback anchor mapping rejected");
+    const auto relativeHead=animated_view::resolve(mapped,sourceHead);
+    spidy::Pose head;
+    check(worldDisplayedPose(head,upper_frame::rebase(relativeHead,actor),root),"mapped feedback head rejected");
+    const spidy::Pose gazeInHead{{.01f,.02f,-.03f},Quat::yaw(.18f)};
+    const auto rawGaze=compose(rawHead,gazeInHead);
+    const auto gaze=feedback_frame::transport(rawHead,head,rawGaze);
+    const auto expected=compose(head,gazeInHead);
+    check(length(gaze.position-expected.position)<.0002f,"eye gaze root translated twice");
+    check(dot(gaze.orientation.rotate({0,0,-1}),expected.orientation.rotate({0,0,-1}))>.9999f,
+          "eye-relative gaze did not follow mapped HMD");
+    GameMotionFrame basis;basis.headPose=head;basis.gazePose=gaze;
+    for(unsigned hand=0;hand<2;++hand) {
+     spidy::Pose relative{{hand?.3f:-.3f,1.3f,-.4f},actor};
+     spidy::Pose world;
+     check(worldDisplayedPose(world,relative,root),"held presentation rejected actual hand");
+     basis.grips[hand]=basis.hands[hand]=world;
+     for(float hold : {0.f,.5f,.5001f,1.f}) {
+      spidy::Pose aim{{9,8,7},{}};const auto original=aim;
+      check(mapAimToDisplayedGrip(aim,relative,root,hand,hold)==(hold<=.5f),"held physics aim policy changed");
+      if(hold>.5f)check(length(aim.position-original.position)==0,"presentation changed held-web physics");
+      else check(length(aim.position-webShooter(world,hand).position)<.0001f,
+                 "free action and actual presentation emitter diverged");
+     }
+    }
+    const auto before=basis;
+    const spidy::Pose displayed{{root.x+2,root.y+2,root.z-3},actor*Quat::yaw(.25f)};
+    const std::array<Mat4,2> eyes{animated_view::toNative(compose(displayed,{{-.032f,0,0},{}})),
+                                animated_view::toNative(compose(displayed,{{ .032f,0,0},{}}))};
+    feedback_frame::camera(basis,eyes);
+    check(length(basis.headPose.position-displayed.position)<.0002f,"native render eye midpoint incorrect");
+    const auto pivot=flip_reprojection::eyesMiddle(basis);
+    check(length(pivot-displayed.position)<.0002f,"held feedback pivot stayed in raw rig");
+    const Quat correction=Quat::yaw(.13f);
+    const auto held=flip_reprojection::held(basis,correction);
+    for(unsigned hand=0;hand<2;++hand) {
+     check(length(basis.grips[hand].position-before.grips[hand].position)==0,
+           "camera installation double-transformed actual hand");
+     const auto expectedHand=flip_reprojection::about(before.grips[hand],correction,pivot);
+     check(length(held.grips[hand].position-expectedHand.position)<.0002f,
+           "held actual hand rotated about unrelated raw eyes");
+    }
+    const spidy::Pose widget=compose(rawHead,{{.2f,-.3f,-.4f},Quat::yaw(.3f)});
+    const auto moved=feedback_frame::transport(rawHead,basis.headPose,widget);
+    const auto local=compose(inverse(basis.headPose),moved);
+    check(length(local.position-Vec3{.2f,-.3f,-.4f})<.0002f,"phone/wheel head-relative placement changed");
+    const auto gazeAfter=compose(inverse(basis.headPose),basis.gazePose);
+    check(length(gazeAfter.position-gazeInHead.position)<.0003f,"captured native camera/gaze transport drifted");
+    check(animation_cancel::validPose(101,100,200,199),"current paired action lease rejected");
+    check(animation_cancel::validPose(100,100,200,199),"first current-owner serial rejected");
+    check(!animation_cancel::validPose(99,100,200,199),"prior-owner serial accepted");
+    check(!animation_cancel::validPose(101,100,200,200),"expired feedback/action lease accepted");
+    ++cases;
+   }
+ for(unsigned mask : {0u,1u,2u,3u}) for(bool native : {false,true}) {
+  GameMotionFrame frame;for(auto& hand:frame.swing.hands)hand.tracked=true;
+  feedback_frame::hands(frame,native,mask);
+  for(unsigned i=0;i<2;++i)check(frame.swing.hands[i].tracked==(!native || bool(mask&(1u<<i))),
+      "missing paired action pose exposed raw native feedback or changed OG tracking");
+ }
+ spidy::Pose unchanged{{1,2,3},{}};
+ check(!worldDisplayedPose(unchanged,{{0,0,0},{0,0,0,0}},{}),"invalid presentation quaternion accepted");
+ check(length(unchanged.position-Vec3{1,2,3})==0,"invalid presentation modified destination");
+ std::printf("PASS: %u production feedback transports (Full/Level/World, both hands, held/free thresholds, translated/rotated roots, native camera pivot, gaze/widgets, generation/lease)\n",cases);
+}
+
 int main(){
+ feedbackConsumerCases();
  upperBodyCases();
  articulatedPunchCases();
  unsigned count=0;

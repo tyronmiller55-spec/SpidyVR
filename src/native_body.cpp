@@ -709,6 +709,8 @@ void solveHero(float* out, uintptr_t job, uintptr_t instance) {
         actionJobTurn = toWorld;
         actionInstance = instance;
         overlayTrackingSample.headError = result.headError;
+        overlayTrackingSample.headValid = result.solved && lastTargets.viewMapped && lastTargets.head;
+        overlayTrackingSample.mappedHead = {toWorld.rotate(lastTargets.eyes), toWorld * lastTargets.facing};
         overlayTrackingSample.playerTorso = lastTargets.torsoAssist && lastTargets.head;
         overlayTrackingSample.rootDrift = 0;
         overlayTrackingSample.root = {transform[12], transform[13], transform[14]};
@@ -788,6 +790,7 @@ void solveHero(float* out, uintptr_t job, uintptr_t instance) {
         // an earlier successful pose which happens to retain a live lease.
         actionInstance = 0;
         overlayTrackingSample.deadlineMs = 0;
+        overlayTrackingSample.headValid = 0;
         for (unsigned i=0;i<2;++i)
             overlayTrackingSample.valid[i] = overlayTrackingSample.actualValid[i] = 0;
     }
@@ -1143,6 +1146,7 @@ native_body::ActionFrame native_body::actionFrame() {
         const Quat delta = body::unit(turn * actionJobTurn.conjugate());
         out.tracking.rootDrift = body::angle(delta);
         out.tracking.root = {current[12], current[13], current[14]};
+        out.tracking.mappedHead = upper_frame::rebase(out.tracking.mappedHead, delta);
         for (unsigned i=0;i<2;++i) {
             auto& t = out.tracking;
             t.actualGrip[i] = upper_frame::rebase(t.actualGrip[i], delta);
@@ -1157,6 +1161,7 @@ native_body::ActionFrame native_body::actionFrame() {
             f.palm = delta.rotate(f.palm); f.grip = delta * f.grip;
         }
     } else {
+        out.tracking.headValid = 0;
         for (unsigned i=0;i<2;++i) {
             out.tracking.actualValid[i] = out.tracking.valid[i] = false;
             out.forearms.arms[i].valid = false;

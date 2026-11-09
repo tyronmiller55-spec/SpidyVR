@@ -13,6 +13,7 @@ namespace spidy {
 struct NativeEyeFrame {
     uint64_t serial{};
     GameMotionFrame motion;
+    Pose feedbackRigHead{}; // raw physical rig basis for camera-relative widgets only
     std::array<TrackedEye, 2> trackingEyes;
     // The tracking space's turn in the world the pair was rendered with
     // (flip_reprojection.hpp).

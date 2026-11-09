@@ -85,17 +85,28 @@ inline Pose webShooter(Pose grip, unsigned hand) {
 // The web shooter sits on that mapped grip — the glove the player sees. A
 // pre-existing held web keeps the caller's rig aim. A fresh animation
 // cancel is consumed before this helper and never dispatches a grip-out web.
-inline bool mapAimToDisplayedGrip(Pose& aim, Pose mappedGrip, Vec3 feet, unsigned hand, float webHold) {
-    const auto q = mappedGrip.orientation;
+// Presentation must also follow held hands, without changing an existing
+// web's physical aim. Keep that transport separate from free-hand aim policy.
+inline bool worldDisplayedPose(Pose& world, Pose relative, Vec3 root) {
+    const auto q = relative.orientation;
     const float norm = q.x*q.x + q.y*q.y + q.z*q.z + q.w*q.w;
-    if (hand > 1 || !std::isfinite(webHold) || webHold > .5f || !finite(mappedGrip.position) ||
-        !finite(feet) || !std::isfinite(norm) || std::abs(norm-1.f) > .01f)
+    if (!finite(relative.position) || !finite(root) || !std::isfinite(norm) ||
+        std::abs(norm-1.f) > .01f)
         return false;
-    mappedGrip.position += feet;
-    const Pose next = webShooter(mappedGrip, hand);
-    if (!finite(next.position))
+    relative.position += root;
+    if (!finite(relative.position)) return false;
+    world = relative;
+    return true;
+}
+inline bool mapAimToDisplayedGrip(Pose& aim, Pose mappedGrip, Vec3 feet, unsigned hand, float webHold) {
+    Pose world;
+    if (hand > 1 || !std::isfinite(webHold) || webHold > .5f ||
+        !worldDisplayedPose(world, mappedGrip, feet))
         return false;
+    const Pose next = webShooter(world, hand);
+    if (!finite(next.position)) return false;
     aim = next;
     return true;
 }
+
 } // namespace spidy
