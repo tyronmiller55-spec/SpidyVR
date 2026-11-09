@@ -59,6 +59,7 @@ class SessionSummaryTests(unittest.TestCase):
         self.assertEqual(d['position_lock_residual_m']['1 s into VR']['max'], .02)
         self.assertEqual(d['position_lock_residual_m']['at VR->anim']['max'], .04)
         self.assertEqual(d['switch_eye_jump_m']['grip-cancel']['over_half_metre'], 1)
+        self.assertEqual(d['switch_reasons']['anim->vr'], {'grip-cancel': 1})
 
     def test_written_beside_the_report(self):
         with tempfile.TemporaryDirectory() as folder:

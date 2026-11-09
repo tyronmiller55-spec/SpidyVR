@@ -25,6 +25,8 @@ _COUNTS = {
 _DISCARDED = re.compile(r'position lock: G->T .*discarded (-?[0-9.]+) m')
 _RESIDUAL = re.compile(r'position lock: residual (-?[0-9.]+) m (1 s into VR|at VR->anim)')
 _EYES = re.compile(r'G->T \(([^)]+)\) eyes dPos (-?[0-9.]+) m')
+# Each switch by its reason (the ownership update's anim-end, run-release, land, ...).
+_SWITCH = re.compile(r'hybrid: (anim->vr|vr->anim) \(([a-z-]+)')
 
 
 def _stats(values):
@@ -39,6 +41,7 @@ def diag_counts(lines):
     """Counts of the key diagnostics lines (an iterable of text lines)."""
     counts = {k: 0 for k in _COUNTS}
     discarded, residual, eyes = [], {'1 s into VR': [], 'at VR->anim': []}, {}
+    reasons = {'anim->vr': {}, 'vr->anim': {}}
     for line in lines:
         for key, pattern in _COUNTS.items():
             if pattern.search(line):
@@ -49,9 +52,12 @@ def diag_counts(lines):
             residual[m.group(2)].append(float(m.group(1)))
         if m := _EYES.search(line):
             eyes.setdefault(m.group(1), []).append(float(m.group(2)))
+        if m := _SWITCH.search(line):
+            reasons[m.group(1)][m.group(2)] = reasons[m.group(1)].get(m.group(2), 0) + 1
     return dict(counts, position_lock_discarded_m=_stats(discarded),
                 position_lock_residual_m={k: _stats(v) for k, v in residual.items()},
-                switch_eye_jump_m={k: _stats(v) for k, v in sorted(eyes.items())})
+                switch_eye_jump_m={k: _stats(v) for k, v in sorted(eyes.items())},
+                switch_reasons={k: dict(sorted(v.items())) for k, v in reasons.items()})
 
 
 def summarize(report, diag_lines=(), limit=LIMIT):

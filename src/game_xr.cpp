@@ -44,7 +44,6 @@
 #include "spidy/game_warp.hpp"
 #include "spidy/hand_pose.hpp"
 #include "spidy/headset_smoothing.hpp"
-#include "spidy/launch_facing.hpp"
 #include "spidy/aim_filter.hpp"
 #include "spidy/impact_sound.hpp"
 #include "spidy/native_eye_frame.hpp"
@@ -1079,10 +1078,7 @@ DWORD WINAPI run(void*) {
         // adopt's first-frame diag waits on native_body::jumpAdopt's count.
         bool hybridJumpAsk{};
         int64_t positionLockCheckNs{-1}; // POSITION LOCK residual check time
-        launch_facing::Tracker launchFacing; // LAUNCH FACING: face momentum after a launch
         std::array<aim_filter::Direction, 2> aimSteady; // WRIST MARKER SMOOTHING (shot = marker)
-        bool launchFacingWas{};
-        Vec3 launchFaceWay{}; // while launch facing applies (zero: not), for the OG body
         bool hybridLeapAir{};
         bool hybridAdoptWaiting{};
         uint64_t hybridAdoptSeen{};
@@ -1106,8 +1102,6 @@ DWORD WINAPI run(void*) {
             bool fromValid{};
             bool delayArmsClear{};
             bool delayModelYaw{};
-            float seedActorYaw{};
-            bool seedActorYawValid{};
             float enterEyeDPos{};
             float enterEyeDYaw{};
             float landSpeed{};
@@ -2957,10 +2951,17 @@ DWORD WINAPI run(void*) {
                             shotButtons |= (h.trigger > .5f ? 1u : 0u) << i;
                             trackedHands |= (h.tracked ? 1u : 0u) << i;
                         }
+                        // OWNERSHIP UPDATE: grip cancels only a midair animation; on
+                        // the ground (or the game's crawl) grip is the arms' web.
+                        const bool cancelSupported = swingFresh &&
+                            hybrid_owner::supported(head_probe::StateInputs{
+                                true, true, swingState.grounded != 0, false, false, false, false,
+                                false, false, swingState.wall});
                         gripCancel = gripCancelGate.update(
                             animation_cancel::enabled(bodyStarted, values.animatedHybrid,
                                                       values.animatedMoves, calibrationInput),
-                            hybridOwner.domain == hybrid_owner::Domain::anim,
+                            hybrid_owner::cancelArmed(hybridOwner.domain == hybrid_owner::Domain::anim,
+                                                      cancelSupported),
                             motion.active && !flatScreen && controlsVisible && spiderMan,
                             webButtons, shotButtons, trackedHands);
                         if (gripCancel.cancel) {
@@ -3045,8 +3046,7 @@ DWORD WINAPI run(void*) {
                         }
                         const bool nativeGroundNext = swingFresh &&
                             (swingState.grounded || swingState.wall == hybrid_owner::surfaceGame) &&
-                            swingState.wall != hybrid_owner::surfaceWall && !gripCancel.holdVr &&
-                            !hybridOwner.cancelSticky; // a cancel's VR stay is full OG, ground too
+                            swingState.wall != hybrid_owner::surfaceWall && !gripCancel.holdVr;
                         const bool animationActions = animation_cancel::nativeActions(
                             values.animatedHybrid && values.animatedMoves,
                             animatedMovesHandoff.yielding, gripCancel.holdVr, nativeGroundNext);
@@ -4918,7 +4918,6 @@ DWORD WINAPI run(void*) {
                         // through left-stick walk facing (VALIDATION / InteractStep)
                         // — not a facing RVA write, and not CameraLook view yaw.
                         // Basic flips that own the right stick keep that ownership.
-                        launchFaceWay = {}; // set below only while launch facing applies
                         if ((values.animatedSteering || values.animatedModelYaw ||
                              (values.animatedHybrid && values.animatedMoves)) &&
                             !walk.dodge && !calibrationInput && mapping == game_pad::Mapping::gameplay) {
@@ -5013,10 +5012,15 @@ DWORD WINAPI run(void*) {
                                 hybridSteer && hybridBlend.active && !hybridBlend.toTraversal &&
                                 hybridBlend.delayModelYaw &&
                                 !hybrid_handoff::blendDone(blendNowNs - hybridBlend.startNs);
+                            // OWNERSHIP UPDATE: a midair native animation (jump, point
+                            // launch, zip) plays as in the main game: the R stick turns
+                            // the camera there, never the hero (no walk-stick turn).
+                            const bool midairAnimation =
+                                hybrid_owner::midairAnimation(hybridSteer && yieldingPose, steerState);
                             const bool modelYawOwns =
                                 animated_model_yaw::ownsStick(values.animatedModelYaw, yieldingPose,
                                                               airSpinOwnsStick) &&
-                                !motion.basicFlipControls && !hybridYawHold;
+                                !motion.basicFlipControls && !hybridYawHold && !midairAnimation;
                             // HYBRID view steering: MODEL YAW frees CameraLook only while
                             // the R-stick turns; otherwise the game camera follows the
                             // view so its parkour assists see a sensible camera.
@@ -5051,43 +5055,10 @@ DWORD WINAPI run(void*) {
                                     cameraLook.update(hybrid_steer::viewForward(hybridViewYawNow),
                                                       {camera[8], camera[9], camera[10]}, cameraSteered);
                             }
-                            if (hybridYawHold && hybridBlend.seedActorYawValid) {
-                                // Seed the game actor toward the rig look the player
-                                // last held in OG air (reverse of G→T yaw carry).
-                                const Vec3 want =
-                                    Quat::yaw(hybridBlend.seedActorYaw).rotate({0, 0, -1});
-                                const auto seeded = animated_model_yaw::worldToStick(
-                                    want, motion.walkForwardAxis, motion.walkRightAxis,
-                                    animated_model_yaw::turnTilt);
-                                if (std::hypot(walk.right, walk.forward) < animated_model_yaw::deadzone) {
-                                    walk.right = seeded.right;
-                                    walk.forward = seeded.forward;
-                                }
-                            }
-                            // LAUNCH FACING: a launch the player asked for faces its momentum
-                            // for its first 0.6 s (the game's walk-facing turn; no facing write).
-                            Vec3 launchWay{};
-                            const bool launchFaces =
-                                hybridSteer && swingFresh &&
-                                launchFacing.update(blendNowNs, hybridJumpAsk, swingState.grounded != 0,
-                                                    swingState.velocity, launchWay);
-                            if (launchFaces) {
-                                const auto faced = animated_model_yaw::worldToStick(
-                                    launchWay, motion.walkForwardAxis, motion.walkRightAxis,
-                                    animated_model_yaw::turnTilt);
-                                if (faced.right != 0.f || faced.forward != 0.f) {
-                                    walk.right = faced.right;
-                                    walk.forward = faced.forward;
-                                }
-                                if (!launchFacingWas)
-                                    diag_log::writef("launch facing: momentum %.0f deg, %.1f m/s, owner %s",
-                                                     hybrid_handoff::lookYaw(launchWay) * (180.f / 3.14159265f),
-                                                     length(Vec3{swingState.velocity.x, 0, swingState.velocity.z}),
-                                                     hybrid_owner::domainName(hybridOwner.domain));
-                            }
-                            launchFacingWas = launchFaces;
-                            launchFaceWay = launchFaces ? launchWay : Vec3{};
-                            if (modelYawOwns && !launchFaces) {
+                            // OWNERSHIP UPDATE: nothing of the mod's is steered into the
+                            // game's own animation - no facing seed after a handoff, no
+                            // launch facing toward momentum (both removed).
+                            if (modelYawOwns) {
                                 const float rStickX =
                                     frame.hands[1].valid && std::isfinite(frame.hands[1].stickX)
                                         ? frame.hands[1].stickX
@@ -5945,6 +5916,13 @@ DWORD WINAPI run(void*) {
                         hybridFrame.cutscene = !animState.playing || !animState.fresh;
                         hybridFrame.zipPress = hybridZipPress;
                         hybridFrame.jumpAsk = hybridJumpAsk;
+                        hybridFrame.velY = swingFresh && std::isfinite(swingState.velocity.y)
+                                               ? swingState.velocity.y
+                                               : NAN;
+                        hybridFrame.moveStick = frame.hands[0].valid && std::isfinite(frame.hands[0].stickX) &&
+                                                        std::isfinite(frame.hands[0].stickY)
+                                                    ? std::hypot(frame.hands[0].stickX, frame.hands[0].stickY)
+                                                    : -1.f;
                         if (hybridOn) {
                             hybridOwner.update(hybridFrame, handoffNs);
                             if (hybridOwner.enterVr || hybridOwner.enterAnim) {
@@ -6200,10 +6178,6 @@ DWORD WINAPI run(void*) {
                                 }
                                 hybridBlend.delayArmsClear = false;
                                 hybridBlend.delayModelYaw = true; // MODEL YAW after H
-                                hybridBlend.seedActorYaw = fromYaw;
-                                // Landing faces him where you looked; a web zip is the game's move.
-                                hybridBlend.seedActorYawValid =
-                                    fromOk && hybrid_owner::seedsFacing(hybridOwner.lastEnterAnim);
                                 hybridBlend.landSpeed = landSpeed;
                                 hybridBlend.clearLook = true;
                                 hybridBlend.recheckMove = true;
@@ -6212,10 +6186,6 @@ DWORD WINAPI run(void*) {
                                 cameraPitch.reset();
                                 game_fp::relatchHeadFrame();
                                 const char* why = hybrid_owner::enterAnimName(hybridOwner.lastEnterAnim);
-                                if (hybridOwner.lastEnterAnim == hybrid_owner::EnterAnim::native)
-                                    diag_log::writef("hybrid: grip-cancel stay ended by native start bits %u "
-                                                     "(1 fight 2 dodge 4 parkour 8 crawl)",
-                                                     hybridOwner.lastNativeStart);
                                 // The head is often not sampled yet on the edge frame (head follow
                                 // turns on below): say so rather than log a 0.00 m that never was.
                                 if (headDPos >= 0.f)
@@ -6487,12 +6457,6 @@ DWORD WINAPI run(void*) {
                         // Slice T: hold B (dodge) to tuck. Triggers and grips stay
                         // web. Not while the pad layer is latched, or during a kick.
                         // Isolated here so a later remap can point at another button.
-                        // LAUNCH FACING in SpidyVR: the body keeps the momentum way for the
-                        // window instead of turning after the headset.
-                        native_body::setFaceAhead((pose.flags & native_body::airborne) &&
-                                                          !(pose.flags & native_body::kick)
-                                                      ? launchFaceWay
-                                                      : Vec3{});
                         native_body::setTuck((pose.flags & native_body::airborne) &&
                                              !(pose.flags & native_body::kick) &&
                                              (frame.buttons & buttonB) && !calibrationInput &&

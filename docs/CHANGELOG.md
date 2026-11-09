@@ -3,6 +3,16 @@
 Every build, newest first, with what changed, why, and what was measured.
 Per-check results are in [VALIDATION.md](VALIDATION.md).
 
+## Native Animation: ownership update
+
+**Animation owns the ground, parkour, jumps and landings. SpidyVR owns the air and wall runs. A point launch now plays as the game's own animation, from the Y press to the top of the launch.** The table is in [OWNERSHIP.md](OWNERSHIP.md).
+
+- **Point-launch turning, the cause:** the mod took the body on the takeoff frame (jump adopt), so the game's launch never played. It also pushed its own walk stick into the game during the move: launch facing toward the swing's velocity, plus the R-stick model-yaw turn. All three are removed.
+- **Grip on the ground** no longer leaves the animation. It only arms SpidyVR's webs, balls and punches on the animated arms.
+- **Grip in a midair animation** is the cancel: no shot, SpidyVR at once.
+- **Landings always come back to the animation.** A Native Run's wall run hands back when the stick is let go.
+- **Tests:** owner-table tests replace the cancel-stay, jump-adopt and launch-facing tests. Not headset-tested.
+
 ## Native Animation: 0.8.5 compatibility playtest
 
 - Integrates upstream gameplay presets and category pages without replacing the

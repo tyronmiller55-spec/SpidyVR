@@ -190,37 +190,43 @@ void feedbackAndCancelPipelineTests() {
 }
 void activationTests() {
     for (const float stick : {0.f,.2f,.8f}) {
-        // Ownership does not depend on a run threshold at all: idle, walking
-        // and running all restore native on the exact grip-release frame.
+        // OWNERSHIP UPDATE (the user, November 9 09:34): the ground is the
+        // animation's. Grip there is no cancel (the gate is not armed) and
+        // nothing switches - idle, walking or running.
         hybrid_owner::HybridOwner owner;
         hybrid_owner::Frame f;
         f.state.playing=f.state.fresh=f.state.grounded=true;
+        f.speedH=stick*20;
         owner.update(f,1);
-        f.cancelGrip=f.cancelGripHeld=true;
+        animation_cancel::Gate gate;
+        gate.update(true,hybrid_owner::cancelArmed(true,true),true,0,0);
+        const auto d=gate.update(true,hybrid_owner::cancelArmed(true,true),true,1,0);
+        check(!d.cancel && !d.holdVr && !d.webBlocked,"ground grip was consumed as a cancel");
+        f.webIntent=true;
         owner.update(f,2);
-        check(owner.enterVr,"ground grip did not cancel");
-        f.cancelGrip=false;
-        owner.update(f,3);
-        check(owner.domain==hybrid_owner::Domain::vr,"held ground cancel bounced");
-        f.cancelGripHeld=false; f.speedH=stick*20;
-        // GRIP CANCEL STAYS IN SPIDYVR (November 8 21:51): idle, walking and
-        // running on the ground keep SpidyVR after release; no handback.
-        owner.update(f,4);
         animated_moves::Handoff handoff;
-        handoff.update(false);
+        handoff.update(true);
         handoff.update(owner.animOwns(true,f.state));
-        check(!handoff.enter && !handoff.yielding && owner.domain==hybrid_owner::Domain::vr && !owner.enterAnim,
-              "ground release after cancel handed back to animation");
+        check(owner.domain==hybrid_owner::Domain::anim && !owner.enterVr && handoff.yielding,
+              "ground grip left the animation");
+        // In a midair animation the same grip is the cancel: SpidyVR at once.
+        f.state.grounded=false; f.webIntent=false;
+        owner.update(f,3);
+        f.cancelGrip=f.cancelGripHeld=true;
+        owner.update(f,4);
+        check(owner.enterVr && owner.lastEnterVr==hybrid_owner::EnterVr::cancel,"air grip did not cancel");
+        f.cancelGrip=false;
         owner.update(f,5);
-        check(!owner.enterVr && !owner.enterAnim,"cancel stay synthesized an edge");
-        f.state.fighting=true; // the game's own fight starts: the handback
+        check(owner.domain==hybrid_owner::Domain::vr && !owner.enterAnim,"held air cancel bounced");
+        handoff.update(owner.animOwns(true,f.state));
+        // Landing always comes back to the animation, the grip still held or not.
+        f.state.grounded=true;
         owner.update(f,6);
         handoff.update(owner.animOwns(true,f.state));
-        check(owner.enterAnim && owner.lastEnterAnim==hybrid_owner::EnterAnim::native,
-              "native start did not hand back");
+        check(owner.enterAnim && owner.lastEnterAnim==hybrid_owner::EnterAnim::land,"landing did not hand back");
         check(handoff.enter && handoff.yielding,"owner returned but production handoff deferred native ownership");
         owner.update(f,7);
-        check(!owner.enterVr && !owner.enterAnim,"native handback synthesized another edge");
+        check(!owner.enterVr && !owner.enterAnim,"landing synthesized another edge");
     }
     web_aim::ForearmAim correction;
     for(unsigned i=0;i<30;++i)correction.update(true,Quat::yaw(1.2f),.02f,180.f);
@@ -231,29 +237,24 @@ void activationTests() {
     hybrid_owner::HybridOwner owner;
     hybrid_owner::Frame f;
     f.state.playing=f.state.fresh=true;
-    f.state.grounded=true; f.cancelGrip=f.cancelGripHeld=true;
+    owner.domain=hybrid_owner::Domain::vr;
+    f.state.grounded=true; f.groundAction=true;
     owner.update(f,1);
-    f.cancelGrip=f.cancelGripHeld=false; f.groundAction=true;
-    owner.update(f,2);
     check(owner.domain==hybrid_owner::Domain::vr,"active takeoff was cut short");
     f.groundAction=false;
-    owner.update(f,3);
-    check(owner.domain==hybrid_owner::Domain::vr,"cleared action ended the cancel stay");
-    f.state.wall=hybrid_owner::surfaceGame; // the game's crawl starts
-    owner.update(f,4);
-    check(owner.enterAnim && owner.lastEnterAnim==hybrid_owner::EnterAnim::native,"crawl start did not hand back");
-    f.state.wall=0;
+    owner.update(f,2);
+    check(owner.enterAnim && owner.lastEnterAnim==hybrid_owner::EnterAnim::land,"landing after the takeoff");
     owner={}; f={}; f.state.playing=f.state.fresh=true;
     owner.update(f,1);
-    check(owner.domain==hybrid_owner::Domain::anim,"all air was incorrectly forced OG");
+    check(owner.domain==hybrid_owner::Domain::anim,"the start of a midair animation was forced OG");
     owner.domain=hybrid_owner::Domain::vr; f.state.grounded=true;
     f.state.wall=hybrid_owner::surfaceWall;
     owner.update(f,2);
     check(owner.domain==hybrid_owner::Domain::vr,"wallrunning was forced native as ground");
     f.state.wall=hybrid_owner::surfaceGame; f.state.grounded=false;
     owner.update(f,3);
-    check(owner.enterAnim,"native crawl wrongly retained OG body");
-    std::printf("PASS: cancel stay through idle/walk/run until a native start, actual-action deferral and air/wall policy\n");
+    check(owner.enterAnim && owner.lastEnterAnim==hybrid_owner::EnterAnim::mount,"native crawl wrongly retained OG body");
+    std::printf("PASS: ownership update - ground grip never switches, air cancel, landing, takeoff deferral and wall policy\n");
 }
 void cancellationTests() {
     using namespace animation_cancel;
@@ -267,14 +268,20 @@ void cancellationTests() {
         hybrid_owner::Frame f;
         f.state.playing = f.state.fresh = true;
         f.state.grounded = grounded;
-        f.state.fighting = true; // grounded combat must also cancel
+        f.state.fighting = true; // a fight must not keep the cancel from working
         f.zipPress = f.jumpAsk = true; // cancel overrides stale asks
+        // OWNERSHIP UPDATE: production arms the gate only in a midair
+        // animation (cancelArmed); on the ground the owner never switches.
+        check(hybrid_owner::cancelArmed(true, grounded) == !grounded, "cancel armed on the ground");
         f.cancelGrip = d.cancel;
         f.cancelGripHeld = d.holdVr;
         owner.update(f, 1'000'000'000);
-        check(owner.enterVr && owner.lastEnterVr == hybrid_owner::EnterVr::cancel,
-              "cancel did not win owner transition");
-        check(hybrid_owner::adoptsFromAir(owner.lastEnterVr, grounded) == !grounded,
+        if (grounded)
+            check(owner.domain == hybrid_owner::Domain::anim && !owner.enterVr, "ground cancel switched owner");
+        else
+            check(owner.enterVr && owner.lastEnterVr == hybrid_owner::EnterVr::cancel,
+                  "cancel did not win owner transition");
+        check(hybrid_owner::adoptsFromAir(hybrid_owner::EnterVr::cancel, grounded) == !grounded,
               "cancel changed grounded/air pose adoption policy");
         OpenMotion world;
         Swing solver;
@@ -312,7 +319,8 @@ void cancellationTests() {
             check(!d.cancel && d.holdVr, "held cancel retriggered or rearmed");
             f.cancelGripHeld=d.holdVr;
             owner.update(f,2'000'000'000+static_cast<int64_t>(i)*1'000'000'000);
-            check(owner.domain==hybrid_owner::Domain::vr && !owner.enterAnim && !owner.enterVr,
+            check(owner.domain==(grounded ? hybrid_owner::Domain::anim : hybrid_owner::Domain::vr) &&
+                      !owner.enterAnim && !owner.enterVr,
                   "held cancel bounced ownership or reseeded pose");
             check(step(d,true,true)==0,"still-held trigger fired after cancel");
             check(!solver.webs()[0].attached && !solver.webs()[1].attached,"held cancel fired a web");
@@ -322,29 +330,23 @@ void cancellationTests() {
         check(step(d,false,false)==0,"release fired a ball");
         f.cancelGripHeld=false; f.zipPress=f.jumpAsk=false;
         owner.update(f,19'000'000'000);
-        // GRIP CANCEL STAYS IN SPIDYVR (the user, November 8 21:51): release
-        // no longer hands back on the ground; full OG play, web lines on the
-        // ground included, until another native animation starts on its own.
-        check(owner.domain==hybrid_owner::Domain::vr && !owner.enterAnim && owner.cancelSticky,
-              "release after cancel left SpidyVR");
+        // In the air SpidyVR keeps him after the release (it owns the air).
+        check(owner.domain==(grounded ? hybrid_owner::Domain::anim : hybrid_owner::Domain::vr) &&
+              !owner.enterAnim, "release after cancel changed owner");
         d=gate.update(true,false,true,web,3);
         check(!d.cancel && !d.webBlocked && !d.shotBlocked,"press after cancel still intercepted");
         check(step(d,true,true)==3,"trigger press after cancel no longer fires");
         check(solver.webs()[hand].attached,"grip after cancel shot no web (lingering suppression)");
         f.cancelGripHeld=false; f.zipPress=f.jumpAsk=false;
         f.state.fighting=false; f.state.grounded=true;
+        // Landing: the animation's, at once (no stay, no native-start wait).
+        owner.update(f,20'000'000'000);
+        check(owner.domain==hybrid_owner::Domain::anim && (grounded || (owner.enterAnim &&
+              owner.lastEnterAnim==hybrid_owner::EnterAnim::land)), "landing after cancel not the animation's");
         for (unsigned i=0;i<5;++i) {
-            owner.update(f,20'000'000'000+static_cast<int64_t>(i)*1'000'000'000);
-            check(owner.domain==hybrid_owner::Domain::vr,"standing still/walking ended the cancel stay");
+            owner.update(f,21'000'000'000+static_cast<int64_t>(i)*1'000'000'000);
+            check(owner.domain==hybrid_owner::Domain::anim && !owner.enterVr,"ground switched after landing");
         }
-        f.state.dodging=true; // the game's own dodge starts: the handback
-        owner.update(f,26'000'000'000);
-        check(owner.domain==hybrid_owner::Domain::anim && owner.enterAnim &&
-              owner.lastEnterAnim==hybrid_owner::EnterAnim::native && !owner.cancelSticky,
-              "native start did not end the cancel stay");
-        f.state.dodging=false;
-        owner.update(f,27'000'000'000);
-        check(owner.domain==hybrid_owner::Domain::anim,"handback did not hold (ground native)");
     }
     Gate disabled;
     check(!disabled.update(false,true,true,1,0).cancel,"disabled hybrid consumed ordinary grip");

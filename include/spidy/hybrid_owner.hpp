@@ -1,21 +1,38 @@
-// ANIMATED HYBRID (vr_settings::Values::animatedHybrid, off by default): the
-// game's animation owns the body by default (ANIM) — running, fighting,
-// parkour hops and vaults, jumps, game zips, the game's crawls, falls — and the
-// headset stays on the hero's head the way finishers do. OG SpidyVR (VR) takes
-// over only when the player asks for it: a web (attach, or trigger/grip web
-// intent in the air), a mid-air rotation (R-stick held or a ~90° body turn),
-// real speed in the air, Spidy's own wall run, or a real jump or leap the
-// player asked for (Frame::jumpAsk), on the frame he leaves the ground: the
-// game's takeoff plays, and SpidyVR picks the body up from that pose (jump
-// adopt; native_body::beginJumpAdopt). Grip cancel is a consumed, no-shot
-// switch to VR (the user, November 8 21:51: it supersedes "release restores
-// animation"): VR then STAYS - full OG SpidyVR, webs on the ground included -
-// until another native animation starts on its own (nativeStarts: the game's
-// fight or dodge, its parkour, its crawl, or a game zip begins). That start
-// hands back to ANIM; nothing lingers afterwards. Back to ANIM also once a web zip the player asked for (Y in the air or
-// the game's zip to a point) actually begins: that zip is the game's animation
-// until it ends. A press the game does not take never leaves VR. Pure domain
-// FSM — no Windows.
+// ANIMATED HYBRID (vr_settings::Values::animatedHybrid, off by default): who
+// owns Spider-Man's body - the game's animation (ANIM) or OG SpidyVR (VR).
+//
+// OWNERSHIP UPDATE (the user, November 9 09:34; supersedes the November 8
+// grip-cancel stay, ground grip cancel and jump-adopt rules):
+//   Animation owns the ground, parkour, jumps and landings. SpidyVR owns the
+//   air and wall runs / wall jumps.
+//
+//   where / what                     owner   switch
+//   -------------------------------  ------  ---------------------------------
+//   ground, game crawl, perch        ANIM    VR -> ANIM on landing (always)
+//   ground + grip / trigger          ANIM    none: grip only arms SpidyVR
+//                                            webs, balls, punches, markers
+//   jump, vault, point launch, zip   ANIM    plays from the press / takeoff
+//     (any midair native animation)          until the animation ends; then
+//                                            VR only if still in the air
+//   midair animation + grip          VR      grip cancel (consumed, no shot)
+//   midair animation + Spidy wall    VR      wall run
+//   midair animation + SpidyVR web   VR      web (a web of SpidyVR's attached)
+//   air after the animation ended    VR      (anim-end)
+//   Y zip from VR in the air         ANIM    when the game begins the zip
+//   Spidy wall run / wall jump       VR      -
+//   wall run from a Native Run,      ANIM    run-release
+//     stick released on the wall
+//
+// No ownership switch ever happens on the ground. "The animation ended" is
+// not a signal the game gives the mod: it is taken as the move having
+// stopped rising (vertical velocity at or below zero for fallHoldNs, after at
+// least airAnimMinNs off the ground), no zip, fight or dodge still going on,
+// or airAnimMaxNs at the most. A short hop or step down lands inside that
+// and never switches. A web zip (Y) plays while its keys go out and then
+// through what it leads into: its point launch ends at the launch's top (the
+// same fall rule); a zip with no launch plays until he lands or perches, or
+// zipMaxNs. The position lock (game_xr) runs on every switch.
+// Pure domain FSM - no Windows.
 //
 // Diagnostics keep the old G->T / T->G spelling (G = anim, T = vr) so earlier
 // log greps still work.
@@ -30,17 +47,19 @@ namespace spidy::hybrid_owner {
 
 enum class Domain : uint8_t { anim, vr };
 
-// Why the owner went to VR. Only player intent (or the mod's own wall run).
+// Why the owner went to VR. The retired values stay for old logs and the
+// session summary; the ownership update never produces them.
 enum class EnterVr : uint8_t {
     none,
-    web,     // a web attached
-    airWeb,  // trigger/grip web intent pressed while airborne, not fighting
-    rotate,  // R-stick held or a fast body turn while airborne
-    speed,   // airborne horizontal measured speed held above vrSpeed
+    web,     // a SpidyVR web attached in the air (or holds him as he leaves the ground)
+    airWeb,  // retired: grip in the air is the cancel now
+    rotate,  // retired: no mid-air rotate takeover
+    speed,   // retired: no mid-air speed takeover
     wallRun, // Spidy's own wall run (game_swing::Surface::wall): the mod drives it
     swing,   // a web zip the game did not take: the swing still carries him in the air
-    jump,    // a real jump or leap the player asked for, on the frame he left the ground
-    cancel,  // consumed grip: return to VR without a web or other action
+    jump,    // retired: the jump is the game's animation until it ends (animEnd)
+    cancel,  // consumed grip in a midair animation: VR without a web or other action
+    animEnd, // a midair native animation ended with him still in the air
 };
 
 inline const char* enterVrName(EnterVr e) {
@@ -61,14 +80,15 @@ inline const char* enterVrName(EnterVr e) {
         return "swing";
     case EnterVr::jump:
         return "jump";
+    case EnterVr::animEnd:
+        return "anim-end";
     default:
         return "none";
     }
 }
 
-// Snapshot the live pose and keep the legs airborne: a real jump (even if the
-// ground flickers on that frame), or any other takeover while the hero is not
-// on the ground. A grounded web, wall run or swing still reclaims without a seed.
+// Snapshot the live pose and keep the legs airborne for any takeover while the
+// hero is not on the ground. A grounded one reclaims without a seed.
 inline bool adoptsFromAir(EnterVr why, bool grounded) {
     return why == EnterVr::jump || !grounded;
 }
@@ -76,14 +96,12 @@ inline bool adoptsFromAir(EnterVr why, bool grounded) {
 // Why the owner went back to ANIM.
 enum class EnterAnim : uint8_t {
     none,
-    land, // legacy diagnostic value; current ground rule uses `ground`
-    zip,  // the game began a web zip the player asked for (Frame::zipPress)
-    // A jump taken over (EnterVr::jump) turned out to be a wall mount: the
-    // game's crawl has him on the wall, and nothing else of the player's keeps
-    // VR (no web). That climb is the game's animation, as any wall mount is.
-    mount,
-    ground, // eligible standing/walking/running/crawl: native immediately
-    native, // after a grip cancel: another native animation started on its own
+    land,       // VR touched the ground (or a perch): landings are the game's
+    zip,        // the game began a web zip the player asked for (Frame::zipPress)
+    mount,      // VR met the game's crawl (a wall mount is the game's animation)
+    ground,     // retired spelling of land (old logs)
+    native,     // retired: the grip-cancel stay is gone
+    runRelease, // a wall run from a Native Run, the stick let go on the wall
 };
 
 inline const char* enterAnimName(EnterAnim e) {
@@ -98,16 +116,11 @@ inline const char* enterAnimName(EnterAnim e) {
         return "ground";
     case EnterAnim::native:
         return "native";
+    case EnterAnim::runRelease:
+        return "run-release";
     default:
         return "none";
     }
-}
-
-// Whether a return to ANIM seeds the hero's facing toward where the player last
-// looked in VR (the landing blend's short stick push). A web zip is the game's
-// move once it begins: nothing of the player's is steered into it.
-inline bool seedsFacing(EnterAnim why) {
-    return why == EnterAnim::land;
 }
 
 inline const char* domainName(Domain d) {
@@ -115,112 +128,86 @@ inline const char* domainName(Domain d) {
 }
 
 // game_swing::Surface values as Frame::state.wall carries them (kept here so the
-// FSM stays pure). Only `wall` (the swing's own wall run) is VR intent; the
-// game's crawl (`game`) and the floor crawl flag (`floor`, lit by ordinary
-// rooftop parkour) stay ANIM.
+// FSM stays pure). Only `wall` (the swing's own wall run) is VR; the game's
+// crawl (`game`) is supported ground for ownership; the floor crawl flag
+// (`floor`, lit by ordinary rooftop parkour) is no surface.
 constexpr unsigned surfaceWall = 1, surfaceGame = 2, surfaceFloor = 3;
 
-// Historical constants retained for old diagnostics/tests; NOT restoration gates.
-constexpr int64_t landHoldNs = 250'000'000;
-constexpr int64_t vrMinDwellNs = 500'000'000;
-// Active timings (nanoseconds) and thresholds, behind HYBRID only.
 constexpr int64_t combatClearNs = 300'000'000; // sticky combat ends after idle
-constexpr float vrSpeed = 15.f;                // m/s horizontal, measured
-constexpr int64_t speedHoldNs = 200'000'000;   // default hold (ANIMATED HYBRID SPEED)
-constexpr float rotateStick = .5f;             // |R-stick x|
-constexpr int64_t rotateHoldNs = 150'000'000;  // R-stick held this long
-constexpr float spinRadians = 1.5707963f;      // 90° body/HMD turn ...
-constexpr int64_t spinWindowNs = 500'000'000;  // ... within this window
-constexpr int64_t airWebAirNs = 80'000'000;    // airborne this long before air-web counts
+// Retired thresholds of the old rotate / speed takeovers (settings still parse).
+constexpr float vrSpeed = 15.f;
+constexpr int64_t speedHoldNs = 200'000'000;
 // A web zip's hold (Frame::zipPress). From VR while the swing still has him,
 // ANIM starts only when the game begins the move (the swing yields). The game
 // begins within game_swing::AirYield::askMs of the press or never does, and
-// lets the swing have him back after AirYield::yieldMs at most: the same
-// 400 ms / 3 s, so no new feel number.
+// lets the swing have him back after AirYield::yieldMs at most.
 constexpr int64_t zipAskNs = 400'000'000;
 constexpr int64_t zipMaxNs = 3'000'000'000;
-// Jump adopt: a jump or leap asked for on the ground (Frame::jumpAsk) counts
-// when he leaves the ground within this of the ask. The game's A goes out at
-// most 0.2 s after the press (game_pad::JumpRelay), a charged leap within
-// ChargeJump::leapSeconds of its release, SPIDY RUN JUMP's own jump within
-// Swing::runJumpSeconds; the game's takeoff takes the rest.
-constexpr int64_t jumpAskNs = 500'000'000;
+// The end of a midair native animation (see the top): at least this long off
+// the ground, then falling (vertical velocity <= 0) for fallHoldNs; at most
+// airAnimMaxNs. A point launch rises the whole way to its top, so it plays.
+constexpr int64_t airAnimMinNs = 300'000'000;
+constexpr int64_t fallHoldNs = 150'000'000;
+constexpr int64_t airAnimMaxNs = 2'500'000'000;
+// After a zip, rising faster than this is its point launch.
+constexpr float zipRiseVel = 1.f;
+// Native Run's stick let go: below this tilt (NATIVE RUN's own off threshold
+// is higher; a resting stick reads under it).
+constexpr float runReleaseStick = .2f;
+// A Native Run counts for the wall run it leads into within this of RT.
+constexpr int64_t runRecentNs = 500'000'000;
 
 struct Frame {
     head_probe::StateInputs state{};
-    bool webRising{};   // a web attached this frame
+    bool webRising{};   // a SpidyVR web attached this frame
     bool webIntent{};   // web-hold button held (grip by default; trigger if swapped)
-    float speedH{};     // horizontal measured (position-delta) speed, m/s
-    float rStickX{};    // right stick x, -1..1
-    float hmdYaw{};     // headset yaw in tracking space, radians
-    bool hmdYawValid{}; // hmdYaw is a tracked sample
-    bool cutscene{};    // !playing || !fresh — freeze domain
-    // The player pressed a web zip this frame: the game's zip to a point (its LT
-    // + RT, the stick up) or its Y in the air (a web strike; a car's in a chase).
-    // Not Y on the ground or on Spidy's wall (interact). game_xr sets it on the
-    // press frame itself, before the swing or the game has moved. The owner
-    // leaves VR only if the game then begins that zip.
+    float speedH{};     // horizontal measured speed, m/s (diagnostics)
+    float rStickX{};    // right stick x (diagnostics; no rotate takeover)
+    float hmdYaw{};     // headset yaw (diagnostics)
+    bool hmdYawValid{};
+    bool cutscene{};    // !playing || !fresh - freeze domain
+    // The player pressed a web zip this frame: the game's zip to a point or its
+    // Y in the air (a web strike). Not Y on the ground or on Spidy's wall.
     bool zipPress{};
-    // The player asked for a real jump or leap this frame, from the ground:
-    // A pressed (Command::jump), the game's A sent, a charged leap let go of
-    // (Command::leap; ChargeJump, RUNNING LEAP), or SPIDY RUN JUMP's own jump
-    // (Command::asks bit 3). Nothing the game does on its own - a parkour
-    // vault or mantle, a hop, a combat launcher - sets it.
-    bool jumpAsk{};
-    // ANIMATED HYBRID SPEED: how long speed must hold before VR; 0 = speed never
-    // forces a takeover (webs, mid-air turns and wall runs still do).
-    int64_t speedHoldNs = hybrid_owner::speedHoldNs;
-    bool cancelGrip{}, cancelGripHeld{}; // consumed no-action exit; hold VR until release
+    bool jumpAsk{};     // a jump asked for (diagnostics; the jump is the game's)
+    int64_t speedHoldNs = hybrid_owner::speedHoldNs; // retired setting
+    // Consumed grip (animation_cancel::Gate, armed only in a midair animation)
+    // and that grip still held.
+    bool cancelGrip{}, cancelGripHeld{};
     bool groundAction{}; // actual dispatched takeoff, not a queue/phase cooldown
+    // The hero's vertical velocity, m/s (up +); NaN unknown.
+    float velY = NAN;
+    // The left (walk) stick's tilt 0..1; negative unknown.
+    float moveStick = -1.f;
 };
 
-// Airborne for intent purposes: off the ground and not on the game's own crawl.
-// The floor-crawl flag counts as no surface (it lights during rooftop parkour).
+// Airborne: off the ground and not on the game's own crawl. The floor-crawl
+// flag counts as no surface (it lights during rooftop parkour).
 inline bool airborne(const head_probe::StateInputs& s) {
     return !s.grounded && s.wall != surfaceGame;
 }
-
-// Jump adopt: what keeps a jump ask from being the player's own real jump or
-// leap - a fight (and its launcher hops), a web zip, any surface (Spidy's
-// wall, the game's crawl, the floor crawl), the game's own parkour under
-// NATIVE RUN (head_probe::State::parkour: its vault, mantle or wall run).
-inline bool jumpBlocked(const head_probe::StateInputs& s, bool sticky) {
-    return sticky || s.fighting || s.dodging || s.zipping || s.wall != 0 ||
-           head_probe::classify(s) == head_probe::State::parkour;
+// Supported ground for ownership: the ground, a perch, or the game's crawl.
+inline bool supported(const head_probe::StateInputs& s) {
+    return (s.grounded || s.wall == surfaceGame) && s.wall != surfaceWall;
 }
-
-// The native animations that end a grip cancel's VR stay, as bits: the game's
-// fight (1), its dodge (2), its parkour under NATIVE RUN (4), its crawl (8).
-// Only a bit that rises after the cancel counts (one already on at the cancel
-// must end and start again). A game zip ends it through the zip path.
-inline unsigned nativeAnimations(const head_probe::StateInputs& s) {
-    return (s.fighting ? 1u : 0u) | (s.dodging ? 2u : 0u) |
-           (head_probe::classify(s) == head_probe::State::parkour ? 4u : 0u) |
-           (s.wall == 2u /* surfaceGame */ ? 8u : 0u);
+// A midair native animation plays: the animation owns and he is in the air
+// (not on Spidy's wall). Nothing of the mod's is steered into it (game_xr).
+inline bool midairAnimation(bool animOwns, const head_probe::StateInputs& s) {
+    return animOwns && airborne(s) && s.wall != surfaceWall;
 }
-inline unsigned nativeStarts(unsigned before, unsigned now) {
-    return now & ~before;
+// Grip cancel is armed only where it can switch: a midair animation. On the
+// ground grip is the arms' SpidyVR web (no ownership change).
+inline bool cancelArmed(bool animOwns, bool supportedNow) {
+    return animOwns && !supportedNow;
 }
 
 struct HybridOwner {
     Domain domain = Domain::anim;
     int64_t sinceNs{};
-    int64_t groundedNs{-1};
-    int64_t airNs{-1};
-    int64_t speedNs{-1};
-    int64_t rotateNs{-1};
     bool combatSticky{};
     int64_t combatIdleNs{-1};
     bool webIntentWas{};
-    bool airWebArmed{};
-    // Unwrapped HMD yaw samples while airborne (tracking space).
-    static constexpr unsigned spinSamples = 128;
-    int64_t spinT[spinSamples]{};
-    float spinYaw[spinSamples]{};
-    unsigned spinHead{}, spinCount{};
-    float yawUnwrapped{}, yawLast{};
-    bool yawLastSet{};
-    float lastSpin{}; // largest yaw change (radians) in the window, this frame
+    float lastSpin{}; // retired (always 0), kept for the diag line
     EnterVr lastEnterVr = EnterVr::none;
     EnterAnim lastEnterAnim = EnterAnim::none;
     // Web zip hold: the last press (or zip key still going out), -1 none.
@@ -229,67 +216,39 @@ struct HybridOwner {
     int64_t zipNs{-1};
     int64_t zipPressNs{-1};
     bool zipFromHold{};
+    bool zipRose{}; // the move after the zip rose (a point launch)
+    // The midair animation now playing: since when (-1 none), and since when
+    // it has been falling (-1 not falling).
+    int64_t airAnimNs{-1};
+    int64_t fallNs{-1};
+    // Native Run: RT last held (-1 never), whether this VR stint is a wall run
+    // that came out of it, and the wall it was released on (no wall run again
+    // until that wall contact ends).
+    int64_t runRtNs{-1};
+    bool runStint{};
+    bool runReleaseLatch{};
     // How long the last VR stint lasted (set on each VR -> ANIM edge, for diag).
     int64_t lastVrNs{};
-    // Why VR has the body now (kept for the stint; a web on the way makes it the web's).
     EnterVr vrBy = EnterVr::none;
-    // Jump adopt: when the player last asked for a real jump from the ground (-1 none),
-    // and whether he stood on the ground last update (the leave-ground frame).
-    int64_t jumpAskAtNs{-1};
-    bool groundedWas{}, groundedWasSet{};
     bool enterVr{};
     bool enterAnim{};
-    // Grip cancel's VR stay (see the top): set on EnterVr::cancel, cleared on
-    // any return to ANIM. nativeWas: nativeAnimations() last update.
+    // Retired (always false / 0): kept so old diagnostics compile unchanged.
     bool cancelSticky{};
-    unsigned nativeWas{};
-    unsigned lastNativeStart{}; // the bits that ended the stay (diagnostics)
+    unsigned lastNativeStart{};
 
     Domain update(const Frame& f, int64_t nowNs) {
         enterVr = enterAnim = false;
         lastEnterVr = EnterVr::none;
         lastEnterAnim = EnterAnim::none;
-        lastSpin = 0;
 
         if (f.cutscene) {
-            // Freeze: keep domain, clear pending clocks so a long cutscene does
-            // not fire a stale edge on return.
-            resetClocks();
             clearZip();
-            jumpAskAtNs = -1;
-            groundedWasSet = false;
+            airAnimNs = fallNs = -1;
             webIntentWas = f.webIntent;
             return domain;
         }
-        // Explicit cancel wins over a stale zip/jump/web edge, including combat
-        // and grounded animation. Existing pose adoption/blend handles continuity.
-        const unsigned nativeNow = nativeAnimations(f.state);
-        const unsigned started = nativeStarts(nativeWas, nativeNow);
-        nativeWas = nativeNow;
-        if (f.cancelGrip && domain == Domain::anim) {
-            clearZip();
-            webIntentWas = false;
-            goVr(EnterVr::cancel, nowNs);
-            cancelSticky = true;
-            return domain;
-        }
-        if (domain == Domain::vr && f.cancelGripHeld) {
-            resetClocks();
-            clearZip();
-            jumpAskAtNs = -1;
-            webIntentWas = false;
-            return domain;
-        }
-        if (domain == Domain::vr && cancelSticky && started) {
-            lastNativeStart = started;
-            goAnim(nowNs, EnterAnim::native);
-            return domain;
-        }
-        // The frame he leaves the ground (the swing's sample of the game's contact).
-        const bool leftGround = groundedWasSet && groundedWas && !f.state.grounded;
-        groundedWas = f.state.grounded;
-        groundedWasSet = true;
-
+        const bool pressed = f.webIntent && !webIntentWas;
+        webIntentWas = f.webIntent;
         const bool fighting = f.state.fighting || f.state.dodging;
         if (fighting) {
             if (domain == Domain::anim)
@@ -303,232 +262,183 @@ struct HybridOwner {
         } else {
             combatIdleNs = -1;
         }
+        if (f.state.runRt)
+            runRtNs = nowNs;
+        if (f.state.wall != surfaceWall)
+            runReleaseLatch = false;
 
-        const bool air = airborne(f.state);
-        const bool pressed = f.webIntent && !webIntentWas;
-        webIntentWas = f.webIntent;
-        if (air) {
-            if (airNs < 0)
-                airNs = nowNs;
-        } else {
-            airNs = -1;
+        // The cancel (a consumed grip, no shot) wins over everything in a
+        // midair animation, stale zip or jump asks included.
+        if (f.cancelGrip && domain == Domain::anim && !supported(f.state)) {
+            clearZip();
+            goVr(EnterVr::cancel, nowNs);
+            return domain;
         }
 
-        // Definitive ground contract: grip-held cancellation is the explicit
-        // exception above. Ground arm actions and passive attached webs do not
-        // require the OG body. Only an actually dispatched takeoff may defer.
-        const bool supported = f.state.grounded || f.state.wall == surfaceGame;
-        if (supported && f.state.wall != surfaceWall && !f.groundAction && !cancelSticky) {
-            if (domain == Domain::vr) goAnim(nowNs, EnterAnim::ground);
+        // While the cancelling grip is still held in the air, nothing else
+        // (a stale zip ask) takes the body back; landing still does, below.
+        if (f.cancelGripHeld && domain == Domain::vr && !supported(f.state))
+            clearZip();
+        const bool cancelHeldAir = f.cancelGripHeld && domain == Domain::vr && !supported(f.state);
+
+        // GROUND: the animation's, always. Landing comes back at once; nothing
+        // on the ground (grip, trigger, a web, a jump press) switches. Only a
+        // takeoff the swing actually dispatched leaves VR there to leave.
+        if (supported(f.state)) {
+            airAnimNs = fallNs = -1;
+            if (domain == Domain::vr && !f.groundAction)
+                goAnim(nowNs, f.state.grounded ? EnterAnim::land : EnterAnim::mount);
             if (f.zipPress || f.state.zipping) {
-                jumpAskAtNs = -1;
                 zipNs = nowNs;
-                if (f.zipPress || zipPressNs < 0) zipPressNs = nowNs;
+                if (f.zipPress || zipPressNs < 0)
+                    zipPressNs = nowNs;
                 zipFromHold = false;
-                holdForZip();
             } else {
                 clearZip();
-                const bool blocked = jumpBlocked(f.state, combatSticky || fighting);
-                if (f.jumpAsk) jumpAskAtNs = blocked ? -1 : nowNs;
-                if (jumpAskAtNs >= 0 && (blocked || nowNs-jumpAskAtNs > jumpAskNs)) jumpAskAtNs = -1;
             }
             return domain;
         }
-        // A web zip: remember the press. From animation, hold ANIM for that zip
-        // (no land confirm). From VR while the swing or Spidy's wall still has
-        // him, stay in VR until the game begins the move (the swing yields). A
-        // press the game refuses then never leaves VR. From VR with no swing (a
-        // speed or rotate flight) there is no yield to watch, so ANIM on the
-        // press still gets out of the way. A fresh grip is the explicit way out
-        // of an ANIM zip hold.
+
+        // Spidy's own wall run / wall jump: SpidyVR's. A wall run that came
+        // out of a Native Run hands back to the animation when the stick is
+        // let go on the wall (and stays the animation's on that wall).
+        if (f.state.wall == surfaceWall) {
+            airAnimNs = fallNs = -1;
+            if (domain == Domain::vr && runStint && f.moveStick >= 0.f && f.moveStick < runReleaseStick) {
+                clearZip();
+                runReleaseLatch = true;
+                goAnim(nowNs, EnterAnim::runRelease);
+                return domain;
+            }
+            if (domain == Domain::anim && !runReleaseLatch && !f.zipPress && zipNs < 0) {
+                const bool fromRun = runRtNs >= 0 && nowNs - runRtNs <= runRecentNs;
+                goVr(EnterVr::wallRun, nowNs);
+                runStint = fromRun;
+                return domain;
+            }
+            if (domain == Domain::vr && !f.zipPress && zipNs < 0)
+                return domain;
+            if (domain == Domain::anim && runReleaseLatch && !f.zipPress && zipNs < 0)
+                return domain;
+        }
+
+        if (cancelHeldAir)
+            return domain;
+        // A web zip: from VR while the swing or Spidy's wall still has him, VR
+        // waits until the game begins the move; otherwise ANIM at once. The zip
+        // is the game's until it ends; then it is a midair animation like any.
         if (f.zipPress) {
-            jumpAskAtNs = -1; // a zip is the game's move, never a jump to adopt
             zipNs = zipPressNs = nowNs;
             zipFromHold = f.state.owned || f.state.wall == surfaceWall;
             if (domain == Domain::vr && zipFromHold)
                 return domain;
             if (domain == Domain::vr)
                 goAnim(nowNs, EnterAnim::zip);
-            holdForZip();
+            airAnimNs = nowNs;
+            fallNs = -1;
             return domain;
         }
         if (zipNs >= 0) {
-            jumpAskAtNs = -1;
             if (f.state.zipping)
                 zipNs = nowNs; // the zip's keys still go out
             const bool asked = nowNs - zipPressNs < zipAskNs || f.state.zipping;
             if (domain == Domain::vr && zipFromHold) {
-                // Waiting in VR for the game to take a zip the swing still has.
                 const bool gameTook = !f.state.owned && f.state.wall != surfaceWall;
                 if (gameTook) {
                     goAnim(nowNs, EnterAnim::zip);
-                    holdForZip();
+                    airAnimNs = nowNs;
+                    fallNs = -1;
                     return domain;
                 }
                 if (pressed || !asked)
                     clearZip();
                 else
                     return domain;
-            } else {
-                // Done: landed, the swing has him again (a press from animation
-                // the game refused, or its move over and a web of the swing's
-                // carrying him), or the longest the game keeps him.
-                const bool done = nowNs - zipNs >= zipMaxNs || (!asked && (!air || f.state.owned));
-                if (!done) {
-                    if (pressed) {
-                        clearZip();
-                        goVr(EnterVr::airWeb, nowNs);
-                        return domain;
-                    }
-                    holdForZip();
+            } else if (domain == Domain::anim) {
+                if (f.cancelGrip) {
+                    clearZip();
+                    goVr(EnterVr::cancel, nowNs);
                     return domain;
                 }
-                clearZip();
-                // The swing still carrying him in the air (the game never took
-                // an ANIM press): the swing's owner again. Spidy's wall is its
-                // own wall run, below.
-                if (domain == Domain::anim && air && f.state.owned && f.state.wall != surfaceWall) {
+                // The swing still carrying him (the game never took it): VR.
+                if (!asked && f.state.owned) {
+                    clearZip();
                     goVr(f.state.webbed ? EnterVr::web : EnterVr::swing, nowNs);
                     return domain;
                 }
+                // The zip plays, and what it leads into: a point launch rises
+                // off the point and ends at its top (the fall held); a zip
+                // with no launch after it plays until he lands or perches, or
+                // the game's longest zip.
+                if (!asked && std::isfinite(f.velY) && f.velY > zipRiseVel)
+                    zipRose = true;
+                if (zipRose && std::isfinite(f.velY) && f.velY <= 0.f) {
+                    if (fallNs < 0)
+                        fallNs = nowNs;
+                } else {
+                    fallNs = -1;
+                }
+                const bool launchOver = zipRose && fallNs >= 0 && nowNs - fallNs >= fallHoldNs;
+                if (asked || (nowNs - zipNs < zipMaxNs && !launchOver))
+                    return domain;
+                clearZip();
+                goVr(EnterVr::animEnd, nowNs);
+                return domain;
+            } else {
+                clearZip();
             }
         }
 
-        if (domain == Domain::anim) {
-            // Immediate: a web attached, or Spidy's own wall run (mod drives it).
-            if (f.webRising) {
-                goVr(EnterVr::web, nowNs);
-                return domain;
-            }
-            if (f.state.wall == surfaceWall) {
-                goVr(EnterVr::wallRun, nowNs);
-                return domain;
-            }
-            // Jump adopt: only a real jump or leap the player asked for on the ground,
-            // on the frame he leaves it. Vaults, mantles, hops and launchers ask nothing;
-            // a fight, a zip, a wall or a crawl, or the game's parkour block the ask.
-            const bool jumpSticky = combatSticky || fighting;
-            if (f.jumpAsk && f.state.grounded)
-                jumpAskAtNs = jumpBlocked(f.state, jumpSticky) ? -1 : nowNs;
-            if (jumpAskAtNs >= 0 && (jumpBlocked(f.state, jumpSticky) || nowNs - jumpAskAtNs > jumpAskNs))
-                jumpAskAtNs = -1;
-            if (leftGround && air && jumpAskAtNs >= 0) {
-                goVr(EnterVr::jump, nowNs);
-                return domain;
-            }
-            if (air)
-                jumpAskAtNs = -1; // off the ground some other way (a hop, a fall): spent
-            // Grip (the web-hold button) leaves ANIM on that press: on the
-            // ground, in the air, or in a fight. Web balls never set webIntent.
-            if (pressed) {
-                goVr(EnterVr::airWeb, nowNs);
-                return domain;
-            }
-            if (!air) {
-                // Hops and crawls stay ANIM; a jump waits for leave-ground.
-                airWebArmed = false;
-                speedNs = rotateNs = -1;
-                clearSpin();
-                return domain;
-            }
-            const bool sticky = combatSticky || fighting;
-            // Mid-air rotation: R-stick held, or a fast physical turn.
-            if (std::isfinite(f.rStickX) && std::abs(f.rStickX) >= rotateStick) {
-                if (rotateNs < 0)
-                    rotateNs = nowNs;
-            } else {
-                rotateNs = -1;
-            }
-            lastSpin = sampleSpin(f, nowNs);
-            if (!sticky && ((rotateNs >= 0 && nowNs - rotateNs >= rotateHoldNs) || lastSpin >= spinRadians)) {
-                goVr(EnterVr::rotate, nowNs);
-                return domain;
-            }
-            // Speed: measured, held (a takeoff spike does not count).
-            if (std::isfinite(f.speedH) && f.speedH >= vrSpeed) {
-                if (speedNs < 0)
-                    speedNs = nowNs;
-            } else {
-                speedNs = -1;
-            }
-            if (!sticky && f.speedHoldNs > 0 && speedNs >= 0 && nowNs - speedNs >= f.speedHoldNs) {
-                goVr(EnterVr::speed, nowNs);
-                return domain;
-            }
-            return domain;
-        }
+        if (domain == Domain::vr)
+            return domain; // the air is SpidyVR's until he lands
 
-        // A web on the way makes an adopted jump's stint the web's.
-        if (vrBy == EnterVr::jump && (f.webRising || f.state.webbed))
-            vrBy = EnterVr::web;
-        // An adopted jump the game's crawl took onto a wall: a wall mount from a
-        // jump, which is the game's animation (no land confirm or VR minimum).
-        if (vrBy == EnterVr::jump && f.state.wall == surfaceGame) {
-            goAnim(nowNs, EnterAnim::mount);
+        // A MIDAIR ANIMATION: the game's jump, launch, vault or fall plays
+        // uninterrupted. The cancel, Spidy's wall (above) or a SpidyVR web
+        // takes it at once; otherwise VR only once it has ended in the air.
+        if (airAnimNs < 0) {
+            airAnimNs = nowNs;
+            fallNs = -1;
+        }
+        if (f.cancelGrip) {
+            goVr(EnterVr::cancel, nowNs);
             return domain;
         }
-        // Eligible ground returned above on this very update. No landing
-        // confirm, VR minimum, run edge, neutral/repress or queue cooldown.
+        if (f.webRising || (f.state.webbed && f.state.owned)) {
+            goVr(EnterVr::web, nowNs);
+            return domain;
+        }
+        if (std::isfinite(f.velY) && f.velY <= 0.f) {
+            if (fallNs < 0)
+                fallNs = nowNs;
+        } else {
+            fallNs = -1;
+        }
+        const bool busy = f.state.zipping || fighting || combatSticky;
+        const int64_t inAir = nowNs - airAnimNs;
+        const bool fell = fallNs >= 0 && nowNs - fallNs >= fallHoldNs && inAir >= airAnimMinNs;
+        if (!busy && (fell || inAir >= airAnimMaxNs)) {
+            goVr(EnterVr::animEnd, nowNs);
+            return domain;
+        }
         return domain;
     }
 
     // True while the game's animation owns the body (and the head follows it).
-    // No per-frame classify: only an owner edge changes this, so one ungrounded
-    // frame cannot drop head-follow without a blend.
     bool animOwns(bool movesOn, const head_probe::StateInputs& s) const {
         return movesOn && domain == Domain::anim && s.playing && s.fresh;
     }
 
-    // Older name, same answer as animOwns (web/aim intent is an owner edge now).
+    // Older name, same answer as animOwns.
     bool yielding(bool movesOn, const head_probe::StateInputs& s, bool /*webAimIntent*/ = false,
                   bool /*armsHandlesAim*/ = false) const {
         return animOwns(movesOn, s);
     }
 
   private:
-    void resetClocks() {
-        groundedNs = airNs = speedNs = rotateNs = -1;
-        airWebArmed = false;
-        clearSpin();
-    }
     void clearZip() {
         zipNs = zipPressNs = -1;
         zipFromHold = false;
-    }
-    // While a zip holds ANIM: intent clocks start over when it ends.
-    void holdForZip() {
-        speedNs = rotateNs = groundedNs = -1;
-        airWebArmed = false;
-        clearSpin();
-    }
-    void clearSpin() {
-        spinHead = spinCount = 0;
-        yawLastSet = false;
-    }
-    // Largest |yaw change| between now and any airborne sample in the window.
-    float sampleSpin(const Frame& f, int64_t nowNs) {
-        if (!f.hmdYawValid || !std::isfinite(f.hmdYaw))
-            return 0.f;
-        if (!yawLastSet) {
-            yawUnwrapped = f.hmdYaw;
-            yawLastSet = true;
-        } else {
-            yawUnwrapped += std::remainder(f.hmdYaw - yawLast, 6.2831853f);
-        }
-        yawLast = f.hmdYaw;
-        spinT[spinHead] = nowNs;
-        spinYaw[spinHead] = yawUnwrapped;
-        spinHead = (spinHead + 1) % spinSamples;
-        if (spinCount < spinSamples)
-            ++spinCount;
-        float most = 0.f;
-        for (unsigned i = 0; i < spinCount; ++i) {
-            const unsigned k = (spinHead + spinSamples - 1 - i) % spinSamples;
-            if (nowNs - spinT[k] > spinWindowNs)
-                break;
-            most = std::max(most, std::abs(yawUnwrapped - spinYaw[k]));
-        }
-        return most;
+        zipRose = false;
     }
     void goVr(EnterVr why, int64_t nowNs) {
         domain = Domain::vr;
@@ -536,8 +446,8 @@ struct HybridOwner {
         enterVr = true;
         lastEnterVr = why;
         vrBy = why;
-        jumpAskAtNs = -1;
-        resetClocks();
+        airAnimNs = fallNs = -1;
+        runStint = false;
         combatSticky = false;
         combatIdleNs = -1;
     }
@@ -548,11 +458,10 @@ struct HybridOwner {
         enterAnim = true;
         lastEnterAnim = why;
         vrBy = EnterVr::none;
-        jumpAskAtNs = -1;
-        resetClocks();
+        airAnimNs = fallNs = -1;
+        runStint = false;
         combatSticky = false;
         combatIdleNs = -1;
-        cancelSticky = false;
     }
 };
 
