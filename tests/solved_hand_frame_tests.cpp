@@ -94,6 +94,9 @@ TestBody testBody(bool oddFrames=false,bool heroHand=false) {
 }
 
 void upperBodyCases() {
+ check(!upper_frame::hideHead(true,true,true),"head-follow would apply both head shrinkers");
+ check(upper_frame::hideHead(true,true,false) && upper_frame::hideHead(true,false,false),
+       "World/head-off or original OG head hiding lost");
  check(upper_frame::armWeight(true,true,true,.55f)==1.f,"tracked player arm mixed passive animation");
  check(upper_frame::armWeight(true,false,true,.3f)==.3f,"tracking loss lost existing visual fade");
  check(upper_frame::armWeight(true,true,false,1.f)==0.f,"missing view invented a hand frame");
@@ -181,6 +184,22 @@ void upperBodyCases() {
  saved.begin(42);check(saved.read(42,100,root,result)==-1,
     "native activation before first writer read its own modified OG head");
  check(saved.read(43,100,root,result)==0,"pending native anchor hijacked another actor");
+ // World/head-off has no game_fp follow-head shrinker: actual player head
+ // geometry must still be hidden, without changing head centre or lower rig.
+ auto hiddenBody=testBody(true);auto hidden=hiddenBody.rest, visible=hiddenBody.rest;
+ body::Targets ht;ht.armsOnly=ht.head=ht.torsoAssist=ht.viewMapped=true;ht.armWeight={1,1};
+ ht.eyes={0,1.68f,.08f};ht.facing=Quat::yaw(3.14159265f);
+ for(unsigned h=0;h<2;++h)ht.hands[h]={true,{h?-.25f:.25f,1.4f,.3f},{},0,0};
+ body::State hs,vs;body::Config hc,vc;hc.hideHead=true;vc.hideHead=false;
+ body::Pose hp(hidden.data(),hiddenBody.rig.parent.size()),vp(visible.data(),hiddenBody.rig.parent.size());
+ body::solve(hp,hiddenBody.rig,ht,hc,hs,true,.01f,1,1);
+ body::solve(vp,hiddenBody.rig,ht,vc,vs,true,.01f,1,1);
+ check(length(hp.position(hiddenBody.rig.head)-vp.position(hiddenBody.rig.head))<1e-5f,
+       "self-head hiding moved gameplay head");
+ check(length(hp.direction(hiddenBody.rig.head,{1,0,0}))<.002f,
+       "world native head still fills the player's view");
+ check(std::memcmp(hidden.data()+hiddenBody.rig.pelvis*16,visible.data()+hiddenBody.rig.pelvis*16,
+       16*sizeof(float))==0,"self-head hiding changed pelvis");
  std::printf("max tracked-head residual %.4fm\n",maxHeadError);
  std::printf("PASS: %u production mapped upper-body cases (Full/Level/World, mirrored rigs, actor/HMD turns); rooted bone/lower matrices and camera lease gates\n",cases);
 }

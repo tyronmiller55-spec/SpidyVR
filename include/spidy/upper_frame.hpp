@@ -3,6 +3,11 @@
 #include <cstdint>
 
 namespace spidy::upper_frame {
+// Head-follow has its own post-writer shrinker. World/head-off needs the
+// solver's hide policy; never multiply both shrinkers into the same head.
+inline bool hideHead(bool requested, bool armsOverlay, bool followsHead) {
+    return requested && !(armsOverlay && followsHead);
+}
 // Full player-rig mode must not mix 45% authored arm motion into a tracked
 // idle hand. Lost tracking may retain only the existing short visual fade;
 // XR/raw tracking still withholds actions and clears physical punch history.

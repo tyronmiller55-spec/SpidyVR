@@ -469,8 +469,14 @@ void solveHero(float* out, uintptr_t job, uintptr_t instance) {
     authored.instance = instance;
     authored.serial = wanted.serial;
     authored.deadline = sampleDeadline;
-    if (playerTorso && probeHead >= 0 && probeHead < static_cast<int>(cache.joints))
-        std::memcpy(authored.model.data(), out + probeHead * 16, 16 * sizeof(float));
+    if (playerTorso && probeHead >= 0 && probeHead < static_cast<int>(cache.joints)) {
+        const body::Pose original(out, static_cast<int>(cache.joints));
+        // Cache the calibrated eye frame, not raw joint axes plus unrelated
+        // live global calibration. Suit/rig changes remain one coherent job.
+        animated_view::headFrame(original.position(probeHead),
+            original.direction(probeHead, cache.ik.headForward),
+            original.direction(probeHead, cache.ik.headUp), cache.ik.eyesFromHead, authored.model);
+    }
     AcquireSRWLockExclusive(&anchorLock);
     // A native activation can precede its first matching pose command. Keep
     // that pending camera boundary across an old-owner writer/missing view;
@@ -646,7 +652,8 @@ void solveHero(float* out, uintptr_t job, uintptr_t instance) {
             lastTargets = t;
         }
         body::Config config;
-        config.hideHead = wanted.flags & native_body::hideHead;
+        config.hideHead = upper_frame::hideHead((wanted.flags & native_body::hideHead) != 0,
+            armsOverlayOn, game_fp::followingHero());
         config.handOrientation = wanted.flags & native_body::handTurn;
         // The player's size: their T-pose calibration's eye height and arm,
         // or the headset's running height and the hero's own arms.

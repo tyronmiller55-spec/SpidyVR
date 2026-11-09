@@ -16,6 +16,11 @@ constexpr uint64_t controlHoldMs = 500;
 inline bool recentPresentation(uint64_t lastNewImageMs, uint64_t nowMs) {
     return lastNewImageMs && nowMs >= lastNewImageMs && nowMs - lastNewImageMs <= controlHoldMs;
 }
+// Native tracked-body presentation is ownership, not camera mode: World/head-
+// off must also hide duplicate overlay gloves/ropes and use its real camera.
+inline bool nativeTrackedPresentation(bool body, bool hybrid, bool yielding, bool arms) {
+    return body && hybrid && yielding && arms;
+}
 // Native head-follow hides duplicate gloves/ropes, NOT gameplay feedback.
 // A real scene/cutscene and flat-screen presentation remain unobstructed.
 inline bool gameplayFeedback(bool flatScreen, bool scene, bool animation) {

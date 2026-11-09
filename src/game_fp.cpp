@@ -1855,10 +1855,11 @@ bool frame(Mat4& head) {
     float world[16];
     Mat4 authored{};
     const int anchorState = !cutscene && source ? native_body::authoredHead(source, authored) : 0;
-    bool ok = source && entityOk(source) && headAxesSet.load(std::memory_order_acquire) &&
-              (anchorState == 1 || (anchorState == 0 && headWorld(source, world, 0)));
+    bool ok = source && entityOk(source) &&
+              (anchorState == 1 || (anchorState == 0 && headAxesSet.load(std::memory_order_acquire) &&
+                                   headWorld(source, world, 0)));
     if (anchorState == 1) std::memcpy(world, authored.data(), sizeof(world));
-    if (ok) {
+    if (ok && anchorState != 1) {
         // The joint's rows are its own axes: normalised (a shrunk head's are a thousandth long). The
         // character's forward and up are given in them (setHeadAxes); the view's rows are right, down,
         // forward.

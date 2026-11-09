@@ -6915,8 +6915,9 @@ DWORD WINAPI run(void*) {
                     saved.trackingEyes = frame.eyes;
                     // Same as finishers: placeEyes re-resolves the head each frame
                     // (stereo_probe) instead of keeping a latched gameplay head.
-                    saved.scene = headFollowEyes;
-                    saved.animation = headFollowEyes;
+                    saved.animation = headFollowEyes || nativeTrackedPresentation(bodyStarted && values.body,
+                        values.animatedHybrid, yieldAnim, values.animatedArms);
+                    saved.scene = headFollowEyes || saved.animation;
                     if (motion.active)
                         saved.rigTurn =
                             flip_reprojection::trackingTurn(motion.headPose.orientation, frame.head.orientation);

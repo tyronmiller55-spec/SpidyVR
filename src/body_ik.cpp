@@ -738,6 +738,11 @@ Result solve(Pose& pose, const Rig& rig, const Targets& targets, const Config& c
                 r.solved = true;
             }
         }
+        // Head-off/world cameras still sit inside the HMD-driven head. Use
+        // the same mesh-hiding policy as OG without moving the head joint or
+        // touching its original camera anchor (captured before this solve).
+        if (c.hideHead && upperSafe && tg.torsoAssist && tg.head && tg.viewMapped)
+            pose.scale(rig.below[rig.head], .001f, pose.position(rig.head));
         return r;
     }
     state.weight = approach(state.weight, wanted ? 1.f : 0.f, c.blendSpeed * dt);

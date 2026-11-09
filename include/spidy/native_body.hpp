@@ -336,7 +336,7 @@ struct OverlayTracking {
     uint32_t remapped{}; // 1 when armsOnly chest remap ran
     uint32_t softlock{}; // 1 when remap used softlock/headbone player frame
 };
-// Gameplay only: 1 fresh original authored head in current world transform,
+// Gameplay only: 1 fresh original calibrated eye anchor in current world transform,
 // 0 not managed by player torso, -1 managed but missing/expired (never read
 // our modified head as the next camera anchor). Cinematics never call this.
 int authoredHead(uintptr_t instance, Mat4& world);

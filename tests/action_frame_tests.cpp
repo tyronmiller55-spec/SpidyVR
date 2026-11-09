@@ -98,6 +98,10 @@ void punchDiscontinuityTests() {
     std::puts("PASS: both-hand rotated phantom-sweep, residual-speed, reacquisition/owner-history and simultaneous cancel regressions");
 }
 void feedbackAndCancelPipelineTests() {
+    check(nativeTrackedPresentation(true,true,true,true),"world/head-off native body lost native presentation");
+    check(!nativeTrackedPresentation(true,true,false,true) &&
+          !nativeTrackedPresentation(false,true,true,true) &&
+          !nativeTrackedPresentation(true,true,true,false),"OG/body-off/arms-off presentation changed");
     for(const Vec3 root : {Vec3{145,20,-735},Vec3{-350,90,510}})
       for(const Quat turn : {Quat::yaw(1.3f),Quat::yaw(-2.2f)*Quat::around({1,0,0},.4f)}) {
         std::array<Mat4,2> actual;
