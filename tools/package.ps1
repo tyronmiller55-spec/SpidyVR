@@ -37,7 +37,7 @@ if ((Get-FileHash -LiteralPath $pythonZip -Algorithm SHA256).Hash -ne $pythonHas
 }
 
 $shortCommit = (git -C $root rev-parse --short=7 HEAD).Trim()
-$name = "Spidy-$version-feedback-cancel-$shortCommit"
+$name = "Spidy-$version-player-torso-$shortCommit"
 $dist = Join-Path $root 'dist'
 # Staged under build\, never dist\: players extract the zip into dist\Spidy-<version>
 # and play from there, and the line below would wipe that folder.
@@ -61,16 +61,18 @@ Copy-Item -LiteralPath (Join-Path $root 'docs\PLAYERS.md') -Destination (Join-Pa
 Copy-Item -LiteralPath (Join-Path $root 'docs\WEB_BALL_DIAGNOSTICS.md') -Destination (Join-Path $stage 'WEB_BALL_DIAGNOSTICS.txt')
 $sourceCommit = (git -C $root rev-parse HEAD).Trim()
 @(
-    "Native Animation FEEDBACK + CANCEL PLAYTEST, version $version, source $sourceCommit"
-    'New slice: native gameplay indicator parity and stale-input cancellation bypass; inherited world muzzle/physical punches.'
-    'Unmerged test build; no headset success claim. Read FEEDBACK_CANCEL_PLAYTEST.txt and ACTION_FRAME_PLAYTEST.txt.'
-    'Full upper-torso rig overhaul is NOT in this slice; active separate work.'
+    "Native Animation PLAYER UPPER TORSO PLAYTEST, version $version, source $sourceCommit"
+    'New slice: rooted player spine/neck/arms, original authored camera anchor, actual solved-hand/current-root action frames.'
+    'Unmerged test build; no headset alignment/success claim. Read PLAYER_UPPER_TORSO_PLAYTEST.txt first.'
+    'Includes prior indicator/cancel/action-frame/punch repairs. Explicit authored air-spin torso policy preserved.'
     'Matching Command v7 host/rays: extract entire archive into a NEW writable folder; never mix DLLs/tools.'
     'Preserve older builds and back up shared %APPDATA%\Spidy settings/profiles before testing.'
     'Read WEB_BALL_DIAGNOSTICS.txt for counter caveats; fired is not proof of a visible projectile or damage.'
 ) | Set-Content -LiteralPath (Join-Path $stage 'ACTION_FRAME_BUILD.txt') -Encoding utf8
 Copy-Item -LiteralPath (Join-Path $root 'docs\ACTION_FRAME_PLAYTEST.md') -Destination (Join-Path $stage 'ACTION_FRAME_PLAYTEST.txt')
 Copy-Item -LiteralPath (Join-Path $root 'docs\FEEDBACK_CANCEL_PLAYTEST.md') -Destination (Join-Path $stage 'FEEDBACK_CANCEL_PLAYTEST.txt')
+Copy-Item -LiteralPath (Join-Path $root 'docs\PLAYER_UPPER_TORSO_PLAYTEST.md') -Destination (Join-Path $stage 'PLAYER_UPPER_TORSO_PLAYTEST.txt')
+Copy-Item -LiteralPath (Join-Path $root 'docs\PLAYER_UPPER_TORSO_CONTRACT.md') -Destination (Join-Path $stage 'PLAYER_UPPER_TORSO_CONTRACT.txt')
 Copy-Item -LiteralPath (Join-Path $root 'docs\LINUX.md') -Destination $stage
 Copy-Item -LiteralPath (Join-Path $root 'LICENSE') -Destination (Join-Path $stage 'LICENSE.txt')
 Copy-Item -LiteralPath (Join-Path $root 'THIRD_PARTY_NOTICES.md') -Destination $stage

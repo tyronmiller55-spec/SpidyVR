@@ -27599,7 +27599,7 @@ int main() {
         check(std::abs(sum - 1.f) < 1e-4f && spineShare(0, 3) < spineShare(2, 3), "spine shares");
     });
 
-    test("ANIMATED TORSO: armsOnly+torsoAssist preserves head/pelvis/legs; idle exact; limits", [] {
+    test("ANIMATED TORSO: absent mapped HMD fails closed; arm-only preserves head/pelvis/legs", [] {
         auto b = testBody(true);
         auto poseData = b.rest;
         body::Pose pose(poseData.data(), static_cast<int>(b.rig.parent.size()));
@@ -27644,8 +27644,8 @@ int main() {
             check(std::abs(st.overlayTorsoYaw) <= c.overlayTorsoYawMax + .01f, "yaw over limit");
             check(std::abs(st.overlayTorsoPitch) <= c.overlayTorsoPitchMax + .01f, "pitch over limit");
         }
-        check(std::abs(st.overlayTorsoYaw) > .05f || std::abs(st.overlayTorsoPitch) > .05f,
-              "extreme reach produced no torso angle");
+        check(st.overlayTorsoYaw == 0 && st.overlayTorsoPitch == 0,
+              "missing mapped HMD invented a torso target");
         // Independent right arm only (left weight 0) after clearing state.
         st = {};
         t.armWeight = {0.f, 1.f};

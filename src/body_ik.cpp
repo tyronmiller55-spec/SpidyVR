@@ -445,13 +445,33 @@ bool prepare(Rig& rig, std::span<const float> restPose) {
     return true;
 }
 
+bool solvedGrip(const Pose& pose, const Rig& rig, const Config& c, unsigned hand, spidy::Pose& out) {
+    if(hand>1 || !rig.ready || rig.arms[hand].hand<0 || rig.arms[hand].hand>=pose.count() ||
+       !std::isfinite(c.fingerPitch)) return false;
+    const int wrist=rig.arms[hand].hand;
+    const Vec3 fingers=pose.direction(wrist,rig.handFingers[hand]);
+    const Vec3 palm=pose.direction(wrist,rig.handPalm[hand]);
+    const Vec3 at=pose.position(wrist);
+    if(!finite(at) || !finite(fingers) || !finite(palm) || length(fingers)<.5f ||
+       length(palm)<.5f || length(cross(normalized(fingers),normalized(palm)))<.2f) return false;
+    // solve() maps local -Y fingers / mirrored X palm through grip * pitch(X).
+    const Quat grip=unit(between({0,-1,0},hand==0 ? Vec3{1,0,0}:Vec3{-1,0,0},
+                                 fingers,palm)*axisAngle({1,0,0},-c.fingerPitch));
+    const Vec3 offset{hand==0 ? -c.wristFromGrip.x:c.wristFromGrip.x,
+                      c.wristFromGrip.y,c.wristFromGrip.z};
+    const spidy::Pose actual{at-grip.rotate(offset),grip};
+    if(!finite(actual.position)) return false;
+    out=actual;
+    return true;
+}
+
 Result solve(Pose& pose, const Rig& rig, const Targets& targets, const Config& c, State& state, bool wanted,
              float dt, float scale, float armScale) {
     Result r;
     dt = std::isfinite(dt) ? std::clamp(dt, 0.f, .1f) : 0.f;
     // ANIMATED ARMS overlay: arm chains on the game's current pose. Optional
-    // ANIMATED TORSO (targets.torsoAssist) bounds waist→chest spine + clavicles
-    // toward controller reaches; head world pose is compensated; pelvis/legs
+    // ANIMATED TORSO (targets.torsoAssist + mapped head) articulates the
+    // waist-rooted spine/neck from HMD, then clavicles/arms; pelvis/legs
     // stay on the game anim. Tracking loss clears the held latch so the arm
     // returns to the game anim (not a frozen hold). Pose is the game's frame
     // each solve — no cumulative mutation of an animation base across frames.
@@ -529,6 +549,7 @@ Result solve(Pose& pose, const Rig& rig, const Targets& targets, const Config& c
         if (length(look) < .2f)
             look = playerLook;
         look = length(look) > .2f ? normalized(look) : Vec3{0, 0, 1};
+        if (tg.torsoAssist && tg.viewMapped) look = playerLook;
         const Vec3 left = normalized(cross(up, look));
         const Quat bodyFrame = between({0, 0, 1}, {0, 1, 0}, look, up);
         float maxW = 0.f;
@@ -574,59 +595,83 @@ Result solve(Pose& pose, const Rig& rig, const Targets& targets, const Config& c
                 wrists[i] = shoulders[i];
             }
         }
-        // Bound upper-spine participation before the arm IK so shoulders move
-        // toward extreme controller aims. Idle (maxW≈0) leaves the game pose.
-        if (tg.torsoAssist && !rig.spine.empty() && rig.head >= 0) {
-            const Vec3 headAt = pose.position(rig.head);
-            const Vec3 headF = pose.direction(rig.head, rig.headForward);
-            const Vec3 headU = pose.direction(rig.head, rig.headUp);
-            const Vec3 chest = pose.position(rig.spine.back());
-            const float yawCap =
-                std::isfinite(c.overlayTorsoYawMax) ? c.overlayTorsoYawMax : animated_torso::yawMax;
-            const float pitchCap =
-                std::isfinite(c.overlayTorsoPitchMax) ? c.overlayTorsoPitchMax : animated_torso::pitchMax;
-            const animated_torso::Demand demand = animated_torso::reachDemand(
-                chest, up, look, left, shoulders, wrists, weights, armLens, yawCap, pitchCap);
-            const float blend = maxW > .001f ? maxW : 0.f;
-            const float wantYaw = demand.yaw * blend;
-            const float wantPitch = demand.pitch * blend;
-            if (blend <= .001f) {
-                state.overlayTorsoYaw = approach(state.overlayTorsoYaw, 0.f, animated_torso::blendSpeed * dt);
-                state.overlayTorsoPitch =
-                    approach(state.overlayTorsoPitch, 0.f, animated_torso::blendSpeed * dt);
-            } else {
-                state.overlayTorsoYaw =
-                    approach(state.overlayTorsoYaw, wantYaw, animated_torso::blendSpeed * dt);
-                state.overlayTorsoPitch =
-                    approach(state.overlayTorsoPitch, wantPitch, animated_torso::blendSpeed * dt);
+        const auto safeJoint = [&](int j) {
+            if (j < 0 || static_cast<size_t>(j) >= rig.below.size()) return false;
+            const auto& below = rig.below[j];
+            const auto contains = [&](int joint) {
+                return std::find(below.begin(), below.end(), joint) != below.end();
+            };
+            if (contains(rig.pelvis)) return false;
+            for (const auto& leg : rig.legs)
+                if (contains(leg.upper) || contains(leg.lower) || contains(leg.foot)) return false;
+            return true;
+        };
+        bool upperSafe = safeJoint(rig.head);
+        for (const auto j : rig.spine) upperSafe = upperSafe && safeJoint(j);
+        for (const auto j : rig.neck) upperSafe = upperSafe && safeJoint(j);
+        // Player upper body, rooted at the authored waist. Unlike the old
+        // reach assist, every turn pivots about its OWN joint, never headAt:
+        // the latter translated the lumbar attachment away from the pelvis.
+        // Targets are already in this pose job's displayed view frame.
+        if (upperSafe && tg.torsoAssist && tg.head && finite(tg.eyes) && !rig.spine.empty() && rig.head >= 0) {
+            const float w = tg.viewMapped ? 1.f : maxW;
+            const Vec3 F = normalized(tg.facing.rotate({0, 0, -1}));
+            const Vec3 U = normalized(tg.facing.rotate({0, 1, 0}));
+            const Vec3 L = normalized(cross(U, F));
+            const Vec3 headTarget = tg.eyes -
+                (F * rig.eyesFromHead.x + U * rig.eyesFromHead.y + L * rig.eyesFromHead.z) * s;
+            // Same HMD lean policy as OG; lower body is deliberately excluded.
+            const float lean = std::clamp(-std::asin(std::clamp(dot(F, up), -1.f, 1.f)) * c.lean,
+                                          -c.maxLean, c.maxLean);
+            const Vec3 torso = up * std::cos(lean) + playerLook * std::sin(lean);
+            const Quat bend = between(pose.position(rig.head) - pose.position(rig.spine.front()), torso);
+            for (const auto j : rig.spine)
+                pose.turn(rig.below[j], partial(bend, w / static_cast<float>(rig.spine.size())),
+                          pose.position(j));
+            // Distribute player yaw along actual spine pivots. Keep the existing
+            // anatomical waist yaw cap; head look and arm poles use full player yaw.
+            const Vec3 at = normalized(across(pose.direction(rig.spine.back(), rig.spineForward.back()), up));
+            const float yawCap = std::isfinite(c.overlayTorsoYawMax)
+                ? std::clamp(c.overlayTorsoYawMax,0.f,1.5707963f) : animated_torso::yawMax;
+            const float yaw = std::clamp(std::atan2(dot(cross(at, playerLook), up), dot(at, playerLook)),
+                                        -yawCap, yawCap);
+            for (const auto j : rig.spine)
+                pose.turn(rig.below[j], axisAngle(up, yaw * w / static_cast<float>(rig.spine.size())),
+                          pose.position(j));
+            // Rooted CCD fits tracked head translation without moving a single
+            // lower-body matrix or stretching a bone. Unreachable targets retain
+            // a measured residual; never translate the torso to manufacture reach.
+            for (unsigned pass = 0; pass < 10 && length(pose.position(rig.head) - headTarget) > .001f; ++pass) {
+                const auto fit = [&](int j) {
+                    const Vec3 pivot = pose.position(j);
+                    const Vec3 from = pose.position(rig.head) - pivot, to = headTarget - pivot;
+                    if (length(from) > 1e-5f && length(to) > 1e-5f)
+                        pose.turn(rig.below[j], partial(between(from, to), w), pivot);
+                };
+                for (auto j = rig.neck.rbegin(); j != rig.neck.rend(); ++j) fit(*j);
+                for (auto j = rig.spine.rbegin(); j != rig.spine.rend(); ++j) fit(*j);
             }
-            const float yaw = animated_torso::clampAngle(state.overlayTorsoYaw, yawCap);
-            const float pitch = animated_torso::clampAngle(state.overlayTorsoPitch, pitchCap);
-            if (std::abs(yaw) > 1e-5f || std::abs(pitch) > 1e-5f) {
-                // Pivot every spine turn through the saved head point so the
-                // head's position and the pelvis/legs (outside spine subtrees)
-                // stay put; then restore head orientation.
-                for (size_t i = 0; i < rig.spine.size(); ++i) {
-                    const int joint = rig.spine[i];
-                    const float share = animated_torso::spineShare(i, rig.spine.size());
-                    const Quat turn = unit(axisAngle(up, yaw * share) * axisAngle(left, pitch * share));
-                    pose.turn(rig.below[joint], turn, headAt);
-                }
-                // Spine turns include the head in their subtrees; restore the
-                // gameplay head's world orientation at the head joint only
-                // (neck is above in the chain — turning it would move the head
-                // again). Head position was preserved by pivoting through headAt.
-                const Quat headFix =
-                    between(pose.direction(rig.head, rig.headForward), pose.direction(rig.head, rig.headUp),
-                            headF, headU);
-                pose.turn(rig.below[rig.head], headFix, headAt);
+            // Articulated neck, then exact HMD head look. Does not move pelvis.
+            const Quat neckTurn = between(pose.direction(rig.head, rig.headForward),
+                pose.direction(rig.head, rig.headUp), F, U);
+            for (const auto j : rig.neck)
+                pose.turn(rig.below[j], partial(neckTurn, c.neckShare * w /
+                          static_cast<float>(rig.neck.size())), pose.position(j));
+            // Neck orientation may move the head slightly: refit spine once,
+            // then set head orientation without moving its joint.
+            for (auto j = rig.spine.rbegin(); j != rig.spine.rend(); ++j) {
+                const Vec3 pivot = pose.position(*j);
+                pose.turn(rig.below[*j], partial(between(pose.position(rig.head)-pivot,
+                          headTarget-pivot), w), pivot);
             }
-            // Refresh shoulders after torso so arm IK uses the new bases.
-            for (int i = 0; i < 2; ++i)
-                shoulders[i] = pose.position(rig.arms[i].upper);
+            pose.turn(rig.below[rig.head], partial(between(pose.direction(rig.head, rig.headForward),
+                      pose.direction(rig.head, rig.headUp), F, U), w), pose.position(rig.head));
+            r.headError = length(pose.position(rig.head) - headTarget);
+            state.overlayTorsoYaw = yaw;
+            state.overlayTorsoPitch = lean;
+            for (int i = 0; i < 2; ++i) shoulders[i] = pose.position(rig.arms[i].upper);
         } else {
-            state.overlayTorsoYaw = 0;
-            state.overlayTorsoPitch = 0;
+            state.overlayTorsoYaw = state.overlayTorsoPitch = 0;
         }
         // Publish chest/player yaw for XR dense diag (side channel).
         state.overlayChestYaw = animated_arms::lookYaw(chestLook);
@@ -683,7 +728,7 @@ Result solve(Pose& pose, const Rig& rig, const Targets& targets, const Config& c
             // outside this overlay.
         }
         r.weight = maxW;
-        r.solved = any || maxW > .001f;
+        r.solved = any || maxW > .001f || (tg.torsoAssist && tg.head && tg.viewMapped);
         if (spinning && rig.pelvis >= 0 && static_cast<size_t>(rig.pelvis) < rig.below.size()) {
             Vec3 pivot = rig.head >= 0 ? pose.position(rig.head) : Vec3{};
             if (!finite(pivot) || rig.head < 0)

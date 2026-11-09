@@ -1,3 +1,5 @@
+> Historical scope: this file describes feedback/cancel source79dee84. In newer PLAYER UPPER TORSO packages, read PLAYER_UPPER_TORSO_PLAYTEST.txt and ACTION_FRAME_BUILD.txt for the superseding current scope. Prior behavior/acceptance guidance below remains relevant.
+
 # Native Animation feedback + no-shot cancel follow-up — 0.8.5
 
 This NEW playtest includes the previous action-frame/punch fixes plus two narrow source repairs. Full source SHA is in ACTION_FRAME_BUILD.txt. It does NOT contain the requested full upper-torso rig overhaul; that work is active separately.

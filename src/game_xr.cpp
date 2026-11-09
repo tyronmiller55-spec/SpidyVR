@@ -2927,6 +2927,10 @@ DWORD WINAPI run(void*) {
                         // both are optional and, like the grab, can be switched on later.
                         applySettings();
                     }
+                    // Raw motion.grips remains the next IK input. Action emitters
+                    // use a separate completed-job pose; never feed solved hands back.
+                    std::array<Pose,2> actionGrips = motion.grips;
+                    uint32_t actionGripMask{};
                     animation_cancel::Decision gripCancel;
                     if (swingStarted) {
                         unsigned webButtons{}, shotButtons{}, trackedHands{};
@@ -3064,7 +3068,7 @@ DWORD WINAPI run(void*) {
                                                            overlay.deadlineMs, GetTickCount64());
                             for (unsigned i = 0; i < 2; ++i) {
                                 if (!input.hands[i].tracked) continue;
-                                if (!current || !overlay.valid[i]) {
+                                if (!current || !overlay.valid[i] || !overlay.actualValid[i]) {
                                     // Never dispatch a free-hand animation action using a
                                     // prior owner's pose or the unrelated tracking rig.
                                     if (input.hands[i].grip <= .5f && !gripCancel.cancel) {
@@ -3074,10 +3078,13 @@ DWORD WINAPI run(void*) {
                                     continue;
                                 }
                                 if (mapAimToDisplayedGrip(input.hands[i].aim,
-                                                          {overlay.grip[i], overlay.gripOri[i]},
-                                                          motion.anchor, i, input.hands[i].grip)) {
+                                                          overlay.actualGrip[i],
+                                                          overlay.root, i, input.hands[i].grip)) {
                                     motion.swing.hands[i].aim = input.hands[i].aim;
-                                    input.physicalToContact[i] = overlay.gripOri[i] *
+                                    actionGrips[i] = overlay.actualGrip[i];
+                                    actionGrips[i].position += overlay.root;
+                                    actionGripMask |= 1u << i;
+                                    input.physicalToContact[i] = overlay.actualGrip[i].orientation *
                                         overlay.sourceGripOri[i].conjugate();
                                     if (overlay.residual[i] >= 0 && overlay.residual[i] <= web_aim::forearmMiss &&
                                         overlay.armWeight[i] > .85f)
@@ -3861,7 +3868,7 @@ DWORD WINAPI run(void*) {
                                 hand.tracked = motion.swing.hands[from].tracked;
                                 hand.attachedAt = rope.key;
                                 hand.anchor = trail ? trailEnds[from] : swingState.webs[from].anchor;
-                                hand.wrist = webShooter(motion.grips[from], from).position;
+                                hand.wrist = webShooter(actionGrips[from], from).position;
                                 if (hand.attached == 1 && flightVisual[from].flying())
                                     hand.anchor = flightVisual[from].tip();
                                 if (hand.attached == 1 && flightVisual[from].flying() &&
@@ -3903,7 +3910,7 @@ DWORD WINAPI run(void*) {
                                         rope.tracked = 1;
                                         rope.attachedAt = static_cast<int64_t>(lineState.zipKey);
                                         rope.anchor = lineState.zipTo;
-                                        rope.wrist = webShooter(motion.grips[hand], hand).position;
+                                        rope.wrist = webShooter(actionGrips[hand], hand).position;
                                         bent[i].count = 0;
                                         break;
                                     }
@@ -3914,7 +3921,7 @@ DWORD WINAPI run(void*) {
                                 const auto lower = static_cast<unsigned>(1 - upper);
                                 const int slot = webRopes.slot(lower);
                                 if (slot >= 0 && motion.swing.hands[lower].tracked) {
-                                    const Vec3 wrist = webShooter(motion.grips[lower], lower).position;
+                                    const Vec3 wrist = webShooter(actionGrips[lower], lower).position;
                                     webs.held.rope = static_cast<uint32_t>(slot) + 1;
                                     webs.held.wrist = wrist;
                                     webs.held.slack =
@@ -6474,8 +6481,9 @@ DWORD WINAPI run(void*) {
                         if (armsWanted &&
                             frame.predictedDisplayTime - trackingLockDiagAt > 100'000'000) {
                             trackingLockDiagAt = frame.predictedDisplayTime;
-                            const auto ot = native_body::overlayTracking();
-                            const auto arms = native_body::forearms();
+                            const auto diagnosticFrame = native_body::actionFrame();
+                            const auto& ot = diagnosticFrame.tracking;
+                            const auto& arms = diagnosticFrame.forearms;
                             const auto hs = native_body::headSample();
                             float offL = -1.f, offR = -1.f;
                             for (unsigned i = 0; i < 2; ++i) {
@@ -6526,6 +6534,10 @@ DWORD WINAPI run(void*) {
                                 animated_arms::yieldFloor, offL, offR, actorYaw, chestYaw, playerYaw,
                                 chestYaw - playerYaw, hmdY, hmdP, hmdR, animY, animP, animR, ot.remapped,
                                 ot.softlock, animated_moves::headFollowName(animHeadMode));
+                            diag_log::writef("player torso: active %u serial %llu job %llu head residual %.3f m root drift %.2f deg actual hands %u/%u",
+                                ot.playerTorso, static_cast<unsigned long long>(ot.serial),
+                                static_cast<unsigned long long>(ot.job), ot.headError,
+                                ot.rootDrift * 57.29578f, ot.actualValid[0], ot.actualValid[1]);
                             if (ot.targetFrame != animated_view::Frame::none) {
                                 for (unsigned i = 0; i < 2; ++i) {
                                     diag_log::writef(
@@ -6837,7 +6849,7 @@ DWORD WINAPI run(void*) {
                     // Publish with the body command under commandLock; the pose job
                     // resolves Full on its fresh, unmodified head (not this thread's sample).
                     animated_view::Targets handView;
-                    if (bodyStarted && values.animatedHybrid && yieldAnim && headFollowEyes &&
+                    if (bodyStarted && values.animatedHybrid && yieldAnim &&
                         values.animatedArms && (pose.flags & native_body::armsOverlay)) {
                         const bool anchoredHead = eyes.anchored == 2 || eyes.anchored == 4;
                         Pose reference = animHeadRef;
@@ -6857,8 +6869,7 @@ DWORD WINAPI run(void*) {
                             handView.worldAnchor.position =
                                 Vec3{(eyes.eyes[0].world[12] + eyes.eyes[1].world[12]) * .5f,
                                      (eyes.eyes[0].world[13] + eyes.eyes[1].world[13]) * .5f,
-                                     (eyes.eyes[0].world[14] + eyes.eyes[1].world[14]) * .5f} -
-                                motion.anchor;
+                                     (eyes.eyes[0].world[14] + eyes.eyes[1].world[14]) * .5f};
                             reference = frame.head;
                             turn = 0;
                             frameOk = true;
@@ -6897,6 +6908,10 @@ DWORD WINAPI run(void*) {
                     NativeEyeFrame saved;
                     saved.serial = eyes.serial;
                     saved.motion = motion;
+                    for (unsigned i=0;i<2;++i) if(actionGripMask & (1u<<i)) {
+                        saved.motion.grips[i] = actionGrips[i];
+                        saved.motion.hands[i] = actionGrips[i];
+                    }
                     saved.trackingEyes = frame.eyes;
                     // Same as finishers: placeEyes re-resolves the head each frame
                     // (stereo_probe) instead of keeping a latched gameplay head.

@@ -8,6 +8,7 @@
 // MSVC: functions with __try hold no object that needs a destructor.
 #include "spidy/animated_view.hpp"
 #include "spidy/game_fp.hpp"
+#include "spidy/native_body.hpp"
 #include <atomic>
 #include <cmath>
 #include <cstdio>
@@ -1852,8 +1853,11 @@ bool frame(Mat4& head) {
         shrinkObject[1] = headObject;
     }
     float world[16];
+    Mat4 authored{};
+    const int anchorState = !cutscene && source ? native_body::authoredHead(source, authored) : 0;
     bool ok = source && entityOk(source) && headAxesSet.load(std::memory_order_acquire) &&
-              headWorld(source, world, 0);
+              (anchorState == 1 || (anchorState == 0 && headWorld(source, world, 0)));
+    if (anchorState == 1) std::memcpy(world, authored.data(), sizeof(world));
     if (ok) {
         // The joint's rows are its own axes: normalised (a shrunk head's are a thousandth long). The
         // character's forward and up are given in them (setHeadAxes); the view's rows are right, down,

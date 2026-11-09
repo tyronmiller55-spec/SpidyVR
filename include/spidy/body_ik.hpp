@@ -162,9 +162,9 @@ struct Targets {
     bool armsOnly{};
     // Wanted per-arm blend 0..1 while armsOnly (native_body fills from XR).
     std::array<float, 2> armWeight{};
-    // ANIMATED TORSO: while armsOnly, bound waist→chest spine + clavicles
-    // toward controller reaches (animated_torso.hpp). Head world pose is
-    // compensated; pelvis/legs stay on the game anim. Off leaves arms-only.
+    // ANIMATED TORSO: a mapped/tracked head drives articulated spine/neck
+    // rooted at the authored waist, then arm IK. Actor/pelvis/lower joints
+    // never move here. Missing mapped head is not a guessed torso target.
     bool torsoAssist{};
     // ANIMATED AIR SPIN (animated_air_spin.hpp), armsOnly only: turn the whole
     // animated skeleton (pelvis subtree) by this model-space rotation about
@@ -347,7 +347,8 @@ struct Config {
     // How fast the body takes over from the game's pose and gives it back
     // (shares per second).
     float blendSpeed = 4;
-    // ANIMATED TORSO (provisional): max spine yaw/pitch while armsOnly+torsoAssist.
+    // ANIMATED TORSO: waist yaw cap; pitch uses OG lean/maxLean.
+    // overlayTorsoPitchMax retained for config source compatibility.
     float overlayTorsoYawMax = .6981317f;   // ~40°
     float overlayTorsoPitchMax = .4363323f; // ~25°
 };
@@ -362,7 +363,7 @@ struct State {
     bool adoptArms{};
     // Per-arm overlay blend while Targets::armsOnly (separate from weight).
     std::array<float, 2> armWeight{};
-    // Smoothed ANIMATED TORSO spine angles while armsOnly + torsoAssist (rad).
+    // Actual player torso demand angles for diagnostics (rad).
     float overlayTorsoYaw{};
     float overlayTorsoPitch{};
     // Slice C tracking-lock diag: last armsOnly chest vs player look yaw (rad).
@@ -426,6 +427,10 @@ struct Result {
 // sizes the body about the feet (1 the game's size), and `armScale` its arms
 // on top of that, each about its shoulder (the player's arms, measured by
 // the T-pose calibration). Leaves the pose as it was while the weight is 0.
+// Reconstruct the controller-equivalent grip from the ACTUAL solved hand
+// matrix. Calibrated hand axes preserve mirrored model rigs; no requested
+// target or authored chest orientation is substituted. Internal pose API.
+bool solvedGrip(const Pose& pose, const Rig& rig, const Config& config, unsigned hand, spidy::Pose& out);
 Result solve(Pose& pose, const Rig& rig, const Targets& targets, const Config& config, State& state, bool wanted,
              float dt, float scale = 1, float armScale = 1);
 // ANIMATED HYBRID: the animation takes the body back from the full-body solve

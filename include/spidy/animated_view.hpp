@@ -11,7 +11,7 @@ struct Targets {
     Pose head{}, grips[2]{}, aims[2]{}; // relative to the displayed anchor
     bool valid[2]{};
     Quat levelWorld{};
-    Pose worldAnchor{}; // relative to actor feet, only for the existing eye blend
+    Pose worldAnchor{}; // ABSOLUTE world eye anchor, also for head-off tracking view
 };
 inline Pose relative(Pose raw, Pose reference, float turn) {
     return compose({{}, Quat::yaw(turn)}, compose(inverse(reference), raw));
@@ -26,6 +26,23 @@ inline Mat4 toNative(Pose p) {
 }
 inline Pose resolve(const Mat4& anchor, Pose relativePose) {
     return fromNative(native_view::relativePose(anchor, relativePose));
+}
+// Shared by the production pose job and real-pose regressions. `authored`
+// contains the ORIGINAL head eye frame in model space, never a solved head.
+inline bool modelAnchor(const Targets& view, Quat modelToWorld, Mat4 authored, Mat4& out, Vec3 actorRoot = {}) {
+    const Quat toModel = modelToWorld.conjugate();
+    if (view.frame == Frame::level) {
+        auto at = fromNative(authored);
+        at.orientation = toModel * view.levelWorld;
+        authored = toNative(at);
+    } else if (view.frame == Frame::world) {
+        authored = toNative({toModel.rotate(view.worldAnchor.position - actorRoot),
+                              toModel * view.worldAnchor.orientation});
+    }
+    if (view.frame == Frame::none || view.frame == Frame::missing || !native_view::validPose(authored))
+        return false;
+    out=authored;
+    return true;
 }
 // Same right/down/forward convention as game_fp::frame. eyeOffset is in
 // discovered (forward, up, left) metres, not a new hard-coded bone offset.
