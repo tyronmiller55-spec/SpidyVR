@@ -212,6 +212,73 @@ inline bool cancelArmed(bool animOwns, bool supportedNow) {
     return animOwns && !supportedNow;
 }
 
+// FULL ARMS strike hold (EngineBot review M3/M4, Nov 9 23:01): what tells the
+// owner a punch's web strike is under way. The strike sample must be FRESH
+// (its sequence advanced within freshNs: a stalled game or punch module
+// cannot keep SpidyVR forever), a hold lasts capNs at most (then the strike
+// must go idle before another may hold), and animated_full_arms is frozen
+// for the length of a hold (a menu or ini change lands after it).
+class StrikeHold {
+  public:
+    static constexpr int64_t freshNs = 100'000'000, capNs = 4'000'000'000;
+    enum class Event : uint8_t { none, enter, ended, stale, capped };
+    static const char* eventName(Event e) {
+        switch (e) {
+        case Event::enter: return "enter";
+        case Event::ended: return "ended";
+        case Event::stale: return "stale";
+        case Event::capped: return "capped";
+        default: return "none";
+        }
+    }
+    struct Out {
+        bool hold{};
+        Event event{};
+        int64_t heldNs{}; // on a leave: how long it held
+    };
+    // The setting in force: frozen while a hold lasts.
+    bool fullArms(bool setting) const { return holding_ ? latched_ : setting; }
+    bool holding() const { return holding_; }
+    Out update(bool read, bool underWay, int64_t sequence, bool setting, int64_t nowNs) {
+        Out out;
+        if (read && (seqNs_ < 0 || sequence != seq_)) {
+            seq_ = sequence;
+            seqNs_ = nowNs;
+        }
+        const bool fresh = read && seqNs_ >= 0 && nowNs - seqNs_ <= freshNs;
+        const bool active = fresh && underWay;
+        if (!underWay || !read)
+            blocked_ = false; // idle again (or gone): a new strike may hold
+        if (holding_) {
+            Event leave = Event::none;
+            if (!fresh)
+                leave = Event::stale;
+            else if (!underWay)
+                leave = Event::ended;
+            else if (nowNs - startNs_ >= capNs) {
+                leave = Event::capped;
+                blocked_ = true;
+            }
+            if (leave != Event::none) {
+                holding_ = false;
+                out.event = leave;
+                out.heldNs = nowNs - startNs_;
+            }
+        } else if (setting && active && !blocked_) {
+            holding_ = true;
+            latched_ = setting;
+            startNs_ = nowNs;
+            out.event = Event::enter;
+        }
+        out.hold = holding_;
+        return out;
+    }
+
+  private:
+    bool holding_{}, latched_{true}, blocked_{};
+    int64_t seq_{}, seqNs_{-1}, startNs_{};
+};
+
 struct HybridOwner {
     Domain domain = Domain::anim;
     int64_t sinceNs{};

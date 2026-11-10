@@ -16,7 +16,7 @@ struct Targets {
     // relative frame (m/s) and when it was sampled (QueryPerformanceCounter
     // ticks; 0 none). The pose job moves the glove on by its wait.
     Vec3 gripVelocity[2]{};
-    int64_t sampledTicks{};
+    int64_t sampledTicks{}; float leadSeconds{};
 };
 inline Pose relative(Pose raw, Pose reference, float turn) {
     return compose({{}, Quat::yaw(turn)}, compose(inverse(reference), raw));

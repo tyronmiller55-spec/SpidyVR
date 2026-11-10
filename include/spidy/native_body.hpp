@@ -345,6 +345,8 @@ int authoredHead(uintptr_t instance, Mat4& world);
 // ARMS IN ANIMATION (arm_frame.hpp): authoredHead for the current hero, the
 // displayed head anchor the hands map onto every XR frame (same returns).
 int viewAnchorWorld(Mat4& world);
+// HAND PREDICTION: the pose job's measured wait for a command (seconds, smoothed).
+float handLeadWait();
 OverlayTracking overlayTracking();
 // A render frame begins (the stereo module's render setup, main thread).
 void renderFrame();

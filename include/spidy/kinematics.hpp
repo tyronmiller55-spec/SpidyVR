@@ -16,6 +16,7 @@ struct Snapshot {
     int64_t ns{-1};
     uint32_t owner{};  // 0 animation, 1 SpidyVR
     uint32_t state{};  // the caller's state code (head_probe::State)
+    uint32_t epoch{};  // the source's: a new one (snap turn, re-latch, recenter, reseat) zeroes velocities
     bool headValid{}, feetValid{};
     bool handValid[2]{}, forearmValid[2]{};
     Pose head{}, grip[2]{}, aim[2]{};
@@ -51,9 +52,17 @@ enum Issue : uint32_t {
     rightBackward = 256,
 };
 
+inline bool finiteQuat(Quat q) {
+    return std::isfinite(q.x) && std::isfinite(q.y) && std::isfinite(q.z) && std::isfinite(q.w);
+}
 inline uint32_t validate(const Snapshot& s, const Limits& k = {}) {
     uint32_t out{};
-    if (s.headValid && !finite(s.head.position))
+    // Any NaN or infinity anywhere a value is claimed (positions, turns,
+    // velocities, yaws) is its own issue, never a silent pass of a check.
+    if (s.headValid && (!finite(s.head.position) || !finiteQuat(s.head.orientation)))
+        out |= nonFinite;
+    if ((s.feetValid && !finite(s.feet)) || !finite(s.headVelocity) || !finite(s.feetVelocity) ||
+        !std::isfinite(s.headSpin) || !std::isfinite(s.actorYaw) || !std::isfinite(s.viewYaw))
         out |= nonFinite;
     if (s.headValid && s.feetValid && finite(s.feet) && finite(s.head.position)) {
         const Vec3 d = s.head.position - s.feet;
@@ -63,7 +72,9 @@ inline uint32_t validate(const Snapshot& s, const Limits& k = {}) {
     for (unsigned i = 0; i < 2; ++i) {
         if (!s.handValid[i])
             continue;
-        if (!finite(s.grip[i].position) || !finite(s.aim[i].position)) {
+        if (!finite(s.grip[i].position) || !finite(s.aim[i].position) || !finiteQuat(s.grip[i].orientation) ||
+            !finiteQuat(s.aim[i].orientation) || !finite(s.handVelocity[i]) || !std::isfinite(s.handSpin[i]) ||
+            (s.forearmValid[i] && (!finite(s.elbow[i]) || !finite(s.wrist[i])))) {
             out |= nonFinite;
             continue;
         }
@@ -98,7 +109,7 @@ class Tracker {
     // never a spike. Low-passed by `smooth` (0 none, toward 1 heavy).
     void derive(Snapshot& s, float smooth = .5f) {
         const float dt = last_.ns >= 0 && s.ns > last_.ns ? static_cast<float>(s.ns - last_.ns) * 1e-9f : 0.f;
-        const bool ok = dt > 1e-4f && dt < .1f;
+        const bool ok = dt > 1e-4f && dt < .1f && s.epoch == last_.epoch;
         const auto blend = [&](Vec3 before, Vec3 now) { return before * smooth + now * (1 - smooth); };
         const auto bf = [&](float before, float now) { return before * smooth + now * (1 - smooth); };
         s.headVelocity = s.feetVelocity = s.handVelocity[0] = s.handVelocity[1] = {};
@@ -117,26 +128,52 @@ class Tracker {
             }
         last_ = s;
     }
-    // Whether this frame's snapshot is worth a line: an owner or state change,
-    // a new issue (not one already reported), or the heartbeat.
+    // Whether this frame's snapshot is worth a line. Always on an owner or
+    // state change. Issues pass a HYSTERESIS first: a bit counts once it has
+    // held raiseFrames frames in a row and stops counting after clearFrames
+    // clean frames, so one flickering check cannot write a line a frame.
+    // Then a newly counted issue is logged (at most one line per
+    // minIntervalNs for issues), and while any lasts, a heartbeat.
+    static constexpr int raiseFrames = 3, clearFrames = 15;
+    static constexpr int64_t minIntervalNs = 250'000'000;
     bool shouldLog(const Snapshot& s, uint32_t issues, int64_t heartbeatNs = 5'000'000'000) {
+        for (unsigned b = 0; b < bits; ++b) {
+            const uint32_t bit = 1u << b;
+            if (issues & bit) {
+                clean_[b] = 0;
+                if (held_[b] < raiseFrames && ++held_[b] >= raiseFrames)
+                    active_ |= bit;
+            } else {
+                held_[b] = 0;
+                if ((active_ & bit) && ++clean_[b] >= clearFrames)
+                    active_ &= ~bit;
+            }
+        }
         const bool changed = s.owner != loggedOwner_ || s.state != loggedState_;
-        const bool fresh = (issues & ~loggedIssues_) != 0;
-        const bool beat = issues && (loggedNs_ < 0 || s.ns - loggedNs_ >= heartbeatNs);
-        loggedIssues_ = issues;
-        if (!(changed || fresh || beat))
+        const bool spaced = loggedNs_ < 0 || s.ns - loggedNs_ >= minIntervalNs;
+        const bool fresh = (active_ & ~loggedIssues_) != 0 && spaced;
+        const bool beat = active_ && (loggedNs_ < 0 || s.ns - loggedNs_ >= heartbeatNs);
+        if (!(changed || fresh || beat)) {
+            loggedIssues_ &= active_; // a cleared issue may be news again
             return false;
+        }
+        loggedIssues_ = active_;
         loggedOwner_ = s.owner;
         loggedState_ = s.state;
         loggedNs_ = s.ns;
         return true;
     }
+    // The issues that passed the hysteresis (what a line reports).
+    uint32_t active() const { return active_; }
     const Snapshot& last() const { return last_; }
 
   private:
     Snapshot last_{};
     uint32_t loggedOwner_ = ~0u, loggedState_ = ~0u, loggedIssues_{};
     int64_t loggedNs_{-1};
+    static constexpr unsigned bits = 9;
+    int held_[bits]{}, clean_[bits]{};
+    uint32_t active_{};
 };
 
 } // namespace spidy::kinematics

@@ -103,6 +103,7 @@ native_body::JumpAdopt adoptSample{};
 // The body's turn away from the wall at the last solve (crawlOutwardWeight),
 // for the XR thread, which must not wait out a solve for it.
 std::atomic<float> outwardWeight{};
+std::atomic<float> handWaitEma{}; // HAND PREDICTION: the pose job's wait for a command, s
 // The hero's instance and rig at the previous hero job (solveLock): another
 // instance is another actor, and the body starts over on it.
 uintptr_t lastInstance{}, lastRig{};
@@ -630,14 +631,21 @@ void solveHero(float* out, uintptr_t job, uintptr_t instance) {
                     t.facing = head.orientation;
                     t.viewMapped = true;
                     t.head = true;
-                    for (unsigned i = 0; i < 2; ++i) {
-                        // HAND PREDICTION: on by the hand's velocity for the job's wait.
+                    // HAND PREDICTION: the job measures its wait for the next
+                    // command's lead (handLeadWait); this one applies exactly the
+                    // lead the XR thread used for the actions' hand, so the glove,
+                    // the marker and the line start share one time base.
+                    if (view.sampledTicks > 0 && frequency.QuadPart > 0) {
                         const float waited =
-                            view.sampledTicks > 0 && frequency.QuadPart > 0
-                                ? static_cast<float>(now.QuadPart - view.sampledTicks) / frequency.QuadPart
-                                : 0.f;
+                            static_cast<float>(now.QuadPart - view.sampledTicks) / frequency.QuadPart;
+                        if (waited >= 0 && waited < .2f) {
+                            const float was = handWaitEma.load(std::memory_order_relaxed);
+                            handWaitEma.store(was * .9f + waited * .1f, std::memory_order_relaxed);
+                        }
+                    }
+                    for (unsigned i = 0; i < 2; ++i) {
                         const auto grip = animated_view::resolve(
-                            anchor, arm_frame::ahead(view.grips[i], view.gripVelocity[i], waited));
+                            anchor, arm_frame::ahead(view.grips[i], view.gripVelocity[i], view.leadSeconds));
                         // A lost hand keeps only its last valid target during its short fade.
                         t.hands[i].tracked =
                             view.valid[i] && (wanted.hands[i].tracked || overlayArmWeight[i] > 0);
@@ -1186,10 +1194,28 @@ int native_body::authoredHead(uintptr_t instance, Mat4& world) {
     ReleaseSRWLockShared(&anchorLock);
     return result;
 }
+float native_body::handLeadWait() {
+    return handWaitEma.load(std::memory_order_relaxed);
+}
 int native_body::viewAnchorWorld(Mat4& world) {
     const auto hero = record.load();
     const auto instance = hero ? pointer(hero) : 0;
-    return instance ? authoredHead(instance, world) : 0;
+    if (!instance) return 0;
+    // The game writes the actor's matrix on its own thread: read it until two
+    // reads agree (a torn read is never used), at most three tries. The arms
+    // then fall back to the pose job's mapping for that frame.
+    Mat4 root{}, again{};
+    bool stable = false;
+    for (int tries = 0; tries < 3 && !stable; ++tries) {
+        if (!read(instance, root.data(), sizeof(root)) || !read(instance, again.data(), sizeof(again)))
+            return -1;
+        stable = std::memcmp(root.data(), again.data(), sizeof(root)) == 0;
+    }
+    if (!stable) return -1;
+    AcquireSRWLockShared(&anchorLock);
+    const int result = originalHead.read(instance, GetTickCount64(), root, world);
+    ReleaseSRWLockShared(&anchorLock);
+    return result;
 }
 void native_body::setHeadProbe(bool on) {
     headProbeOn = on;

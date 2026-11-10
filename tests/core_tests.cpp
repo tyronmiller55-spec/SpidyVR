@@ -28291,6 +28291,82 @@ int main() {
               "a bad wait or velocity moved the hand");
     });
 
+    test("HAND PREDICTION (review H1/M2): tracking-space velocity, clamped, restarted per epoch; one lead", [] {
+        using namespace arm_frame;
+        HandVelocity v;
+        int64_t ns = 0;
+        Vec3 p{0, 1, -.3f};
+        check(length(v.update(p, true, ns, 0)) == 0, "first sample not at rest");
+        for (int i = 0; i < 20; ++i) {
+            p.x += .011f; // 1 m/s
+            v.update(p, true, ns += 11'000'000, 0);
+        }
+        check(std::abs(length(v.value()) - 1.f) < .02f, "1 m/s not estimated");
+        // A spike (a lost frame, a reseat seen as motion): never past maxLeadSpeed.
+        p.x += .5f;
+        check(length(v.update(p, true, ns += 11'000'000, 0)) <= maxLeadSpeed + 1e-4f, "a spike passed the clamp");
+        // A snap turn / re-latch / recenter / reseat / owner change: a new epoch, from rest.
+        p.x += .3f;
+        check(length(v.update(p, true, ns += 11'000'000, 1)) == 0, "a new epoch kept the velocity");
+        p.x += .011f;
+        check(length(v.update(p, true, ns += 11'000'000, 1)) > 0, "the epoch never restarted");
+        // Tracking lost, then found far away: from rest, not a jump.
+        check(length(v.update(p, false, ns += 11'000'000, 1)) == 0, "a lost hand kept a velocity");
+        p.x += 1.f;
+        check(length(v.update(p, true, ns += 11'000'000, 1)) == 0, "found again read as speed");
+        // A gap (a pause): from rest.
+        p.x += .2f;
+        check(length(v.update(p, true, ns += 300'000'000, 1)) == 0, "a gap read as speed");
+        check(length(v.update({NAN, 0, 0}, true, ns += 11'000'000, 1)) == 0, "a NaN hand gave a velocity");
+        // A snap turn is NOT hand motion: the same tracked hand, the turn changed,
+        // gives no velocity in tracking space (the old relative-space estimate saw
+        // 0.5 m in one frame and threw the glove).
+        {
+            HandVelocity still;
+            const Pose ref{{0, 1.6f, 0}, {}};
+            const Vec3 hand{.3f, 1.2f, -.4f};
+            still.update(hand, true, 0, 0);
+            check(length(still.update(hand, true, 11'000'000, 0)) == 0, "a still hand moved");
+            const Vec3 before = animated_view::relative({hand, {}}, ref, 0).position;
+            const Vec3 after = animated_view::relative({hand, {}}, ref, .5236f).position;
+            check(length(after - before) > .2f, "the snap did not move the relative hand (test premise)");
+        }
+        // relativeVelocity turns a tracking velocity as relative() turns positions.
+        {
+            const Pose ref{{.2f, 1.5f, .1f}, Quat::around({0, 1, 0}, .7f)};
+            const float turn = -1.1f;
+            const Vec3 at{.3f, 1.1f, -.4f}, vel{1.5f, -.4f, 2.f};
+            const float dt = .01f;
+            const Vec3 moved = (animated_view::relative({at + vel * dt, {}}, ref, turn).position -
+                                animated_view::relative({at, {}}, ref, turn).position) / dt;
+            check(length(moved - relativeVelocity(vel, ref, turn)) < 1e-3f, "relativeVelocity not relative()'s turn");
+        }
+        // One lead: the actions' hand (toGame of the led tracked hand) and the
+        // glove's target (the job: ahead() in relative space) are the same point.
+        {
+            ViewMap m;
+            const Pose eyes{{3, 1.7f, -2}, Quat::around({0, 1, 0}, 2.f)};
+            check(worldAnchor(animated_view::Frame::full, animated_view::toNative(eyes), {}, {}, m.anchor), "anchor");
+            m.reference = {{.1f, 1.6f, .2f}, Quat::around({0, 1, 0}, .3f)};
+            m.turn = .4f;
+            const Pose grip{{.3f, 1.2f, -.4f}, Quat::around({1, 0, 0}, .3f)};
+            const Vec3 vel{3, 0, -2};
+            const float lead = leadSeconds(.02f);
+            Pose led = grip;
+            led.position = led.position + clampSpeed(vel) * lead;
+            const Pose actions = toGame(m, led);
+            const Pose glove = animated_view::resolve(
+                m.anchor, ahead(animated_view::relative(grip, m.reference, m.turn),
+                                relativeVelocity(vel, m.reference, m.turn), lead));
+            check(length(actions.position - glove.position) < 1e-4f, "glove and actions' hand disagree");
+        }
+        check(leadSeconds(.5f) == maxAhead && leadSeconds(-1) == 0 && leadSeconds(NAN) == 0 &&
+                  std::abs(leadSeconds(.01f) - .01f) < 1e-6f,
+              "lead not clamped to 0..25 ms");
+        check(length(clampSpeed({30, 0, 0})) <= maxLeadSpeed + 1e-4f && length(clampSpeed({NAN, 0, 0})) == 0,
+              "speed clamp");
+    });
+
     test("BODY KINEMATICS: velocities per frame, checks, and a line only when something changes", [] {
         using namespace kinematics;
         Tracker k;
@@ -28339,15 +28415,69 @@ int main() {
         s.grip[0].position = s.head.position + Vec3{0, 0, -2};
         uint32_t issues = validate(s);
         check((issues & leftReach) && !(issues & rightReach), "a far hand not caught");
-        s.ns += 11'000'000ll;
-        check(k.shouldLog(s, issues), "a new mismatch not logged");
-        s.ns += 11'000'000ll;
-        check(!k.shouldLog(s, issues), "the same mismatch logged every frame");
+        // Review M6: a mismatch must hold raiseFrames frames before it is news.
+        auto step = [&](uint32_t is) {
+            s.ns += 11'000'000ll;
+            return k.shouldLog(s, is);
+        };
+        check(!step(issues) && !step(issues), "a 1-2 frame mismatch logged (no hysteresis)");
+        // ...and at most one issue line per minIntervalNs: the owner line went
+        // out 4 frames ago, so this one waits for the interval, then goes.
+        int waited = 0;
+        while (!step(issues) && waited < 40)
+            ++waited;
+        check(waited < 40 && (k.active() & leftReach) && (waited + 3) * 11'000'000ll >= Tracker::minIntervalNs - 11'000'000,
+              "a held mismatch not logged (or not spaced)");
+        check(!step(issues), "the same mismatch logged every frame");
+        // Flapping on and off within clearFrames stays one issue: no new lines.
+        bool flapLogged = false;
+        for (int i = 0; i < 40; ++i)
+            flapLogged |= step(i % 2 ? issues : 0u);
+        check(!flapLogged, "a flapping check wrote lines");
         s.feet.x += 3;
         issues = validate(s);
-        check((issues & headOffFeet) && k.shouldLog(s, issues), "a head off its feet not logged");
+        check(issues & headOffFeet, "a head off its feet not caught");
+        bool headLogged = false;
+        for (int i = 0; i < 3; ++i)
+            headLogged |= step(issues);
+        check(headLogged && (k.active() & headOffFeet), "a head off its feet not logged");
         s.ns += 6'000'000'000ll;
         check(k.shouldLog(s, issues), "no heartbeat while it lasts");
+        // An issue gone clearFrames frames is cleared; back again, news again.
+        for (int i = 0; i < Tracker::clearFrames; ++i)
+            step(0);
+        check(k.active() == 0, "issues not cleared after clean frames");
+        // L4: NaN anywhere claimed is flagged, velocities included.
+        {
+            Snapshot n = s;
+            n.handVelocity[1] = {NAN, 0, 0};
+            check(validate(n) & nonFinite, "a NaN hand velocity passed");
+            n = s;
+            n.head.orientation.w = NAN;
+            check(validate(n) & nonFinite, "a NaN head turn passed");
+            n = s;
+            n.viewYaw = INFINITY;
+            check(validate(n) & nonFinite, "an infinite yaw passed");
+        }
+        // L1: a new epoch (snap turn, re-latch, recenter, reseat) zeroes velocities.
+        {
+            Tracker e;
+            Snapshot a;
+            a.headValid = a.handValid[0] = true;
+            a.ns = 0;
+            e.derive(a);
+            a.ns = 11'000'000;
+            a.head.position.x = .05f;
+            a.grip[0].position.x = .05f;
+            e.derive(a);
+            check(length(a.headVelocity) > 1, "no velocity in one epoch");
+            a.ns += 11'000'000;
+            a.epoch = 1;
+            a.head.position.x += .5f;
+            a.grip[0].position.x += .5f;
+            e.derive(a);
+            check(length(a.headVelocity) == 0 && length(a.handVelocity[0]) == 0, "a new epoch carried velocity");
+        }
         s.head.position.x = NAN;
         check(validate(s) & nonFinite, "a NaN head passed");
         Snapshot web = s;
@@ -28361,6 +28491,55 @@ int main() {
         check(validate(web) & leftBackward, "a backward web along the arm not caught");
         web.aim[0].orientation = {};
         check(!(validate(web) & leftBackward), "a forward web flagged");
+    });
+
+    test("FULL ARMS strike hold (review M3/M4): fresh samples only, 4 s cap, the setting frozen", [] {
+        using namespace hybrid_owner;
+        using E = StrikeHold::Event;
+        StrikeHold h;
+        int64_t t = 0, seq = 10;
+        auto tick = [&](bool read, bool under, bool advance, bool setting) {
+            t += 11'000'000;
+            if (advance)
+                seq += 2;
+            return h.update(read, under, seq, setting, t);
+        };
+        tick(true, false, true, true);
+        auto o = tick(true, true, true, true);
+        check(o.hold && o.event == E::enter, "a fresh strike did not hold");
+        o = tick(true, false, true, true);
+        check(!o.hold && o.event == E::ended && o.heldNs == 11'000'000, "an ended strike still held");
+        // A stalled sample (sequence stops): stale after freshNs.
+        tick(true, true, true, true);
+        bool stale = false;
+        for (int i = 0; i < 12 && !stale; ++i)
+            stale = tick(true, true, false, true).event == E::stale;
+        check(stale && !h.holding(), "a stalled strike sample kept SpidyVR");
+        // The punch module gone (no read): stale at once.
+        tick(true, false, true, true);
+        tick(true, true, true, true);
+        check(tick(false, true, false, true).event == E::stale, "a lost strike sample kept SpidyVR");
+        // The cap: 4 s, then no new hold until the strike goes idle.
+        tick(true, false, true, true);
+        check(tick(true, true, true, true).event == E::enter, "no enter");
+        E last = E::none;
+        int frames = 0;
+        while (last == E::none && frames++ < 1000)
+            last = tick(true, true, true, true).event;
+        check(last == E::capped && frames * 11'000'000ll >= StrikeHold::capNs - 11'000'000 &&
+                  frames * 11'000'000ll <= StrikeHold::capNs + 11'000'000,
+              "the hold was not capped at 4 s");
+        check(!tick(true, true, true, true).hold, "a capped strike held again before going idle");
+        tick(true, false, true, true);
+        check(tick(true, true, true, true).hold, "a new strike after idle did not hold");
+        // Frozen setting: switched off mid-strike, the hold keeps full arms.
+        check(h.fullArms(false), "the setting not frozen during a hold");
+        check(tick(true, true, true, false).hold, "switching off mid-strike cut the hold");
+        tick(true, false, true, false);
+        check(!h.fullArms(false) && h.fullArms(true), "the setting not back after the hold");
+        // Off: a strike never holds.
+        check(!tick(true, true, true, false).hold, "FULL ARMS off still held a strike");
+        check(std::strcmp(StrikeHold::eventName(E::capped), "capped") == 0, "event names");
     });
 
     test("FULL ARMS: a punch's web strike takes SpidyVR (punch), even on the ground, and landing returns", [] {

@@ -3,6 +3,19 @@
 Every build, newest first, with what changed, why, and what was measured.
 Per-check results are in [VALIDATION.md](VALIDATION.md).
 
+## Native Animation: arms review fixes (EngineBot review of d31887c)
+
+These fixes build on the full-arms build (d31887c), after EngineBot's independent review on Nov 9 23:01 PST. Not headset-tested.
+
+- **Glove lead (H1):** the hand's velocity is now estimated in tracking space, so a snap turn, a reference latch or a reseat never looks like hand motion. It is clamped to 5 m/s and restarts from rest on each new epoch: a snap turn, re-latch, recenter, reseat, owner change, frame-mode change, or tracking lost and found. Before, a 30 deg snap could read as about 45 m/s and throw the glove about a metre.
+- **One lead (M2):** the pose job's measured wait (smoothed, at most 25 ms) is the lead. It is applied the same way to the glove and to the hand the actions use, so the marker, line start and glove agree. The poses are already predicted to the frame's display time; the lead covers only the job's extra wait.
+- **Gaze (H2):** the eye gaze is moved onto the action head once, not twice. Gaze, its origin and EYE AIM are rebuilt from it. A frame with no action head now really clears gaze.
+- **This frame's turn (M1):** the Level R-stick turn and the level heading are read before the hands are mapped. The frame mode is still last frame's, because ownership is decided after input.
+- **Strike hold (M3/M4):** a FULL ARMS hold needs a fresh strike sample (within 100 ms) and lasts 4 s at most. A capped strike must go idle before another can hold. animated_full_arms stays ON by default and is frozen while a hold lasts. `full arms strike: enter` and `leave ended/stale/capped after N ms` lines are logged.
+- **Contact-only (M5):** with animated_full_arms=0, a hand counts for contact only when the glove has converged on it, as before.
+- **Kinematics log (M6, L1, L2, L4):** an issue must hold 3 frames to count and clears after 15 clean frames. Issue lines are at least 250 ms apart. An epoch id zeroes velocities. The glove-miss check is now fed. Any NaN, velocities included, is flagged.
+- **Actor matrix read (L6):** for the per-frame map it is read until two reads agree. A torn read falls back to the pose job's mapping.
+
 ## Native Animation: full arms in animation, analog arm control, body kinematics
 
 **In an animation the arms are the player's SpidyVR arms: every web, ball, marker and punch leaves from where the controller is in the game, mapped every headset frame, and turns with the R stick.** The user, Nov 9 22:27 PST, after the b84b3a7 session (stamp b84b3a7 confirmed).

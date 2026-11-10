@@ -15,7 +15,7 @@ Source: the user, Nov 9 09:34 PST. Code: `include/spidy/hybrid_owner.hpp`, the `
 | Where / what | Owner | Switch |
 |---|---|---|
 | Ground, perch, the game's crawl, parkour | ANIM | VR → ANIM the moment he lands (`land`, or `mount` onto the game's crawl) |
-| Ground + grip or trigger | ANIM | **None.** Grip only enables SpidyVR's arm features on the animated arms (webs, web balls, punches, markers). |
+| Ground + grip or trigger | ANIM | **None.** Grip only enables SpidyVR's arm features on the animated arms (webs, web balls, punches, markers). The one exception is a punch's web strike under FULL ARMS (next rows). |
 | Jump, vault, point launch, Y zip, fall: any midair native animation | ANIM | Plays from the press or takeoff until the animation ends, then hands to VR **only if he is still in the air** (`anim-end`). |
 | Midair animation + grip | VR | Grip cancel (`grip-cancel`). It is consumed and fires no web or ball. |
 | Midair animation + Spidy's wall | VR | `wallrun` |
@@ -24,12 +24,12 @@ Source: the user, Nov 9 09:34 PST. Code: `include/spidy/hybrid_owner.hpp`, the `
 | Y zip pressed from VR in the air | ANIM | `zip`, once the game begins the zip. A zip the game refuses never leaves VR. |
 | Spidy wall run / wall jump | VR | none |
 | Wall run that came out of a Native Run, stick let go on the wall | ANIM | `run-release`. It stays ANIM on that wall. |
-| FULL ARMS (`animated_full_arms`, on): a punch opens a web strike in an animation | VR | `punch`, for the strike's flight and hang, even on the ground. It lands back in ANIM. |
+| FULL ARMS (`animated_full_arms`, on): a punch opens a web strike in an animation | VR | `punch`, for the strike's flight and hang, even on the ground. The hold needs a fresh strike sample (within 100 ms), lasts 4 s at most, and freezes the setting while it lasts (`full arms strike:` diag). It lands back in ANIM. |
 | Cutscene / stale sample | frozen | none |
 
 **Rules:**
 - No ownership switch happens on the ground, except a FULL ARMS punch's web strike (the user, Nov 9 22:27: "Punching can pull you out of the animation and teleport you").
-- Switching happens only in midair, on wall runs, and at Native Run's release.
+- Otherwise, switching happens only in midair, on wall runs, and at Native Run's release.
 - The position lock (`position lock:` diag) runs on every switch.
 
 ## When "the animation ended"

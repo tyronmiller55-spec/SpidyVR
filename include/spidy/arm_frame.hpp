@@ -65,14 +65,67 @@ inline Pose shooter(const ViewMap& m, Pose trackedGrip, unsigned hand) {
 
 // HAND PREDICTION for the animated gloves: the pose job runs on the game's
 // frame (about 41 a second in the Nov 9 22:27 session against the headset's
-// 72+), after the command was sent. The glove's target moves on by the
-// hand's own velocity for that wait, at most maxAhead.
+// 64-69), after the command was sent. The tracked poses are already predicted
+// to this XR frame's display time (predictedDisplayTime); the lead covers
+// only the further wait until the job uses them, at most maxAhead. ONE lead
+// per frame, used for both the glove (pose job) and the actions' hand
+// (kinematics snapshot: marker, line start, punches), so they agree.
 constexpr float maxAhead = .025f;
+// A hand's speed for the lead, m/s: a real hand rarely beats it for long,
+// and a glitch (a reseat, a lost frame) cannot throw the glove.
+constexpr float maxLeadSpeed = 5.f;
+inline float leadSeconds(float measuredWait) {
+    return std::isfinite(measuredWait) ? std::clamp(measuredWait, 0.f, maxAhead) : 0.f;
+}
+inline Vec3 clampSpeed(Vec3 v, float most = maxLeadSpeed) {
+    if (!finite(v))
+        return {};
+    const float n = length(v);
+    return n > most ? v * (most / n) : v;
+}
 inline Pose ahead(Pose relative, Vec3 velocity, float seconds) {
     if (!finite(velocity) || !std::isfinite(seconds) || seconds <= 0)
         return relative;
-    relative.position = relative.position + velocity * std::min(seconds, maxAhead);
+    relative.position = relative.position + clampSpeed(velocity) * std::min(seconds, maxAhead);
     return relative;
 }
+// A tracking-space velocity in the view's relative frame (what the pose job
+// resolves): the same rotation animated_view::relative gives a position.
+inline Vec3 relativeVelocity(Vec3 tracking, Pose reference, float turn) {
+    return Quat::yaw(turn).rotate(reference.orientation.conjugate().rotate(tracking));
+}
+// A hand's velocity, estimated IN TRACKING SPACE (a snap turn, a reference
+// latch or glide never shows up as motion), clamped and low-passed. A new
+// epoch (snap turn, re-latch, recenter, reseat, owner or frame-mode change),
+// tracking lost and found, or a gap restarts it from rest.
+class HandVelocity {
+  public:
+    Vec3 update(Vec3 position, bool valid, int64_t ns, uint32_t epoch, float smooth = .5f) {
+        if (!valid || !finite(position)) {
+            reset();
+            return {};
+        }
+        const float dt = have_ && ns > lastNs_ ? static_cast<float>(ns - lastNs_) * 1e-9f : 0.f;
+        if (!have_ || epoch != epoch_ || dt <= 1e-4f || dt >= .1f) {
+            have_ = true;
+            epoch_ = epoch;
+            velocity_ = {};
+        } else {
+            const Vec3 raw = clampSpeed((position - last_) / dt);
+            velocity_ = clampSpeed(velocity_ * smooth + raw * (1 - smooth));
+        }
+        last_ = position;
+        lastNs_ = ns;
+        return velocity_;
+    }
+    void reset() { *this = {}; }
+    Vec3 value() const { return velocity_; }
+
+  private:
+    bool have_{};
+    uint32_t epoch_{};
+    int64_t lastNs_{-1};
+    Vec3 last_{}, velocity_{};
+};
 
 } // namespace spidy::arm_frame
