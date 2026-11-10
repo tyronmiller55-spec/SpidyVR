@@ -6,6 +6,7 @@
 #include "spidy/tracking.hpp"
 #include "spidy/game_fp.hpp"
 #include "spidy/hybrid_handoff.hpp"
+#include "spidy/arm_frame.hpp"
 #include "spidy/native_appearance.hpp"
 #include <MinHook.h>
 #include <algorithm>
@@ -630,7 +631,13 @@ void solveHero(float* out, uintptr_t job, uintptr_t instance) {
                     t.viewMapped = true;
                     t.head = true;
                     for (unsigned i = 0; i < 2; ++i) {
-                        const auto grip = animated_view::resolve(anchor, view.grips[i]);
+                        // HAND PREDICTION: on by the hand's velocity for the job's wait.
+                        const float waited =
+                            view.sampledTicks > 0 && frequency.QuadPart > 0
+                                ? static_cast<float>(now.QuadPart - view.sampledTicks) / frequency.QuadPart
+                                : 0.f;
+                        const auto grip = animated_view::resolve(
+                            anchor, arm_frame::ahead(view.grips[i], view.gripVelocity[i], waited));
                         // A lost hand keeps only its last valid target during its short fade.
                         t.hands[i].tracked =
                             view.valid[i] && (wanted.hands[i].tracked || overlayArmWeight[i] > 0);
@@ -1178,6 +1185,11 @@ int native_body::authoredHead(uintptr_t instance, Mat4& world) {
     const int result = originalHead.read(instance, GetTickCount64(), root, world);
     ReleaseSRWLockShared(&anchorLock);
     return result;
+}
+int native_body::viewAnchorWorld(Mat4& world) {
+    const auto hero = record.load();
+    const auto instance = hero ? pointer(hero) : 0;
+    return instance ? authoredHead(instance, world) : 0;
 }
 void native_body::setHeadProbe(bool on) {
     headProbeOn = on;

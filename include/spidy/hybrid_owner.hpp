@@ -22,8 +22,12 @@
 //   Spidy wall run / wall jump       VR      -
 //   wall run from a Native Run,      ANIM    run-release
 //     stick released on the wall
+//   FULL ARMS: a punch's web strike  VR      punch (its lunge / teleport), held
+//     (ground or air)                        until the strike ends; then the
+//                                            table (landing -> ANIM)
 //
-// No ownership switch ever happens on the ground. "The animation ended" is
+// No ownership switch happens on the ground except a FULL ARMS punch's strike
+// (the user, November 9 22:27: "punching can pull you out of the animation"). "The animation ended" is
 // not a signal the game gives the mod: it is taken as the move having
 // stopped rising (vertical velocity at or below zero for fallHoldNs, after at
 // least airAnimMinNs off the ground), no zip, fight or dodge still going on,
@@ -60,6 +64,7 @@ enum class EnterVr : uint8_t {
     jump,    // retired: the jump is the game's animation until it ends (animEnd)
     cancel,  // consumed grip in a midair animation: VR without a web or other action
     animEnd, // a midair native animation ended with him still in the air
+    punch,   // FULL ARMS: a SpidyVR punch opened a web strike (its lunge / teleport)
 };
 
 inline const char* enterVrName(EnterVr e) {
@@ -82,6 +87,8 @@ inline const char* enterVrName(EnterVr e) {
         return "jump";
     case EnterVr::animEnd:
         return "anim-end";
+    case EnterVr::punch:
+        return "punch";
     default:
         return "none";
     }
@@ -175,6 +182,10 @@ struct Frame {
     // and that grip still held.
     bool cancelGrip{}, cancelGripHeld{};
     bool groundAction{}; // actual dispatched takeoff, not a queue/phase cooldown
+    // FULL ARMS (the user, Nov 9 22:27): a SpidyVR web strike is under way (its
+    // flight or hang). It pulls him out of the animation, ground included,
+    // and holds SpidyVR until it ends; then the table as usual.
+    bool strike{};
     // The hero's vertical velocity, m/s (up +); NaN unknown.
     float velY = NAN;
     // The left (walk) stick's tilt 0..1; negative unknown.
@@ -272,6 +283,16 @@ struct HybridOwner {
         if (f.cancelGrip && domain == Domain::anim && !supported(f.state)) {
             clearZip();
             goVr(EnterVr::cancel, nowNs);
+            return domain;
+        }
+
+        // FULL ARMS: a punch's web strike takes the body wherever he is, and
+        // keeps it until the strike ends (landing then hands back as always).
+        if (f.strike) {
+            clearZip();
+            airAnimNs = fallNs = -1;
+            if (domain == Domain::anim)
+                goVr(EnterVr::punch, nowNs);
             return domain;
         }
 

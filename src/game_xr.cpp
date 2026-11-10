@@ -45,6 +45,8 @@
 #include "spidy/hand_pose.hpp"
 #include "spidy/headset_smoothing.hpp"
 #include "spidy/aim_filter.hpp"
+#include "spidy/arm_frame.hpp"
+#include "spidy/kinematics.hpp"
 #include "spidy/impact_sound.hpp"
 #include "spidy/native_eye_frame.hpp"
 #include "spidy/native_eye_gpu.hpp"
@@ -1119,6 +1121,18 @@ DWORD WINAPI run(void*) {
         animated_arms::State animatedArmsState{};
         Pose animatedLastGrip[2]{}, animatedLastAim[2]{};
         bool animatedHandSeen[2]{};
+        // ARMS IN ANIMATION (arm_frame.hpp): the hand view's frame last sent
+        // (the per-frame map uses the same), the hands' relative velocity for
+        // HAND PREDICTION, and BODY KINEMATICS (kinematics.hpp).
+        animated_view::Frame armFrameWas = animated_view::Frame::none;
+        Quat armLevelWas{};
+        Pose armWorldEyesWas{};
+        Pose armRelWas[2]{};
+        Vec3 armRelVelocity[2]{};
+        int64_t armRelNs{-1};
+        kinematics::Tracker kinematicsTracker;
+        native_body::Forearms kinematicsArms{};
+        bool strikeUnderWay{}; // FULL ARMS: a web strike's flight or hang (game_punch::Strikes::phase)
         int64_t trackingLockDiagAt{};
         int64_t animatedMovesDiagAt{};
         bool animatedHeadFollowWas{};
@@ -2942,6 +2956,52 @@ DWORD WINAPI run(void*) {
                     uint64_t actionPoseSerial{}, actionPoseDeadline{};
                     const Pose physicalGaze = motion.gazePose;
                     const bool physicalGazeValid = motion.gazeValid;
+                    // ARMS IN ANIMATION: the hands in the game THIS frame, through the
+                    // eyes' own map (arm_frame.hpp) - not the last pose job's solved
+                    // bones (about 41 a second, contorted by the animation) and not
+                    // the SpidyVR tracking rig (whose yaw never sees the actor's
+                    // R-stick turn). Built when the animation owns with ANIMATED ARMS.
+                    arm_frame::ViewMap armView{};
+                    strikeUnderWay = false; // the strike read below says again this frame
+                    if (bodyStarted && values.animatedHybrid && values.animatedArms &&
+                        animatedMovesHandoff.yielding && animHeadRefSet && validTrackedPose(frame.head) &&
+                        armFrameWas != animated_view::Frame::none && armFrameWas != animated_view::Frame::missing) {
+                        Mat4 headWorld{};
+                        if (native_body::viewAnchorWorld(headWorld) == 1 &&
+                            arm_frame::worldAnchor(armFrameWas, headWorld, armLevelWas, armWorldEyesWas,
+                                                   armView.anchor)) {
+                            const bool world = armFrameWas == animated_view::Frame::world;
+                            armView.reference = world ? frame.head : animHeadRef;
+                            armView.turn = world ? 0.f : animHeadTurn;
+                            armView.valid = true;
+                        }
+                    }
+                    // BODY KINEMATICS: this frame's snapshot (the single source the
+                    // web, ball, marker and punch aims below are taken from in animation).
+                    kinematics::Snapshot kin;
+                    kin.ns = frame.predictedDisplayTime > 0 ? frame.predictedDisplayTime
+                                                            : static_cast<int64_t>(GetTickCount64()) * 1'000'000ll;
+                    kin.owner = hybridOwner.domain == hybrid_owner::Domain::vr ? 1u : 0u;
+                    if (armView.valid) {
+                        kin.head = arm_frame::toGame(armView, frame.head);
+                        kin.headValid = true;
+                        kin.viewYaw = arm_frame::trackingYaw(armView, frame.head);
+                    } else if (motion.active) {
+                        kin.head = motion.headPose;
+                        kin.headValid = finite(kin.head.position);
+                        kin.viewYaw = motion.swing.trackingYaw;
+                    }
+                    for (unsigned i = 0; i < 2; ++i) {
+                        if (armView.valid && frame.hands[i].valid && validTrackedPose(frame.hands[i].grip)) {
+                            kin.grip[i] = arm_frame::toGame(armView, frame.hands[i].grip);
+                            kin.aim[i] = webShooter(kin.grip[i], i);
+                            kin.handValid[i] = true;
+                        } else if (motion.active && motion.swing.hands[i].tracked) {
+                            kin.grip[i] = motion.grips[i];
+                            kin.aim[i] = motion.swing.hands[i].aim;
+                            kin.handValid[i] = finite(kin.grip[i].position);
+                        }
+                    }
                     animation_cancel::Decision gripCancel;
                     if (swingStarted) {
                         unsigned webButtons{}, shotButtons{}, trackedHands{};
@@ -3050,7 +3110,10 @@ DWORD WINAPI run(void*) {
                         const bool animationActions = animation_cancel::nativeActions(
                             values.animatedHybrid && values.animatedMoves,
                             animatedMovesHandoff.yielding, gripCancel.holdVr, nativeGroundNext);
-                        input.actionMode = animationActions ? 1u : 0u;
+                        // ANIMATED FULL ARMS (default on): the arms keep every SpidyVR
+                        // control in animation - punches may open a web strike (and
+                        // its lunge) instead of contact-only blows.
+                        input.actionMode = animationActions && !values.animatedFullArms ? 1u : 0u;
                         // Release restores ground animation later in THIS loop. Do not
                         // allow a one-sample original-VR lunge/rig shot before that
                         // ownership transaction has a matching displayed hand solve.
@@ -3107,35 +3170,72 @@ DWORD WINAPI run(void*) {
                                 input.gazeOrigin = {};
                                 motion.gazeValid = false;
                             }
-                            for (unsigned i = 0; i < 2; ++i) {
-                                if (!input.hands[i].tracked) continue;
-                                if (!current || !overlay.valid[i] || !overlay.actualValid[i]) {
-                                    // Never dispatch a free-hand animation action using a
-                                    // prior owner's pose or the unrelated tracking rig.
-                                    if (input.hands[i].grip <= .5f && !gripCancel.cancel) {
+                            if (armView.valid) {
+                                // ARMS IN ANIMATION: the tracked hands, mapped this frame
+                                // (kinematics snapshot): webs - held ones too -, balls,
+                                // markers and punches leave from where the player's hand
+                                // is in the game. The glove is solved onto the very same
+                                // pose; the line starts there.
+                                const Pose head = kin.head;
+                                actionHead = head;
+                                actionHeadValid = true;
+                                if (input.focused)
+                                    input.look = head.orientation.rotate({0,0,-1});
+                                motion.gazePose = feedback_frame::transport(motion.headPose, head, motion.gazePose);
+                                if (length(input.gaze) > .5f) {
+                                    input.gazeOrigin = motion.gazePose.position;
+                                    input.gaze = motion.gazePose.orientation.rotate({0,0,-1});
+                                }
+                                motion.gazeValid = physicalGazeValid;
+                                input.trackingYaw = kin.viewYaw;
+                                for (unsigned i = 0; i < 2; ++i) {
+                                    if (!input.hands[i].tracked)
+                                        continue;
+                                    if (!kin.handValid[i]) {
+                                        if (input.hands[i].grip <= .5f && !gripCancel.cancel) {
+                                            input.hands[i].tracked = 0;
+                                            motion.swing.hands[i].tracked = false;
+                                        }
+                                        continue;
+                                    }
+                                    actionGrips[i] = kin.grip[i];
+                                    actionGripMask |= 1u << i;
+                                    input.hands[i].aim = kin.aim[i];
+                                    motion.swing.hands[i].aim = kin.aim[i];
+                                    input.physicalToContact[i] = {}; // the tracked hand is the contact
+                                    input.actionMode |= animationActions ? (2u << i) : 0u;
+                                }
+                            } else {
+                                for (unsigned i = 0; i < 2; ++i) {
+                                    if (!input.hands[i].tracked) continue;
+                                    if (!current || !overlay.valid[i] || !overlay.actualValid[i]) {
+                                        // Never dispatch a free-hand animation action using a
+                                        // prior owner's pose or the unrelated tracking rig.
+                                        if (input.hands[i].grip <= .5f && !gripCancel.cancel) {
+                                            input.hands[i].tracked = 0;
+                                            motion.swing.hands[i].tracked = false;
+                                        }
+                                        continue;
+                                    }
+                                    // Held-web force/anchor aim stays unchanged, but its
+                                    // rendered endpoint must still meet the actual hand.
+                                    if (worldDisplayedPose(actionGrips[i], overlay.actualGrip[i], overlay.root))
+                                        actionGripMask |= 1u << i;
+                                    if (mapAimToDisplayedGrip(input.hands[i].aim,
+                                                              overlay.actualGrip[i],
+                                                              overlay.root, i, input.hands[i].grip)) {
+                                        motion.swing.hands[i].aim = input.hands[i].aim;
+                                        input.physicalToContact[i] = overlay.actualGrip[i].orientation *
+                                            overlay.sourceGripOri[i].conjugate();
+                                        if (overlay.residual[i] >= 0 && overlay.residual[i] <= web_aim::forearmMiss &&
+                                            overlay.armWeight[i] > .85f)
+                                            input.actionMode |= animationActions ? (2u << i) : 0u;
+                                    } else if (input.hands[i].grip <= .5f) {
+                                        // Rejected world anchor/orientation is not permission
+                                        // to fire the unrelated original tracking-rig pose.
                                         input.hands[i].tracked = 0;
                                         motion.swing.hands[i].tracked = false;
                                     }
-                                    continue;
-                                }
-                                // Held-web force/anchor aim stays unchanged, but its
-                                // rendered endpoint must still meet the actual hand.
-                                if (worldDisplayedPose(actionGrips[i], overlay.actualGrip[i], overlay.root))
-                                    actionGripMask |= 1u << i;
-                                if (mapAimToDisplayedGrip(input.hands[i].aim,
-                                                          overlay.actualGrip[i],
-                                                          overlay.root, i, input.hands[i].grip)) {
-                                    motion.swing.hands[i].aim = input.hands[i].aim;
-                                    input.physicalToContact[i] = overlay.actualGrip[i].orientation *
-                                        overlay.sourceGripOri[i].conjugate();
-                                    if (overlay.residual[i] >= 0 && overlay.residual[i] <= web_aim::forearmMiss &&
-                                        overlay.armWeight[i] > .85f)
-                                        input.actionMode |= animationActions ? (2u << i) : 0u;
-                                } else if (input.hands[i].grip <= .5f) {
-                                    // Rejected world anchor/orientation is not permission
-                                    // to fire the unrelated original tracking-rig pose.
-                                    input.hands[i].tracked = 0;
-                                    motion.swing.hands[i].tracked = false;
                                 }
                             }
                         }
@@ -3152,6 +3252,7 @@ DWORD WINAPI run(void*) {
                             const auto& snapshot = sampleHandFrame();
                             const auto& arms = snapshot.forearms;
                             const auto& overlay = snapshot.tracking;
+                            kinematicsArms = arms;
                             forearmStaleFrames = arms.job != forearmJob ? 0u : forearmStaleFrames + 1;
                             forearmJob = arms.job;
                             const float dt = input.sampleSeconds;
@@ -3170,6 +3271,12 @@ DWORD WINAPI run(void*) {
                                     why = Fallback::gameCamera;
                                 else if (!input.hands[i].tracked)
                                     why = Fallback::untracked;
+                                // ARMS IN ANIMATION: the web leaves along the tracked
+                                // hand (the controller's line), never turned onto the
+                                // animation's forearm - a contorted pose bent it 39 deg
+                                // (median) and past 90 deg in 173 lines on Nov 9 22:27.
+                                else if (armView.valid)
+                                    why = Fallback::armsOverlay;
                                 else if (!native_body::drawn() || !f.valid)
                                     why = Fallback::notSolved;
                                 else if (forearmStaleFrames > web_aim::forearmStaleFrames ||
@@ -3596,6 +3703,7 @@ DWORD WINAPI run(void*) {
                             punchStarted && sampleStrike && !sampleStrike(&strikes) &&
                             strikes.magic == expectedStrikes.magic && strikes.version == expectedStrikes.version &&
                             strikes.bytes == expectedStrikes.bytes;
+                        strikeUnderWay = fighting && strikes.phase != static_cast<uint32_t>(WebStrike::Phase::Idle);
                         if (fighting) {
                             // Punching switched off and on again counts from nothing.
                             blowsBefore = std::min(blowsBefore, strikes.blows);
@@ -5916,6 +6024,7 @@ DWORD WINAPI run(void*) {
                         hybridFrame.cutscene = !animState.playing || !animState.fresh;
                         hybridFrame.zipPress = hybridZipPress;
                         hybridFrame.jumpAsk = hybridJumpAsk;
+                        hybridFrame.strike = strikeUnderWay && values.animatedFullArms;
                         hybridFrame.velY = swingFresh && std::isfinite(swingState.velocity.y)
                                                ? swingState.velocity.y
                                                : NAN;
@@ -6204,6 +6313,37 @@ DWORD WINAPI run(void*) {
                             actionFrameFloor = 0;
                             hybridBlend = {};
                             hybridLeapAir = hybridAdoptWaiting = false;
+                        }
+                        // BODY KINEMATICS: velocities, checks; a line only at an owner or
+                        // state change, a new mismatch, or a 5 s heartbeat while one lasts.
+                        {
+                            kin.owner = hybridOwner.domain == hybrid_owner::Domain::vr ? 1u : 0u;
+                            kin.state = static_cast<uint32_t>(head_probe::classify(animState));
+                            const Vec3 feetNow{body[12], body[13], body[14]};
+                            kin.feetValid = finite(feetNow);
+                            kin.feet = feetNow;
+                            kin.actorYaw = hybrid_handoff::actorLookYaw({body[8], body[9], body[10]});
+                            for (unsigned i = 0; i < 2; ++i) {
+                                const auto& arm = kinematicsArms.arms[i];
+                                kin.forearmValid[i] = arm.valid && kin.feetValid && finite(arm.elbow) &&
+                                                      finite(arm.wrist) && kin.owner == 1u;
+                                kin.elbow[i] = arm.elbow;
+                                kin.wrist[i] = arm.wrist;
+                            }
+                            kinematicsTracker.derive(kin);
+                            const uint32_t issues = kinematics::validate(kin);
+                            if (diag_log::enabled() && kinematicsTracker.shouldLog(kin, issues)) {
+                                const Vec3 h = kin.head.position - kin.feet;
+                                diag_log::writef(
+                                    "kinematics: owner %s state %s issues 0x%x head %.2f/%.2f/%.2f from feet "
+                                    "v %.1f m/s spin %.0f deg/s, L %u v %.1f, R %u v %.1f, actorYaw %.0f viewYaw %.0f, "
+                                    "arm map %s",
+                                    kin.owner ? "vr" : "anim", head_probe::stateName(static_cast<head_probe::State>(kin.state)),
+                                    issues, h.x, h.y, h.z, length(kin.headVelocity), kin.headSpin * 57.29578f,
+                                    kin.handValid[0] ? 1u : 0u, length(kin.handVelocity[0]), kin.handValid[1] ? 1u : 0u,
+                                    length(kin.handVelocity[1]), kin.actorYaw * 57.29578f, kin.viewYaw * 57.29578f,
+                                    armView.valid ? "per-frame" : "none");
+                            }
                         }
                         // Jump adopt's first frame, once the pose job has seeded it.
                         if (hybridAdoptWaiting) {
@@ -6971,6 +7111,10 @@ DWORD WINAPI run(void*) {
                         }
                         if (frameOk) {
                             handView.head = animated_view::relative(frame.head, reference, turn);
+                            const int64_t relNs = frame.predictedDisplayTime;
+                            const float relDt = armRelNs > 0 && relNs > armRelNs
+                                                    ? static_cast<float>(relNs - armRelNs) * 1e-9f
+                                                    : 0.f;
                             for (unsigned i = 0; i < 2; ++i) {
                                 if (frame.hands[i].valid && validTrackedPose(frame.hands[i].grip) &&
                                     validTrackedPose(frame.hands[i].aim)) {
@@ -6983,7 +7127,21 @@ DWORD WINAPI run(void*) {
                                     animated_view::relative(animatedLastGrip[i], reference, turn);
                                 handView.aims[i] =
                                     animated_view::relative(animatedLastAim[i], reference, turn);
+                                // HAND PREDICTION: the hand's velocity in this frame,
+                                // low-passed; a gap or a frame change starts from rest.
+                                if (relDt > 1e-4f && relDt < .1f && armFrameWas == handView.frame) {
+                                    const Vec3 v = (handView.grips[i].position - armRelWas[i].position) / relDt;
+                                    armRelVelocity[i] = finite(v) ? armRelVelocity[i] * .5f + v * .5f : Vec3{};
+                                } else {
+                                    armRelVelocity[i] = {};
+                                }
+                                armRelWas[i] = handView.grips[i];
+                                handView.gripVelocity[i] = armRelVelocity[i];
                             }
+                            armRelNs = relNs;
+                            LARGE_INTEGER ticks{};
+                            QueryPerformanceCounter(&ticks);
+                            handView.sampledTicks = ticks.QuadPart;
                         } else {
                             handView = {};
                             handView.frame = animated_view::Frame::missing;
@@ -6991,6 +7149,10 @@ DWORD WINAPI run(void*) {
                     } else {
                         animatedHandSeen[0] = animatedHandSeen[1] = false;
                     }
+                    // The frame the hands go out in: the per-frame map takes it next loop.
+                    armFrameWas = handView.frame;
+                    armLevelWas = handView.levelWorld;
+                    armWorldEyesWas = handView.worldAnchor;
                     if (bodyStarted)
                         native_body::submit(pose, handView);
                     // The HUD panel for this command's frame, as the head sees it:

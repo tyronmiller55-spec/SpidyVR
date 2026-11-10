@@ -12,6 +12,11 @@ struct Targets {
     bool valid[2]{};
     Quat levelWorld{};
     Pose worldAnchor{}; // ABSOLUTE world eye anchor, also for head-off tracking view
+    // HAND PREDICTION (arm_frame::ahead): each grip's velocity in this same
+    // relative frame (m/s) and when it was sampled (QueryPerformanceCounter
+    // ticks; 0 none). The pose job moves the glove on by its wait.
+    Vec3 gripVelocity[2]{};
+    int64_t sampledTicks{};
 };
 inline Pose relative(Pose raw, Pose reference, float turn) {
     return compose({{}, Quat::yaw(turn)}, compose(inverse(reference), raw));

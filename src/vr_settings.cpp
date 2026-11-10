@@ -1264,6 +1264,7 @@ constexpr TabOnly tabOnly[] = {
     {"animated_hybrid", &Values::animatedHybrid, nullptr},
     {"animated_hybrid_speed_ms", nullptr, &Values::animatedHybridSpeedMs},
     {"web_lines", &Values::webLines, nullptr},
+    {"animated_full_arms", &Values::animatedFullArms, nullptr},
 };
 } // namespace
 std::string tabOnlyText(const Values& v) {

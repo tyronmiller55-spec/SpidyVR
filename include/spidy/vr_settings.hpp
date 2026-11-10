@@ -363,6 +363,12 @@ struct Values {
     bool animatedSteering = false;
     // ANIMATED ARMS: controller arm overlay while yielding (animated_arms.hpp).
     bool animatedArms = true;
+    // ANIMATED FULL ARMS (spidy_vr.ini animated_full_arms; the user, Nov 9
+    // 22:27): while the animation owns, the arms keep every SpidyVR control -
+    // punches open web strikes that pull him out of the animation (lunge /
+    // teleport) - instead of the contact-only policy. On by default; 0 brings
+    // back contact-only arms. Not on the menu.
+    bool animatedFullArms = true;
     // ANIMATED TORSO: with ANIMATED ARMS, bound waist→chest toward controller
     // reaches (animated_torso.hpp). On by default; bounded limits.
     bool animatedTorso = true;

@@ -3,6 +3,17 @@
 Every build, newest first, with what changed, why, and what was measured.
 Per-check results are in [VALIDATION.md](VALIDATION.md).
 
+## Native Animation: full arms in animation, analog arm control, body kinematics
+
+**In an animation the arms are the player's SpidyVR arms: every web, ball, marker and punch leaves from where the controller is in the game, mapped every headset frame, and turns with the R stick.** The user, Nov 9 22:27 PST, after the b84b3a7 session (stamp b84b3a7 confirmed).
+
+- **Slow hands, the cause:** aims and gloves came only from the game's hero pose job, about 41 a second against the headset's 64-69, and that job used the previous loop's controller. **Fix:** the hands are mapped on the headset frame through the eyes' own map (`arm_frame.hpp`). The glove's target moves on by the hand's velocity for the job's wait (25 ms at most).
+- **Backwards webs after an R-stick turn, the cause:** a grip-held web skipped the animated hand and used the SpidyVR tracking rig, whose heading never sees the actor's model-yaw turn. **Fix:** every hand, grip held or not, uses the mapped pose, and the swing's tracking yaw is the map's heading each frame.
+- **Bent web lines in contorted poses, the cause:** MODEL FOREARM turned each web onto the animation's forearm, 39 deg off the controller (median), more than 90 deg in 173 lines. **Fix:** in an animation the line follows the tracked hand. The glove is solved onto that same pose, so marker, line start and hit agree. MODEL FOREARM still applies in SpidyVR.
+- **Full arms:** punches are no longer contact-only in an animation. A web strike (its lunge, its hang) takes SpidyVR (`punch`), even on the ground, and landing hands back. Switch: `animated_full_arms=0` in spidy_vr.ini restores contact-only. It is ini-only, has no menu row, and is on by default.
+- **Body kinematics** (`kinematics.hpp`): head, hands, aims, forearms, feet, yaws and their velocities, every frame. It checks reach, a head off its feet, speed, and a backward web, and writes a `kinematics:` line only on an owner or state change, a new mismatch, or every 5 s while one lasts.
+- **Tests:** map/turn, prediction, kinematics, and the punch owner rule. Not headset-tested.
+
 ## Native Animation: ownership update
 
 **Animation owns the ground, parkour, jumps and landings. SpidyVR owns the air and wall runs. A point launch now plays as the game's own animation, from the Y press to the top of the launch.** The table is in [OWNERSHIP.md](OWNERSHIP.md).

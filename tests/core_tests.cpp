@@ -87,6 +87,8 @@
 #include "spidy/hybrid_steer.hpp"
 #include "spidy/hybrid_handoff.hpp"
 #include "spidy/aim_filter.hpp"
+#include "spidy/arm_frame.hpp"
+#include "spidy/kinematics.hpp"
 #include "spidy/animation_cancel.hpp"
 #include "spidy/animated_steering.hpp"
 #include "spidy/animated_arms.hpp"
@@ -24247,7 +24249,7 @@ int main() {
                   "flip_reprojection=0\nsteady_hud=0\nreel_haptics=0\nswing_haptics=0\n"
                   "pc_media=0\nsingle_hand_yank_percent=100\nweb_tie=0\nnative_run=1\nair_slingshot=0\nweb_angle_"
                   "degrees=0\nwrist_shooters=0\n"
-                  "dodge_tumble=0\nrun_curve=0\nnative_run_at_percent=70\nrun_logs=0\nrunning_leap=0\nearly_jump=0\nsoft_landing=0\nspidy_run=1\nspidy_run_from_standing=0\nweb_aim_source=0\nforearm_blend=100\nweb_landing_smooth=0\nweb_landing_impact_speed=24\nsteady_states=0\ncombat_responsive=0\nspidy_run_jump=1\nforearm_aim_limit=180\npalm_shooters=0\nhead_probe=0\nanimated_moves=1\nanimated_head=2\nanimated_headset_smooth=0\nrun_speed_percent=100\nslow_motion_seconds=12\nsoft_lock_metres=15\nanimated_air=0\nanimated_steering=0\nanimated_arms=1\nanimated_torso=1\nanimated_model_yaw=1\nanimated_only=0\nanimated_air_spin=0\nanimated_hybrid=1\nanimated_hybrid_speed_ms=200\nweb_lines=0\n",
+                  "dodge_tumble=0\nrun_curve=0\nnative_run_at_percent=70\nrun_logs=0\nrunning_leap=0\nearly_jump=0\nsoft_landing=0\nspidy_run=1\nspidy_run_from_standing=0\nweb_aim_source=0\nforearm_blend=100\nweb_landing_smooth=0\nweb_landing_impact_speed=24\nsteady_states=0\ncombat_responsive=0\nspidy_run_jump=1\nforearm_aim_limit=180\npalm_shooters=0\nhead_probe=0\nanimated_moves=1\nanimated_head=2\nanimated_headset_smooth=0\nrun_speed_percent=100\nslow_motion_seconds=12\nsoft_lock_metres=15\nanimated_air=0\nanimated_steering=0\nanimated_arms=1\nanimated_torso=1\nanimated_model_yaw=1\nanimated_only=0\nanimated_air_spin=0\nanimated_hybrid=1\nanimated_hybrid_speed_ms=200\nweb_lines=0\nanimated_full_arms=1\n",
               "the defaults' text");
         Values changed = defaults;
         changed.recordingFov = 140;
@@ -28223,6 +28225,167 @@ int main() {
         check(sanitized(wild).animatedHybridSpeedMs == 5, "speed ms not clamped low");
         wild.animatedHybridSpeedMs = -4;
         check(sanitized(wild).animatedHybridSpeedMs == 0, "negative speed ms not off");
+    });
+
+    test("ARMS IN ANIMATION: hands map like the eyes; an actor's R-stick turn turns the webs with it", [] {
+        using namespace arm_frame;
+        const Pose head{{.1f, 1.6f, .2f}, Quat::around({0, 1, 0}, .3f)};
+        // The grip held 40 cm ahead of the face, pointing where the face looks.
+        // (the shooter's line along the face's look: webShooter turns the grip 90 deg)
+        const Pose grip{head.position + head.orientation.rotate({.15f, -.2f, -.4f}),
+                        head.orientation * Quat::around({1, 0, 0}, 1.5707963f)};
+        auto mapAt = [&](float actorYaw) {
+            ViewMap m;
+            const Pose eyes{{3, 1.7f, -2}, Quat::around({0, 1, 0}, actorYaw)};
+            check(worldAnchor(animated_view::Frame::full, animated_view::toNative(eyes), {}, {}, m.anchor),
+                  "full anchor rejected");
+            m.reference = head;
+            m.valid = true;
+            return m;
+        };
+        const ViewMap before = mapAt(0), after = mapAt(3.14159265f); // standing R-stick 180
+        const Pose g0 = toGame(before, grip), g1 = toGame(after, grip);
+        const Vec3 f0 = shooter(before, grip, 1).orientation.rotate({0, 0, -1});
+        const Vec3 f1 = shooter(after, grip, 1).orientation.rotate({0, 0, -1});
+        const Vec3 look1 = toGame(after, head).orientation.rotate({0, 0, -1});
+        check(dot(f0, f1) < -.95f, "the web did not turn with the actor (webs shoot backwards)");
+        check(dot(f1, look1) > .5f, "the web is not ahead of the turned view");
+        check(std::abs(length(g0.position - toGame(before, head).position) - length(grip.position - head.position)) < 1e-3f &&
+                  std::abs(length(g1.position - toGame(after, head).position) - length(grip.position - head.position)) < 1e-3f,
+              "the hand's reach from the eyes changed in the map");
+        // The swing's tracking yaw is the map's heading: the head's tracked
+        // look turned by it is the mapped look.
+        const float yaw = trackingYaw(after, head);
+        const Vec3 turned = Quat::around({0, 1, 0}, yaw).rotate(head.orientation.rotate({0, 0, -1}));
+        check(dot(Vec3{turned.x, 0, turned.z}, Vec3{look1.x, 0, look1.z}) /
+                      (length(Vec3{turned.x, 0, turned.z}) * length(Vec3{look1.x, 0, look1.z})) > .999f,
+              "tracking yaw does not turn the tracked look onto the mapped look");
+        check(std::abs(hybrid_handoff::wrapPi(trackingYaw(after, head) - trackingYaw(before, head)) - 3.14159265f) < .01f ||
+                  std::abs(hybrid_handoff::wrapPi(trackingYaw(after, head) - trackingYaw(before, head)) + 3.14159265f) < .01f,
+              "tracking yaw missed the actor's 180");
+        // LEVEL keeps the head's place under the scene's heading; WORLD the eyes'.
+        Mat4 level{}, world{};
+        const Pose eyes{{3, 1.7f, -2}, Quat::around({1, 0, 0}, .4f)};
+        const Quat flat = Quat::around({0, 1, 0}, .7f);
+        check(worldAnchor(animated_view::Frame::level, animated_view::toNative(eyes), flat, {}, level), "level rejected");
+        const Pose lp = animated_view::fromNative(level);
+        check(length(lp.position - eyes.position) < 1e-4f &&
+                  dot(lp.orientation.rotate({0, 0, -1}), flat.rotate({0, 0, -1})) > .9999f,
+              "level anchor not the head's place under the level heading");
+        check(worldAnchor(animated_view::Frame::world, {}, {}, eyes, world) &&
+                  length(animated_view::fromNative(world).position - eyes.position) < 1e-4f,
+              "world anchor not the eye centre");
+        check(!worldAnchor(animated_view::Frame::none, animated_view::toNative(eyes), {}, {}, world) &&
+                  !worldAnchor(animated_view::Frame::missing, animated_view::toNative(eyes), {}, {}, world),
+              "no frame mapped anyway");
+    });
+
+    test("HAND PREDICTION: the glove target moves on by the hand's velocity, 25 ms at most", [] {
+        using namespace arm_frame;
+        const Pose p{{0, 0, -.4f}, {}};
+        check(length(ahead(p, {2, 0, 0}, .01f).position - Vec3{.02f, 0, -.4f}) < 1e-5f, "10 ms not followed");
+        check(length(ahead(p, {2, 0, 0}, .5f).position - Vec3{.05f, 0, -.4f}) < 1e-5f, "not clamped at 25 ms");
+        check(length(ahead(p, {2, 0, 0}, -1).position - p.position) < 1e-6f &&
+                  length(ahead(p, {NAN, 0, 0}, .01f).position - p.position) < 1e-6f &&
+                  length(ahead(p, {2, 0, 0}, NAN).position - p.position) < 1e-6f,
+              "a bad wait or velocity moved the hand");
+    });
+
+    test("BODY KINEMATICS: velocities per frame, checks, and a line only when something changes", [] {
+        using namespace kinematics;
+        Tracker k;
+        Snapshot s;
+        s.headValid = s.feetValid = s.handValid[0] = s.handValid[1] = true;
+        s.feet = {0, 0, 0};
+        s.head = {{0, 1.6f, 0}, {}};
+        s.grip[0] = {{-.3f, 1.2f, -.3f}, {}};
+        s.grip[1] = {{.3f, 1.2f, -.3f}, {}};
+        s.aim[0] = s.aim[1] = s.grip[0];
+        s.ns = 0;
+        k.derive(s);
+        check(length(s.headVelocity) == 0 && length(s.handVelocity[0]) == 0, "first frame not at rest");
+        check(validate(s) == 0, "a standing body failed its checks");
+        check(k.shouldLog(s, 0), "the first state not logged");
+        for (int i = 1; i <= 30; ++i) {
+            s.ns = i * 11'000'000ll;
+            s.head.position.x = .02f * static_cast<float>(i); // 1.8 m/s
+            s.feet.x = s.head.position.x;
+            s.grip[1].position.x = .3f + .02f * static_cast<float>(i);
+            k.derive(s);
+            check(!k.shouldLog(s, validate(s)), "a steady frame logged");
+        }
+        check(std::abs(length(s.headVelocity) - 1.818f) < .05f && std::abs(length(s.handVelocity[1]) - 1.818f) < .05f,
+              "velocity not the per-frame motion");
+        // A gap (a pause) restarts at rest rather than as a burst.
+        s.ns += 500'000'000ll;
+        s.head.position.x += 5;
+        k.derive(s);
+        check(length(s.headVelocity) < 2.f, "a pause read as a teleport speed");
+        // The owner changes: logged; hand velocity restarts (another owner's hand).
+        s.owner = 1;
+        s.ns += 11'000'000ll;
+        s.grip[1].position.x += .5f;
+        k.derive(s);
+        check(length(s.handVelocity[1]) == 0, "a hand velocity carried across owners");
+        check(k.shouldLog(s, validate(s)), "an owner change not logged");
+        // A hand 2 m from the head, a head off its feet: one line, then quiet
+        // until the heartbeat (still wrong) or a new issue.
+        s.feet = {s.head.position.x, 0, s.head.position.z};
+        s.grip[0].position = s.head.position + Vec3{-.3f, -.4f, -.3f};
+        s.grip[1].position = s.head.position + Vec3{.3f, -.4f, -.3f};
+        check(validate(s) == 0, "the moved body failed its checks");
+        s.ns += 11'000'000ll;
+        check(!k.shouldLog(s, 0), "a clean frame logged"); // and the old issues are cleared
+        s.grip[0].position = s.head.position + Vec3{0, 0, -2};
+        uint32_t issues = validate(s);
+        check((issues & leftReach) && !(issues & rightReach), "a far hand not caught");
+        s.ns += 11'000'000ll;
+        check(k.shouldLog(s, issues), "a new mismatch not logged");
+        s.ns += 11'000'000ll;
+        check(!k.shouldLog(s, issues), "the same mismatch logged every frame");
+        s.feet.x += 3;
+        issues = validate(s);
+        check((issues & headOffFeet) && k.shouldLog(s, issues), "a head off its feet not logged");
+        s.ns += 6'000'000'000ll;
+        check(k.shouldLog(s, issues), "no heartbeat while it lasts");
+        s.head.position.x = NAN;
+        check(validate(s) & nonFinite, "a NaN head passed");
+        Snapshot web = s;
+        web.head.position = {0, 1.6f, 0};
+        web.feet = {0, 0, 0};
+        web.grip[0].position = {-.3f, 1.2f, -.3f};
+        web.forearmValid[0] = true;
+        web.elbow[0] = {-.3f, 1.2f, 0};
+        web.wrist[0] = {-.3f, 1.2f, -.25f};       // forearm points forward
+        web.aim[0] = {web.grip[0].position, Quat::around({0, 1, 0}, 3.14159265f)}; // web backward
+        check(validate(web) & leftBackward, "a backward web along the arm not caught");
+        web.aim[0].orientation = {};
+        check(!(validate(web) & leftBackward), "a forward web flagged");
+    });
+
+    test("FULL ARMS: a punch's web strike takes SpidyVR (punch), even on the ground, and landing returns", [] {
+        using namespace hybrid_owner;
+        HybridOwner o;
+        Frame f{};
+        f.state.playing = f.state.fresh = f.state.grounded = true;
+        int64_t t = 0;
+        o.update(f, t);
+        f.strike = true;
+        check(o.update(f, t += 11'000'000) == Domain::vr && o.enterVr && o.lastEnterVr == EnterVr::punch &&
+                  std::strcmp(enterVrName(EnterVr::punch), "punch") == 0,
+              "a strike did not hand the arms' lunge to SpidyVR");
+        for (int i = 0; i < 30; ++i)
+            check(o.update(f, t += 11'000'000) == Domain::vr && !o.enterAnim, "the strike was cut short on the ground");
+        f.strike = false;
+        check(o.update(f, t += 11'000'000) == Domain::anim && o.enterAnim && o.lastEnterAnim == EnterAnim::land,
+              "the ended strike on the ground did not land back in the animation");
+        // Off: no strike reaches the owner (contact-only blows).
+        vr_settings::Values v;
+        check(v.animatedFullArms, "FULL ARMS not on by default");
+        check(vr_settings::tabOnlyText(v).find("animated_full_arms=1\n") != std::string::npos &&
+                  !vr_settings::withTabOnly({}, "animated_full_arms=0\n").animatedFullArms &&
+                  vr_settings::withTabOnly({}, "").animatedFullArms,
+              "animated_full_arms ini not kept");
     });
 
     test("OWNERSHIP UPDATE: the ground is the animation's - grip, webs, a jump press, a fight never switch", [] {

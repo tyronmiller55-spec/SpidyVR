@@ -342,6 +342,9 @@ struct OverlayTracking {
 // 0 not managed by player torso, -1 managed but missing/expired (never read
 // our modified head as the next camera anchor). Cinematics never call this.
 int authoredHead(uintptr_t instance, Mat4& world);
+// ARMS IN ANIMATION (arm_frame.hpp): authoredHead for the current hero, the
+// displayed head anchor the hands map onto every XR frame (same returns).
+int viewAnchorWorld(Mat4& world);
 OverlayTracking overlayTracking();
 // A render frame begins (the stereo module's render setup, main thread).
 void renderFrame();

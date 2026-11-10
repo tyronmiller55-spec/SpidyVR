@@ -705,8 +705,11 @@ int main() {
         size_t lines = 0;
         for (size_t line = 0; line < tabOnly.size(); line = tabOnly.find('\n', line) + 1) {
             const std::string key = tabOnly.substr(line, tabOnly.find('=', line) - line);
+            // animated_full_arms: an ini-only test switch for the arms in animation
+            // (no menu row), the player's own like the headset's.
             if (key == "recording_fov" || key == "recording_smoothing" || key == "height_cm" ||
-                key == "eye_aim" || key == "flip_reprojection" || key == "steady_hud")
+                key == "eye_aim" || key == "flip_reprojection" || key == "steady_hud" ||
+                key == "animated_full_arms")
                 continue;
             ++lines;
             check(at(key) < std::size(profileSettings) &&

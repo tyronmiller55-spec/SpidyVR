@@ -24,10 +24,11 @@ Source: the user, Nov 9 09:34 PST. Code: `include/spidy/hybrid_owner.hpp`, the `
 | Y zip pressed from VR in the air | ANIM | `zip`, once the game begins the zip. A zip the game refuses never leaves VR. |
 | Spidy wall run / wall jump | VR | none |
 | Wall run that came out of a Native Run, stick let go on the wall | ANIM | `run-release`. It stays ANIM on that wall. |
+| FULL ARMS (`animated_full_arms`, on): a punch opens a web strike in an animation | VR | `punch`, for the strike's flight and hang, even on the ground. It lands back in ANIM. |
 | Cutscene / stale sample | frozen | none |
 
 **Rules:**
-- No ownership switch happens on the ground.
+- No ownership switch happens on the ground, except a FULL ARMS punch's web strike (the user, Nov 9 22:27: "Punching can pull you out of the animation and teleport you").
 - Switching happens only in midair, on wall runs, and at Native Run's release.
 - The position lock (`position lock:` diag) runs on every switch.
 
@@ -58,3 +59,12 @@ In the air, the R stick turns the camera as in the main game. The player's own L
 - **Air cancel input** = grip, the web-hold button. If WEB BUTTON is swapped, it is the trigger. Web balls never cancel.
 - **Native Run release** applies to a wall run entered within 0.5 s of Native Run's RT. "Released" = left stick tilt under 0.2. In open air the release changes nothing, because SpidyVR owns the air and landing hands back anyway.
 - **ANIMATED HYBRID SPEED** setting is still parsed but no longer used, because the speed takeover was removed.
+
+## Arms in an animation (Nov 9 22:27)
+
+While the animation owns, the arms are the player's own SpidyVR arms (`include/spidy/arm_frame.hpp`). The controller is mapped into the game every headset frame through the same map the eyes use:
+- the headset reference;
+- the view's turn;
+- the animated head's eye anchor, as the actor stands now.
+
+Webs, web balls, markers and punches aim from that pose, and the glove is solved onto it. When the player torso's anchor is missing, the old pose-job mapping is used.
