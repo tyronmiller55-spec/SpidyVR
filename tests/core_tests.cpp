@@ -2,6 +2,7 @@
 #include "spidy/native_view.hpp"
 #include "spidy/game_tracking.hpp"
 #include "spidy/leg_control.hpp"
+#include "spidy/xr_connect.hpp"
 #include "spidy/native_eye_frame.hpp"
 #include "spidy/native_hud.hpp"
 #include "spidy/native_eye_history.hpp"
@@ -641,6 +642,53 @@ int main() {
         }
     };
 
+    test("an unavailable headset is asked for again until it comes (November 11, -35)", [] {
+        using namespace spidy::xr_connect;
+        // Meta Quest Link said XR_ERROR_FORM_FACTOR_UNAVAILABLE five starts in a row; Spidy gave up at once.
+        int calls = 0;
+        double slept = 0, waited = 0;
+        unsigned attempts = 0;
+        Wait wait;
+        const auto code = retry([&] { return ++calls < 6 ? formFactorUnavailable : 0; },
+                                [&](double s) { slept += s; }, [](double, unsigned, int32_t) { return true; },
+                                wait, waited, attempts);
+        check(code == 0 && calls == 6 && attempts == 6, "the headset that came after 5 refusals was not found");
+        near(static_cast<float>(waited), static_cast<float>(slept), 1e-6f);
+        near(static_cast<float>(waited), .25f + .5f + 1 + 1 + 1, 1e-5f);
+        // It never comes: gives up after the limit with the runtime's own code.
+        calls = 0;
+        wait.limitSeconds = 10;
+        check(retry([&] { ++calls; return formFactorUnavailable; }, [](double) {},
+                    [](double, unsigned, int32_t) { return true; }, wait, waited, attempts) == formFactorUnavailable,
+              "a headset that never came was found");
+        check(waited >= 10 && waited < 11.01 && attempts == static_cast<unsigned>(calls), "the wait overran its limit");
+        // Stopping VR ends the wait.
+        calls = 0;
+        retry([&] { ++calls; return formFactorUnavailable; }, [](double) {},
+              [](double s, unsigned, int32_t) { return s < 2; }, Wait{}, waited, attempts);
+        check(waited >= 2 && waited < 3.01, "stopping did not end the wait");
+        // Other failures are not retried, and a limit of 0 asks once (the probes, as before).
+        calls = 0;
+        check(retry([&] { ++calls; return -34; }, [](double) {}, [](double, unsigned, int32_t) { return true; },
+                    Wait{}, waited, attempts) == -34 && calls == 1,
+              "an unsupported form factor was asked again");
+        calls = 0;
+        retry([&] { ++calls; return formFactorUnavailable; }, [](double) {},
+              [](double, unsigned, int32_t) { return true; }, Wait{0}, waited, attempts);
+        check(calls == 1, "a limit of 0 asked again");
+    });
+    test("OpenXR codes and session states are named in the connection log", [] {
+        using namespace spidy::xr_connect;
+        check(describe("Find headset", -35) == "Find headset XrResult=-35 (XR_ERROR_FORM_FACTOR_UNAVAILABLE)",
+              describe("Find headset", -35).c_str());
+        check(std::string(resultName(-17)) == "XR_ERROR_SESSION_LOST", "-17");
+        check(std::string(resultName(-51)) == "XR_ERROR_RUNTIME_UNAVAILABLE", "-51");
+        check(std::string(resultName(-999)) == "XR_ERROR (unnamed)", "unknown");
+        check(std::string(stateName(7)) == "LOSS_PENDING" && std::string(stateName(5)) == "FOCUSED", "states");
+        check(waitingLine("Meta Quest Link", 10, 120).find("Meta Quest Link says it is not available") !=
+                  std::string::npos,
+              "the waiting line does not name the runtime");
+    });
     struct SlingWorld : TwoAnchors {
         std::optional<RayHit> raycast(Vec3 o, Vec3 d, float distance) const override {
             return enabled ? TwoAnchors::raycast(o, d, distance) : std::nullopt;

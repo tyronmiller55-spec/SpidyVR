@@ -2,10 +2,12 @@
 #include "controller_layout.hpp"
 #include "d3d12_renderer.hpp"
 #include "tracking.hpp"
+#include "xr_connect.hpp"
 #include "xr_timing.hpp"
 #include <algorithm>
 #include <cmath>
 #include <functional>
+#include <string>
 #include <openxr/openxr.h>
 #include <openxr/openxr_platform.h>
 
@@ -13,6 +15,27 @@ namespace spidy {
 class XrRuntime {
   public:
     ~XrRuntime();
+    // The connection's lines, for the player's logs (xr_connect.hpp): the
+    // runtime and its version, each step of the start with its result, how
+    // long a headset wait took, and every session state with its time. Set
+    // before initialize; also printed as before.
+    std::function<void(const std::string&)> log;
+    // While the runtime calls the headset unavailable at the start
+    // (XR_ERROR_FORM_FACTOR_UNAVAILABLE): the seconds waited so far and the
+    // attempt; false stops the wait. Up to headsetWait.limitSeconds; 0 (the
+    // default, for the probes) asks once, as before.
+    std::function<bool(double, unsigned)> waitingForHeadset;
+    xr_connect::Wait headsetWait{0};
+    // Why the runtime ended the session (LOSS_PENDING, EXITING, the instance
+    // lost), once it has; empty while it runs.
+    const std::string& endReason() const {
+        return endReason_;
+    }
+    // The runtime's name ("Meta Quest Link" or as it calls itself), once
+    // initialize has created the instance.
+    const std::string& runtimeName() const {
+        return runtimeName_;
+    }
     void initialize(D3D12Renderer& renderer, bool probeOnly = false);
     // The game adapter supplies its actual device and direct queue. The runtime
     // validates the OpenXR GPU/feature requirements and retains COM references.
@@ -180,6 +203,10 @@ class XrRuntime {
     DXGI_FORMAT format_{};
     XrTime previousTime_{};
     bool running_{}, exit_{};
+    void note(const std::string& line);
+    std::string endReason_, runtimeName_;
+    // When the session was created, for the state changes' times.
+    double createdAt_{};
     bool lastFrameSubmitted_{};
     bool flatScreen_{}, stereoScreen_{}, headLocked_{};
     Pose screenPose_{};

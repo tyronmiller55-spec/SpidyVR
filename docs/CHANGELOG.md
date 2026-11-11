@@ -3,6 +3,16 @@
 Every build, newest first, with what changed, why, and what was measured.
 Per-check results are in [VALIDATION.md](VALIDATION.md).
 
+## Native Animation: OpenXR connection, wait for an unavailable headset, connection log
+
+The user, Nov 11 12:06 PST: "VR is constantly dropping now, can't even get in ... only SpidyVR is dropping connection". Not headset-tested.
+
+- **What the logs showed:** five starts of 0e9436e between 11:41 and 11:46 PST stopped at the in-game `xrGetSystem` with `XrResult=-35` (XR_ERROR_FORM_FACTOR_UNAVAILABLE) about 19 s after the game started and seconds after the launcher's probe had found the Quest 3S on Meta Quest Link. No session was created, so it was neither a session loss nor the new leg code. `xr_session.cpp` is the same in ed4616e, 6ec06c4, 8cce51d, 0e9436e and upstream 0.8.6.
+- **The fix (`xr_connect.hpp`):** the OpenXR specification says -35 means the headset is supported but not available right now (asleep, off the head, Link not started) and that a later call may succeed; Meta's documentation says Link returns it while its connection is not available. Spidy gave up on the first one. It now asks again (0.25 s, 0.5 s, then each second) for up to two minutes, telling the player every 5 s; stopping VR ends the wait. The probes keep asking once.
+- **Connection log:** the runtime's name and version, the extensions enabled, each step's result (create instance, find headset with attempts and seconds, create session, begin and end session) and every session state change with its time since the session was created, on the launcher's console while VR starts and in the report's timeline (and RUN LOGS) throughout. Every OpenXR failure names its code (`XrResult=-35 (XR_ERROR_FORM_FACTOR_UNAVAILABLE)`); a session or instance lost says the runtime lost it; LOSS_PENDING, EXITING and an instance loss end VR with that reason in the status line. The old "connect Quest to Virtual Desktop first" text is gone for Link.
+- **Not done:** recreating a lost session in place (the swapchains, actions and spaces are rebuilt only by a new start).
+- **Tests:** the wait (found after refusals, gives up at the limit, stopping ends it, other codes not retried, a limit of 0 asks once) and the names. Core 917/917.
+
 ## Native Animation: right-stick leg control (first pass)
 
 The user, Nov 10 (t41u): "procedural leg control on the right stick, but only when Controlled Flips is on ... an advanced feature ... smoothly blend between straight leg positions, jacknife for forward, left and right leg splays, and a rearward leg splay ... loosen the legs more so that momentum plays on them ... and we want momentum on them so that they affect rotation"; t42u "procedural legs are only in midair or during swinging"; t43u "Make zip and heal work in midair, but you have to double tap them". Built on 8cce51d. Not headset-tested.

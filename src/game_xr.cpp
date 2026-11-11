@@ -802,6 +802,30 @@ DWORD WINAPI run(void*) {
         if (FAILED(queue->GetDevice(IID_PPV_ARGS(&device))))
             throw std::runtime_error("Game graphics device unavailable");
         XrRuntime runtime;
+        // The connection's lines (xr_connect.hpp): on the launcher's console while VR starts (its log
+        // keeps every status line), and in the report's timeline and RUN LOGS throughout, so a start
+        // or a drop names the OpenXR call, its result and the session states before it.
+        bool connecting = true;
+        runtime.log = [&connecting](const std::string& line) {
+            game_prompts::note(line.c_str());
+            if (connecting)
+                message(1, 0, line.c_str());
+        };
+        // A headset the runtime calls unavailable is waited for (November 11: Meta Quest Link said so
+        // five starts in a row, seconds after the launcher's probe had found it), up to two minutes,
+        // telling the player; stopping VR ends the wait.
+        runtime.headsetWait = xr_connect::Wait{};
+        // One status line each 5 s of the wait, not each attempt (the launcher prints every change).
+        int waitShown = -1;
+        runtime.waitingForHeadset = [&runtime, &waitShown](double seconds, unsigned) {
+            if (static_cast<int>(seconds / 5) != waitShown) {
+                waitShown = static_cast<int>(seconds / 5);
+                const auto line = xr_connect::waitingLine(runtime.runtimeName().c_str(), seconds,
+                                                          runtime.headsetWait.limitSeconds);
+                message(1, 0, line.c_str());
+            }
+            return !stopRequested.load();
+        };
         {
             RuntimeSelection selected(config.runtime);
             LayerSwitches layers;
@@ -812,6 +836,7 @@ DWORD WINAPI run(void*) {
             }
             runtime.initialize(device.Get(), queue, config.eyeSize, config.renderScale);
         }
+        connecting = false;
         D3D12Renderer overlay;
         overlay.initialize(device.Get(), queue);
         // The session report's copies of the left eye live in the overlay's
@@ -8286,7 +8311,12 @@ DWORD WINAPI run(void*) {
             native_body::setHeadProbe(false);
             publishDiag();
         }
-        message(6, 0, "Stopping VR and restoring game hooks");
+        if (!runtime.endReason().empty()) {
+            const auto text = runtime.endReason() + ". Stopping VR and restoring game hooks";
+            game_prompts::note(text.c_str());
+            message(6, 0, text.c_str());
+        } else
+            message(6, 0, "Stopping VR and restoring game hooks");
     } catch (const std::exception& e) {
         error = 1;
         failure = e.what();
