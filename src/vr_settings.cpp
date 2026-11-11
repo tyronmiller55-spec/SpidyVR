@@ -455,6 +455,8 @@ template <class V> auto switchOf(Item item, V& v) -> decltype(&v.aimMarkers) {
         return &v.webTie;
     case Item::webLines:
         return &v.webLines;
+    case Item::airFists:
+        return &v.airFists;
     case Item::view:
         return &v.flatScreen;
     case Item::realisticFlips:
@@ -595,9 +597,9 @@ Values sanitized(Values v) {
     v.automaticHandThreshold = std::clamp(v.automaticHandThreshold, 50, 300);
     return v;
 }
-const std::array<Row, 126>& rows() {
+const std::array<Row, 127>& rows() {
     // The help fits the game's description column beside the rows.
-    static const std::array<Row, 126> all{{
+    static const std::array<Row, 127> all{{
         {Item::none, "WEBS", nullptr, {}},
         {Item::webStyle, "WEB STYLE",
          "Arcade: webs pass lamp posts, signs and cars, and swings stay above the street.", webStyleChoices},
@@ -917,6 +919,10 @@ const std::array<Row, 126>& rows() {
          legSpringChoices},
         {Item::legCoupling, "LEG COUPLING", "How much the legs' swing turns your body in the air.",
          legCouplingChoices},
+        {Item::airFists,
+         "AIR FISTS",
+         "A fast hand closes into a fist with nobody to punch. Off: only near enemies.",
+         {}},
         {Item::realisticFlips,
          "REALISTIC FLIPS",
          "Momentum rotation from arms and webs. FLIPS also enables left-stick steering.",
@@ -981,7 +987,7 @@ const std::array<Screen, categoryCount>& screens() {
         Item::spidyRun, Item::spidyRunFromStanding, Item::spidyRunJump, Item::momentumLeap,
         Item::earlyJump, Item::softLanding, Item::webLandingSmooth, Item::webLandingImpact,
         Item::handClimb, Item::joystickRunCamera, Item::wallRunCameraTilt, Item::combatResponsive,
-        Item::combatVisuals, Item::halfPunchDamage, Item::runLogs,
+        Item::combatVisuals, Item::halfPunchDamage, Item::airFists, Item::runLogs,
     };
     static constexpr Item flips[] = {
         Item::realisticFlips, Item::flips, Item::controlledFlips, Item::flipSpeed,
@@ -1431,6 +1437,7 @@ constexpr TabOnly tabOnly[] = {
     {"leg_damping_pct", nullptr, &Values::legDampingPct},
     {"leg_coupling_pct", nullptr, &Values::legCouplingPct},
     {"leg_double_tap_ms", nullptr, &Values::legDoubleTapMs},
+    {"air_fists", &Values::airFists, nullptr},
 };
 } // namespace
 std::string tabOnlyText(const Values& v) {

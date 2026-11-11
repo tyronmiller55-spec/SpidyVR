@@ -354,9 +354,10 @@ Your body and fists
   Take the other hand's  that hand closes into a fist on the web
   web
   Squeeze a grip ....... otherwise closes that hand into a fist (the grip
-                         when the trigger is your web button); with an enemy
-                         marked or within reach a hand moving fast is a fist
-                         too, even while it shoots
+                         when the trigger is your web button). A hand moving
+                         fast is a fist too (AIR FISTS off: only with an
+                         enemy marked or within reach), and with an enemy
+                         near even while it shoots
   T-pose, both triggers  calibrates your body (when the panel asks): his
                          height and arms become yours. B skips it
 
@@ -545,15 +546,17 @@ Moving
                          it holds for as long as you hold the trigger. No
                          web ball from that pull
   Both hands at your ... the game's suit power (its L3 + R3, which nothing
-  chest, both triggers   sent in VR before): both hands together before your
-                         chest, a fist's width apart, pull both triggers at
-                         once. No web balls from those pulls. The game uses
-                         its power when its meter is full, as in the flat game.
-                         Both hands buzz as it goes out. Builds before
-                         October 23 buzzed but sent the game nothing. Builds
-                         before November 5 kept any trigger pulled near the
-                         chest for it, so webs, web balls and the reel failed
-                         with the hands at rest there
+  chest, both triggers   sent in VR before): both hands together at your
+                         chest or held a little before it, wrists together,
+                         pull both triggers at once. No web balls from those
+                         pulls. The game uses its power when its meter is
+                         full, as in the flat game. Both hands buzz as it goes
+                         out. Builds before October 23 buzzed but sent the
+                         game nothing. Builds before November 5 kept any
+                         trigger pulled near the chest for it, so webs, web
+                         balls and the reel failed with the hands at rest
+                         there; builds of November 5 to 11 wanted both hands
+                         within 12 cm of one point, and most tries missed it
   Menu button .......... pause
   Hold both sticks in .. pause too, after a moment (both hands buzz). Under
                          SteamVR the Quest's menu button is SteamVR's own:
@@ -1090,6 +1093,10 @@ VR settings
                    finishers. Launch and smash velocity, knockback, combo
                    rules and punch recognition do not change. Off restores
                    normal damage. This is not a global game damage setting.
+  AIR FISTS ...... in VR MOVEMENT after HALF PUNCH DAMAGE, on by default: a
+                   hand moved fast closes into a fist even with nobody to
+                   punch. Off: only with an enemy marked or within reach,
+                   so hands moved about at rest never close.
   WEB TIE ........ in VR WEBS, off by default.
                    Web an enemy up, put one web on a wall (a ceiling, a
                    beam, a crane, a lamp post) and the other on him, bring

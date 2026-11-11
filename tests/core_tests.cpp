@@ -2367,6 +2367,9 @@ int main() {
         check(!airborne(sample(1,0,0,0x2060001,0),now,hz),"a perch (contact 2) is airborne");
         check(!airborne(sample(1,0,1,0x2060005,0),now,hz),"a wall crawl is airborne");
         check(!airborne(sample(1,0,0,0x2060000,0),now,hz),"a wall run is airborne");
+        // November 11: the swing running the body on the ground (SPIDY RUN, the landing carry) is not.
+        check(!airborne(sample(2,1,1,0x2060000,0),now,hz),"SPIDY RUN on the ground is airborne");
+        check(!airborne(sample(2,1,1,0x2060010,0),now,hz),"the landing carry is airborne");
         check(!airborne(sample(2,1,0,0x2060010,hz/5),now,hz),"a step 200 ms old is airborne");
         check(airborne(sample(2,1,0,0x2060010,-hz/100),now,hz),"a step newer than the frame is not airborne");
         check(!airborne(sample(0,1,0,0x2060010,0),now,hz),"a stopped swing is airborne");
@@ -8998,19 +9001,21 @@ int main() {
         near(pose.shoot,0,.001f);near(pose.fist,1,.001f);
         // November 5: an open hand moved fast with nobody to punch stays open ("if I don't do anything
         // they just spam a grab motion"); with somebody to punch it is a fist.
-        HandPoser waving;
-        HandPoseInput waved;
-        waved.tracked = true;
-        waved.speed = 3;
-        for (int i = 0; i < 5; ++i)
-            pose = waving.update(dt, waved);
-        near(pose.fist, 0, .001f);
-        near(pose.shoot, 0, .001f);
-        HandPoser punching;
-        waved.fighting = true;
-        for (int i = 0; i < 5; ++i)
-            pose = punching.update(dt, waved);
-        near(pose.fist, 1, .001f);
+        // November 11: AIR FISTS (on by default) closes it all the same, as before November 5 ("I liked
+        // when even if there wasn't a enemy I could punch and it would go into a fist"); the shooting pose
+        // stays over it while the hand shoots, as before.
+        HandPoser waving;HandPoseInput waved;waved.tracked=true;waved.speed=3;
+        for(int i=0;i<5;++i)pose=waving.update(dt,waved);
+        near(pose.fist,0,.001f);near(pose.shoot,0,.001f);
+        HandPoser punching;waved.fighting=true;
+        for(int i=0;i<5;++i)pose=punching.update(dt,waved);
+        near(pose.fist,1,.001f);
+        HandPoser air;waved.fighting=false;waved.airFists=true;
+        for(int i=0;i<5;++i)pose=air.update(dt,waved);
+        near(pose.fist,1,.001f);near(pose.shoot,0,.001f);
+        HandPoser airShot;HandPoseInput shooting=waved;shooting.web=1;
+        for(int i=0;i<5;++i)pose=airShot.update(dt,shooting);
+        near(pose.fist,1,.001f);near(pose.shoot,1,.001f);
         // An untracked hand is neither.
         thrown.tracked=false;pose=fight.update(dt,thrown);
         near(pose.fist,0);near(pose.shoot,0);
@@ -10519,16 +10524,26 @@ int main() {
         // November 5: one hand at the chest, the other away, is a web at once (the
         // other hand on the web's trigger, a player at rest, never waits).
         SuitPowerPress alone;
-        Pose spread[2]{{{-.06f, 1.33f, -.15f}, {}}, {{.3f, 1.1f, -.3f}, {}}};
-        float single[2]{1, 0};
-        check(!alone.update(dt, true, head, spread, both, single) && !alone.hands(),
-              "one hand at the chest held its trigger");
-        // Both at the chest but 22 cm apart (an October 28 player at rest): no gesture.
+        Pose spread[2]{{{-.06f,1.33f,-.15f},{}},{{.3f,1.1f,-.3f},{}}};
+        float single[2]{1,0};
+        check(!alone.update(dt,true,head,spread,both,single)&&!alone.hands(),"one hand at the chest held its trigger");
+        // Both at the chest but 30 cm apart: no gesture.
         SuitPowerPress wide;
-        Pose wideGrips[2]{{{-.11f, 1.33f, -.15f}, {}}, {{.11f, 1.33f, -.15f}, {}}};
-        float bothPulled[2]{1, 1};
-        check(!wide.update(dt, true, head, wideGrips, both, bothPulled) && !wide.hands() && !wide.powers(),
-              "hands 22 cm apart were the suit power");
+        Pose wideGrips[2]{{{-.15f,1.33f,-.15f},{}},{{.15f,1.33f,-.15f},{}}};
+        float bothPulled[2]{1,1};
+        check(!wide.update(dt,true,head,wideGrips,both,bothPulled)&&!wide.hands()&&!wide.powers(),
+              "hands 30 cm apart were the suit power");
+        // November 11: wrists together held out before the chest, 31 cm ahead of the eyes and 33 cm
+        // under them (a player's 30 tries, of which the 12 cm round a point took 6) are the power too;
+        // the hands at arm's length, 55 cm ahead, are not.
+        SuitPowerPress out;
+        Pose held[2]{{{-.07f,1.37f,-.31f},{}},{{.07f,1.37f,-.31f},{}}};
+        check(out.update(dt,true,head,held,both,bothPulled)&&out.powers()==1,
+              "hands held out before the chest were no suit power");
+        SuitPowerPress reaching;
+        Pose arms[2]{{{-.07f,1.37f,-.55f},{}},{{.07f,1.37f,-.55f},{}}};
+        check(!reaching.update(dt,true,head,arms,both,bothPulled)&&!reaching.hands(),
+              "hands at arm's length were the suit power");
         // A hand whose web is out reels with its trigger: never the gesture's.
         SuitPowerPress reel;
         const bool webOut[2]{true, false};
@@ -23750,12 +23765,19 @@ int main() {
                                   Item::automaticHandStrength, Item::automaticFalloff,     Item::automaticHandThreshold,
                                   Item::automaticAirBrake,     Item::automaticCombat};
         // The realistic flips' rows come last, after the EXPERIMENTAL rows before them.
-        constexpr size_t firstRealistic = 115; // RUN SPEED, SLOW-MO LENGTH, SOFT LOCK, the ten camera rows, the four leg rows
+        constexpr size_t firstRealistic = 116; // RUN SPEED, SLOW-MO LENGTH, SOFT LOCK, the ten camera rows, the four leg rows, AIR FISTS
         check(all.size() == firstRealistic + std::size(realistic), "the realistic flips' rows are not the last");
         for (size_t i = 0; i < std::size(realistic); ++i)
             check(all[firstRealistic + i].item == realistic[i], "the realistic flips' rows out of order");
         check(std::strcmp(all[firstRealistic].title, "REALISTIC FLIPS") == 0 && all[firstRealistic].choices.empty(),
               "realistic flips: a switch, first of its rows");
+        // AIR FISTS (November 11): a switch just before them (after the four leg rows), on by default, shown on the Movement page after
+        // HALF PUNCH DAMAGE and kept as air_fists.
+        check(all[115].item == Item::airFists && std::strcmp(all[115].title, "AIR FISTS") == 0 &&
+                  all[115].choices.empty() && all[115].place == Place::tab && Values{}.airFists &&
+                  defaultChoice(Item::airFists) == 1 && !withTabOnly({}, "air_fists=0\n").airFists &&
+                  withTabOnly({}, "").airFists,
+              "AIR FISTS: an ON switch before the realistic flips, kept as air_fists");
         check(all[50].item == Item::controlledFlips && all[53].item == Item::joystickRunCamera &&
                   all[54].item == Item::wallRunCameraTilt && all[55].item == Item::halfPunchDamage,
               "custom switches misplaced");
@@ -23965,7 +23987,7 @@ int main() {
                   "a row in the wrong place");
         }
         check(std::count_if(all.begin(), all.end(), [](const Row& r) { return r.place == Place::tab; }) ==
-                  121,
+                  122,
               "the tab's own rows");
         check(all[1].item == Item::webStyle && std::strcmp(all[1].title, "WEB STYLE") == 0 &&
                   all[1].choices.size() == 2 && std::strcmp(all[1].choices[0], "REALISTIC") == 0 &&
@@ -24254,7 +24276,7 @@ int main() {
                   "camera_stabilization=0\ncamera_vertical_ms=0\ncamera_horizontal_ms=0\ncamera_angle_ms=0\n"
                   "camera_light_vertical_ms=75\ncamera_light_horizontal_ms=50\ncamera_light_angle_ms=75\n"
                   "camera_heavy_vertical_ms=200\ncamera_heavy_horizontal_ms=150\ncamera_heavy_angle_ms=200\n"
-                  "spherical_aim=1\nleg_control=0\nleg_stiffness_pct=100\nleg_damping_pct=100\nleg_coupling_pct=50\nleg_double_tap_ms=300\n",
+                  "spherical_aim=1\nleg_control=0\nleg_stiffness_pct=100\nleg_damping_pct=100\nleg_coupling_pct=50\nleg_double_tap_ms=300\nair_fists=1\n",
               "the defaults' text");
         Values changed = defaults;
         changed.recordingFov = 140;
@@ -27866,7 +27888,7 @@ int main() {
                   all[89].choices.size() == 9 && std::strcmp(all[89].choices[0], "OFF") == 0 &&
                   std::strcmp(all[89].choices[8], "500 MS") == 0 && all[89].place == Place::tab,
               "ANIMATED HYBRID SPEED row");
-        check(lastItem == Item::legCoupling && Item::animatedHeadsetSmooth < lastItem &&
+        check(lastItem == Item::airFists && Item::legCoupling < lastItem && Item::animatedHeadsetSmooth < lastItem &&
                   Item::softLock < Item::cameraStabilization,
               "SMOOTHING not included in the last Item bound");
     });
@@ -31018,7 +31040,7 @@ int main() {
     test("Native Animation: combined menu inventory and upstream-compatible v39 settings packet", [] {
         using namespace vr_settings;
         const auto& all = rows();
-        check(all.size() == 126 && static_cast<unsigned>(lastItem) < 256, "row/Item bounds");
+        check(all.size() == 127 && static_cast<unsigned>(lastItem) < 256, "row/Item bounds");
         std::array<unsigned, 256> seen{};
         size_t start = all.size();
         for (size_t i = 0; i < all.size(); ++i) {
