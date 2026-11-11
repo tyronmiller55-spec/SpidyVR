@@ -23749,7 +23749,7 @@ int main() {
                                   Item::automaticHandStrength, Item::automaticFalloff,     Item::automaticHandThreshold,
                                   Item::automaticAirBrake,     Item::automaticCombat};
         // The realistic flips' rows come last, after the EXPERIMENTAL rows before them.
-        constexpr size_t firstRealistic = 101; // RUN SPEED, SLOW-MO LENGTH, SOFT LOCK before them
+        constexpr size_t firstRealistic = 111; // RUN SPEED, SLOW-MO LENGTH, SOFT LOCK, the ten camera rows
         check(all.size() == firstRealistic + std::size(realistic), "the realistic flips' rows are not the last");
         for (size_t i = 0; i < std::size(realistic); ++i)
             check(all[firstRealistic + i].item == realistic[i], "the realistic flips' rows out of order");
@@ -23964,7 +23964,7 @@ int main() {
                   "a row in the wrong place");
         }
         check(std::count_if(all.begin(), all.end(), [](const Row& r) { return r.place == Place::tab; }) ==
-                  107,
+                  117,
               "the tab's own rows");
         check(all[1].item == Item::webStyle && std::strcmp(all[1].title, "WEB STYLE") == 0 &&
                   all[1].choices.size() == 2 && std::strcmp(all[1].choices[0], "REALISTIC") == 0 &&
@@ -24249,7 +24249,11 @@ int main() {
                   "flip_reprojection=0\nsteady_hud=0\nreel_haptics=0\nswing_haptics=0\n"
                   "pc_media=0\nsingle_hand_yank_percent=100\nweb_tie=0\nnative_run=1\nair_slingshot=0\nweb_angle_"
                   "degrees=0\nwrist_shooters=0\n"
-                  "dodge_tumble=0\nrun_curve=0\nnative_run_at_percent=70\nrun_logs=0\nrunning_leap=0\nearly_jump=0\nsoft_landing=0\nspidy_run=1\nspidy_run_from_standing=0\nweb_aim_source=0\nforearm_blend=100\nweb_landing_smooth=0\nweb_landing_impact_speed=24\nsteady_states=0\ncombat_responsive=0\nspidy_run_jump=1\nforearm_aim_limit=180\npalm_shooters=0\nhead_probe=0\nanimated_moves=1\nanimated_head=2\nanimated_headset_smooth=0\nrun_speed_percent=100\nslow_motion_seconds=12\nsoft_lock_metres=15\nanimated_air=0\nanimated_steering=0\nanimated_arms=1\nanimated_torso=1\nanimated_model_yaw=1\nanimated_only=0\nanimated_air_spin=0\nanimated_hybrid=1\nanimated_hybrid_speed_ms=200\nweb_lines=0\nanimated_full_arms=1\n",
+                  "dodge_tumble=0\nrun_curve=0\nnative_run_at_percent=70\nrun_logs=0\nrunning_leap=0\nearly_jump=0\nsoft_landing=0\nspidy_run=1\nspidy_run_from_standing=0\nweb_aim_source=0\nforearm_blend=100\nweb_landing_smooth=0\nweb_landing_impact_speed=24\nsteady_states=0\ncombat_responsive=0\nspidy_run_jump=1\nforearm_aim_limit=180\npalm_shooters=0\nhead_probe=0\nanimated_moves=1\nanimated_head=2\nanimated_headset_smooth=0\nrun_speed_percent=100\nslow_motion_seconds=12\nsoft_lock_metres=15\nanimated_air=0\nanimated_steering=0\nanimated_arms=1\nanimated_torso=1\nanimated_model_yaw=1\nanimated_only=0\nanimated_air_spin=0\nanimated_hybrid=1\nanimated_hybrid_speed_ms=200\nweb_lines=0\nanimated_full_arms=1\n"
+                  "camera_stabilization=0\ncamera_vertical_ms=0\ncamera_horizontal_ms=0\ncamera_angle_ms=0\n"
+                  "camera_light_vertical_ms=75\ncamera_light_horizontal_ms=50\ncamera_light_angle_ms=75\n"
+                  "camera_heavy_vertical_ms=200\ncamera_heavy_horizontal_ms=150\ncamera_heavy_angle_ms=200\n"
+                  "spherical_aim=1\n",
               "the defaults' text");
         Values changed = defaults;
         changed.recordingFov = 140;
@@ -27861,7 +27865,8 @@ int main() {
                   all[89].choices.size() == 9 && std::strcmp(all[89].choices[0], "OFF") == 0 &&
                   std::strcmp(all[89].choices[8], "500 MS") == 0 && all[89].place == Place::tab,
               "ANIMATED HYBRID SPEED row");
-        check(lastItem == Item::softLock && Item::animatedHeadsetSmooth < lastItem,
+        check(lastItem == Item::heavyAngle && Item::animatedHeadsetSmooth < lastItem &&
+                  Item::softLock < Item::cameraStabilization,
               "SMOOTHING not included in the last Item bound");
     });
 
@@ -29285,6 +29290,142 @@ int main() {
              check(plantOff < .01f, "airMomentum moved a grounded plant");
          });
 
+    test("PROCEDURAL LEGS ONLY IN THE AIR: no trail on wall runs or the ground, eased out on landing",
+         [] {
+             const auto b = testBody();
+             const auto& rig = b.rig;
+             const int joints = static_cast<int>(rig.parent.size());
+             auto jump = b.rest;
+             {
+                 body::Pose p(jump.data(), joints);
+                 for (const auto& leg : rig.legs) {
+                     p.turn(rig.below[leg.upper], body::axisAngle({1, 0, 0}, -.6f), p.position(leg.upper));
+                     p.turn(rig.below[leg.lower], body::axisAngle({1, 0, 0}, 1.2f), p.position(leg.lower));
+                 }
+             }
+             const body::Pose snap(jump.data(), joints);
+             body::Targets t;
+             t.head = true;
+             t.up = {0, 1, 0};
+             t.facing = Quat::yaw(3.14159265f);
+             const Vec3 F = t.facing.rotate({0, 0, -1}), U = t.facing.rotate({0, 1, 0});
+             t.eyes = snap.position(rig.head) + F * rig.eyesFromHead.x + U * rig.eyesFromHead.y +
+                      cross(U, F) * rig.eyesFromHead.z + Vec3{0, .12f, 0};
+             for (int i = 0; i < 2; ++i) {
+                 const Vec3 shoulder = snap.position(rig.arms[i].upper);
+                 t.hands[i] = {true, shoulder + Vec3{0, -.15f, .35f}, gripFacing({0, 0, 1}), 0, 0};
+             }
+             const float dt = 1.f / 90;
+             body::Config c;
+             // The gate itself.
+             body::Targets air = t;
+             air.airborne = true;
+             check(body::airLegsAllowed(air), "midair not allowed");
+             for (auto change : {+[](body::Targets& x) { x.wallRun = true; }, +[](body::Targets& x) { x.crawl = true; },
+                                 +[](body::Targets& x) { x.plant = true; }, +[](body::Targets& x) { x.kneel = true; },
+                                 +[](body::Targets& x) { x.kick = true; },
+                                 +[](body::Targets& x) { x.surfaceHands = true; },
+                                 +[](body::Targets& x) { x.airborne = false; }}) {
+                 body::Targets x = air;
+                 change(x);
+                 check(!body::airLegsAllowed(x), "procedural legs allowed off the air");
+             }
+             // In the air the trail comes in over airLegBlendSeconds, not at once.
+             body::Targets moving = air;
+             moving.airMomentum = true;
+             moving.airVelocity = F * 10.f;
+             body::State s;
+             body::seedFromPose(snap, rig, moving, s);
+             std::vector<float> poseData;
+             float firstWeight = -1;
+             for (int k = 0; k < 60; ++k) {
+                 poseData = jump;
+                 body::Pose p(poseData.data(), joints);
+                 body::solve(p, rig, moving, c, s, true, dt);
+                 if (k == 0)
+                     firstWeight = s.airLegWeight;
+             }
+             check(firstWeight > 0 && firstWeight < .1f, "the air trail did not ease in");
+             check(s.airLegWeight >= 1.f - 1e-4f, "the air trail never came all in");
+             // A landing: the trail eases out, it does not snap and it does not stay.
+             body::Targets landed = moving;
+             landed.airborne = false;
+             landed.plant = true;
+             landed.floor = {0, 0, 0};
+             std::vector<float> weights;
+             for (int k = 0; k < 40; ++k) {
+                 poseData = b.rest;
+                 body::Pose p(poseData.data(), joints);
+                 body::solve(p, rig, landed, c, s, true, dt);
+                 weights.push_back(s.airLegWeight);
+             }
+             check(weights[0] > .85f && weights[0] < 1.f, "the landing snapped the legs");
+             bool falling = true;
+             for (size_t k = 1; k < weights.size(); ++k)
+                 falling = falling && weights[k] <= weights[k - 1];
+             check(falling && weights.back() == 0.f && s.airLegWeight == 0.f && !s.airFootSet,
+                   "the trail stayed on the ground");
+             const int framesOut = static_cast<int>(std::count_if(weights.begin(), weights.end(),
+                                                                  [](float w) { return w > 0; }));
+             check(framesOut >= 15 && framesOut <= 20, ("eased out over " + std::to_string(framesOut) +
+                                                         " frames, not about 0.2 s").c_str());
+             // A wall run with a velocity: the run's legs, never the trail.
+             body::Targets run = moving;
+             run.wallRun = true;
+             run.runNormal = {1, 0, 0};
+             run.runAhead = {0, 0, -1};
+             run.floor = {-.5f, 0, 0};
+             run.runPhase = .3f;
+             run.runSpeed = 1;
+             body::Targets runOnly = run;
+             runOnly.airMomentum = false;
+             body::State withTrail, without;
+             body::seedFromPose(snap, rig, run, withTrail);
+             body::seedFromPose(snap, rig, runOnly, without);
+             std::vector<float> a, bb;
+             for (int k = 0; k < 40; ++k) {
+                 a = jump;
+                 body::Pose pa(a.data(), joints);
+                 body::solve(pa, rig, run, c, withTrail, true, dt);
+                 bb = jump;
+                 body::Pose pb(bb.data(), joints);
+                 body::solve(pb, rig, runOnly, c, without, true, dt);
+             }
+             body::Pose pa(a.data(), joints), pb(bb.data(), joints);
+             float runOff = 0;
+             for (int i = 0; i < 2; ++i)
+                 runOff = std::max(runOff, length(pa.position(rig.legs[i].foot) - pb.position(rig.legs[i].foot)));
+             check(withTrail.airLegWeight == 0.f && runOff < 1e-4f, "the air trail moved a wall run's legs");
+             // The tuck eases out on a landing too, never snaps.
+             body::Targets tucked = air;
+             tucked.tuck = true;
+             body::State ts;
+             body::seedFromPose(snap, rig, tucked, ts);
+             for (int k = 0; k < 120; ++k) {
+                 poseData = jump;
+                 body::Pose p(poseData.data(), joints);
+                 body::solve(p, rig, tucked, c, ts, true, dt);
+             }
+             const float tuckBefore = ts.tuckWeight;
+             body::Targets tuckLanded = tucked;
+             tuckLanded.airborne = false;
+             tuckLanded.plant = true;
+             tuckLanded.floor = {0, 0, 0};
+             poseData = b.rest;
+             {
+                 body::Pose p(poseData.data(), joints);
+                 body::solve(p, rig, tuckLanded, c, ts, true, dt);
+             }
+             check(tuckBefore > .9f && ts.tuckWeight > .5f && ts.tuckWeight < tuckBefore,
+                   "the tuck snapped off on landing");
+             for (int k = 0; k < 40; ++k) {
+                 poseData = b.rest;
+                 body::Pose p(poseData.data(), joints);
+                 body::solve(p, rig, tuckLanded, c, ts, true, dt);
+             }
+             check(ts.tuckWeight == 0.f, "the tuck stayed on the ground");
+         });
+
     test("ANIMATED HYBRID tuck: holding pulls air knees toward the chest, kick and ground stay put",
          [] {
              const auto b = testBody();
@@ -30140,6 +30281,231 @@ int main() {
               "a distant cut was eased");
     });
 
+    test("CAMERA SMOOTHING: bob relative to the feet calmed, travel exact, banks, lag cap, cuts", [] {
+        using namespace headset_smoothing;
+        const auto at = [](Vec3 pos, float yaw = 0) {
+            const float c = std::cos(yaw), s = std::sin(yaw);
+            return Mat4{c, 0, -s, 0, 0, 1, 0, 0, s, 0, c, 0, pos.x, pos.y, pos.z, 1};
+        };
+        // Off: identity, even with feet.
+        Filter off;
+        Vec3 feet{0, 0, 0};
+        const Mat4 o = off.update(at({.1f, 1.7f, .2f}, .3f), 1.f / 90, Params{}, &feet);
+        check(o[12] == .1f && o[13] == 1.7f && o[14] == .2f && o[0] == std::cos(.3f), "off changed the head");
+        // A run at 8 m/s with a 2 Hz, 4 cm vertical bob: the feet's travel is exact,
+        // the bob calmed, heavier calmer than lighter.
+        const auto bobOver = [&](Params p, float& worstTravel) {
+            Filter f;
+            float lo = 1e9f, hi = -1e9f;
+            worstTravel = 0;
+            for (int i = 0; i < 360; ++i) {
+                const float t = i / 90.f;
+                Vec3 root{8 * t, 0, 0};
+                const Mat4 head = at(root + Vec3{0, 1.7f + .04f * std::sin(2 * 3.14159265f * 2 * t), 0});
+                const Mat4 out = f.update(head, 1.f / 90, p, &root);
+                if (i > 180) {
+                    lo = std::min(lo, out[13]);
+                    hi = std::max(hi, out[13]);
+                    worstTravel = std::max(worstTravel, std::abs(out[12] - root.x));
+                }
+            }
+            return hi - lo;
+        };
+        float travel{};
+        const float raw = bobOver(Params{.001f, 0, 0}, travel);
+        vr_settings::Values v;
+        v.cameraStabilization = 1;
+        const Params light = fromValues(v);
+        v.cameraStabilization = 2;
+        const Params heavy = fromValues(v);
+        float lightTravel{}, heavyTravel{};
+        const float lightBob = bobOver(light, lightTravel), heavyBob = bobOver(heavy, heavyTravel);
+        check(raw > .075f, "set-up: the bob was not there");
+        check(lightBob < raw * .85f && heavyBob < lightBob * .75f,
+              ("bob raw " + std::to_string(raw) + " light " + std::to_string(lightBob) + " heavy " +
+               std::to_string(heavyBob)).c_str());
+        check(lightTravel < 1e-3f && heavyTravel < 1e-3f, "the feet's travel trailed");
+        // Banks: OFF uses the CAMERA rows, the SMOOTHING level stays an angle floor.
+        vr_settings::Values base;
+        check(!fromValues(base).any(), "defaults smoothed the camera");
+        base.cameraVerticalMs = 100;
+        base.cameraAngleMs = 50;
+        const Params bp = fromValues(base);
+        check(std::abs(bp.verticalSec - .1f) < 1e-6f && bp.horizontalSec == 0 && std::abs(bp.angleSec - .05f) < 1e-6f,
+              "the CAMERA rows were not the OFF bank");
+        base.animatedHeadsetSmooth = 4;
+        check(std::abs(fromValues(base).angleSec - responseSec[4]) < 1e-6f, "the SMOOTHING floor was lost");
+        check(std::abs(light.verticalSec - .075f) < 1e-6f && std::abs(heavy.angleSec - .2f) < 1e-6f &&
+                  heavy.positionBeta < light.positionBeta,
+              "the LIGHT / HEAVY banks");
+        // The old level API is unchanged: travel copied, angle eased.
+        Filter level;
+        (void)level.update(at({0, 0, 0}), 1.f / 90, 3);
+        const Mat4 moved = level.update(at({4, 5, 6}, .05f), 1.f / 90, 3);
+        check(moved[12] == 4 && moved[13] == 5 && moved[14] == 6, "the level API lagged travel");
+        // A head shoved far off the feet: the lag is capped.
+        Filter cap;
+        Params slow{.5f, .5f, 0};
+        slow.positionBeta = 0;
+        Vec3 still{0, 0, 0};
+        (void)cap.update(at({0, 1.7f, 0}), 1.f / 90, slow, &still);
+        Mat4 last{};
+        for (int i = 0; i < 3; ++i)
+            last = cap.update(at({.8f, 1.0f, 0}), 1.f / 90, slow, &still);
+        check(std::abs(last[13] - 1.0f) <= maxVerticalLag + 1e-4f && std::abs(last[12] - .8f) <= maxHorizontalLag + 1e-4f,
+              "the smoothed head lagged past its cap");
+        // A teleport of the feet: straight to the target.
+        Vec3 far{50, 0, 0};
+        const Mat4 cut = cap.update(at({50, 1.7f, 0}), 1.f / 90, slow, &far);
+        check(cut[12] == 50 && cut[13] == 1.7f, "a teleport was eased");
+        // The headset is never filtered: only the parent passed in is (no
+        // headset input exists in this API at all).
+    });
+
+    test("SPHERICAL AIM: great-circle easing, learned forearm behind/above/below, no flip at the wrap", [] {
+        using namespace spherical_aim;
+        // toward() stays unit, even between opposite directions.
+        const Vec3 f{0, 0, -1}, back{0, 0, 1};
+        for (float t : {0.f, .25f, .5f, .75f, 1.f}) {
+            const Vec3 v = toward(f, back, t);
+            check(std::abs(length(v) - 1) < 1e-4f, "toward left the sphere");
+            check(std::abs(angleBetween(f, v) - t * pi) < 1e-3f, "toward was not along the great circle");
+        }
+        // The shot filter flicked over the shoulder: never a near-zero mean.
+        aim_filter::Direction d;
+        (void)d.update(f, {}, 1.f / 90);
+        for (int i = 0; i < 30; ++i) {
+            const Vec3 out = d.update(back, {}, 1.f / 90);
+            check(std::abs(length(out) - 1) < 1e-3f, "the shot filter left the sphere");
+        }
+        AimMarkerMotion m;
+        m.begin(1'000'000'000);
+        (void)m.aim(f, Quat{});
+        for (int i = 1; i <= 30; ++i) {
+            m.begin(1'000'000'000 + i * 11'111'111ll);
+            check(std::abs(length(m.aim(back, Quat{})) - 1) < 1e-3f, "the marker filter left the sphere");
+        }
+        // Trust: a wrist within reach and near the model is trusted; out of reach or far off it, not.
+        check(trust(.0f, 10, true) == 1.f && trust(.2f, 10, true) == 0.f && trust(-1, 0, true) == 0.f &&
+                  trust(0, 90, true) == 0.f && trust(0, 90, false) == 1.f,
+              "trust");
+        // The model learns the forearm in the controller frame and carries it anywhere.
+        const Vec3 forearmInAim = normalized(Vec3{0, .5f, -1}); // about 27 degrees off the aim line
+        ForearmModel model;
+        Quat aim = Quat::yaw(.3f);
+        for (int i = 0; i < 90; ++i)
+            model.learn(aim.rotate(forearmInAim), aim, 1.f / 90);
+        check(model.ready() && angleBetween(model.inAim, forearmInAim) < 1e-3f, "the model did not learn");
+        const Quat behind = Quat::yaw(3.14159265f) * Quat::around({1, 0, 0}, .4f);
+        const Quat overhead = Quat::around({1, 0, 0}, 1.5f);
+        const Quat low = Quat::around({1, 0, 0}, -1.4f);
+        for (Quat q : {behind, overhead, low})
+            check(angleBetween(model.world(q), q.rotate(forearmInAim)) < 1e-3f,
+                  "the model did not follow the controller round the sphere");
+        // A plainly wrong solve (90 degrees off the controller) teaches nothing.
+        ForearmModel wrong = model;
+        for (int i = 0; i < 90; ++i)
+            wrong.learn(aim.rotate({1, 0, 0}), aim, 1.f / 90);
+        check(angleBetween(wrong.inAim, model.inAim) < 1e-3f, "a wrong solve was learned");
+        // The blend: trust dropping at once eases the line over, never jumps.
+        Blend blend;
+        const Vec3 solved{1, 0, 0}, modelLine{0, 0, -1};
+        (void)blend.update(solved, modelLine, 1, 1.f / 90);
+        Vec3 prev = solved;
+        float worstStep = 0;
+        for (int i = 0; i < 90; ++i) {
+            const Vec3 line = blend.update(solved, modelLine, 0, 1.f / 90);
+            worstStep = std::max(worstStep, angleBetween(prev, line));
+            prev = line;
+        }
+        check(worstStep < 12 * degree && angleBetween(prev, modelLine) < 1 * degree,
+              ("the line jumped " + std::to_string(worstStep / degree) + " degrees in a frame").c_str());
+        // The solve gone: the model, at once (the same line in any owner).
+        Blend gone;
+        check(angleBetween(gone.update({}, modelLine, 0, 1.f / 90), modelLine) < 1e-5f, "no model line without a solve");
+        check(!unitish(Blend{}.update({}, {}, 1, 1.f / 90)), "a line from nothing");
+        // The inward clamp no longer flips by 15 degrees at the angle's 180-degree wrap.
+        const Vec3 forearm{0, 0, -1};
+        const Quat a1 = Quat::around({0, 1, 0}, 3.14159265f - .01f), a2 = Quat::around({0, 1, 0}, -3.14159265f + .01f);
+        const Vec3 w1 = web_aim::clampedForearmDir(forearm, a1, 0), w2 = web_aim::clampedForearmDir(forearm, a2, 0);
+        check(angleBetween(w1, w2) < 1 * degree, "the clamp flipped at the wrap");
+        // Within 90 degrees the clamp is as before: inward up to 15 degrees.
+        const Quat in20 = Quat::around({0, 1, 0}, -20 * degree);
+        const Vec3 wIn = web_aim::clampedForearmDir(forearm, in20, 0);
+        check(std::abs(angleBetween(wIn, forearm) - 15 * degree) < .5f * degree ||
+                  std::abs(angleBetween(wIn, forearm)) < 1e-3f,
+              "the inward cap changed inside 90 degrees");
+        vr_settings::Values v;
+        check(v.sphericalAim && vr_settings::withTabOnly({}, "spherical_aim=0\n").sphericalAim == false, "spherical_aim key");
+    });
+
+    test("MIDAIR ZIP AND HEAL: a double tap of the right stick; single pushes are the legs'", [] {
+        using game_pad::StickDoubleTap;
+        using Way = StickDoubleTap::Way;
+        const float dt = 1.f / 90;
+        const auto run = [&](StickDoubleTap& d, int frames, float y, bool active = true, float x = 0) {
+            Way w = Way::none;
+            for (int i = 0; i < frames; ++i)
+                w = d.update(dt, active, x, y);
+            return w;
+        };
+        // A hold: the legs', never an action.
+        StickDoubleTap hold;
+        check(run(hold, 60, 1) == Way::none && hold.legY() == 1.f && hold.actions() == 0, "a hold became a zip");
+        // Double tap up, the second held: the zip's hold until let go.
+        StickDoubleTap zip;
+        check(run(zip, 8, 1) == Way::none && zip.legY() == 0.f, "the first tap moved the legs");
+        check(run(zip, 8, 0) == Way::none, "a gap was an action");
+        bool began = false;
+        Way w = Way::none;
+        for (int i = 0; i < 60; ++i) {
+            w = zip.update(dt, true, 0, 1);
+            began = began || zip.actionBegan();
+            check(w == Way::up && zip.legY() == 0.f, "the second tap's hold was not the zip's");
+        }
+        check(began && zip.actions() == 1, "no action began");
+        check(zip.update(dt, true, 0, 0) == Way::none, "letting go held on");
+        // Double tap down: the heal.
+        StickDoubleTap heal;
+        run(heal, 6, -1);
+        run(heal, 10, 0);
+        check(run(heal, 3, -1) == Way::down, "a double tap down did not heal");
+        // Too slow a second tap: none, and that push is the legs'.
+        StickDoubleTap late(StickDoubleTap::defaultWindowSeconds);
+        run(late, 6, 1);
+        run(late, 40, 0); // 0.44 s
+        check(run(late, 30, 1) == Way::none && late.legY() == 1.f && late.actions() == 0, "a late tap zipped");
+        // Opposite ways: none.
+        StickDoubleTap mixed;
+        run(mixed, 6, 1);
+        run(mixed, 6, 0);
+        check(run(mixed, 10, -1) == Way::none, "up then down acted");
+        // A soft push is no tap.
+        StickDoubleTap soft;
+        run(soft, 6, .7f);
+        run(soft, 6, 0);
+        check(run(soft, 10, .7f) == Way::none && soft.actions() == 0, "soft taps acted");
+        // A diagonal is no tap.
+        StickDoubleTap diag;
+        run(diag, 6, .9f, true, .6f);
+        run(diag, 6, 0);
+        check(run(diag, 10, .9f, true, .6f) == Way::none, "diagonal taps acted");
+        // Not active (leg control off or not in the air): nothing, and the stick is the old StickPush's.
+        StickDoubleTap inactive;
+        run(inactive, 6, 1, false);
+        run(inactive, 6, 0, false);
+        check(run(inactive, 10, 1, false) == Way::none && inactive.actions() == 0, "acted while inactive");
+        // Tunable window, clamped.
+        check(StickDoubleTap(.5f).windowSeconds() == .5f && StickDoubleTap(5).windowSeconds() == .6f &&
+                  StickDoubleTap(0).windowSeconds() == .15f,
+              "window");
+        StickDoubleTap wide(.5f);
+        run(wide, 6, 1);
+        run(wide, 36, 0); // 0.4 s: inside the wider window
+        check(run(wide, 3, 1) == Way::up, "a wider window refused");
+    });
+
+
     test("Native Animation: recommended defaults, compound master and saved values", [] {
         using namespace vr_settings;
         Values v;
@@ -30350,7 +30716,7 @@ int main() {
     test("Native Animation: combined menu inventory and upstream-compatible v39 settings packet", [] {
         using namespace vr_settings;
         const auto& all = rows();
-        check(all.size() == 112 && static_cast<unsigned>(lastItem) < 256, "row/Item bounds");
+        check(all.size() == 122 && static_cast<unsigned>(lastItem) < 256, "row/Item bounds");
         std::array<unsigned, 256> seen{};
         size_t start = all.size();
         for (size_t i = 0; i < all.size(); ++i) {

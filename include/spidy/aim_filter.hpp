@@ -8,6 +8,7 @@
 // same Command hands, so both get it. Pure; no Windows.
 #pragma once
 #include "spidy/math.hpp"
+#include "spidy/spherical_aim.hpp"
 #include <algorithm>
 #include <cmath>
 
@@ -39,7 +40,9 @@ struct Direction {
         const auto share = [dt = seconds](float hz) { return dt / (dt + 1 / (2 * 3.14159265f * hz)); };
         speed = speed + ((raw - steady) / seconds - speed) * share(speedCutoffHz);
         const float cutoff = minCutoffHz + speedCutoff * std::max(length(speed) - speedDeadband, 0.f);
-        steady = normalized(steady + (raw - steady) * share(cutoff));
+        // Along the great circle (spherical_aim::toward): a flick over the
+        // shoulder never passes through a near-zero mean.
+        steady = spherical_aim::toward(steady, raw, share(cutoff));
         return turn.rotate(steady);
     }
     void reset() { *this = {}; }

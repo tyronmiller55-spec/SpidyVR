@@ -1,5 +1,6 @@
 #pragma once
 #include "math.hpp"
+#include "spherical_aim.hpp"
 #include <algorithm>
 #include <cmath>
 #include <cstddef>
@@ -186,7 +187,9 @@ inline Vec3 clampedForearmDir(Vec3 forearmWorld, Quat aimNow, int hand,
         return {};
     float s = signedPalmAngle(forearmWorld, aimNow, hand);
     const float cap = std::clamp(inwardDegrees, 0.f, 90.f) * 3.14159265f / 180;
-    const float t = std::clamp(s, -cap, 0.f);
+    // SPHERICAL AIM: past 90 degrees the cap fades out (spherical_aim::
+    // inwardShare), so the angle's wrap at 180 cannot flip the web by it.
+    const float t = std::clamp(s, -cap, 0.f) * spherical_aim::inwardShare(s);
     if (std::abs(t) < 1e-6f)
         return F;
     const float palmSign = hand == 0 ? 1.f : -1.f;

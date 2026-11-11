@@ -1009,6 +1009,18 @@ VR settings
                    RECORDING SMOOTHING (OFF unless you pick 10 to 100):
                    that view turns with your head more and more softly;
                    the headset's view never does.
+                   STABILIZATION (OFF unless you pick LIGHT or HEAVY) and
+                   CAMERA VERTICAL / HORIZONTAL / ANGLE (OFF unless you
+                   pick 25 to 500 ms): while an animation moves your view
+                   (Native Animation), soften how the animated camera
+                   rises and falls, slides sideways and turns. Your own
+                   head is never smoothed and your feet stay where they
+                   are; only the animation's sway is. LIGHT and HEAVY
+                   each have their own three times (LIGHT 75/50/75 ms,
+                   HEAVY 200/150/200 ms by default, 0 to 500 ms), used
+                   instead of the CAMERA rows while that level is on, and
+                   damp quick jolts more. A big jump (a cut, a
+                   teleport, over 45 degrees) is never smoothed.
   BODY ........... CALIBRATE BODY: set it to ON RESUME and resume, and the
                    T-pose panel asks for your measurements again. HEIGHT
                    (AUTO unless you pick one, 150 to 190 cm): your height.

@@ -123,6 +123,14 @@ static_assert(std::size(animatedHeadChoices) == std::size(animatedHeads));
 constexpr int animatedHeadsetSmooths[] = {0, 1, 2, 3, 4};
 constexpr const char* animatedHeadsetSmoothChoices[] = {"OFF", "LOW", "MEDIUM", "HIGH", "MAX"};
 static_assert(std::size(animatedHeadsetSmoothChoices) == std::size(animatedHeadsetSmooths));
+// CAMERA SMOOTHING's response times (ms) and STABILIZATION's banks.
+constexpr int cameraSmoothSteps[] = {0, 25, 50, 75, 100, 150, 200, 300, 500};
+constexpr const char* cameraSmoothChoices[] = {"OFF",    "25 MS",  "50 MS",  "75 MS", "100 MS",
+                                               "150 MS", "200 MS", "300 MS", "500 MS"};
+static_assert(std::size(cameraSmoothChoices) == std::size(cameraSmoothSteps));
+constexpr int cameraStabilizations[] = {0, 1, 2};
+constexpr const char* cameraStabilizationChoices[] = {"OFF", "LIGHT", "HEAVY"};
+static_assert(std::size(cameraStabilizationChoices) == std::size(cameraStabilizations));
 constexpr int runSpeeds[] = {50, 75, 100, 125, 150, 175, 200};
 constexpr const char* runSpeedChoices[] = {"50%", "75%", "100%", "125%", "150%", "175%", "200%"};
 static_assert(std::size(runSpeedChoices) == std::size(runSpeeds));
@@ -203,6 +211,18 @@ std::span<const int> steps(Item item) {
         return animatedHeads;
     case Item::animatedHeadsetSmooth:
         return animatedHeadsetSmooths;
+    case Item::cameraStabilization:
+        return cameraStabilizations;
+    case Item::cameraVertical:
+    case Item::cameraHorizontal:
+    case Item::cameraAngle:
+    case Item::lightVertical:
+    case Item::lightHorizontal:
+    case Item::lightAngle:
+    case Item::heavyVertical:
+    case Item::heavyHorizontal:
+    case Item::heavyAngle:
+        return cameraSmoothSteps;
     case Item::runSpeed:
         return runSpeeds;
     case Item::slowMotionLength:
@@ -300,6 +320,26 @@ float numberOf(Item item, const Values& v) {
         return static_cast<float>(v.animatedHead);
     case Item::animatedHeadsetSmooth:
         return static_cast<float>(v.animatedHeadsetSmooth);
+    case Item::cameraStabilization:
+        return static_cast<float>(v.cameraStabilization);
+    case Item::cameraVertical:
+        return static_cast<float>(v.cameraVerticalMs);
+    case Item::cameraHorizontal:
+        return static_cast<float>(v.cameraHorizontalMs);
+    case Item::cameraAngle:
+        return static_cast<float>(v.cameraAngleMs);
+    case Item::lightVertical:
+        return static_cast<float>(v.lightVerticalMs);
+    case Item::lightHorizontal:
+        return static_cast<float>(v.lightHorizontalMs);
+    case Item::lightAngle:
+        return static_cast<float>(v.lightAngleMs);
+    case Item::heavyVertical:
+        return static_cast<float>(v.heavyVerticalMs);
+    case Item::heavyHorizontal:
+        return static_cast<float>(v.heavyHorizontalMs);
+    case Item::heavyAngle:
+        return static_cast<float>(v.heavyAngleMs);
     case Item::runSpeed:
         return static_cast<float>(v.runSpeedPercent);
     case Item::slowMotionLength:
@@ -499,6 +539,11 @@ Values sanitized(Values v) {
     v.dodgeTumble = std::clamp(v.dodgeTumble, 0, 2);
     v.animatedHead = std::clamp(v.animatedHead, 0, 2);
     v.animatedHeadsetSmooth = std::clamp(v.animatedHeadsetSmooth, 0, 4);
+    v.cameraStabilization = std::clamp(v.cameraStabilization, 0, 2);
+    for (int Values::*ms : {&Values::cameraVerticalMs, &Values::cameraHorizontalMs, &Values::cameraAngleMs,
+                            &Values::lightVerticalMs, &Values::lightHorizontalMs, &Values::lightAngleMs,
+                            &Values::heavyVerticalMs, &Values::heavyHorizontalMs, &Values::heavyAngleMs})
+        v.*ms = std::clamp(v.*ms, 0, 500);
     v.runSpeedPercent = std::clamp(v.runSpeedPercent, 50, 200);
     v.slowMotionSeconds = std::clamp(v.slowMotionSeconds, 3, slowMotionEndless);
     v.softLockMetres = std::clamp(v.softLockMetres, 0, 40);
@@ -526,9 +571,9 @@ Values sanitized(Values v) {
     v.automaticHandThreshold = std::clamp(v.automaticHandThreshold, 50, 300);
     return v;
 }
-const std::array<Row, 112>& rows() {
+const std::array<Row, 122>& rows() {
     // The help fits the game's description column beside the rows.
-    static const std::array<Row, 112> all{{
+    static const std::array<Row, 122> all{{
         {Item::none, "WEBS", nullptr, {}},
         {Item::webStyle, "WEB STYLE",
          "Arcade: webs pass lamp posts, signs and cars, and swings stay above the street.", webStyleChoices},
@@ -816,6 +861,28 @@ const std::array<Row, 112>& rows() {
          slowMotionLengthChoices},
         {Item::softLock, "SOFT LOCK", "Grip webs snap to an enemy or prop this near your aim. Closer wins.",
          softLockChoices},
+        {Item::cameraStabilization, "STABILIZATION",
+         "Steadies the animated camera. LIGHT/HEAVY use their rows; OFF the CAMERA rows.",
+         cameraStabilizationChoices},
+        {Item::cameraVertical, "CAMERA VERTICAL",
+         "Animated head up/down bob smoothing (STABILIZATION OFF). Headset stays 1:1.",
+         cameraSmoothChoices},
+        {Item::cameraHorizontal, "CAMERA HORIZONTAL",
+         "Animated head sway smoothing (STABILIZATION OFF). Your feet stay exact.",
+         cameraSmoothChoices},
+        {Item::cameraAngle, "CAMERA ANGLE",
+         "Animated head turn smoothing (STABILIZATION OFF). Headset look stays 1:1.",
+         cameraSmoothChoices},
+        {Item::lightVertical, "LIGHT VERTICAL", "Up/down smoothing used by STABILIZATION LIGHT.",
+         cameraSmoothChoices},
+        {Item::lightHorizontal, "LIGHT HORIZONTAL", "Side/forward smoothing used by STABILIZATION LIGHT.",
+         cameraSmoothChoices},
+        {Item::lightAngle, "LIGHT ANGLE", "Turn smoothing used by STABILIZATION LIGHT.", cameraSmoothChoices},
+        {Item::heavyVertical, "HEAVY VERTICAL", "Up/down smoothing used by STABILIZATION HEAVY.",
+         cameraSmoothChoices},
+        {Item::heavyHorizontal, "HEAVY HORIZONTAL", "Side/forward smoothing used by STABILIZATION HEAVY.",
+         cameraSmoothChoices},
+        {Item::heavyAngle, "HEAVY ANGLE", "Turn smoothing used by STABILIZATION HEAVY.", cameraSmoothChoices},
         {Item::realisticFlips,
          "REALISTIC FLIPS",
          "Momentum rotation from arms and webs. FLIPS also enables left-stick steering.",
@@ -896,6 +963,9 @@ const std::array<Screen, categoryCount>& screens() {
     static constexpr Item display[] = {
         Item::screenSize, Item::screenDepth, Item::hud, Item::steadyHud,
         Item::uiStyle, Item::nearClip, Item::recordingFov, Item::recordingSmoothing,
+        Item::cameraStabilization, Item::cameraVertical, Item::cameraHorizontal, Item::cameraAngle,
+        Item::lightVertical, Item::lightHorizontal, Item::lightAngle,
+        Item::heavyVertical, Item::heavyHorizontal, Item::heavyAngle,
     };
     static constexpr Item nativeAnimation[] = {
         Item::nativeAnimation, Item::animatedHead, Item::animatedHeadsetSmooth,
@@ -1090,6 +1160,36 @@ bool choose(Item item, int index, Values& v) {
     case Item::animatedHeadsetSmooth:
         v.animatedHeadsetSmooth = s[index];
         break;
+    case Item::cameraStabilization:
+        v.cameraStabilization = s[index];
+        break;
+    case Item::cameraVertical:
+        v.cameraVerticalMs = s[index];
+        break;
+    case Item::cameraHorizontal:
+        v.cameraHorizontalMs = s[index];
+        break;
+    case Item::cameraAngle:
+        v.cameraAngleMs = s[index];
+        break;
+    case Item::lightVertical:
+        v.lightVerticalMs = s[index];
+        break;
+    case Item::lightHorizontal:
+        v.lightHorizontalMs = s[index];
+        break;
+    case Item::lightAngle:
+        v.lightAngleMs = s[index];
+        break;
+    case Item::heavyVertical:
+        v.heavyVerticalMs = s[index];
+        break;
+    case Item::heavyHorizontal:
+        v.heavyHorizontalMs = s[index];
+        break;
+    case Item::heavyAngle:
+        v.heavyAngleMs = s[index];
+        break;
     case Item::runSpeed:
         v.runSpeedPercent = s[index];
         break;
@@ -1265,6 +1365,17 @@ constexpr TabOnly tabOnly[] = {
     {"animated_hybrid_speed_ms", nullptr, &Values::animatedHybridSpeedMs},
     {"web_lines", &Values::webLines, nullptr},
     {"animated_full_arms", &Values::animatedFullArms, nullptr},
+    {"camera_stabilization", nullptr, &Values::cameraStabilization},
+    {"camera_vertical_ms", nullptr, &Values::cameraVerticalMs},
+    {"camera_horizontal_ms", nullptr, &Values::cameraHorizontalMs},
+    {"camera_angle_ms", nullptr, &Values::cameraAngleMs},
+    {"camera_light_vertical_ms", nullptr, &Values::lightVerticalMs},
+    {"camera_light_horizontal_ms", nullptr, &Values::lightHorizontalMs},
+    {"camera_light_angle_ms", nullptr, &Values::lightAngleMs},
+    {"camera_heavy_vertical_ms", nullptr, &Values::heavyVerticalMs},
+    {"camera_heavy_horizontal_ms", nullptr, &Values::heavyHorizontalMs},
+    {"camera_heavy_angle_ms", nullptr, &Values::heavyAngleMs},
+    {"spherical_aim", &Values::sphericalAim, nullptr},
 };
 } // namespace
 std::string tabOnlyText(const Values& v) {

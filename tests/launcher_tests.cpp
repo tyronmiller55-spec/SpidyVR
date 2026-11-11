@@ -695,7 +695,9 @@ int main() {
                                  row.item == Item::height || row.item == Item::recordingFov ||
                                  row.item == Item::eyeAim || row.item == Item::recordingSmoothing ||
                                  row.item == Item::flipReprojection || row.item == Item::steadyHud ||
-                                 row.item == Item::nativeAnimation;
+                                 row.item == Item::nativeAnimation ||
+                                 // Camera smoothing: comfort, the player's own like the headset's.
+                                 (row.item >= Item::cameraStabilization && row.item <= Item::heavyAngle);
             check(std::count_if(begin, end, [&](const ProfileSetting& s) { return s.item == row.item; }) ==
                       (leftOut ? 0 : 1),
                   row.title);
@@ -709,7 +711,8 @@ int main() {
             // (no menu row), the player's own like the headset's.
             if (key == "recording_fov" || key == "recording_smoothing" || key == "height_cm" ||
                 key == "eye_aim" || key == "flip_reprojection" || key == "steady_hud" ||
-                key == "animated_full_arms")
+                key == "animated_full_arms" || key == "spherical_aim" ||
+                key.rfind("camera_", 0) == 0)
                 continue;
             ++lines;
             check(at(key) < std::size(profileSettings) &&

@@ -663,6 +663,145 @@ class StickPush {
     bool spent_{};
     float held_{}, lapse_{};
 };
+// MIDAIR ZIP AND HEAL BY DOUBLE TAP (the user, November 10 21:06: "Make zip
+// and heal work in midair, but you have to double tap them"). For when a leg
+// control owns the right stick in the air (swinging or falling, CONTROLLED
+// FLIPS on, its setting on): single pushes and holds are the legs'; two quick
+// strong pushes the same way are the zip (up) or the heal (down), and the
+// second push held is the hold StickPush gives - the zip's aim and slow time
+// until it is let go, the heal's hold - so the zip and heal relays downstream
+// work unchanged. Outside that mode StickPush stays exactly as it is.
+//   - A tap: past `strong` within `aside` of the vertical, back under
+//     `released` within tapSeconds. Held longer it is a leg hold, never a tap.
+//   - The second tap must start within doubleTapSeconds of the first one's
+//     release, the same way. The other way, a diagonal or a late one starts
+//     over (that push is the legs').
+//   - legY(): the stick's vertical for the legs - zero from the moment a tap
+//     could still become a double tap's action through to the action's end,
+//     and actionBegan() once when it starts, so the caller eases the first
+//     tap's leg pose back out instead of fighting the zip or heal.
+// Pure; tunable through the constructor (window seconds).
+class StickDoubleTap {
+  public:
+    using Way = StickPush::Way;
+    static constexpr float strong = .85f, aside = .45f, released = .5f, tapSeconds = .25f,
+                           defaultWindowSeconds = .3f;
+    explicit StickDoubleTap(float windowSeconds = defaultWindowSeconds)
+        : window_(std::isfinite(windowSeconds) ? std::clamp(windowSeconds, .15f, .6f) : defaultWindowSeconds) {}
+    float windowSeconds() const {
+        return window_;
+    }
+    void reset() {
+        const float w = window_;
+        *this = StickDoubleTap(w);
+    }
+    // seconds since the previous update; active: the leg control owns the
+    // stick now (when false everything resets and nothing is reported); x, y
+    // the right stick, -1..1, y up. Returns the action held now (none, up the
+    // zip, down the heal).
+    Way update(float seconds, bool active, float x, float y) {
+        began_ = false;
+        const float dt = std::isfinite(seconds) ? std::clamp(seconds, 0.f, .1f) : 0.f;
+        const bool bad = !std::isfinite(x) || !std::isfinite(y);
+        if (bad)
+            x = y = 0;
+        legY_ = y;
+        if (!active) {
+            reset();
+            legY_ = y;
+            return Way::none;
+        }
+        const bool rest = std::hypot(x, y) < released;
+        const bool strongPush = std::abs(y) >= strong && std::abs(x) <= aside;
+        const Way way = y < 0 ? Way::down : Way::up;
+        switch (phase_) {
+        case Phase::idle:
+            if (strongPush) {
+                phase_ = Phase::first;
+                way_ = way;
+                time_ = 0;
+                legY_ = 0; // might become a double tap: the legs wait
+            }
+            break;
+        case Phase::first:
+            time_ += dt;
+            if (rest) {
+                phase_ = Phase::gap;
+                time_ = 0;
+                legY_ = 0;
+            } else if (time_ > tapSeconds || (std::abs(x) > aside) || way != way_) {
+                phase_ = Phase::legs; // a hold or a turn: the legs', until neutral
+            } else {
+                legY_ = 0;
+            }
+            break;
+        case Phase::gap:
+            time_ += dt;
+            if (time_ > window_) {
+                phase_ = rest ? Phase::idle : Phase::legs;
+            } else if (strongPush && way == way_) {
+                phase_ = Phase::action;
+                began_ = true;
+                ++actions_;
+                legY_ = 0;
+                return way_;
+            } else if (!rest && (std::abs(x) > aside || way != way_ || !strongPush)) {
+                // A softer push inside the window waits for strength; another
+                // way or a diagonal starts over as the legs'.
+                if (std::abs(x) > aside || way != way_)
+                    phase_ = Phase::legs;
+                else
+                    legY_ = 0;
+            } else {
+                legY_ = 0;
+            }
+            break;
+        case Phase::action:
+            if (rest) {
+                phase_ = Phase::idle; // let go: the zip goes, the heal ends
+                return Way::none;
+            }
+            legY_ = 0;
+            if (way != way_ || std::abs(y) < released) {
+                phase_ = Phase::settle; // rolled off the line: over, back to neutral first
+                return Way::none;
+            }
+            return way_;
+        case Phase::settle:
+            // After an action the stick must come back to neutral before the
+            // legs take it again.
+            legY_ = 0;
+            if (rest)
+                phase_ = Phase::idle;
+            break;
+        case Phase::legs:
+            if (rest)
+                phase_ = Phase::idle;
+            break;
+        }
+        return Way::none;
+    }
+    // The stick's vertical the legs may use this frame (see above).
+    float legY() const {
+        return legY_;
+    }
+    // A double tap's action started this frame.
+    bool actionBegan() const {
+        return began_;
+    }
+    uint32_t actions() const {
+        return actions_;
+    }
+
+  private:
+    enum class Phase { idle, first, gap, action, settle, legs };
+    float window_ = defaultWindowSeconds;
+    Phase phase_{};
+    Way way_{};
+    float time_{}, legY_{};
+    bool began_{};
+    uint32_t actions_{};
+};
 // The right stick held up (StickPush) as the game's LT + RT, and what letting
 // go of it does. The two going down at once are the game's zip to a point,
 // where it has one. Where it has none, LT held on is its aim mode (its L2:

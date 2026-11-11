@@ -338,6 +338,27 @@ struct Values {
     // ease the view toward the headset's look. Translation stays current, so
     // leaning and travel do not trail. Not a Settings / Command field.
     int animatedHeadsetSmooth = 0;
+    // CAMERA SMOOTHING (the user, November 10 20:54: "Give me settings for
+    // vertical, horizontal, and camera angle smoothing, and give a toggle that
+    // applies a heavy stabilization and smoothing to the motion, yet still uses
+    // the settings. Two levels, Heavy and Light"). While the animated head
+    // carries the view (ANIMATED HEAD), the head the eyes sit on is smoothed:
+    // VERTICAL and HORIZONTAL its travel relative to the feet (the bob; the
+    // feet themselves, and so where he is, stay exact), ANGLE its turning. The
+    // headset's own look and lean stay 1:1 (headset_smoothing.hpp). Response
+    // times in milliseconds, 0 off. STABILIZATION picks the bank: OFF the
+    // three CAMERA rows, LIGHT the three LIGHT rows, HEAVY the three HEAVY
+    // rows (heavier speed damping too). Off and 0 by default: as before.
+    int cameraStabilization = 0;
+    int cameraVerticalMs = 0, cameraHorizontalMs = 0, cameraAngleMs = 0;
+    int lightVerticalMs = 75, lightHorizontalMs = 50, lightAngleMs = 75;
+    int heavyVerticalMs = 200, heavyHorizontalMs = 150, heavyAngleMs = 200;
+    // 360 DEGREE SPHERICAL AIM (spidy_vr.ini spherical_aim; spherical_aim.hpp):
+    // with WRIST SHOOTERS or MODEL FOREARM, a contorted arm (over or behind
+    // the head, down by the legs) aims along the forearm learned on the
+    // controller, not the body solve's guess. On by default; 0 is as before.
+    // Not on the menu.
+    bool sphericalAim = true;
     // RUN SPEED, percent (the tab's RUN SPEED; Swing::setRunSpeedPercent):
     // scales the speed SpidyVR's OWN ground run (SPIDY RUN and RUN FROM
     // STANDING) puts the body at, 50 to 200. The game's native run/sprint is
@@ -552,8 +573,18 @@ enum class Item : uint8_t {
     runSpeed,
     slowMotionLength,
     softLock,
+    cameraStabilization,
+    cameraVertical,
+    cameraHorizontal,
+    cameraAngle,
+    lightVertical,
+    lightHorizontal,
+    lightAngle,
+    heavyVertical,
+    heavyHorizontal,
+    heavyAngle,
 };
-inline constexpr Item lastItem = Item::softLock;
+inline constexpr Item lastItem = Item::heavyAngle;
 // SLOW-MO LENGTH's last step: no time limit (until L3 toggles it off).
 inline constexpr int slowMotionEndless = 91;
 // Real seconds a full meter lasts for a SLOW-MO LENGTH value; 0 = endless.
@@ -583,7 +614,7 @@ struct Row {
     Place place{};
 };
 // Stable row/setting numbers; categories below determine presentation order.
-const std::array<Row, 112>& rows();
+const std::array<Row, 122>& rows();
 const Row* rowFor(Item);
 enum class Category : uint8_t { setup, webs, swinging, movement, flips, feedback, display, nativeAnimation, count };
 inline constexpr size_t categoryCount = static_cast<size_t>(Category::count);

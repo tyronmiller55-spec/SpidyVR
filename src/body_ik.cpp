@@ -1081,46 +1081,6 @@ Result solve(Pose& pose, const Rig& rig, const Targets& targets, const Config& c
                                        pose.direction(leg.foot, rig.footUp[i]), out, top);
             pose.turn(rig.below[leg.foot], partial(along, w), pose.position(leg.foot));
         }
-    } else if (t.airMomentum && t.airborne) {
-        // Overlay a damped trail on the pose the air already has (the jump's
-        // shape, or the game's swing pose after the hips turned) so the legs
-        // read as weight instead of standing or staying frozen.
-        const Vec3 vel = finite(t.airVelocity) ? t.airVelocity : Vec3{};
-        float yawRate = 0;
-        if (state.airFwdSet && dt > 1e-4f && length(state.airFwd) > .5f && length(forward) > .5f)
-            yawRate = dot(cross(normalized(state.airFwd), forward), up) / dt;
-        state.airFwd = forward;
-        state.airFwdSet = true;
-        const float follow = 1.f - std::exp(-dt / .12f);
-        for (int i = 0; i < 2; ++i) {
-            const auto& leg = legs[i];
-            const Vec3 hip = pose.position(leg.upper);
-            const Vec3 base = pose.position(leg.foot);
-            if (!state.airFootSet) state.airFoot[i] = base;
-            Vec3 trail = vel * -.04f;
-            trail = trail - up * (dot(vel, up) * .015f);
-            trail = trail - forward * (std::abs(yawRate) * .04f);
-            trail = trail + left * (-yawRate * .05f);
-            const float cap = .28f * s;
-            const float tlen = length(trail);
-            if (tlen > cap) trail = trail * (cap / tlen);
-            Vec3 desired = base + trail;
-            const float reach = (rig.thigh[i] + rig.shin[i]) * s * .98f;
-            const Vec3 delta = desired - hip;
-            const float span = length(delta);
-            if (span > reach && span > 1e-4f) desired = hip + delta * (reach / span);
-            state.airFoot[i] = follow >= 1.f ? desired : state.airFoot[i] + (desired - state.airFoot[i]) * follow;
-            limb(pose, rig, leg.upper, leg.lower, leg.foot, state.airFoot[i], forward, w);
-            Vec3 out = state.airFoot[i] - hip;
-            Vec3 toe = out - up * dot(out, up);
-            toe = length(toe) > .08f * s ? normalized(toe) : forward;
-            Vec3 sole = up - toe * dot(up, toe);
-            sole = length(sole) > .1f ? normalized(sole) : up;
-            const Quat along = between(pose.direction(leg.foot, rig.footForward[i]), pose.direction(leg.foot, rig.footUp[i]),
-                                       toe, sole);
-            pose.turn(rig.below[leg.foot], partial(along, w), pose.position(leg.foot));
-        }
-        state.airFootSet = true;
     } else if (t.wallRun) {
         state.airFootSet = state.airFwdSet = false;
         const Vec3 n = normalized(t.runNormal), travel = normalized(t.runAhead);
@@ -1398,25 +1358,82 @@ Result solve(Pose& pose, const Rig& rig, const Targets& targets, const Config& c
                                       turn.rotate(footAxes[i][0]), turn.rotate(footAxes[i][1]));
             pose.turn(rig.below[leg.foot], partial(back, w), pose.position(leg.foot));
         }
-    } else {
+    } else if (state.airLegWeight <= 0) {
         // Airborne without a kick or an air-momentum trail: the feet stay
         // where the animation (or an adopted jump) put them.
         state.airFootSet = state.airFwdSet = false;
+    }
+    // Air-momentum legs, an overlay on whatever the legs have now. Only while
+    // airLegsAllowed (midair, swinging); on a landing or a wall's contact the
+    // ground's, the wall run's or the crawl's legs above take over and the
+    // trail fades out over airLegBlendSeconds instead of snapping.
+    {
+        const bool momentumOn = t.airMomentum && airLegsAllowed(t) && !r.grounded;
+        state.airLegWeight = t.kick ? 0.f
+            : approach(state.airLegWeight, momentumOn ? 1.f : 0.f, dt / airLegBlendSeconds);
+        if (state.airLegWeight <= 0) {
+            state.airFootSet = state.airFwdSet = false;
+        } else {
+        const float legW = w * state.airLegWeight;
+        // Overlay a damped trail on the pose the air already has (the jump's
+        // shape, or the game's swing pose after the hips turned) so the legs
+        // read as weight instead of standing or staying frozen.
+        const Vec3 vel = finite(t.airVelocity) ? t.airVelocity : Vec3{};
+        float yawRate = 0;
+        if (state.airFwdSet && dt > 1e-4f && length(state.airFwd) > .5f && length(forward) > .5f)
+            yawRate = dot(cross(normalized(state.airFwd), forward), up) / dt;
+        state.airFwd = forward;
+        state.airFwdSet = true;
+        const float follow = 1.f - std::exp(-dt / .12f);
+        for (int i = 0; i < 2; ++i) {
+            const auto& leg = legs[i];
+            const Vec3 hip = pose.position(leg.upper);
+            const Vec3 base = pose.position(leg.foot);
+            if (!state.airFootSet) state.airFoot[i] = base;
+            Vec3 trail = vel * -.04f;
+            trail = trail - up * (dot(vel, up) * .015f);
+            trail = trail - forward * (std::abs(yawRate) * .04f);
+            trail = trail + left * (-yawRate * .05f);
+            const float cap = .28f * s;
+            const float tlen = length(trail);
+            if (tlen > cap) trail = trail * (cap / tlen);
+            Vec3 desired = base + trail;
+            const float reach = (rig.thigh[i] + rig.shin[i]) * s * .98f;
+            const Vec3 delta = desired - hip;
+            const float span = length(delta);
+            if (span > reach && span > 1e-4f) desired = hip + delta * (reach / span);
+            state.airFoot[i] = follow >= 1.f ? desired : state.airFoot[i] + (desired - state.airFoot[i]) * follow;
+            limb(pose, rig, leg.upper, leg.lower, leg.foot, state.airFoot[i], forward, legW);
+            Vec3 out = state.airFoot[i] - hip;
+            Vec3 toe = out - up * dot(out, up);
+            toe = length(toe) > .08f * s ? normalized(toe) : forward;
+            Vec3 sole = up - toe * dot(up, toe);
+            sole = length(sole) > .1f ? normalized(sole) : up;
+            const Quat along = between(pose.direction(leg.foot, rig.footForward[i]), pose.direction(leg.foot, rig.footUp[i]),
+                                       toe, sole);
+            pose.turn(rig.below[leg.foot], partial(along, legW), pose.position(leg.foot));
+        }
+        state.airFootSet = true;
+        }
     }
     // Visual tuck: while SpidyVR owns the air, blend the current feet
     // (authored, or the momentum trail just applied) toward a gymnast
     // knees-to-chest fold. Feet stay near the hips so each thigh rests
     // against the abdomen and the knees rise toward the chin. Same ease
-    // as the arms taking weight. Kick, wall-run, crawl and the ground
-    // snap the weight off so they keep their own legs.
+    // as the arms taking weight. A kick snaps it off; the ground, a wall
+    // run or a crawl ease it out (airLegBlendSeconds).
     {
-        const bool canTuck = t.airborne && !t.kick && !t.wallRun && !t.crawl;
+        // Procedural legs only in the air: off the air (a landing, a wall's
+        // contact) the fold eases out over airLegBlendSeconds at most rather
+        // than snapping; a kick takes the legs at once.
+        const bool canTuck = airLegsAllowed(t) && !r.grounded;
         const float wantTuck = canTuck && t.tuck ? 1.f : 0.f;
-        if (!canTuck)
+        if (t.kick)
             state.tuckWeight = 0.f;
         else
-            state.tuckWeight = approach(state.tuckWeight, wantTuck, c.blendSpeed * dt);
-        if (canTuck && state.tuckWeight > .001f) {
+            state.tuckWeight = approach(state.tuckWeight, wantTuck,
+                                        (canTuck ? c.blendSpeed : std::max(c.blendSpeed, 1.f / airLegBlendSeconds)) * dt);
+        if (state.tuckWeight > .001f) {
             for (int i = 0; i < 2; ++i) {
                 const auto& leg = legs[i];
                 const Vec3 hip = pose.position(leg.upper);

@@ -576,11 +576,14 @@ void solveHero(float* out, uintptr_t job, uintptr_t instance) {
                 t.crawlStrokes = {wanted.crawlStrokes[0], wanted.crawlStrokes[1]};
                 t.crawlDistance = wanted.version >= 9 ? wanted.crawlDistance : 0.f;
             }
-            if (t.airborne && !t.kick && !t.wallRun && !t.crawl && airWorldVelSet && finite(airWorldVel)) {
+            // Procedural legs only in the air (body::airLegsAllowed): never
+            // planted, kneeling, on a wall run, a crawl or a vent.
+            const bool airLegs = body::airLegsAllowed(t);
+            if (airLegs && airWorldVelSet && finite(airWorldVel)) {
                 t.airMomentum = true;
                 t.airVelocity = toModel.rotate(airWorldVel);
             }
-            t.tuck = t.airborne && !t.kick && !t.wallRun && !t.crawl && airTuckHeld;
+            t.tuck = airLegs && airTuckHeld;
             t.eyes = toModel.rotate(wanted.eyes);
             t.facing = toModel * wanted.facing;
             if (const Quat tilt = wanted.tilt; tilt.x != 0 || tilt.y != 0 || tilt.z != 0)

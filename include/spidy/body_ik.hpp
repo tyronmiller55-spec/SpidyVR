@@ -408,7 +408,19 @@ struct State {
     Vec3 airFwd{};
     // Visual tuck: 0..1, eases toward Targets::tuck at Config::blendSpeed.
     float tuckWeight{};
+    // Air-momentum legs' share, 0..1: in over airLegBlendSeconds while
+    // airLegsAllowed, out as smoothly on a landing or a wall's contact.
+    float airLegWeight{};
 };
+// PROCEDURAL LEGS ONLY IN THE AIR (the user, November 10 21:03: "procedural
+// legs are only in midair or during swinging"): the momentum trail and the
+// tuck may move the legs only while airborne and on nothing - no kick, wall
+// run, crawl, vent hands, plant or kneel.
+constexpr float airLegBlendSeconds = .2f;
+template <class T>
+inline bool airLegsAllowed(const T& t) {
+    return t.airborne && !t.kick && !t.wallRun && !t.crawl && !t.surfaceHands && !t.plant && !t.kneel;
+}
 // Turns the body's yaw by `radians` about the up, at once: the player snap
 // turned (body and all), or the model turned under the body (the hero's
 // actor turned in the world, which turns a still headset back as much).

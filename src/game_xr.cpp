@@ -44,6 +44,7 @@
 #include "spidy/game_warp.hpp"
 #include "spidy/hand_pose.hpp"
 #include "spidy/headset_smoothing.hpp"
+#include "spidy/spherical_aim.hpp"
 #include "spidy/aim_filter.hpp"
 #include "spidy/arm_frame.hpp"
 #include "spidy/kinematics.hpp"
@@ -1036,6 +1037,11 @@ DWORD WINAPI run(void*) {
         // largest step of the forearm's turn from frame to frame since the
         // last line (its jitter). webTurnsOn: turns are being sent.
         std::array<web_aim::ForearmAim, 2> forearmAims;
+        // SPHERICAL AIM: each hand's learned forearm (controller frame) and
+        // the eased trust in the solve (spherical_aim.hpp). The model lives
+        // for the session: owner switches keep it.
+        std::array<spherical_aim::ForearmModel, 2> forearmModels;
+        std::array<spherical_aim::Blend, 2> forearmBlends;
         std::array<Quat, 2> webTurnsNow{}, forearmTargets{};
         bool webTurnsOn{};
         uint64_t forearmJob{};
@@ -3379,9 +3385,40 @@ DWORD WINAPI run(void*) {
                                     if (animatedArmsState.arms[i].weight <= .85f)
                                         why = Fallback::armsOverlay;
                                 }
-                                if (why == Fallback::none) {
-                                    target = web_aim::forearmWorldTurn(f.wrist - f.elbow, aimNow,
-                                                                      static_cast<int>(i));
+                                // 360 DEGREE SPHERICAL AIM (spherical_aim.hpp): the solve's
+                                // forearm where it is trusted, else the forearm learned in
+                                // the controller's own frame, carried on the controller now
+                                // - good behind, above and below - eased between the two.
+                                // Where the solve cannot say (stale, not solved, out of
+                                // reach, the animation's arms) the model keeps the web on
+                                // the same forearm line rather than jumping to the
+                                // controller's. Body off, the game's camera and an
+                                // untracked hand fall back as before.
+                                const bool solvedOk = why == Fallback::none;
+                                const bool modelAllowed = values.sphericalAim &&
+                                    (solvedOk || why == Fallback::notSolved || why == Fallback::stale ||
+                                     why == Fallback::wristMiss || why == Fallback::armsOverlay ||
+                                     why == Fallback::misaligned);
+                                const Vec3 solvedDir = solvedOk ? normalized(f.wrist - f.elbow) : Vec3{};
+                                const bool modelReady = forearmModels[i].ready();
+                                const float offModel = modelReady && solvedOk
+                                    ? spherical_aim::angleBetween(solvedDir, forearmModels[i].world(solvedAim)) *
+                                          57.29578f
+                                    : -1.f;
+                                const float trustNow =
+                                    solvedOk ? spherical_aim::trust(f.handError, offModel, modelReady) : 0.f;
+                                if (values.sphericalAim && solvedOk && !armView.valid &&
+                                    trustNow >= spherical_aim::learnTrust)
+                                    forearmModels[i].learn(solvedDir, solvedAim, dt);
+                                Vec3 webLine = solvedDir;
+                                if (modelAllowed)
+                                    webLine = forearmBlends[i].update(
+                                        solvedDir, forearmModels[i].world(aimNow), trustNow, dt);
+                                else
+                                    forearmBlends[i].reset();
+                                const bool haveLine = spherical_aim::unitish(webLine);
+                                if (haveLine) {
+                                    target = web_aim::forearmWorldTurn(webLine, aimNow, static_cast<int>(i));
                                     if (forearmAims[i].primed)
                                         forearmJitter[i] = std::max(
                                             forearmJitter[i],
@@ -3393,7 +3430,7 @@ DWORD WINAPI run(void*) {
                                 const bool clamped =
                                     why == Fallback::none && signedDeg < -limit + .05f;
                                 // 180: do not pull the turn back toward the controller.
-                                forearmAims[i].update(why == Fallback::none, target, dt, 180.f);
+                                forearmAims[i].update(haveLine, target, dt, 180.f);
                                 // WRIST SHOOTERS without MODEL FOREARM takes all of it.
                                 webTurnsNow[i] = forearmAims[i].turn(
                                     values.webAimSource == static_cast<int>(web_aim::Source::forearm)
@@ -3422,7 +3459,7 @@ DWORD WINAPI run(void*) {
                                     web_aim::ForearmAimLine fields;
                                     fields.right = i != 0;
                                     fields.reason = web_aim::fallbackName(why);
-                                    fields.active = why == Fallback::none;
+                                    fields.active = haveLine;
                                     fields.modelForearm =
                                         values.webAimSource == static_cast<int>(web_aim::Source::forearm);
                                     fields.wristShooters = values.wristShooters != 0;
@@ -3452,6 +3489,23 @@ DWORD WINAPI run(void*) {
                                             i ? "R" : "L", static_cast<double>(signedDeg),
                                             static_cast<double>(web_aim::forearmInwardDegrees),
                                             clamped ? ", inward capped" : "");
+                                    if (logNow || diagNow)
+                                        diag_log::writef(
+                                            "spherical aim: %s %s, trust %.2f (target %.2f), model %s "
+                                            "(%.2f s), solve off model %.0f deg, line off controller %.0f deg",
+                                            i ? "R" : "L", web_aim::fallbackName(why),
+                                            static_cast<double>(forearmBlends[i].trust),
+                                            static_cast<double>(trustNow),
+                                            !values.sphericalAim ? "off"
+                                            : modelReady         ? "ready"
+                                                                 : "learning",
+                                            static_cast<double>(forearmModels[i].learned),
+                                            static_cast<double>(offModel),
+                                            haveLine ? static_cast<double>(
+                                                           spherical_aim::angleBetween(
+                                                               webLine, aimNow.rotate({0, 0, -1})) *
+                                                           57.29578f)
+                                                     : -1.0);
                                     if (logNow)
                                         forearmJitter[i] = 0;
                                 }
@@ -3464,6 +3518,8 @@ DWORD WINAPI run(void*) {
                             // Off again: the controller's line at once.
                             for (auto& a : forearmAims)
                                 a.reset();
+                            for (auto& b : forearmBlends)
+                                b.reset();
                             webTurnsNow = {};
                             game_swing::WebTurns turns;
                             if (swingWebTurns)
@@ -5871,6 +5927,7 @@ DWORD WINAPI run(void*) {
                     }
                     if ((!vrPlay || fpPlayBlip) && fpScene) {
                         headset_smoothing::liveLevel.store(0, std::memory_order_relaxed);
+                        headset_smoothing::publish({});
                         // A first-person scene: the headset's own two eyes, inside the head of the character
                         // the scene plays. The eyes are sent relative to that head (anchored 2); the native
                         // views put them on the head of the frame they render (stereo_probe.cpp,
@@ -6118,6 +6175,14 @@ DWORD WINAPI run(void*) {
                                 // first original-VR action (or the opposite handoff).
                                 for (auto& aim : forearmAims) aim.reset();
                                 forearmTargets = {}; forearmJitter = {}; webTurnsNow = {};
+                                // SPHERICAL AIM: the learned forearm means the same line in
+                                // either owner, so a switch keeps the web on it at once
+                                // instead of easing in from the controller's line.
+                                for (unsigned k = 0; k < 2; ++k) {
+                                    forearmBlends[k].reset();
+                                    if (values.sphericalAim && forearmModels[k].ready())
+                                        forearmAims[k].weight = 1;
+                                }
                             }
                             if (hybridFrame.zipPress)
                                 diag_log::writef("hybrid: web zip pressed, owner %s (%s), held for the zip",
@@ -6667,17 +6732,29 @@ DWORD WINAPI run(void*) {
                             pose.flags |= native_body::kick;
                             pose.kick = diveAt - motion.anchor;
                         }
+                        // PROCEDURAL LEGS ONLY IN THE AIR (the user, November 10 21:03:
+                        // "procedural legs are only in midair or during swinging"): the
+                        // trail and the tuck need the body truly off everything - a
+                        // swing or fall the swing owns with no ground, no wall of its
+                        // own (wall run, wall hold), no mount, no landing carry, or a
+                        // hybrid leap - never the ground, a wall run, a wall or vent
+                        // crawl, parkour or a landing. body_ik blends them out
+                        // (airLegBlendSeconds) on landing or wall contact.
+                        const bool legsAirOnly =
+                            (pose.flags & native_body::airborne) && !(pose.flags & native_body::kick) &&
+                            !motion.standing && !motion.ventCrawl && !crawlsFloor && !kneels &&
+                            (hybridLeapAir ||
+                             (swingState.owned && !swingState.grounded && !swingState.mount &&
+                              swingState.wall == static_cast<uint32_t>(game_swing::Surface::none)));
                         // Slice L: trail air legs from swing / leap velocity. No Command bump.
-                        if ((pose.flags & native_body::airborne) && !(pose.flags & native_body::kick) &&
-                            finite(swingState.velocity) && length(swingState.velocity) > .3f)
+                        if (legsAirOnly && finite(swingState.velocity) && length(swingState.velocity) > .3f)
                             native_body::setAirMomentum(swingState.velocity);
                         else
                             native_body::setAirMomentum({});
                         // Slice T: hold B (dodge) to tuck. Triggers and grips stay
                         // web. Not while the pad layer is latched, or during a kick.
                         // Isolated here so a later remap can point at another button.
-                        native_body::setTuck((pose.flags & native_body::airborne) &&
-                                             !(pose.flags & native_body::kick) &&
+                        native_body::setTuck(legsAirOnly &&
                                              (frame.buttons & buttonB) && !calibrationInput &&
                                              !padLayer.latched());
                         const bool wallGrip = game_swing::outdoorClimbGrip(
@@ -6966,8 +7043,13 @@ DWORD WINAPI run(void*) {
                         hybridBlend.active && hybridBlend.fromValid && eyeBlendW < 1.f - 1e-4f && !flatScreen;
                     // SMOOTHING filters the animated head the view sits on, not the
                     // headset. The render thread reads liveLevel in resolveScene.
+                    // CAMERA SMOOTHING / STABILIZATION (headset_smoothing::fromValues):
+                    // the same params on both threads, so hands and eyes share the head.
+                    const headset_smoothing::Params cameraSmooth =
+                        headFollowEyes ? headset_smoothing::fromValues(values) : headset_smoothing::Params{};
                     headset_smoothing::liveLevel.store(
                         headFollowEyes ? values.animatedHeadsetSmooth : 0, std::memory_order_relaxed);
+                    headset_smoothing::publish(cameraSmooth);
                     if (!headFollowEyes)
                         animHeadSmooth.reset();
                     native_eyes::Command eyes;
@@ -7058,7 +7140,8 @@ DWORD WINAPI run(void*) {
                         if (eyes.anchored == 4 ? game_fp::frameLevel(animHeadNow)
                                                : game_fp::frame(animHeadNow)) {
                             animHeadNow = animHeadSmooth.update(
-                                animHeadNow, frame.seconds, values.animatedHeadsetSmooth);
+                                animHeadNow, frame.seconds, cameraSmooth,
+                                finite(motion.anchor) ? &motion.anchor : nullptr);
                             haveAnimHead = true;
                         }
                     }
