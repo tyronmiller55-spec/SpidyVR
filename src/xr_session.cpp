@@ -9,8 +9,21 @@
 namespace spidy {
 namespace {
 void xr(XrResult r, const char* where) {
-    if (XR_FAILED(r))
-        throw std::runtime_error(std::string(where) + " XrResult=" + std::to_string(r));
+    if (XR_FAILED(r)) {
+        // The runtime ended the session or the instance (a Link that dropped, the headset's runtime
+        // restarting): said first, so the player's log reads as the runtime's doing, not Spidy's.
+        if (r == XR_ERROR_SESSION_LOST || r == XR_ERROR_INSTANCE_LOST)
+            throw std::runtime_error("The VR runtime lost the session: " + xr_connect::describe(where, r));
+        throw std::runtime_error(xr_connect::describe(where, r));
+    }
+}
+double now() {
+    using namespace std::chrono;
+    return duration<double>(steady_clock::now().time_since_epoch()).count();
+}
+std::string version(XrVersion v) {
+    return std::to_string(XR_VERSION_MAJOR(v)) + "." + std::to_string(XR_VERSION_MINOR(v)) + "." +
+           std::to_string(XR_VERSION_PATCH(v));
 }
 Pose pose(XrPosef p) {
     return {{p.position.x, p.position.y, p.position.z},
@@ -22,6 +35,11 @@ XrPosef identity() {
     return p;
 }
 } // namespace
+void XrRuntime::note(const std::string& line) {
+    std::cout << line << '\n';
+    if (log)
+        log(line);
+}
 XrRuntime::~XrRuntime() {
     for (auto& e : eyes_)
         if (e.swapchain)
@@ -102,19 +120,30 @@ void XrRuntime::initialize(
     ci.enabledExtensionNames = extensions_.data();
     XrResult created = xrCreateInstance(&ci, &instance_);
     if (XR_FAILED(created) && extensions_.size() > 1) {
+        note(xr_connect::describe("openxr: create instance with the layout extensions", created) +
+             "; again with D3D12 only");
         // Not at the price of VR: without them the runtime translates
         // another controller's layout, as before.
         extensions_.resize(1);
         ci.enabledExtensionCount = 1;
         created = xrCreateInstance(&ci, &instance_);
     }
+    if (XR_FAILED(created))
+        note(xr_connect::describe("openxr: create instance", created));
     xr(created, "Create XR instance");
     gazeOffered_ = std::any_of(extensions_.begin(), extensions_.end(), [](const char* name) {
         return std::strcmp(name, XR_EXT_EYE_GAZE_INTERACTION_EXTENSION_NAME) == 0;
     });
     XrInstanceProperties properties{XR_TYPE_INSTANCE_PROPERTIES};
     xr(xrGetInstanceProperties(instance_, &properties), "XR runtime properties");
-    std::cout << "Runtime: " << properties.runtimeName << '\n';
+    runtimeName_ = properties.runtimeName;
+    {
+        std::string enabled;
+        for (const auto* name : extensions_)
+            enabled += (enabled.empty() ? "" : " ") + std::string(name);
+        note("openxr: runtime " + runtimeName_ + " " + version(properties.runtimeVersion) + ", API 1.0.0, " +
+             std::to_string(count) + " extensions offered; enabled: " + enabled);
+    }
     // Virtual Desktop's calls itself VirtualDesktopXR.
     virtualDesktop_ = std::strstr(properties.runtimeName, "VirtualDesktop") != nullptr;
     if (probeOnly) {
@@ -125,7 +154,41 @@ void XrRuntime::initialize(
     }
     XrSystemGetInfo si{XR_TYPE_SYSTEM_GET_INFO};
     si.formFactor = XR_FORM_FACTOR_HEAD_MOUNTED_DISPLAY;
-    xr(xrGetSystem(instance_, &si, &system_), "Find headset (connect Quest to Virtual Desktop first)");
+    // An unavailable headset is asked for again (xr_connect.hpp, November 11): the specification lets a
+    // runtime call it unavailable while it connects or wakes, and Meta Quest Link did, after the
+    // launcher's probe had found it.
+    {
+        double waited{};
+        unsigned attempts{};
+        double lastNote = -10;
+        const auto found = static_cast<XrResult>(xr_connect::retry(
+            [&] { return static_cast<int32_t>(xrGetSystem(instance_, &si, &system_)); },
+            [](double seconds) { std::this_thread::sleep_for(std::chrono::duration<double>(seconds)); },
+            [&](double seconds, unsigned attempt, int32_t code) {
+                if (seconds - lastNote >= 15) {
+                    lastNote = seconds;
+                    note(xr_connect::describe("openxr: find headset", code) + ", attempt " +
+                         std::to_string(attempt) + ", " + std::to_string(static_cast<int>(seconds)) +
+                         " s waited; asking again");
+                }
+                return !waitingForHeadset || waitingForHeadset(seconds, attempt);
+            },
+            headsetWait, waited, attempts));
+        if (XR_FAILED(found)) {
+            note(xr_connect::describe("openxr: find headset", found) + " after " + std::to_string(attempts) +
+                 " attempts, " + std::to_string(static_cast<int>(waited)) + " s");
+            xr(found, found == XR_ERROR_FORM_FACTOR_UNAVAILABLE
+                          ? "Find headset (the VR runtime says it is not available: put it on, start Link "
+                            "or Virtual Desktop, and try again)"
+                          : "Find headset");
+        }
+        XrSystemProperties named{XR_TYPE_SYSTEM_PROPERTIES};
+        const bool hasName = XR_SUCCEEDED(xrGetSystemProperties(instance_, system_, &named));
+        note("openxr: headset found" + (hasName ? std::string(": ") + named.systemName : std::string()) +
+             (attempts > 1 ? " after " + std::to_string(attempts) + " attempts, " +
+                                 std::to_string(static_cast<int>(waited + .5)) + " s"
+                           : std::string(" at once")));
+    }
     bool eyeTracker = false;
     if (gazeOffered_) {
         XrSystemEyeGazeInteractionPropertiesEXT gaze{XR_TYPE_SYSTEM_EYE_GAZE_INTERACTION_PROPERTIES_EXT};
@@ -168,7 +231,12 @@ void XrRuntime::initialize(
     XrSessionCreateInfo sci{XR_TYPE_SESSION_CREATE_INFO};
     sci.next = &binding;
     sci.systemId = system_;
-    xr(xrCreateSession(instance_, &sci, &session_), "Create XR session");
+    {
+        const auto made = xrCreateSession(instance_, &sci, &session_);
+        note(xr_connect::describe("openxr: create session", made));
+        xr(made, "Create XR session");
+        createdAt_ = now();
+    }
     xr(xrEnumerateReferenceSpaces(session_, 0, &count, nullptr), "Count reference spaces");
     std::vector<XrReferenceSpaceType> spaces(count);
     xr(xrEnumerateReferenceSpaces(session_, count, &count, spaces.data()), "Read reference spaces");
@@ -475,23 +543,48 @@ void XrRuntime::poll() {
     XrResult result;
     while ((result = xrPollEvent(instance_, &event)) == XR_SUCCESS) {
         if (event.type == XR_TYPE_EVENT_DATA_SESSION_STATE_CHANGED) {
+            const auto previous = state_;
             state_ = reinterpret_cast<XrEventDataSessionStateChanged*>(&event)->state;
+            char line[160];
+            std::snprintf(line, sizeof(line), "openxr: session %s -> %s at %.2f s", xr_connect::stateName(previous),
+                          xr_connect::stateName(state_), now() - createdAt_);
+            note(line);
             if (state_ == XR_SESSION_STATE_READY && !running_) {
                 XrSessionBeginInfo begin{XR_TYPE_SESSION_BEGIN_INFO};
                 begin.primaryViewConfigurationType = XR_VIEW_CONFIGURATION_TYPE_PRIMARY_STEREO;
-                xr(xrBeginSession(session_, &begin), "Begin session");
+                const auto began = xrBeginSession(session_, &begin);
+                note(xr_connect::describe("openxr: begin session", began));
+                xr(began, "Begin session");
                 running_ = true;
                 previousTime_ = 0;
             }
             if (state_ == XR_SESSION_STATE_STOPPING && running_) {
-                xr(xrEndSession(session_), "End session");
+                const auto ended = xrEndSession(session_);
+                note(xr_connect::describe("openxr: end session", ended));
+                xr(ended, "End session");
                 running_ = false;
             }
-            if (state_ == XR_SESSION_STATE_EXITING || state_ == XR_SESSION_STATE_LOSS_PENDING)
+            // The runtime ends it: LOSS_PENDING (a Link that dropped, the runtime restarting) or EXITING.
+            // Said once, so the player's log tells the runtime's end from Spidy's.
+            if (state_ == XR_SESSION_STATE_EXITING || state_ == XR_SESSION_STATE_LOSS_PENDING) {
                 exit_ = true;
+                if (endReason_.empty())
+                    endReason_ = state_ == XR_SESSION_STATE_LOSS_PENDING
+                                     ? "The VR runtime is losing the session (LOSS_PENDING): the headset or "
+                                       "its Link connection went away"
+                                     : "The VR runtime asked Spidy to exit (EXITING)";
+            }
         }
-        if (event.type == XR_TYPE_EVENT_DATA_INSTANCE_LOSS_PENDING)
+        if (event.type == XR_TYPE_EVENT_DATA_INSTANCE_LOSS_PENDING) {
             exit_ = true;
+            note("openxr: instance loss pending (the VR runtime is going away)");
+            if (endReason_.empty())
+                endReason_ = "The VR runtime is going away (instance loss pending)";
+        }
+        if (event.type == XR_TYPE_EVENT_DATA_EVENTS_LOST)
+            note("openxr: " +
+                 std::to_string(reinterpret_cast<XrEventDataEventsLost*>(&event)->lostEventCount) +
+                 " runtime events lost");
         if (event.type == XR_TYPE_EVENT_DATA_INTERACTION_PROFILE_CHANGED)
             readControllers();
         if (event.type == XR_TYPE_EVENT_DATA_REFERENCE_SPACE_CHANGE_PENDING) {
