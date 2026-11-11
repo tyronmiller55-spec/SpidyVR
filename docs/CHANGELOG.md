@@ -3,6 +3,20 @@
 Every build, newest first, with what changed, why, and what was measured.
 Per-check results are in [VALIDATION.md](VALIDATION.md).
 
+## Native Animation: right-stick leg control (first pass)
+
+The user, Nov 10 (t41u): "procedural leg control on the right stick, but only when Controlled Flips is on ... an advanced feature ... smoothly blend between straight leg positions, jacknife for forward, left and right leg splays, and a rearward leg splay ... loosen the legs more so that momentum plays on them ... and we want momentum on them so that they affect rotation"; t42u "procedural legs are only in midair or during swinging"; t43u "Make zip and heal work in midair, but you have to double tap them". Built on 8cce51d. Not headset-tested.
+
+- **Setting:** LEG CONTROL (ADVANCED), Settings > VR FLIPS, off by default (`leg_control`). It is active only with CONTROLLED FLIPS on, REALISTIC FLIPS off, the body shown, and the body airborne or swinging free: the same gate as the air legs (no ground, wall, wall run, crawl, mount, landing or parkour).
+- **Blend (`leg_control.hpp`):** five authored poses (centre straight; forward jackknife, hips 83 deg; left/right both legs swung that way, the near leg wider; back a rearward splay, hips back 34 deg, legs apart, knees bent). The pose is linear per half-axis in the stick (after a 0.12 dead zone and an 80 ms stick filter), so it is continuous and diagonals mix.
+- **Loose legs:** a spring-damper per hip angle toward the stick's pose (1.6 Hz, damping 0.35 by default: it overshoots and swings). It is driven by the body's specific force (velocity change minus gravity: legs trail a pull, hang when hanging, float in a free fall), its angular acceleration (legs lag a turn) and its yaw rate (legs thrown apart). Semi-implicit substeps of 1/240 s with clamped angles and rates keep it stable at every setting (tested with wild input).
+- **Rotation coupling:** the legs' swing turns the body back by a share of it (angular momentum kept: 0.3 at full coupling, capped at 2 rad/s). Symmetric splays cancel. It is applied as the controlled flip's tilt, held, and comes upright on landing or A as a flip does. The legs' spread scales a controlled flip's spin by the inverse of the moment of inertia (jackknife faster, 0.75-1.5x).
+- **Tuning rows:** LEG STIFFNESS and LEG DAMPING (25-200%, default 100%), LEG COUPLING (OFF-100%, default 50%). Keys `leg_stiffness_pct`, `leg_damping_pct`, `leg_coupling_pct`, plus ini-only `leg_double_tap_ms` (300, 150-600). These are the player's own settings, not in shared profiles yet.
+- **Right stick in the mode:** it poses the legs. The tracking rig and the Level/model-yaw turns ignore it, the game receives it at rest, and a push held into the landing is no snap turn. `StickDoubleTap` is now wired: a double tap up zips (second push held = aim / slow time, release zips) and down heals, through the existing ZipPress/heal relays. A strong vertical push is withheld from the legs for up to 0.25 s as a possible first tap. When the mode is not active, StickPush is unchanged (it must see neutral first after the mode ends).
+- **Body:** body_ik places the feet from the angles (knee pole ahead of the leg), replacing the momentum trail while on. It eases in and out over 0.2 s (airLegBlendSeconds); a kick takes the legs at once. Arms, webs and ownership are untouched.
+- **Log:** `leg control: on (air)` / `off` on change, and `leg control: double tap up, zip` / `down, heal`.
+- **Tests:** blend shape and continuity, swing and settling, momentum response, stability sweep, coupling and inertia, the double tap's leg withholding, the flip's coupling and spin scale, the body's air-only gate and 0.2 s blend, settings and ini keys. Core 915/915, ctest 5/5.
+
 ## Native Animation: spherical aim, camera smoothing, legs only in the air
 
 The user, Nov 10 20:54 PST: "When aiming high above/behind my head, or low near my legs, the web shooters break and the markers jump around... enable 360 degree spherical aiming", plus a camera smoothing option with Light and Heavy levels; Nov 10 21:03 PST: "procedural legs are only in midair or during swinging". Not headset-tested.

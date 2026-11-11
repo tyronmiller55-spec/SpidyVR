@@ -131,6 +131,13 @@ static_assert(std::size(cameraSmoothChoices) == std::size(cameraSmoothSteps));
 constexpr int cameraStabilizations[] = {0, 1, 2};
 constexpr const char* cameraStabilizationChoices[] = {"OFF", "LIGHT", "HEAVY"};
 static_assert(std::size(cameraStabilizationChoices) == std::size(cameraStabilizations));
+// LEG CONTROL's springs and coupling, percent.
+constexpr int legSpringSteps[] = {25, 50, 75, 100, 150, 200};
+constexpr const char* legSpringChoices[] = {"25%", "50%", "75%", "100%", "150%", "200%"};
+static_assert(std::size(legSpringChoices) == std::size(legSpringSteps));
+constexpr int legCouplingSteps[] = {0, 25, 50, 75, 100};
+constexpr const char* legCouplingChoices[] = {"OFF", "25%", "50%", "75%", "100%"};
+static_assert(std::size(legCouplingChoices) == std::size(legCouplingSteps));
 constexpr int runSpeeds[] = {50, 75, 100, 125, 150, 175, 200};
 constexpr const char* runSpeedChoices[] = {"50%", "75%", "100%", "125%", "150%", "175%", "200%"};
 static_assert(std::size(runSpeedChoices) == std::size(runSpeeds));
@@ -223,6 +230,11 @@ std::span<const int> steps(Item item) {
     case Item::heavyHorizontal:
     case Item::heavyAngle:
         return cameraSmoothSteps;
+    case Item::legStiffness:
+    case Item::legDamping:
+        return legSpringSteps;
+    case Item::legCoupling:
+        return legCouplingSteps;
     case Item::runSpeed:
         return runSpeeds;
     case Item::slowMotionLength:
@@ -340,6 +352,12 @@ float numberOf(Item item, const Values& v) {
         return static_cast<float>(v.heavyHorizontalMs);
     case Item::heavyAngle:
         return static_cast<float>(v.heavyAngleMs);
+    case Item::legStiffness:
+        return static_cast<float>(v.legStiffnessPct);
+    case Item::legDamping:
+        return static_cast<float>(v.legDampingPct);
+    case Item::legCoupling:
+        return static_cast<float>(v.legCouplingPct);
     case Item::runSpeed:
         return static_cast<float>(v.runSpeedPercent);
     case Item::slowMotionLength:
@@ -419,6 +437,8 @@ template <class V> auto switchOf(Item item, V& v) -> decltype(&v.aimMarkers) {
         return &v.flips;
     case Item::controlledFlips:
         return &v.controlledFlips;
+    case Item::legControl:
+        return &v.legControl;
     case Item::webButton:
         return &v.triggerWebs;
     case Item::webStyle:
@@ -544,6 +564,10 @@ Values sanitized(Values v) {
                             &Values::lightVerticalMs, &Values::lightHorizontalMs, &Values::lightAngleMs,
                             &Values::heavyVerticalMs, &Values::heavyHorizontalMs, &Values::heavyAngleMs})
         v.*ms = std::clamp(v.*ms, 0, 500);
+    v.legStiffnessPct = std::clamp(v.legStiffnessPct, 25, 200);
+    v.legDampingPct = std::clamp(v.legDampingPct, 25, 200);
+    v.legCouplingPct = std::clamp(v.legCouplingPct, 0, 100);
+    v.legDoubleTapMs = std::clamp(v.legDoubleTapMs, 150, 600);
     v.runSpeedPercent = std::clamp(v.runSpeedPercent, 50, 200);
     v.slowMotionSeconds = std::clamp(v.slowMotionSeconds, 3, slowMotionEndless);
     v.softLockMetres = std::clamp(v.softLockMetres, 0, 40);
@@ -571,9 +595,9 @@ Values sanitized(Values v) {
     v.automaticHandThreshold = std::clamp(v.automaticHandThreshold, 50, 300);
     return v;
 }
-const std::array<Row, 122>& rows() {
+const std::array<Row, 126>& rows() {
     // The help fits the game's description column beside the rows.
-    static const std::array<Row, 122> all{{
+    static const std::array<Row, 126> all{{
         {Item::none, "WEBS", nullptr, {}},
         {Item::webStyle, "WEB STYLE",
          "Arcade: webs pass lamp posts, signs and cars, and swings stay above the street.", webStyleChoices},
@@ -883,6 +907,16 @@ const std::array<Row, 122>& rows() {
         {Item::heavyHorizontal, "HEAVY HORIZONTAL", "Side/forward smoothing used by STABILIZATION HEAVY.",
          cameraSmoothChoices},
         {Item::heavyAngle, "HEAVY ANGLE", "Turn smoothing used by STABILIZATION HEAVY.", cameraSmoothChoices},
+        {Item::legControl,
+         "LEG CONTROL (ADVANCED)",
+         "Controlled flips: midair right stick poses the legs. Double tap: zip/heal.",
+         {}},
+        {Item::legStiffness, "LEG STIFFNESS", "How firmly the legs hold the stick's pose. Lower swings more.",
+         legSpringChoices},
+        {Item::legDamping, "LEG DAMPING", "How fast the legs' swing settles. Lower keeps them swinging.",
+         legSpringChoices},
+        {Item::legCoupling, "LEG COUPLING", "How much the legs' swing turns your body in the air.",
+         legCouplingChoices},
         {Item::realisticFlips,
          "REALISTIC FLIPS",
          "Momentum rotation from arms and webs. FLIPS also enables left-stick steering.",
@@ -951,6 +985,7 @@ const std::array<Screen, categoryCount>& screens() {
     };
     static constexpr Item flips[] = {
         Item::realisticFlips, Item::flips, Item::controlledFlips, Item::flipSpeed,
+        Item::legControl, Item::legStiffness, Item::legDamping, Item::legCoupling,
         Item::automaticStrength, Item::automaticSpeed, Item::automaticMinimumSpeed, Item::automaticReleaseFlip,
         Item::automaticResponse, Item::automaticHandStrength, Item::automaticFalloff, Item::automaticHandThreshold,
         Item::automaticAirBrake, Item::automaticCombat, Item::dodgeTumble, Item::flipReprojection,
@@ -1011,6 +1046,12 @@ const char* inactiveReason(Item item, const Values& v) {
         return !v.webLandingSmooth ? "Enable Smooth web landing first." : nullptr;
     case Item::controlledFlips:
         return v.realisticFlips ? "Realistic flips takes priority over Controlled flips." : nullptr;
+    case Item::legControl:
+        return !v.controlledFlips || v.realisticFlips ? "Enable Controlled flips to use Leg control." : nullptr;
+    case Item::legStiffness:
+    case Item::legDamping:
+    case Item::legCoupling:
+        return !v.legControl || !v.controlledFlips || v.realisticFlips ? "Enable Leg control first." : nullptr;
     case Item::flips:
         return v.controlledFlips && !v.realisticFlips ? "Controlled flips takes priority over basic Flips." : nullptr;
     case Item::flipSpeed:
@@ -1189,6 +1230,15 @@ bool choose(Item item, int index, Values& v) {
         break;
     case Item::heavyAngle:
         v.heavyAngleMs = s[index];
+        break;
+    case Item::legStiffness:
+        v.legStiffnessPct = s[index];
+        break;
+    case Item::legDamping:
+        v.legDampingPct = s[index];
+        break;
+    case Item::legCoupling:
+        v.legCouplingPct = s[index];
         break;
     case Item::runSpeed:
         v.runSpeedPercent = s[index];
@@ -1376,6 +1426,11 @@ constexpr TabOnly tabOnly[] = {
     {"camera_heavy_horizontal_ms", nullptr, &Values::heavyHorizontalMs},
     {"camera_heavy_angle_ms", nullptr, &Values::heavyAngleMs},
     {"spherical_aim", &Values::sphericalAim, nullptr},
+    {"leg_control", &Values::legControl, nullptr},
+    {"leg_stiffness_pct", nullptr, &Values::legStiffnessPct},
+    {"leg_damping_pct", nullptr, &Values::legDampingPct},
+    {"leg_coupling_pct", nullptr, &Values::legCouplingPct},
+    {"leg_double_tap_ms", nullptr, &Values::legDoubleTapMs},
 };
 } // namespace
 std::string tabOnlyText(const Values& v) {

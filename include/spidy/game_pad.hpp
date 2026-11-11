@@ -700,6 +700,18 @@ class StickDoubleTap {
     // the right stick, -1..1, y up. Returns the action held now (none, up the
     // zip, down the heal).
     Way update(float seconds, bool active, float x, float y) {
+        const Way way = step(seconds, active, x, y);
+        // The stick's sideways for the legs: withheld with legY (a tap that
+        // may still be a double tap's, or the action, or its settling).
+        const float sx = std::isfinite(x) ? x : 0.f, sy = std::isfinite(y) ? y : 0.f;
+        legX_ = (legY_ == 0 && sy != 0) ? 0.f : sx;
+        return way;
+    }
+    // The stick's sideways the legs may use this frame.
+    float legX() const {
+        return legX_;
+    }
+    Way step(float seconds, bool active, float x, float y) {
         began_ = false;
         const float dt = std::isfinite(seconds) ? std::clamp(seconds, 0.f, .1f) : 0.f;
         const bool bad = !std::isfinite(x) || !std::isfinite(y);
@@ -795,6 +807,7 @@ class StickDoubleTap {
 
   private:
     enum class Phase { idle, first, gap, action, settle, legs };
+    float legX_{};
     float window_ = defaultWindowSeconds;
     Phase phase_{};
     Way way_{};

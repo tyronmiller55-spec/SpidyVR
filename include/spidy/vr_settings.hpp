@@ -359,6 +359,17 @@ struct Values {
     // controller, not the body solve's guess. On by default; 0 is as before.
     // Not on the menu.
     bool sphericalAim = true;
+    // LEG CONTROL (ADVANCED; leg_control.hpp): with CONTROLLED FLIPS on and
+    // the body airborne or swinging free, the right stick poses the legs
+    // (centre straight, forward jackknife, left/right splays, back a rearward
+    // splay) and they swing loose with the body's motion and turn it back
+    // (angular momentum). A double tap up zips, down heals. Off by default.
+    // LEG STIFFNESS, LEG DAMPING: percent of the springs' defaults (1.6 Hz,
+    // 0.35); LEG COUPLING: percent of the legs' full turn on the body.
+    // leg_double_tap_ms (spidy_vr.ini only): the double tap's window.
+    bool legControl = false;
+    int legStiffnessPct = 100, legDampingPct = 100, legCouplingPct = 50;
+    int legDoubleTapMs = 300;
     // RUN SPEED, percent (the tab's RUN SPEED; Swing::setRunSpeedPercent):
     // scales the speed SpidyVR's OWN ground run (SPIDY RUN and RUN FROM
     // STANDING) puts the body at, 50 to 200. The game's native run/sprint is
@@ -583,8 +594,12 @@ enum class Item : uint8_t {
     heavyVertical,
     heavyHorizontal,
     heavyAngle,
+    legControl,
+    legStiffness,
+    legDamping,
+    legCoupling,
 };
-inline constexpr Item lastItem = Item::heavyAngle;
+inline constexpr Item lastItem = Item::legCoupling;
 // SLOW-MO LENGTH's last step: no time limit (until L3 toggles it off).
 inline constexpr int slowMotionEndless = 91;
 // Real seconds a full meter lasts for a SLOW-MO LENGTH value; 0 = endless.
@@ -614,7 +629,7 @@ struct Row {
     Place place{};
 };
 // Stable row/setting numbers; categories below determine presentation order.
-const std::array<Row, 122>& rows();
+const std::array<Row, 126>& rows();
 const Row* rowFor(Item);
 enum class Category : uint8_t { setup, webs, swinging, movement, flips, feedback, display, nativeAnimation, count };
 inline constexpr size_t categoryCount = static_cast<size_t>(Category::count);

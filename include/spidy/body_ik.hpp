@@ -187,6 +187,15 @@ struct Targets {
     bool airMomentum{};
     Vec3 airVelocity{}; // model-space metres per second, when airMomentum
     bool tuck{};        // visual knees-to-chest; ignored unless airborne
+    // LEG CONTROL (leg_control.hpp): each leg's hip angles and knee bend in
+    // the body's frame (pitch forward +, side toward the body's left +),
+    // from the right stick and the legs' own swing. Only while
+    // airLegsAllowed; it replaces the momentum trail (its swing is its own).
+    struct LegAngles {
+        float pitch{}, side{}, knee{};
+    };
+    bool legControl{};
+    std::array<LegAngles, 2> legAngles{};
     // Directional running cycle; head and arms remain tracked.
     bool wallRun{};
     Vec3 runNormal{}, runAhead{};
@@ -411,6 +420,9 @@ struct State {
     // Air-momentum legs' share, 0..1: in over airLegBlendSeconds while
     // airLegsAllowed, out as smoothly on a landing or a wall's contact.
     float airLegWeight{};
+    // LEG CONTROL's share, 0..1, in and out over airLegBlendSeconds.
+    float legControlWeight{};
+    std::array<Targets::LegAngles, 2> legAngles{}; // the last pose given, for the blend out
 };
 // PROCEDURAL LEGS ONLY IN THE AIR (the user, November 10 21:03: "procedural
 // legs are only in midair or during swinging"): the momentum trail and the

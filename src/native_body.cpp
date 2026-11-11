@@ -95,6 +95,9 @@ Vec3 airWorldVel{};
 bool airWorldVelSet{};
 // Visual tuck hold (setTuck): mapped onto Targets::tuck when airborne.
 bool airTuckHeld{};
+// LEG CONTROL (setLegControl): mapped onto Targets::legControl when airborne.
+bool legControlOn{};
+std::array<body::Targets::LegAngles, 2> legControlAngles{};
 // ANIMATED HYBRID jump / air adopt (beginJumpAdopt): wanted since this tick (0 none), the live
 // pose snapshot taken at the first bodyOn job, and that first frame's result.
 uint64_t adoptWantedTick{};
@@ -584,6 +587,8 @@ void solveHero(float* out, uintptr_t job, uintptr_t instance) {
                 t.airVelocity = toModel.rotate(airWorldVel);
             }
             t.tuck = airLegs && airTuckHeld;
+            t.legControl = airLegs && legControlOn;
+            t.legAngles = legControlAngles;
             t.eyes = toModel.rotate(wanted.eyes);
             t.facing = toModel * wanted.facing;
             if (const Quat tilt = wanted.tilt; tilt.x != 0 || tilt.y != 0 || tilt.z != 0)
@@ -1068,6 +1073,14 @@ void native_body::setAirMomentum(const Vec3& worldVelocity) {
 void native_body::setTuck(bool held) {
     AcquireSRWLockExclusive(&solveLock);
     airTuckHeld = held;
+    ReleaseSRWLockExclusive(&solveLock);
+}
+
+void native_body::setLegControl(bool on, const std::array<body::Targets::LegAngles, 2>& legs) {
+    AcquireSRWLockExclusive(&solveLock);
+    legControlOn = on;
+    if (on)
+        legControlAngles = legs;
     ReleaseSRWLockExclusive(&solveLock);
 }
 

@@ -1,5 +1,6 @@
 #pragma once
 #include "body_calibration.hpp"
+#include "body_ik.hpp"
 #include "animated_view.hpp"
 #include "head_probe.hpp"
 #include "math.hpp"
@@ -310,6 +311,12 @@ void setAirMomentum(const Vec3& worldVelocity);
 void setTuck(bool held);
 // Eased visual tuck 0..1 from the last pose job (0 if none).
 float tuckWeight();
+// LEG CONTROL (leg_control.hpp): each leg's hip angles and knee bend for the
+// next bodyOn pose job (body::Targets::legAngles), used only while the body
+// may move its legs in the air (body::airLegsAllowed). on false: none, and the
+// legs blend back over body::airLegBlendSeconds. Side channel: no Command
+// layout or version change.
+void setLegControl(bool on, const std::array<body::Targets::LegAngles, 2>& legs);
 // Slice C tracking-lock diag (side channel; no Command / Forearms layout change).
 // Latest armsOnly chest vs player yaw and overlay weights after a pose job.
 struct OverlayTracking {

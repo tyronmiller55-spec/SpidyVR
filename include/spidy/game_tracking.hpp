@@ -259,6 +259,11 @@ class FlipMotion {
         Quat head{};
         float seconds{};
         bool stickTracked = true;
+        // LEG CONTROL (leg_control.hpp): the body's turn this frame from the
+        // legs' swing, radians about the head's level right (+ nose up) and
+        // forward axes, and the flip rate's scale from the legs' spread.
+        float legPitch{}, legRoll{};
+        float spinScale = 1;
     };
     Quat update(const Sample&);
     Quat tilt() const { return tilt_; }
@@ -298,6 +303,18 @@ class GameTrackingRig {
     // tracking rig behind its head-locked view; VR resumes the ordinary turn path.
     void animatedYawOwner(bool on) {
         animatedYawOwner_ = on;
+    }
+    // LEG CONTROL owns the right stick (CONTROLLED FLIPS, in the air): it
+    // turns nothing, and a push held into the landing is no snap turn.
+    void legStick(bool on) {
+        legStick_ = on;
+    }
+    // The legs' turn on the body for the next update (FlipMotion::Sample's
+    // legPitch, legRoll, spinScale); used once.
+    void legCoupling(float pitch, float roll, float spinScale) {
+        legPitch_ = std::isfinite(pitch) ? std::clamp(pitch, -.1f, .1f) : 0.f;
+        legRoll_ = std::isfinite(roll) ? std::clamp(roll, -.1f, .1f) : 0.f;
+        spinScale_ = std::isfinite(spinScale) ? std::clamp(spinScale, .5f, 2.f) : 1.f;
     }
     GameMotionFrame update(const XrFrame&, Vec3 playerFeet, Vec3 gameForward, bool gameplay,
                            Vec3 surfaceUp = {0, 1, 0}, bool airborne = false, const SurfaceHold& surface = {},
@@ -496,6 +513,8 @@ class GameTrackingRig {
         sceneRuns_{}, facingValid_{};
     float facing_{}, activeFor_{};
     bool controlledFlips_{};
+    bool legStick_{};
+    float legPitch_{}, legRoll_{}, spinScale_ = 1;
     // The trigger webs, and the web button changed since the last frame of play.
     bool triggerWebs_{}, buttonsChanged_{};
     float snap_ = .5235988f, smooth_{};

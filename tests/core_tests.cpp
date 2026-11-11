@@ -1,6 +1,7 @@
 #include "spidy/lab_world.hpp"
 #include "spidy/native_view.hpp"
 #include "spidy/game_tracking.hpp"
+#include "spidy/leg_control.hpp"
 #include "spidy/native_eye_frame.hpp"
 #include "spidy/native_hud.hpp"
 #include "spidy/native_eye_history.hpp"
@@ -23749,7 +23750,7 @@ int main() {
                                   Item::automaticHandStrength, Item::automaticFalloff,     Item::automaticHandThreshold,
                                   Item::automaticAirBrake,     Item::automaticCombat};
         // The realistic flips' rows come last, after the EXPERIMENTAL rows before them.
-        constexpr size_t firstRealistic = 111; // RUN SPEED, SLOW-MO LENGTH, SOFT LOCK, the ten camera rows
+        constexpr size_t firstRealistic = 115; // RUN SPEED, SLOW-MO LENGTH, SOFT LOCK, the ten camera rows, the four leg rows
         check(all.size() == firstRealistic + std::size(realistic), "the realistic flips' rows are not the last");
         for (size_t i = 0; i < std::size(realistic); ++i)
             check(all[firstRealistic + i].item == realistic[i], "the realistic flips' rows out of order");
@@ -23964,7 +23965,7 @@ int main() {
                   "a row in the wrong place");
         }
         check(std::count_if(all.begin(), all.end(), [](const Row& r) { return r.place == Place::tab; }) ==
-                  117,
+                  121,
               "the tab's own rows");
         check(all[1].item == Item::webStyle && std::strcmp(all[1].title, "WEB STYLE") == 0 &&
                   all[1].choices.size() == 2 && std::strcmp(all[1].choices[0], "REALISTIC") == 0 &&
@@ -24253,7 +24254,7 @@ int main() {
                   "camera_stabilization=0\ncamera_vertical_ms=0\ncamera_horizontal_ms=0\ncamera_angle_ms=0\n"
                   "camera_light_vertical_ms=75\ncamera_light_horizontal_ms=50\ncamera_light_angle_ms=75\n"
                   "camera_heavy_vertical_ms=200\ncamera_heavy_horizontal_ms=150\ncamera_heavy_angle_ms=200\n"
-                  "spherical_aim=1\n",
+                  "spherical_aim=1\nleg_control=0\nleg_stiffness_pct=100\nleg_damping_pct=100\nleg_coupling_pct=50\nleg_double_tap_ms=300\n",
               "the defaults' text");
         Values changed = defaults;
         changed.recordingFov = 140;
@@ -27865,7 +27866,7 @@ int main() {
                   all[89].choices.size() == 9 && std::strcmp(all[89].choices[0], "OFF") == 0 &&
                   std::strcmp(all[89].choices[8], "500 MS") == 0 && all[89].place == Place::tab,
               "ANIMATED HYBRID SPEED row");
-        check(lastItem == Item::heavyAngle && Item::animatedHeadsetSmooth < lastItem &&
+        check(lastItem == Item::legCoupling && Item::animatedHeadsetSmooth < lastItem &&
                   Item::softLock < Item::cameraStabilization,
               "SMOOTHING not included in the last Item bound");
     });
@@ -30504,6 +30505,307 @@ int main() {
         run(wide, 36, 0); // 0.4 s: inside the wider window
         check(run(wide, 3, 1) == Way::up, "a wider window refused");
     });
+    test("LEG CONTROL: the right stick's blend - straight, jackknife, splays, rearward - continuous", [] {
+        using namespace leg_control;
+        const Legs c = blend(0, 0), f = blend(0, 1), b = blend(0, -1), l = blend(-1, 0), r = blend(1, 0);
+        for (int i = 0; i < 2; ++i) {
+            near(c[i].pitch, 0, 1e-6f);
+            check(std::abs(c[i].side) < .05f && c[i].knee < .1f, "centre is not straight legs");
+            near(f[i].pitch, 1.45f, 1e-4f); // the jackknife
+            check(b[i].pitch < -.5f && b[i].knee > .4f, "back is no rearward splay");
+        }
+        check(b[0].side > .3f && b[1].side < -.3f, "the rearward splay's legs are not apart");
+        check(l[0].side > l[1].side && l[1].side > .2f, "left: both legs left, the left one wider");
+        check(r[1].side < r[0].side && r[0].side < -.2f, "right: both legs right, the right one wider");
+        // Continuous: a small push moves a little, everywhere.
+        float worst = 0;
+        for (float a = 0; a < 6.3f; a += .05f)
+            for (float m = 0; m < 1.2f; m += .05f) {
+                const Legs p = blend(m * std::cos(a), m * std::sin(a));
+                const Legs q = blend((m + .01f) * std::cos(a + .01f), (m + .01f) * std::sin(a + .01f));
+                for (int i = 0; i < 2; ++i)
+                    worst = std::max({worst, std::abs(p[i].pitch - q[i].pitch), std::abs(p[i].side - q[i].side),
+                                      std::abs(p[i].knee - q[i].knee)});
+            }
+        check(worst < .06f, ("the blend jumps by " + std::to_string(worst)).c_str());
+        // A diagonal mixes its neighbours; the dead zone is centre; past the rim is the rim.
+        const Legs d = blend(.7f, .7f);
+        check(d[0].pitch > .5f && d[1].side < -.2f, "a diagonal is not a mix");
+        near(blend(.05f, .05f)[0].pitch, 0, 1e-6f);
+        near(blend(0, 3)[0].pitch, f[0].pitch, 1e-5f);
+        near(blend(NAN, NAN)[0].pitch, 0, 1e-6f);
+    });
+    test("LEG CONTROL: loose legs swing with momentum, settle, stay stable; their swing turns the body", [] {
+        using namespace leg_control;
+        const float dt = 1.f / 90;
+        Params p;
+        Motion still; // a free fall: no pull at all
+        // Inactive: nothing, and it starts over.
+        Simulation off;
+        const auto none = off.update(dt, false, 0, 1, still, p);
+        check(!none.active && none.reactionPitch == 0 && none.reactionRoll == 0 && none.spinScale == 1,
+              "inactive moved something");
+        // A step to the jackknife overshoots (loose) and then settles on it.
+        Simulation step;
+        float peak = 0, reaction = 0;
+        for (int k = 0; k < 360; ++k) {
+            const auto o = step.update(dt, true, 0, 1, still, p);
+            peak = std::max(peak, o.legs[0].pitch);
+            reaction += o.reactionPitch;
+        }
+        check(peak > 1.45f + .02f, "the legs do not swing past the pose (not loose)");
+        near(step.legs()[0].pitch, 1.45f, .02f);
+        // Angular momentum: the jackknife's legs turned the body nose down by the share, no more.
+        check(reaction < -.1f && reaction > -couplingFull * p.coupling * 1.6f, "the jackknife's turn on the body");
+        // Symmetric splays cancel; both legs left roll the body back the other way.
+        Simulation back, left;
+        float roll = 0, leftRoll = 0;
+        for (int k = 0; k < 180; ++k) {
+            roll += back.update(dt, true, 0, -1, still, p).reactionRoll;
+            leftRoll += left.update(dt, true, -1, 0, still, p).reactionRoll;
+        }
+        near(roll, 0, 1e-4f);
+        check(leftRoll < -.05f, "a left swing did not roll the body");
+        // No coupling: no turn, no spin change.
+        Params loose = p;
+        loose.coupling = 0;
+        Simulation free;
+        float any = 0;
+        for (int k = 0; k < 90; ++k) {
+            const auto o = free.update(dt, true, 0, 1, still, loose);
+            any += std::abs(o.reactionPitch) + std::abs(o.reactionRoll) + std::abs(o.spinScale - 1);
+        }
+        near(any, 0, 1e-6f);
+        // Momentum: accelerating forward (a web's pull ahead) throws the legs back; hanging still they hang.
+        Simulation pulled, hanging;
+        Motion pull;
+        pull.specificForce = {25, 0, 9.81f};
+        Motion hang;
+        hang.specificForce = {0, 0, 9.81f};
+        for (int k = 0; k < 180; ++k) {
+            pulled.update(dt, true, 0, 0, pull, p);
+            hanging.update(dt, true, 0, 0, hang, p);
+        }
+        check(pulled.legs()[0].pitch < -.2f, "the legs did not trail a forward pull");
+        near(hanging.legs()[0].pitch, 0, .02f);
+        // A body turn the legs lag: a sudden nose-up pitch (about left) swings them forward.
+        Simulation lag;
+        Motion spin;
+        lag.update(dt, true, 0, 0, still, p);
+        spin.angularVelocity = {0, 4, 0};
+        const auto lagged = lag.update(dt, true, 0, 0, spin, p);
+        lag.update(dt, true, 0, 0, spin, p);
+        check(lag.legs()[0].pitch > lagged.legs[0].pitch - 1e-6f && lag.legs()[0].pitch > 0, "the legs did not lag a turn");
+        // Stable for every setting and wild input: finite, inside the limits, the turn capped.
+        for (int stiff : {25, 100, 200})
+            for (int damp : {25, 100, 200}) {
+                const Params q = fromPercent(stiff, damp, 100);
+                Simulation wild;
+                bool ok = true;
+                for (int k = 0; k < 900; ++k) {
+                    Motion m;
+                    m.specificForce = {60.f * std::sin(k * .7f), 60.f * std::cos(k * 1.3f), 40.f * std::sin(k * .2f)};
+                    m.angularVelocity = {15.f * std::sin(k * .9f), 15.f * std::cos(k * .4f), 15};
+                    const float sx = (k / 7) % 2 ? 1.f : -1.f, sy = (k / 11) % 2 ? 1.f : -1.f;
+                    const auto o = wild.update(k % 50 == 0 ? .1f : dt, true, sx, sy, m, q);
+                    for (const auto& a : o.legs)
+                        ok = ok && std::isfinite(a.pitch) && std::isfinite(a.side) && a.pitch >= pitchMin &&
+                             a.pitch <= pitchMax && std::abs(a.side) <= sideMax && a.knee >= 0 && a.knee <= kneeMax;
+                    ok = ok && std::abs(o.reactionPitch) <= reactionRateMax * .1f + 1e-6f &&
+                         o.spinScale >= spinScaleMin && o.spinScale <= spinScaleMax;
+                }
+                check(ok, ("unstable at stiffness " + std::to_string(stiff) + "%, damping " + std::to_string(damp) + "%").c_str());
+            }
+        // Inertia: a jackknife spins a flip faster, straight legs as set.
+        check(spinScale(blend(0, 1), 1) > 1.1f && std::abs(spinScale(blend(0, 0), 1) - 1) < .05f &&
+                  spinScale(blend(0, 1), 0) == 1,
+              "the legs' spread does not change the spin");
+        // The percent settings.
+        const Params d = fromPercent(100, 100, 50);
+        near(d.frequencyHz, baseFrequencyHz, 1e-5f);
+        near(d.dampingRatio, baseDampingRatio, 1e-5f);
+        near(d.coupling, .5f, 1e-5f);
+        near(fromPercent(200, 25, 0).frequencyHz, 2 * baseFrequencyHz, 1e-5f);
+    });
+    test("LEG CONTROL: the stick's double tap withholds the legs; the flip takes the legs' turn and spin", [] {
+        using game_pad::StickDoubleTap;
+        const float dt = 1.f / 90;
+        // A side push is the legs' at once; a strong push up waits as a possible tap, then is the legs'.
+        StickDoubleTap tap;
+        tap.update(dt, true, -.8f, 0);
+        near(tap.legX(), -.8f, 1e-6f);
+        tap.update(dt, true, 0, 0);
+        tap.update(dt, true, .2f, 1);
+        check(tap.legX() == 0 && tap.legY() == 0, "a possible first tap moved the legs");
+        for (int k = 0; k < 30; ++k)
+            tap.update(dt, true, .2f, 1);
+        check(tap.legY() == 1 && tap.legX() == .2f, "a held push never reached the legs");
+        // FlipMotion: the legs' turn tilts the body in the air (and is held), never on the ground.
+        FlipMotion flip;
+        FlipMotion::Sample s;
+        s.airborne = true;
+        s.controlled = true;
+        s.seconds = dt;
+        flip.update(s);
+        s.legPitch = -.02f;
+        for (int k = 0; k < 10; ++k)
+            flip.update(s);
+        const Vec3 nose = flip.tilt().rotate({0, 0, -1});
+        check(nose.y < -.15f, "the legs' turn did not tip the body nose down");
+        s.legPitch = 0;
+        const Quat held = flip.tilt();
+        for (int k = 0; k < 30; ++k)
+            flip.update(s);
+        near(length(flip.tilt().rotate({0, 1, 0}) - held.rotate({0, 1, 0})), 0, 1e-6f);
+        FlipMotion ground;
+        FlipMotion::Sample g = s;
+        g.airborne = false;
+        g.legPitch = .05f;
+        for (int k = 0; k < 10; ++k)
+            ground.update(g);
+        check(ground.level(), "the legs turned a body on the ground");
+        // The spin scale reaches a controlled flip's rate.
+        const auto travel = [&](float scale) {
+            FlipMotion f;
+            FlipMotion::Sample a;
+            a.airborne = a.controlled = true;
+            a.seconds = dt;
+            f.update(a);
+            a.jump = true;
+            f.update(a); // A: the flip mode
+            a.jump = false;
+            f.update(a);
+            a.stickY = 1;
+            a.spinScale = scale;
+            for (int k = 0; k < 45; ++k)
+                f.update(a);
+            return f.turned();
+        };
+        const float plain = travel(1), tight = travel(1.4f);
+        check(plain > .5f && tight > plain * 1.3f, "the spin scale did not reach the flip");
+    });
+    test("LEG CONTROL: the body places the legs only in the air, in and out over about 0.2 s", [] {
+        const auto b = testBody();
+        const auto& rig = b.rig;
+        const int joints = static_cast<int>(rig.parent.size());
+        auto restCopy = b.rest;
+        const body::Pose snap(restCopy.data(), joints);
+        body::Targets t;
+        t.head = true;
+        t.up = {0, 1, 0};
+        t.facing = Quat::yaw(3.14159265f);
+        const Vec3 F = t.facing.rotate({0, 0, -1}), U = t.facing.rotate({0, 1, 0});
+        t.eyes = snap.position(rig.head) + F * rig.eyesFromHead.x + U * rig.eyesFromHead.y +
+                 cross(U, F) * rig.eyesFromHead.z + Vec3{0, .12f, 0};
+        for (int i = 0; i < 2; ++i) {
+            const Vec3 shoulder = snap.position(rig.arms[i].upper);
+            t.hands[i] = {true, shoulder + Vec3{0, -.15f, .35f}, gripFacing({0, 0, 1}), 0, 0};
+        }
+        const float dt = 1.f / 90;
+        body::Config c;
+        body::Targets air = t;
+        air.airborne = true;
+        air.legControl = true;
+        air.airMomentum = true; // the control replaces the trail
+        air.airVelocity = F * 10.f;
+        const auto jack = leg_control::blend(0, 1);
+        for (int i = 0; i < 2; ++i)
+            air.legAngles[i] = {jack[i].pitch, jack[i].side, jack[i].knee};
+        body::State s;
+        body::seedFromPose(snap, rig, air, s);
+        std::vector<float> data;
+        float first = -1;
+        for (int k = 0; k < 60; ++k) {
+            data = b.rest;
+            body::Pose p(data.data(), joints);
+            body::solve(p, rig, air, c, s, true, dt);
+            if (k == 0)
+                first = s.legControlWeight;
+        }
+        check(first > 0 && first < .1f && s.legControlWeight >= 1 - 1e-4f, "the leg control did not ease in");
+        check(s.airLegWeight == 0.f, "the momentum trail ran under the leg control");
+        {
+            body::Pose p(data.data(), joints);
+            for (int i = 0; i < 2; ++i) {
+                const Vec3 out = p.position(rig.legs[i].foot) - p.position(rig.legs[i].upper);
+                check(dot(out, F) > .5f * length(out), "the jackknife's feet are not out in front");
+            }
+        }
+        // Landing: out over about 0.2 s, never a snap.
+        body::Targets landed = air;
+        landed.airborne = false;
+        landed.plant = true;
+        landed.floor = {0, 0, 0};
+        std::vector<float> w;
+        for (int k = 0; k < 40; ++k) {
+            data = b.rest;
+            body::Pose p(data.data(), joints);
+            body::solve(p, rig, landed, c, s, true, dt);
+            w.push_back(s.legControlWeight);
+        }
+        const int out = static_cast<int>(std::count_if(w.begin(), w.end(), [](float x) { return x > 0; }));
+        check(w[0] > .85f && w.back() == 0 && out >= 15 && out <= 20, "the leg control did not ease out on landing");
+        // Never on a wall run, a crawl or the ground.
+        for (auto change : {+[](body::Targets& x) {
+                                x.wallRun = true;
+                                x.runNormal = {1, 0, 0};
+                                x.runAhead = {0, 0, -1};
+                                x.floor = {-.5f, 0, 0};
+                                x.runPhase = .3f;
+                                x.runSpeed = 1;
+                            },
+                            +[](body::Targets& x) { x.plant = true; x.floor = {0, 0, 0}; },
+                            +[](body::Targets& x) { x.kick = true; },
+                            +[](body::Targets& x) { x.airborne = false; }}) {
+            body::Targets x = air;
+            change(x);
+            body::State fresh;
+            body::seedFromPose(snap, rig, x, fresh);
+            for (int k = 0; k < 10; ++k) {
+                data = b.rest;
+                body::Pose p(data.data(), joints);
+                body::solve(p, rig, x, c, fresh, true, dt);
+            }
+            check(fresh.legControlWeight == 0.f, "the leg control posed legs off the air");
+        }
+    });
+    test("LEG CONTROL settings: off by default, an advanced row under CONTROLLED FLIPS, ini keys", [] {
+        using namespace vr_settings;
+        Values v;
+        check(!v.legControl && v.legStiffnessPct == 100 && v.legDampingPct == 100 && v.legCouplingPct == 50 &&
+                  v.legDoubleTapMs == 300,
+              "defaults");
+        Values wild;
+        wild.legStiffnessPct = 900;
+        wild.legDampingPct = -3;
+        wild.legCouplingPct = 400;
+        wild.legDoubleTapMs = 5;
+        const Values clean = sanitized(wild);
+        check(clean.legStiffnessPct == 200 && clean.legDampingPct == 25 && clean.legCouplingPct == 100 &&
+                  clean.legDoubleTapMs == 150,
+              "ranges");
+        const auto read = withTabOnly({}, "leg_control=1\nleg_stiffness_pct=50\nleg_damping_pct=150\n"
+                                          "leg_coupling_pct=75\nleg_double_tap_ms=400\n");
+        check(read.legControl && read.legStiffnessPct == 50 && read.legDampingPct == 150 &&
+                  read.legCouplingPct == 75 && read.legDoubleTapMs == 400,
+              "ini keys");
+        const Row* row = rowFor(Item::legControl);
+        check(row && std::strcmp(row->title, "LEG CONTROL (ADVANCED)") == 0 && row->choices.empty(), "the row");
+        check(rowFor(Item::legStiffness) && rowFor(Item::legDamping) && rowFor(Item::legCoupling) &&
+                  rowFor(Item::legCoupling)->choices.size() == 5,
+              "the tuning rows");
+        bool inFlips = false;
+        for (const Item item : screens()[4].items)
+            inFlips = inFlips || item == Item::legControl;
+        check(inFlips, "not on the flips screen");
+        Values plain;
+        check(inactiveReason(Item::legControl, plain) != nullptr, "usable without controlled flips");
+        plain.controlledFlips = true;
+        check(inactiveReason(Item::legControl, plain) == nullptr && inactiveReason(Item::legStiffness, plain),
+              "the reasons");
+        plain.legControl = true;
+        check(inactiveReason(Item::legStiffness, plain) == nullptr, "tuning blocked with leg control on");
+    });
 
 
     test("Native Animation: recommended defaults, compound master and saved values", [] {
@@ -30716,7 +31018,7 @@ int main() {
     test("Native Animation: combined menu inventory and upstream-compatible v39 settings packet", [] {
         using namespace vr_settings;
         const auto& all = rows();
-        check(all.size() == 122 && static_cast<unsigned>(lastItem) < 256, "row/Item bounds");
+        check(all.size() == 126 && static_cast<unsigned>(lastItem) < 256, "row/Item bounds");
         std::array<unsigned, 256> seen{};
         size_t start = all.size();
         for (size_t i = 0; i < all.size(); ++i) {

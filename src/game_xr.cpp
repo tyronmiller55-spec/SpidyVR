@@ -45,6 +45,7 @@
 #include "spidy/hand_pose.hpp"
 #include "spidy/headset_smoothing.hpp"
 #include "spidy/spherical_aim.hpp"
+#include "spidy/leg_control.hpp"
 #include "spidy/aim_filter.hpp"
 #include "spidy/arm_frame.hpp"
 #include "spidy/kinematics.hpp"
@@ -885,6 +886,20 @@ DWORD WINAPI run(void*) {
         // The right thumbstick pushed down is the game's D-pad down (heal),
         // pushed up its LT + RT (the zip to a point, a vent).
         game_pad::StickPush stickPush;
+        // LEG CONTROL (leg_control.hpp): with CONTROLLED FLIPS on and the body
+        // airborne or swinging free, the right stick poses the legs; a double
+        // tap up zips, down heals (StickDoubleTap). legStickOwns: the legs'
+        // block below found the mode on this frame; legStickActive: last
+        // frame's, latched where the stick is read (the rig, the zip/heal).
+        game_pad::StickDoubleTap legTap;
+        leg_control::Simulation legSim;
+        bool legStickOwns{}, legStickActive{}, legModeLogged{};
+        float legStickX{}, legStickY{};
+        Vec3 legPrevVelocity{}, legAccel{};
+        bool legPrevVelocitySet{};
+        Quat legPrevBody{};
+        bool legPrevBodySet{};
+        uint32_t legActionsLogged{};
         game_pad::ZipPress zipPress;
         game_pad::FlipZipPriority flipZipPriority;
         // EYE AIM: the zip waits for the game's camera to come onto what the
@@ -2389,6 +2404,13 @@ DWORD WINAPI run(void*) {
                     if (zipPriority || (flipZipPlay && zipPress.active())) {
                         controller.hands[1].stickX = controller.hands[1].stickY = 0;
                     }
+                    // LEG CONTROL owns the right stick (last frame's finding, in
+                    // play): it turns nothing and goes to the game as rest.
+                    legStickActive = legStickOwns && gesturesPlay;
+                    legStickOwns = false;
+                    rig.legStick(legStickActive);
+                    if (legStickActive)
+                        controller.hands[1].stickX = controller.hands[1].stickY = 0;
                     // Whether the game's time runs, for the rig to tell a scene's end from a menu's (after a
                     // scene the view faces where the game's camera does). Only with first-person cutscenes or
                     // the theater screen disabled (options bits 22, 24): without them play resumes after a
@@ -2441,6 +2463,7 @@ DWORD WINAPI run(void*) {
                         hybridBlend.active && !hybridBlend.toTraversal && hybridBlend.delayModelYaw &&
                         !hybrid_handoff::blendDone(hybridInputNs - hybridBlend.startNs);
                     const float hybridInputR = values.animatedModelYaw && !motion.basicFlipControls &&
+                                                       !legStickActive &&
                                                        !hybridInputYawHold && frame.hands[1].valid
                                                    ? frame.hands[1].stickX
                                                    : 0.f;
@@ -2982,7 +3005,7 @@ DWORD WINAPI run(void*) {
                         ++armEpoch;
                     // M1: Level's R-stick turn (as in cutscenes with head tracking off)
                     // for THIS frame, before the hands are mapped; eyes and hands use it.
-                    if (levelTurnGate && animHeadRefSet) {
+                    if (levelTurnGate && animHeadRefSet && !legStickActive) {
                         const float x = frame.hands[1].stickX;
                         const float degrees = 3.14159265f / 180;
                         if (values.smoothTurn > 0) {
@@ -4703,7 +4726,7 @@ DWORD WINAPI run(void*) {
                         // the game zips to. Not while basic flips have the stick.
                         const auto& zipStick = frame.hands[1];
                         const bool zipWanted =
-                            zipPress.active() || (zipStick.stickY >= game_pad::StickPush::pushed &&
+                            zipPress.active() || (!legStickActive && zipStick.stickY >= game_pad::StickPush::pushed &&
                                                   std::abs(zipStick.stickX) <= game_pad::StickPush::aside);
                         const Vec3 gazeLook = motion.gazePose.orientation.rotate({0, 0, -1});
                         const bool eyesZip = (values.eyeAim & vr_settings::eyeAimZips) && motion.gazeValid &&
@@ -4827,9 +4850,33 @@ DWORD WINAPI run(void*) {
                             (!motion.basicFlipControls || flipZip) &&
                             !(named & (game_pad::NamedPress::stickUp | game_pad::NamedPress::stickLeft |
                                        game_pad::NamedPress::stickRight));
-                        const auto push = motion.basicFlipControls && !flipZip ?
-                            game_pad::StickPush::Way::none :
-                            stickPush.update(frame.seconds, sticking, turning.stickX, turning.stickY);
+                        // LEG CONTROL (the user, November 10 21:06: "Make zip and heal
+                        // work in midair, but you have to double tap them"): while the
+                        // legs own the stick, a double tap up is the zip (the second
+                        // push held aims, let go zips) and down the heal, through the
+                        // same relays below; single pushes are the legs'. Off that
+                        // mode StickPush is as it was, and must see neutral first.
+                        game_pad::StickPush::Way push = game_pad::StickPush::Way::none;
+                        if (const float window = static_cast<float>(values.legDoubleTapMs) * .001f;
+                            std::abs(legTap.windowSeconds() - std::clamp(window, .15f, .6f)) > 1e-4f)
+                            legTap = game_pad::StickDoubleTap(window);
+                        if (legStickActive) {
+                            push = legTap.update(frame.seconds, sticking, turning.stickX, turning.stickY);
+                            legStickX = sticking ? legTap.legX() : 0.f;
+                            legStickY = sticking ? legTap.legY() : 0.f;
+                            stickPush.cancel();
+                            if (legTap.actions() != legActionsLogged) {
+                                legActionsLogged = legTap.actions();
+                                diag_log::writef("leg control: double tap %s",
+                                                 push == game_pad::StickPush::Way::up ? "up, zip" : "down, heal");
+                            }
+                        } else {
+                            legTap.update(frame.seconds, false, 0, 0);
+                            legStickX = legStickY = 0;
+                            push = motion.basicFlipControls && !flipZip ?
+                                game_pad::StickPush::Way::none :
+                                stickPush.update(frame.seconds, sticking, turning.stickX, turning.stickY);
+                        }
                         if (motion.basicFlipControls && !flipZip) {
                             stickPush.cancel();
                             zipPress.cancel();
@@ -5247,7 +5294,8 @@ DWORD WINAPI run(void*) {
                             const bool modelYawOwns =
                                 animated_model_yaw::ownsStick(values.animatedModelYaw, yieldingPose,
                                                               airSpinOwnsStick) &&
-                                !motion.basicFlipControls && !hybridYawHold && !midairAnimation;
+                                !motion.basicFlipControls && !legStickActive && !hybridYawHold &&
+                                !midairAnimation;
                             // HYBRID view steering: MODEL YAW frees CameraLook only while
                             // the R-stick turns; otherwise the game camera follows the
                             // view so its parkour assists see a sensible camera.
@@ -6751,6 +6799,61 @@ DWORD WINAPI run(void*) {
                             native_body::setAirMomentum(swingState.velocity);
                         else
                             native_body::setAirMomentum({});
+                        // LEG CONTROL (ADVANCED; leg_control.hpp; the user, November 10:
+                        // "procedural leg control on the right stick, but only when
+                        // Controlled Flips is on"): only where the legs may move in the
+                        // air (legsAirOnly). The legs swing with the body's specific
+                        // force and turn, and their swing turns the body back
+                        // (rig.legCoupling, applied by the flip on the next update).
+                        {
+                            const bool legMode = values.legControl && values.controlledFlips &&
+                                                 !values.realisticFlips && values.body && !flatScreen &&
+                                                 legsAirOnly && !calibrationInput;
+                            legStickOwns = legMode;
+                            const float legDt = std::isfinite(frame.seconds) ? std::clamp(frame.seconds, 0.f, .1f) : 0.f;
+                            const Vec3 vel = swingState.velocity;
+                            if (legMode && finite(vel) && legPrevVelocitySet && legDt > 1e-4f) {
+                                const Vec3 raw = limited((vel - legPrevVelocity) / legDt, 60.f);
+                                legAccel = legAccel + (raw - legAccel) * (1 - std::exp(-legDt / .06f));
+                            } else if (!legMode) {
+                                legAccel = {};
+                            }
+                            legPrevVelocity = finite(vel) ? vel : Vec3{};
+                            legPrevVelocitySet = legMode && finite(vel);
+                            const Quat body = Quat::yaw(motion.swing.trackingYaw) * motion.swing.tilt;
+                            Vec3 look = frame.head.orientation.rotate({0, 0, -1});
+                            look.y = 0;
+                            const Vec3 levelLook = length(look) > .1f ? normalized(look) : Vec3{0, 0, -1};
+                            const Vec3 fwd = body.rotate(levelLook), upB = body.rotate({0, 1, 0});
+                            const Vec3 leftB = cross(upB, fwd);
+                            leg_control::Motion legMotion;
+                            if (legMode && legPrevVelocitySet) {
+                                const Vec3 force = legAccel + Vec3{0, 9.81f, 0};
+                                legMotion.specificForce = {dot(force, fwd), dot(force, leftB), dot(force, upB)};
+                            }
+                            if (legMode && legPrevBodySet && legDt > 1e-4f) {
+                                Quat d = body * legPrevBody.conjugate();
+                                if (d.w < 0)
+                                    d = {-d.x, -d.y, -d.z, -d.w};
+                                const Vec3 w = Vec3{d.x, d.y, d.z} * (2 / legDt);
+                                legMotion.angularVelocity = {dot(w, fwd), dot(w, leftB), dot(w, upB)};
+                            }
+                            legPrevBody = body;
+                            legPrevBodySet = legMode;
+                            const auto params = leg_control::fromPercent(values.legStiffnessPct, values.legDampingPct,
+                                                                         values.legCouplingPct);
+                            const auto legOut = legSim.update(legDt, legMode, legStickX, legStickY, legMotion, params);
+                            std::array<body::Targets::LegAngles, 2> angles{};
+                            for (int i = 0; i < 2; ++i)
+                                angles[i] = {legOut.legs[i].pitch, legOut.legs[i].side, legOut.legs[i].knee};
+                            native_body::setLegControl(legMode, angles);
+                            if (legMode)
+                                rig.legCoupling(legOut.reactionPitch, legOut.reactionRoll, legOut.spinScale);
+                            if (legMode != legModeLogged) {
+                                legModeLogged = legMode;
+                                diag_log::writef("leg control: %s", legMode ? "on (air)" : "off");
+                            }
+                        }
                         // Slice T: hold B (dodge) to tuck. Triggers and grips stay
                         // web. Not while the pad layer is latched, or during a kick.
                         // Isolated here so a later remap can point at another button.
