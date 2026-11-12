@@ -408,6 +408,21 @@ inline bool validWebTurns(const WebTurns& t) {
     }
     return true;
 }
+// Side channel from XR (POINT JUMP, point_jump.hpp): launch at `velocity` on
+// the next step, from the ground or Spidy's wall (Swing::pointJump). `serial`
+// rises with each new launch; the same serial again is ignored. Not a Command
+// or Settings field and not versioned with them (an older swing module has no
+// SpidySwingPointJump export; XR then never fires). `normal`: the surface's,
+// for the diagnostics only.
+struct PointJumpAsk {
+    uint32_t magic = 0x5357504a, version = 1, bytes = sizeof(PointJumpAsk), serial{};
+    Vec3 velocity{}, normal{};
+};
+static_assert(sizeof(PointJumpAsk) == 40);
+inline bool validPointJump(const PointJumpAsk& a) {
+    return a.magic == 0x5357504a && a.version == 1 && a.bytes == sizeof(PointJumpAsk) && finite(a.velocity) &&
+           length(a.velocity) > .1f && length(a.velocity) <= 80.f && finite(a.normal);
+}
 // SpidyWebFlightSample: each hand's web in flight (WEB SPEED). phases: 0 no
 // web, 1 flying, 2 just arrived and catching softly, 3 holding.
 struct WebFlightData {

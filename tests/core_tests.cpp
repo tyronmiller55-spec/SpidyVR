@@ -9584,6 +9584,29 @@ int main() {
         k=edge.update(dt,true,false);
         check(k.jump&&k.leap==0,"a press lost at an edge");
     });
+    test("POINT JUMP: the swing launches at the given velocity from the ground only, never as a point launch", [] {
+        TestWorld w;w.enabled=false;
+        const Body standing{{0,0,0},{},true};
+        Swing s(inert());Input in;
+        s.pointJump({0,8,-12});
+        const auto out=s.predictNativeStep(1.f/60,in,w,standing);
+        int jumps{},launches{};
+        for(const auto& e:s.events()){jumps+=e.kind==EventKind::PointJump;launches+=e.kind==EventKind::PointLaunch;}
+        check(jumps==1&&!launches&&s.pointJumps()==1,"no point jump event, or a point launch");
+        near(out.velocity.z,-12,.05f);check(out.velocity.y>7,"not launched up and along");
+        // In the air: nothing (the queue is dropped).
+        Swing air(inert());air.pointJump({0,8,-12});
+        air.predictNativeStep(1.f/60,in,w,{{0,5,0},{},false});
+        bool any{};for(const auto& e:air.events())any|=e.kind==EventKind::PointJump;
+        check(!any&&!air.pointJumps(),"a point jump in the air");
+        air.predictNativeStep(1.f/60,in,w,standing);
+        for(const auto& e:air.events())any|=e.kind==EventKind::PointJump;
+        check(!any,"a dropped point jump fired later");
+        // A zero or NaN velocity is no launch.
+        Swing z(inert());z.pointJump({0,0,0});z.pointJump({NAN,1,0});
+        z.predictNativeStep(1.f/60,in,w,standing);
+        check(!z.pointJumps(),"an empty launch");
+    });
     test("a charged leap takes the body off the ground: up by its charge, and along the stick", [] {
         TestWorld w;w.enabled=false;
         const Body standing{{0,0,0},{},true};
@@ -23632,7 +23655,7 @@ int main() {
                                   Item::automaticHandStrength, Item::automaticFalloff,     Item::automaticHandThreshold,
                                   Item::automaticAirBrake,     Item::automaticCombat};
         // The realistic flips' rows come last, after the EXPERIMENTAL rows before them.
-        constexpr size_t firstRealistic = 84;
+        constexpr size_t firstRealistic = 90;
         check(all.size() == firstRealistic + std::size(realistic), "the realistic flips' rows are not the last");
         for (size_t i = 0; i < std::size(realistic); ++i)
             check(all[firstRealistic + i].item == realistic[i], "the realistic flips' rows out of order");
@@ -23645,6 +23668,15 @@ int main() {
                   defaultChoice(Item::airFists) == 1 && !withTabOnly({}, "air_fists=0\n").airFists &&
                   withTabOnly({}, "").airFists,
               "AIR FISTS: an ON switch before the realistic flips, kept as air_fists");
+        // POINT JUMP (point_jump.hpp): an OFF switch and its five rows after AIR FISTS, shown on the Swinging
+        // page and kept as point_jump_*.
+        check(all[84].item == Item::pointJump && std::strcmp(all[84].title, "POINT JUMP (EXPERIMENTAL)") == 0 &&
+                  all[84].choices.empty() && all[84].place == Place::tab && !Values{}.pointJump &&
+                  all[85].item == Item::pointJumpTrigger && all[86].item == Item::pointJumpMinSpeed &&
+                  all[87].item == Item::pointJumpMaxSpeed && all[88].item == Item::pointJumpFull &&
+                  all[89].item == Item::pointJumpPush && withTabOnly({}, "point_jump=1\n").pointJump &&
+                  withTabOnly({}, "point_jump_max_speed=99\n").pointJumpMaxSpeed == 40,
+              "POINT JUMP: an OFF switch and its rows before the realistic flips, kept as point_jump_*");
         check(all[50].item == Item::controlledFlips && all[53].item == Item::joystickRunCamera &&
                   all[54].item == Item::wallRunCameraTilt && all[55].item == Item::halfPunchDamage,
               "custom switches misplaced");
@@ -23850,7 +23882,7 @@ int main() {
                                                          : Place::tab),
                   "a row in the wrong place");
         }
-        check(std::count_if(all.begin(), all.end(), [](const Row& r) { return r.place == Place::tab; }) == 90,
+        check(std::count_if(all.begin(), all.end(), [](const Row& r) { return r.place == Place::tab; }) == 96,
               "the tab's own rows");
         check(all[1].item == Item::webStyle && std::strcmp(all[1].title, "WEB STYLE") == 0 &&
                   all[1].choices.size() == 2 && std::strcmp(all[1].choices[0], "REALISTIC") == 0 &&
@@ -24134,7 +24166,9 @@ int main() {
                   "flip_reprojection=0\nsteady_hud=0\nreel_haptics=0\nswing_haptics=0\n"
                   "pc_media=0\nsingle_hand_yank_percent=100\nweb_tie=0\nnative_run=0\nair_slingshot=0\nweb_angle_"
                   "degrees=0\nwrist_shooters=0\n"
-                  "dodge_tumble=0\nrun_curve=0\nnative_run_at_percent=70\nrun_logs=0\nrunning_leap=0\nearly_jump=0\nsoft_landing=0\nspidy_run=0\nspidy_run_from_standing=0\nweb_aim_source=0\nforearm_blend=100\nweb_landing_smooth=0\nweb_landing_impact_speed=24\nsteady_states=0\ncombat_responsive=0\nspidy_run_jump=1\nforearm_aim_limit=180\npalm_shooters=0\nweb_lines=0\nair_fists=1\n",
+                  "dodge_tumble=0\nrun_curve=0\nnative_run_at_percent=70\nrun_logs=0\nrunning_leap=0\nearly_jump=0\nsoft_landing=0\nspidy_run=0\nspidy_run_from_standing=0\nweb_aim_source=0\nforearm_blend=100\nweb_landing_smooth=0\nweb_landing_impact_speed=24\nsteady_states=0\ncombat_responsive=0\nspidy_run_jump=1\nforearm_aim_limit=180\npalm_shooters=0\nweb_lines=0\nair_fists=1\n"
+                  "point_jump=0\npoint_jump_trigger=0\npoint_jump_min_speed=9\npoint_jump_max_speed=22\n"
+                  "point_jump_full_ms=1000\npoint_jump_normal_bias=25\n",
               "the defaults' text");
         Values changed = defaults;
         changed.recordingFov = 140;

@@ -48,6 +48,7 @@
 #include "spidy/native_webs.hpp"
 #include "spidy/near_clip.hpp"
 #include "spidy/offer_pointing.hpp"
+#include "spidy/point_jump.hpp"
 #include "spidy/presentation_gate.hpp"
 #include "spidy/recording_fov.hpp"
 #include "spidy/run_update.hpp"
@@ -549,6 +550,8 @@ BridgeCall aimGameThrow{};
 BridgeCall startShooter{}, sampleShooter{}, stopShooter{}, wheelShooter{};
 // WEB AIM: MODEL FOREARM: optional (an older ray module aims as before).
 BridgeCall swingWebTurns{};
+// POINT JUMP's launch for the swing's next step (SpidySwingPointJump; none in an older module).
+BridgeCall swingPointJump{};
 // The game's own crawl under the player (game_warp, in the same module):
 // optional, for the session report.
 BridgeCall sampleWarp{};
@@ -1037,6 +1040,14 @@ DWORD WINAPI run(void*) {
         game_pad::SuitPowerPress suitPress;
         uint32_t suitPowersBefore{};
         float leapOut{};
+        // POINT JUMP (point_jump.hpp): the A+B chord, the surface gate, the
+        // launches sent, and the look and surface they aim from.
+        point_jump::Chord pointChord;
+        point_jump::Controller pointJumpGate;
+        uint32_t pointJumpSerial{};
+        Vec3 pointJumpLook{}, pointJumpNormal{0, 1, 0};
+        bool pointJumpCharged{}, pointJumpBothWas{};
+        const char* pointJumpSurface = "ground";
         // The game's camera follows the head's pitch too: it offers a thing
         // at the player's feet or overhead only with that camera on it.
         game_pad::CameraPitch cameraPitch;
@@ -1866,6 +1877,166 @@ DWORD WINAPI run(void*) {
                         ++SpidyXrData.toggles;
                         SpidyXrData.flatScreen = flatScreen;
                         InterlockedIncrement64(&SpidyXrData.sequence);
+                    }
+                    // POINT JUMP (point_jump.hpp): touching a surface, A+B together (or
+                    // hold B, then A) charges a jump the way he looks. Here, before
+                    // anything reads A or B this frame: what of them reaches the game and
+                    // the rest of the mod (a button waiting for the other at most the
+                    // chord window; both swallowed while the chord is held), the charge's
+                    // rumble, and the launch sent to the swing (SpidySwingPointJump). Off
+                    // (the default), A and B pass as they are.
+                    {
+                        const auto pj = point_jump::paramsOf(values);
+                        const bool pjFresh =
+                            swingState.status && swingState.qpc &&
+                            static_cast<int64_t>(swingState.qpc) > now.QuadPart - frequency.QuadPart / 10;
+                        const bool pjSpidyWall =
+                            swingState.wall == static_cast<uint32_t>(game_swing::Surface::wall);
+                        const bool pjContact = pjFresh && (swingState.grounded || pjSpidyWall);
+                        if (pjContact) {
+                            pointJumpNormal = pjSpidyWall && finite(swingState.wallNormal) &&
+                                                      length(swingState.wallNormal) > .5f
+                                                  ? normalized(swingState.wallNormal)
+                                                  : Vec3{0, 1, 0};
+                            pointJumpSurface = pjSpidyWall ? "wall" : "ground";
+                        }
+                        // Not while something else has A or B: out of play, the phone,
+                        // the gadget wheel, the pad layer, the calibration, a prompt
+                        // naming A or B, a vent, a web line, the game's own crawl, a takeoff
+                        // under way.
+                        const char* blockedBy = nullptr;
+                        if (!swingPointJump)
+                            blockedBy = "no swing export";
+                        else if (!(viewing && gameplay && motion.active && !flatScreen && spiderMan &&
+                                   recentPresentation(lastNewImageMs, GetTickCount64())))
+                            blockedBy = "not in play";
+                        else if (phone.open() || gadgetWheel.open())
+                            blockedBy = "phone or wheel";
+                        else if (padLayer.latched())
+                            blockedBy = "pad layer";
+                        else if (calibrationInput)
+                            blockedBy = "calibration";
+                        else if (namedPress.claimed() &
+                                 (game_pad::NamedPress::controlA | game_pad::NamedPress::controlB))
+                            blockedBy = "prompt";
+                        else if (motion.ventCrawl)
+                            blockedBy = "vent";
+                        else if (values.webLines && lineState.phase == 2 && lineState.onLine)
+                            blockedBy = "line";
+                        else if (pjFresh &&
+                                 (swingState.wall == static_cast<uint32_t>(game_swing::Surface::game) ||
+                                  swingState.wall == static_cast<uint32_t>(game_swing::Surface::floor)))
+                            blockedBy = "game crawl";
+                        else if (pjFresh && (swingState.takeoff || swingState.takeoffPhase))
+                            blockedBy = "takeoff";
+                        point_jump::Controller::Input gateIn;
+                        gateIn.seconds = frame.seconds;
+                        gateIn.contact = pjContact;
+                        gateIn.blocked = blockedBy != nullptr;
+                        gateIn.fighting = fightLately;
+                        gateIn.zipping = zipping;
+                        const bool allowed = pointJumpGate.update(gateIn, pj);
+                        const bool warning =
+                            std::any_of(senseMarks.begin(), senseMarks.end(),
+                                        [](const SenseMark& m) { return m.live && !m.brokenAt; });
+                        const bool rawA = frame.jump, rawB = (frame.buttons & buttonB) != 0;
+                        // A grip cancels a charge.
+                        if (pointChord.charging() &&
+                            ((frame.hands[0].valid && frame.hands[0].squeeze > .6f) ||
+                             (frame.hands[1].valid && frame.hands[1].squeeze > .6f)))
+                            pointChord.cancel();
+                        point_jump::Chord::Input chordIn;
+                        chordIn.seconds = frame.seconds;
+                        chordIn.a = rawA;
+                        chordIn.b = rawB;
+                        chordIn.allowed = allowed;
+                        chordIn.warning = warning;
+                        chordIn.mode = pj.trigger;
+                        chordIn.window = pj.chordSeconds;
+                        chordIn.dodgeHold = pj.dodgeHoldSeconds;
+                        const auto chord = pointChord.update(chordIn);
+                        frame.jump = chord.a;
+                        frame.buttons =
+                            chord.b ? (frame.buttons | buttonB) : (frame.buttons & ~uint32_t(buttonB));
+                        // Both pressed with the jump not allowed: why (the buttons went on as they were).
+                        const bool both = rawA && rawB;
+                        if (pj.enabled && both && !pointJumpBothWas && !allowed && !chord.began &&
+                            !pointChord.charging()) {
+                            diag_log::writef("point jump: denied %s (A and B went on to the game)",
+                                             blockedBy ? blockedBy
+                                                       : point_jump::denyName(pointJumpGate.deny()));
+                        }
+                        pointJumpBothWas = both;
+                        if (chord.began) {
+                            // The chord took the press: whatever A was doing ends unsent.
+                            chargeJump.consume();
+                            pointJumpCharged = false;
+                            diag_log::writef(
+                                "point jump: chord %s %d ms (trigger %d, %s%s)",
+                                pj.trigger == 1 ? "B-then-A"
+                                : chord.aFirst  ? "A-first"
+                                                : "B-first",
+                                static_cast<int>(chord.gap * 1000 + .5f), pj.trigger, pointJumpSurface,
+                                pointJumpGate.deny() == point_jump::Deny::zipGuard ? ", zip guard" : "");
+                        }
+                        if (pointChord.charging()) {
+                            // The charged leap's rumble: a pulse past the tap, then it builds and holds.
+                            const float held = pointChord.held();
+                            if (held > pj.tapSeconds) {
+                                const float c = point_jump::charge(held, pj);
+                                if (!pointJumpCharged) {
+                                    pointJumpCharged = true;
+                                    runtime.haptic(1, .3f);
+                                    feel(body_haptics::Kind::leapCharge);
+                                } else {
+                                    runtime.haptic(0, .08f + .3f * c);
+                                    runtime.haptic(1, .1f + .4f * c);
+                                }
+                            }
+                        }
+                        if (chord.cancelled)
+                            diag_log::writef("point jump: charge cancelled (grip) after %d ms",
+                                             static_cast<int>(pointChord.held() * 1000 + .5f));
+                        if (chord.released)
+                            pointJumpGate.release(chord.held);
+                        const auto fire = pointJumpGate.take(pj);
+                        if (fire.now) {
+                            Vec3 look = pointJumpLook;
+                            if (!finite(look) || length(look) < .5f)
+                                look = motion.headPose.orientation.rotate({0, 0, -1});
+                            const auto way = point_jump::direction(look, pointJumpNormal, pj);
+                            const float speedNow = point_jump::speed(fire.held, pj);
+                            const Vec3 before =
+                                pjFresh && finite(swingState.velocity) ? swingState.velocity : Vec3{};
+                            const Vec3 velocity =
+                                point_jump::launchVelocity(way.way, speedNow, before, pointJumpNormal, pj);
+                            game_swing::PointJumpAsk ask;
+                            ask.serial = ++pointJumpSerial;
+                            ask.velocity = velocity;
+                            ask.normal = pointJumpNormal;
+                            const DWORD result = swingPointJump(&ask);
+                            if (result == 0) {
+                                runtime.haptic(0, .8f, .12f);
+                                runtime.haptic(1, 1.f, .12f);
+                                feel(body_haptics::Kind::leap);
+                                diag_log::writef(
+                                    "point jump: charge %.2f -> %.1f m/s dir (%.2f, %.2f, %.2f) n (%.2f, "
+                                    "%.2f, %.2f) "
+                                    "out-fix %.0f deg, held %d ms%s, launch (%.1f, %.1f, %.1f), from the %s",
+                                    point_jump::charge(fire.held, pj), speedNow, way.way.x, way.way.y,
+                                    way.way.z, pointJumpNormal.x, pointJumpNormal.y, pointJumpNormal.z,
+                                    way.outFixDegrees, static_cast<int>(fire.held * 1000 + .5f),
+                                    fire.waited > .001f ? ", waited for the surface or the zip guard" : "",
+                                    velocity.x, velocity.y, velocity.z, pointJumpSurface);
+                            } else {
+                                diag_log::writef("point jump: the swing refused the launch (%lu)",
+                                                 static_cast<unsigned long>(result));
+                            }
+                        } else if (fire.dropped) {
+                            diag_log::writef("point jump: denied %s (let go of after %d ms)",
+                                             point_jump::denyName(fire.why),
+                                             static_cast<int>(fire.held * 1000 + .5f));
+                        }
                     }
                     if (!frame.jump)
                         jumpFromScreen = false;
@@ -2918,6 +3089,8 @@ DWORD WINAPI run(void*) {
                                 swingWebTurns(&turns);
                             webTurnsOn = false;
                         }
+                        // POINT JUMP aims where the actions' head looks (next frame's fire).
+                        pointJumpLook = input.look;
                         check(submitSwing(&input), "Tracked swing input");
                         check(sampleSwing(&swingState), "Native swing feedback");
                         game_swing::SlingshotData slingshot;
@@ -6241,6 +6414,7 @@ extern "C" __declspec(dllexport) DWORD WINAPI SpidyXrStart(void* input) {
                                                           dodgeResults->bytes != expected.bytes))
         dodgeResults = nullptr;
     swingSettings = reinterpret_cast<BridgeCall>(GetProcAddress(rays, "SpidySwingSettings"));
+    swingPointJump = reinterpret_cast<BridgeCall>(GetProcAddress(rays, "SpidySwingPointJump"));
     swingWebTurns = reinterpret_cast<BridgeCall>(GetProcAddress(rays, "SpidySwingWebTurns"));
     // Optional: an older ray module has no web shooter.
     startShooter = reinterpret_cast<BridgeCall>(GetProcAddress(rays, "SpidyShooterStart"));

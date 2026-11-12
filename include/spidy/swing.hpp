@@ -344,6 +344,7 @@ enum class EventKind {
     WallGrip, // a palm stuck to the wall; one contact pulse in that hand
     Slingshot, // both drawn webs released: strength is the stored charge
     Shoot,     // WEB SPEED: a web shot and flying, which holds nothing yet (Attach when it arrives)
+    PointJump, // POINT JUMP (point_jump.hpp): off a surface the way he looks; strength: its speed, m/s
 };
 struct Event {
     EventKind kind;
@@ -760,6 +761,19 @@ class Swing {
         twoHandZip_ = zip;
         ropeSteering_ = steering;
     }
+    // POINT JUMP (point_jump.hpp): launch at `velocity` on the next step, from
+    // the ground or Spidy's wall only (game_xr has aimed it out of the
+    // surface). Never the point launch (jumpQueued_): no game launch, no smoke.
+    // A queue older than its next step is dropped there if he is on neither.
+    void pointJump(Vec3 velocity) {
+        if (finite(velocity) && length(velocity) > .1f) {
+            pointJumpQueued_ = true;
+            pointJumpVelocity_ = velocity;
+        }
+    }
+    std::uint32_t pointJumps() const {
+        return pointJumps_;
+    }
     bool gestureTakeoff() const {
         return gestureTakeoff_;
     }
@@ -917,6 +931,10 @@ class Swing {
     // A leap's charge waiting for the next step, and whether one is held out.
     float leapQueued_{};
     bool leapHeld_{};
+    // POINT JUMP: a launch waiting for the next step, and those made.
+    bool pointJumpQueued_{};
+    Vec3 pointJumpVelocity_{};
+    std::uint32_t pointJumps_{};
     WallHold wall_{};
     struct ClimbingHand {
         bool attached{}, held = true;

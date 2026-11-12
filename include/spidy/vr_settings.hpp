@@ -155,6 +155,15 @@ struct Values {
     // A fast hand closes into a fist with nobody to punch too (the tab's AIR
     // FISTS; hand_pose.hpp). Off: only with an enemy marked or within reach.
     bool airFists = true;
+    // POINT JUMP (the tab's POINT JUMP (EXPERIMENTAL); point_jump.hpp):
+    // touching a surface, A+B (or hold B, then A) charges a jump the way you
+    // look. A tap is a quick jump at TAP SPEED; held up to CHARGE TIME a leap
+    // rising to MAX SPEED (m/s). SURFACE PUSH: percent of the surface's normal
+    // mixed into the look. Off by default. The player's own (spidy_vr.ini
+    // point_jump_* keys), not in shared profiles.
+    bool pointJump = false;
+    int pointJumpTrigger = 0, pointJumpMinSpeed = 9, pointJumpMaxSpeed = 22, pointJumpFullMs = 1000,
+        pointJumpNormalBias = 25;
     // Aiming with the eyes (the tab's EYE AIM; eyeAimShots, eyeAimZips): web
     // balls go where the eyes look, from the hand that pulled; a zip goes to
     // the point the eyes look at, the game's camera being turned onto it.
@@ -460,8 +469,14 @@ enum class Item : uint8_t {
     palmShooters,
     webLines,
     airFists,
+    pointJump,
+    pointJumpTrigger,
+    pointJumpMinSpeed,
+    pointJumpMaxSpeed,
+    pointJumpFull,
+    pointJumpPush,
 };
-inline constexpr Item lastItem = Item::airFists;
+inline constexpr Item lastItem = Item::pointJumpPush;
 // Where a row shows: in the tab; on the pause menu's first page instead,
 // under RESUME: VR VIEW (the user, October 15: "move the VIEW: GAME SCREEN to
 // the first menu (the one with resume)"); or only in the launcher's options:
@@ -485,7 +500,7 @@ struct Row {
     Place place{};
 };
 // Stable row/setting numbers; categories below determine presentation order.
-const std::array<Row, 95>& rows();
+const std::array<Row, 101>& rows();
 const Row* rowFor(Item);
 enum class Category : uint8_t { setup, webs, swinging, movement, flips, feedback, display, count };
 inline constexpr size_t categoryCount = static_cast<size_t>(Category::count);

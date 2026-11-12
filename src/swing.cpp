@@ -770,6 +770,8 @@ void Swing::reset(Body b) {
     runJump_ = 0;
     leapQueued_ = 0;
     leapHeld_ = false;
+    pointJumpQueued_ = false;
+    pointJumpVelocity_ = {};
     wall_ = {};
     wallLost_ = crest_ = 0;
     wrapWay_ = {};
@@ -1500,6 +1502,26 @@ void Swing::step(float dt, const Input& in, const WorldQueries& world, const Wor
             jumpQueued_ = false;
         }
         leapQueued_ = 0;
+    }
+    if (pointJumpQueued_) {
+        // POINT JUMP: off the ground, a perch or Spidy's wall the way he looks
+        // (game_xr aimed it out of the surface). Takes the place of any leap
+        // or jump this step; never the point launch.
+        if (body_.grounded || wall_.on) {
+            body_.velocity = limited(pointJumpVelocity_, config_.maxSpeed);
+            if (wall_.on) {
+                leaveWall();
+                sinceWallJump_ = 0;
+                mountLeft_ = 0;
+            }
+            body_.grounded = false;
+            leapQueued_ = 0;
+            jumpQueued_ = false;
+            runJump_ = 0;
+            ++pointJumps_;
+            events_.push_back({EventKind::PointJump, -1, length(body_.velocity)});
+        }
+        pointJumpQueued_ = false;
     }
     // SPIDY RUN JUMP: off the ground with the run's speed, as long as the
     // body is still seen on it (the command takes a native step to land).
