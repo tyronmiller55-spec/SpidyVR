@@ -2066,6 +2066,33 @@ void App::options(ImVec2 origin, ImVec2 size) {
                "With smooth web landing: a landing this fast or faster (m/s, all of its speed) is the game's "
                "heavy one. 24 m/s by default.",
                S(150), [&] { tabCombo("##weblandingimpact", Item::webLandingImpact); });
+        settingOption(
+            Item::pointJump, "Point jump (experimental)",
+            "Whenever you touch a surface (the ground, a perch, a wall you run on), press A and B "
+            "together to jump the way you are looking. A tap is a quick jump; hold up to the charge "
+            "time for a bigger leap, with the charged leap's rumble. No point-launch smoke.",
+            S(42), [&] { tabToggle("##pointjump", Item::pointJump); });
+        settingOption(
+            Item::pointJumpTrigger, "Point jump trigger",
+            "A+B together: press both within about 50 ms. Hold B, then A: hold B and press A; B let "
+            "go of alone, or held a quarter second, is still the dodge, and a spider-sense warning "
+            "makes B the dodge at once.",
+            S(150), [&] { tabCombo("##pointjumptrigger", Item::pointJumpTrigger); });
+        settingOption(Item::pointJumpMinSpeed, "Point jump tap speed",
+                      "How fast a quick tap launches you, metres per second. 9 by default.", S(150),
+                      [&] { tabCombo("##pointjumpmin", Item::pointJumpMinSpeed); });
+        settingOption(Item::pointJumpMaxSpeed, "Point jump max speed",
+                      "How fast a full charge launches you, metres per second. 22 by default.", S(150),
+                      [&] { tabCombo("##pointjumpmax", Item::pointJumpMaxSpeed); });
+        settingOption(Item::pointJumpFull, "Point jump charge time",
+                      "How long to hold both buttons for the full charge. 1 second by default.", S(150),
+                      [&] { tabCombo("##pointjumpfull", Item::pointJumpFull); });
+        settingOption(
+            Item::pointJumpPush, "Point jump surface push",
+            "How much of the surface's own direction (up from the ground, out from a wall) is mixed "
+            "into your look, so a flat look still leaves the surface. 25% by default; the jump "
+            "never goes into the surface either way.",
+            S(150), [&] { tabCombo("##pointjumppush", Item::pointJumpPush); });
     });
     group(3, 0, "Walls", [&] {
         settingOption(Item::handClimb, "Hand wall climbing (experimental)",

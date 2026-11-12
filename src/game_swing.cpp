@@ -205,6 +205,15 @@ std::atomic<bool> wristShooters{};
 SRWLOCK webTurnsLock = SRWLOCK_INIT;
 WebTurns webTurns{};
 uint64_t webTurnsAt{};
+// POINT JUMP (SpidySwingPointJump): a launch waiting for the next step, when
+// it came, and the last serial taken. One older than pointJumpMaxAgeMs when
+// the step comes is dropped (the frame it was for is long gone).
+SRWLOCK pointJumpLock = SRWLOCK_INIT;
+PointJumpAsk pointJumpAsk{};
+uint64_t pointJumpAt{};
+uint32_t pointJumpSerial{};
+bool pointJumpWaiting{};
+constexpr uint64_t pointJumpMaxAgeMs = 250;
 // WEB LINES (Settings version 31): web lines run only with it on; off, the
 // lines there are go, and so does a player on one.
 std::atomic<bool> webLinesOn{};
@@ -1066,6 +1075,17 @@ void visit(const native_rays::QueryContext& world) {
         for (unsigned i = 0; i < 2; ++i)
             paid |= solver.webs()[i].attached && solver.webs()[i].length > before[i] + 1e-3f;
     }
+    // POINT JUMP: a launch XR sent since the last step (SpidySwingPointJump).
+    {
+        AcquireSRWLockExclusive(&pointJumpLock);
+        const bool waiting = pointJumpWaiting;
+        const PointJumpAsk ask = pointJumpAsk;
+        const uint64_t at = pointJumpAt;
+        pointJumpWaiting = false;
+        ReleaseSRWLockExclusive(&pointJumpLock);
+        if (waiting && focused && GetTickCount64() - at <= pointJumpMaxAgeMs)
+            solver.pointJump(ask.velocity);
+    }
     // A press aimed at something a web can catch belongs to the grab: the
     // swing gets the input without that hand's grip.
     auto swingInput = focused ? game_grab::forSwing(in) : in;
@@ -1091,7 +1111,9 @@ void visit(const native_rays::QueryContext& world) {
     for (const auto& event : solver.events()) {
         // A charged leap leaves the ground as a point launch does: by the
         // game's own jump, then at the leap's velocity.
-        pointLaunched |= event.kind == EventKind::PointLaunch || event.kind == EventKind::Leap;
+        // POINT JUMP takes off the same way (its own event: no point launch, no smoke).
+        pointLaunched |= event.kind == EventKind::PointLaunch || event.kind == EventKind::Leap ||
+                         event.kind == EventKind::PointJump;
         slingshotLaunched |= event.kind == EventKind::Slingshot;
         newAttachment |= event.kind == EventKind::Attach;
         zipped |= event.kind == EventKind::Zip;
@@ -1583,6 +1605,11 @@ extern "C" __declspec(dllexport) DWORD WINAPI SpidySwingStart(void* input) {
         webTurns = {};
         webTurnsAt = 0;
         ReleaseSRWLockExclusive(&webTurnsLock);
+        AcquireSRWLockExclusive(&pointJumpLock);
+        pointJumpAsk = {};
+        pointJumpAt = 0;
+        pointJumpWaiting = false;
+        ReleaseSRWLockExclusive(&pointJumpLock);
         webLinesOn = false;
         started = true;
         solver = Swing(physicsConfig(config));
@@ -1686,6 +1713,28 @@ extern "C" __declspec(dllexport) DWORD WINAPI SpidySwingWebTurns(void* input) {
     webTurns = t;
     webTurnsAt = GetTickCount64();
     ReleaseSRWLockExclusive(&webTurnsLock);
+    return 0;
+}
+// POINT JUMP (point_jump.hpp): the VR worker's launch for the next step.
+// 2001: not a PointJumpAsk; 1004: the swing has not started; 0 taken (or the
+// same serial again, ignored).
+extern "C" __declspec(dllexport) DWORD WINAPI SpidySwingPointJump(void* input) {
+    PointJumpAsk a;
+    if (!input || !copy(&a, input, sizeof(a)) || !validPointJump(a))
+        return 2001;
+    AcquireSRWLockShared(&lifecycle);
+    const bool running = started;
+    ReleaseSRWLockShared(&lifecycle);
+    if (!running)
+        return 1004;
+    AcquireSRWLockExclusive(&pointJumpLock);
+    if (a.serial != pointJumpSerial) {
+        pointJumpSerial = a.serial;
+        pointJumpAsk = a;
+        pointJumpAt = GetTickCount64();
+        pointJumpWaiting = true;
+    }
+    ReleaseSRWLockExclusive(&pointJumpLock);
     return 0;
 }
 extern "C" __declspec(dllexport) DWORD WINAPI SpidySwingSettings(void* input) {
