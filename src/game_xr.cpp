@@ -6058,7 +6058,8 @@ DWORD WINAPI run(void*) {
                                 !motion.basicFlipControls && !legStickActive && !hybridYawHold &&
                                 !midairAnimation &&
                                 // FULL head lock: the R stick turns the lock's heading only.
-                                !viewLockSteer;
+                                // HYBRID the same: the heading, the walk stick brings him.
+                                !viewLockSteer && !(hybridMode && viewLockActive && hybridHeading.set);
                             // HYBRID view steering: MODEL YAW frees CameraLook only while
                             // the R-stick turns; otherwise the game camera follows the
                             // view so its parkour assists see a sensible camera.
