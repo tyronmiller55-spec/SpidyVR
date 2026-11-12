@@ -500,6 +500,15 @@ struct Values {
     // heading once it is this far from his facing (degrees); 0 OFF. 35 by
     // default. turn_in_place_deg.
     int turnInPlaceDeg = 35;
+    // MOVEMENT MODE (hybrid_movement.hpp; the user, November 12 t75u): 0 HYBRID
+    // (default: the view locked to the hero's head, yaw included; the left stick's
+    // front half runs along the right stick's heading, its rear half snaps hero and
+    // view to the stick), 1 STABLE (Step B: full lock on the stable heading), 2 OLD
+    // (head-bone steering, VIEW YAW SOURCE BODY). movement_mode.
+    int movementMode = 0;
+    // REAR SNAP TURN (HYBRID): how long the view takes for the rear snap, ms; 0
+    // INSTANT (default). rear_snap_ms.
+    int rearSnapMs = 0;
     // PASSIVE LEGS (leg_layers.hpp; November 12 06:18): in SpidyVR's air with
     // LEG CONTROL not engaged, the legs' spring runs with no stick, so momentum
     // moves them; this share of it shown (0 OFF). 60 by default. passive_legs_pct.
@@ -731,8 +740,11 @@ enum class Item : uint8_t {
     passiveCoupling,
     legAirCrouch,
     legReachSpread,
+    // November 12 (hybrid movement): MOVEMENT MODE, REAR SNAP TURN (hybrid_movement.hpp), VR CAMERA & STABILIZATION.
+    movementMode,
+    rearSnap,
 };
-inline constexpr Item lastItem = Item::legReachSpread;
+inline constexpr Item lastItem = Item::rearSnap;
 // SLOW-MO LENGTH's last step: no time limit (until L3 toggles it off).
 inline constexpr int slowMotionEndless = 91;
 // Real seconds a full meter lasts for a SLOW-MO LENGTH value; 0 = endless.
@@ -762,7 +774,7 @@ struct Row {
     Place place{};
 };
 // Stable row/setting numbers; categories below determine presentation order.
-const std::array<Row, 153>& rows();
+const std::array<Row, 155>& rows();
 const Row* rowFor(Item);
 // camera, shooters and legs (November 11, the user: "I can't find legs or
 // camera settings in any of the menus. Make sure it's clearly labeled"): tabs

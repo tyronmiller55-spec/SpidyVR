@@ -2533,6 +2533,16 @@ void App::options(ImVec2 origin, ImVec2 size) {
                    "view stays where the animation showed it and eases onto your feet; hands and webs move with "
                    "it. Off: the old instant snap. 250 ms by default.",
                    S(150), [&] { tabCombo("##airviewease", Item::airViewEase); });
+            settingOption(Item::movementMode, "Movement mode",
+                   "HYBRID (default): the view stays on Spider-Man's head, its turn included. The left stick's "
+                   "front half runs along the heading the right stick sets (he keeps facing it); pushing it into "
+                   "the rear half snaps him and the view to that exact direction and he runs that way. STABLE: "
+                   "Step B, the view's turn on a steady heading of its own. OLD: head-bone steering.",
+                   S(150), [&] { tabCombo("##movementmode", Item::movementMode); });
+            settingOption(Item::rearSnap, "Rear snap turn",
+                   "HYBRID: how fast the view turns for the left stick's rear snap (over 100 degrees back snaps, "
+                   "back under 80 or to neutral re-arms). Instant by default; the hero turns at the game's pace.",
+                   S(150), [&] { tabCombo("##rearsnap", Item::rearSnap); });
             settingOption(Item::animYawSway, "Anim yaw sway",
                    "With Head lock Full and View yaw source Stable: the view's left-right turn comes from your "
                    "steady heading, not the hero's head; this much of the animation's head sway is added back. "

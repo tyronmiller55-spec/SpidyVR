@@ -250,6 +250,12 @@ constexpr int passiveLegsSteps[] = {0, 20, 40, 60, 80, 100};
 constexpr const char* passiveLegsChoices[] = {"OFF", "20%", "40%", "60%", "80%", "100%"};
 static_assert(std::size(passiveLegsChoices) == std::size(passiveLegsSteps));
 // PASSIVE COUPLING: passive_coupling_pct, percent of LEG COUPLING.
+constexpr int movementModes[] = {0, 1, 2};
+constexpr const char* movementModeChoices[] = {"HYBRID", "STABLE", "OLD"};
+static_assert(std::size(movementModeChoices) == std::size(movementModes));
+constexpr int rearSnaps[] = {0, 100, 150, 200, 300};
+constexpr const char* rearSnapChoices[] = {"INSTANT", "100 MS", "150 MS", "200 MS", "300 MS"};
+static_assert(std::size(rearSnapChoices) == std::size(rearSnaps));
 constexpr int passiveCouplingSteps[] = {0, 5, 10, 15, 25, 50, 100};
 constexpr const char* passiveCouplingChoices[] = {"OFF", "5%", "10%", "15%", "25%", "50%", "100%"};
 static_assert(std::size(passiveCouplingChoices) == std::size(passiveCouplingSteps));
@@ -347,6 +353,10 @@ std::span<const int> steps(Item item) {
         return passiveLegsSteps;
     case Item::passiveCoupling:
         return passiveCouplingSteps;
+    case Item::movementMode:
+        return movementModes;
+    case Item::rearSnap:
+        return rearSnaps;
     case Item::pointJumpMinSpeed:
         return pointJumpMinSpeeds;
     case Item::pointJumpMaxSpeed:
@@ -514,6 +524,10 @@ float numberOf(Item item, const Values& v) {
         return static_cast<float>(v.passiveLegsPct);
     case Item::passiveCoupling:
         return static_cast<float>(v.passiveCouplingPct);
+    case Item::movementMode:
+        return static_cast<float>(v.movementMode);
+    case Item::rearSnap:
+        return static_cast<float>(v.rearSnapMs);
     case Item::pointJumpMinSpeed:
         return static_cast<float>(v.pointJumpMinSpeed);
     case Item::pointJumpMaxSpeed:
@@ -756,6 +770,8 @@ Values sanitized(Values v) {
     v.turnInPlaceDeg = std::clamp(v.turnInPlaceDeg, 0, 180);
     v.passiveLegsPct = std::clamp(v.passiveLegsPct, 0, 100);
     v.passiveCouplingPct = std::clamp(v.passiveCouplingPct, 0, 100);
+    v.movementMode = std::clamp(v.movementMode, 0, 2);
+    v.rearSnapMs = std::clamp(v.rearSnapMs, 0, 1000);
     v.pointJumpChordMs = std::clamp(v.pointJumpChordMs, 20, 150);
     v.pointJumpTapMs = std::clamp(v.pointJumpTapMs, 50, 400);
     v.pointJumpFullMs = std::clamp(v.pointJumpFullMs, 300, 2000);
@@ -797,9 +813,9 @@ Values sanitized(Values v) {
     v.automaticHandThreshold = std::clamp(v.automaticHandThreshold, 50, 300);
     return v;
 }
-const std::array<Row, 153>& rows() {
+const std::array<Row, 155>& rows() {
     // The help fits the game's description column beside the rows.
-    static const std::array<Row, 153> all{{
+    static const std::array<Row, 155> all{{
         {Item::none, "WEBS", nullptr, {}},
         {Item::webStyle, "WEB STYLE",
          "Arcade: webs pass lamp posts, signs and cars, and swings stay above the street.", webStyleChoices},
@@ -1172,7 +1188,7 @@ const std::array<Row, 153>& rows() {
          "Jump and landing thumps. Own strength: CONTROLLER VIBRATION doesn't scale it.", moveHapticChoices},
         {Item::viewYawSource, "VIEW YAW SOURCE",
          "STABLE: steer by a steady heading (no circling). BODY: old head-bone steering.",
-         viewYawSourceChoices},
+         viewYawSourceChoices, Place::launcher}, // superseded by MOVEMENT MODE (in game)
         {Item::soundTrace, "SOUND TRACE",
          "Diagnostics: logs game sound ids around jumps and landings. Changes nothing.", {}},
         // November 12: JUMP TO SPIDYVR (hybrid_owner.hpp), AIR VIEW EASE (view_ease.hpp).
@@ -1182,10 +1198,16 @@ const std::array<Row, 153>& rows() {
         {Item::airViewEase, "AIR VIEW EASE",
          "Jump timer, flip and grip breaks: view held, then eased. OFF: the old snap.", airViewEaseChoices},
         // November 12 (Step B): FULL head lock on the stable heading (view_yaw_lock.hpp).
+        // November 12 (hybrid movement): hybrid_movement.hpp.
+        {Item::movementMode, "MOVEMENT MODE",
+         "HYBRID: view on his head, stick back snaps. STABLE: steady heading. OLD.", movementModeChoices},
+        {Item::rearSnap, "REAR SNAP TURN",
+         "HYBRID: left stick back snaps you that way. How fast the view turns.", rearSnapChoices},
         {Item::animYawSway, "ANIM YAW SWAY",
          "Full lock, stable yaw: share of the head's yaw sway shown. 100%: the old feel.", animYawSwayChoices},
         {Item::turnInPlace, "TURN-IN-PLACE ANGLE",
-         "Standing: he turns to where you look past this angle. OFF: he never does.", turnInPlaceChoices},
+         "Standing: he turns to where you look past this angle. OFF: he never does.", turnInPlaceChoices,
+         Place::launcher}, // STABLE only since MOVEMENT MODE; the camera tab holds 20
         // November 12 (legs): leg_layers.hpp.
         {Item::passiveLegs, "PASSIVE LEGS",
          "In the air without LEG CONTROL: legs swing with momentum, this much shown.", passiveLegsChoices},
@@ -1280,7 +1302,7 @@ const std::array<Screen, categoryCount>& screens() {
         Item::nativeAnimation, Item::animatedHead, Item::animatedHeadsetSmooth,
         Item::animatedArms, Item::animatedTorso, Item::animatedModelYaw, Item::animatedHybridSpeed,
         Item::animatedMoves, Item::animatedHybrid, Item::animatedAir, Item::animatedOnly,
-        Item::animatedSteering, Item::viewYawSource, Item::jumpHandoff, Item::animatedAirSpin, Item::headProbe, Item::soundTrace,
+        Item::animatedSteering, Item::viewYawSource, Item::movementMode, Item::jumpHandoff, Item::animatedAirSpin, Item::headProbe, Item::soundTrace,
         Item::runSpeed,
         Item::slowMotionLength, Item::softLock,
     };
@@ -1289,7 +1311,7 @@ const std::array<Screen, categoryCount>& screens() {
     static constexpr Item camera[] = {
         Item::cameraMotion, Item::cameraPitch, Item::cameraRoll, Item::cameraBobVertical,
         Item::cameraBobSide, Item::cameraHeadAngle,
-        Item::cameraStabilization, Item::punchViewEase, Item::airViewEase, Item::animYawSway, Item::turnInPlace, Item::cameraVertical, Item::cameraHorizontal, Item::cameraAngle,
+        Item::cameraStabilization, Item::punchViewEase, Item::airViewEase, Item::rearSnap, Item::animYawSway, Item::turnInPlace, Item::cameraVertical, Item::cameraHorizontal, Item::cameraAngle,
         Item::lightVertical, Item::lightHorizontal, Item::lightAngle,
         Item::heavyVertical, Item::heavyHorizontal, Item::heavyAngle,
     };
@@ -1329,6 +1351,12 @@ const std::array<Screen, categoryCount>& screens() {
 }
 const char* inactiveReason(Item item, const Values& v) {
     switch (item) {
+    case Item::rearSnap:
+        return v.movementMode != 0 ? "Set MOVEMENT MODE to HYBRID to use the rear snap." : nullptr;
+    case Item::viewYawSource:
+        return "MOVEMENT MODE sets it now (OLD: body; HYBRID, STABLE: stable).";
+    case Item::animYawSway:
+        return v.movementMode != 1 ? "Set MOVEMENT MODE to STABLE to use it." : nullptr;
     case Item::snapTurn:
         return v.smoothTurn > 0 ? "Turn Smooth turn off to use Snap turn." : nullptr;
     case Item::smartAnchor:
@@ -1642,6 +1670,12 @@ bool choose(Item item, int index, Values& v) {
     case Item::passiveCoupling:
         v.passiveCouplingPct = s[index];
         break;
+    case Item::movementMode:
+        v.movementMode = s[index];
+        break;
+    case Item::rearSnap:
+        v.rearSnapMs = s[index];
+        break;
     case Item::pointJumpMinSpeed:
         v.pointJumpMinSpeed = s[index];
         v.pointJumpMaxSpeed = std::max(v.pointJumpMaxSpeed, v.pointJumpMinSpeed);
@@ -1857,6 +1891,8 @@ constexpr TabOnly tabOnly[] = {
     {"turn_in_place_deg", nullptr, &Values::turnInPlaceDeg},
     {"passive_legs_pct", nullptr, &Values::passiveLegsPct},
     {"passive_coupling_pct", nullptr, &Values::passiveCouplingPct},
+    {"movement_mode", nullptr, &Values::movementMode},
+    {"rear_snap_ms", nullptr, &Values::rearSnapMs},
     {"leg_air_crouch", &Values::legAirCrouch, nullptr},
     {"leg_reach_spread", &Values::legReachSpread, nullptr},
     {"air_fists", &Values::airFists, nullptr},

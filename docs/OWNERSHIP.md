@@ -83,6 +83,10 @@ In the air, the R stick turns the camera as in the main game. The player's own L
 
 Every ownership event (landing, point launch, jump handoff, anim re-entry, takeover) checks the facing within 0.3 s against the view shown before it: a view more than 45 deg off is turned back (yaw lock or rig), a hero more than 90 deg off on the animation's side is turned to it by the walk stick (forced TURN-IN-PLACE). Details: [FACING_CHECK.md](FACING_CHECK.md).
 
+## MOVEMENT MODE HYBRID (Nov 12, t75u)
+
+In HYBRID the walk stick is the mod's on the ground (front half: along the right-stick heading; rear half: one snap) and, in SpidyVR's air, a light stick toward the view keeps the game's facing with it; a landing holds the heading on the shown view while the walk stick turns him. STABLE and OLD keep the rules above. Details: [HYBRID_MOVEMENT.md](HYBRID_MOVEMENT.md).
+
 ## Defaults chosen (flag if wrong)
 
 - **Air cancel input** = grip, the web-hold button. If WEB BUTTON is swapped, it is the trigger. Web balls never cancel.

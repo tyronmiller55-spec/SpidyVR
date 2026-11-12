@@ -3,6 +3,16 @@
 Every build, newest first, with what changed, why, and what was measured.
 Per-check results are in [VALIDATION.md](VALIDATION.md).
 
+## MOVEMENT MODE: HYBRID (default), STABLE, OLD; REAR SNAP TURN
+
+The user, Nov 12 (t75u, re-asked 07:34). Built on 2f867a8. Not headset-tested. Details: [HYBRID_MOVEMENT.md](HYBRID_MOVEMENT.md).
+
+- **HYBRID:** the view on the hero's head, yaw included; one right-stick heading he faces; the view holds it only while he is brought onto it (rear snap, R turn, landing), sway faded out and back in, 2.5 s give-up. Front half of the left stick runs straight along the heading at its forward share (the game has no strafe; side pushes do not turn him). Rear half: one snap past 100 deg to the stick's exact direction, re-arm under 80 deg or neutral, settle 60 ms; he runs that way.
+- **Landings in HYBRID:** the heading is set to the shown view on the vr->anim edge frame and held; facing check hero correction drives the walk stick. Replays: 31.70 s 177 deg plain vs 10 deg; 408.44 s 128 vs 11.
+- **Air facing sync (HYBRID):** a 0.3 walk stick toward the view in SpidyVR's air while the game facing is 20+ deg off; logged per landing.
+- **Settings:** MOVEMENT MODE (NATIVE ANIMATION; `movement_mode`), REAR SNAP TURN (CAMERA & STABILIZATION; `rear_snap_ms`). VIEW YAW SOURCE and TURN-IN-PLACE ANGLE moved to the launcher only (superseded / STABLE only; the camera tab holds 20 rows); ANIM YAW SWAY greyed outside STABLE.
+- Tests: `hybrid_movement` 79; core, launcher updated; ctest 19 of 19.
+
 ## FACING CHECK on every ownership event, sway fade (on the legs build)
 
 The user, Nov 12 07:14 PST: "there are times where it turns me 180 on landing or launch. Maybe we need a check on each event." Built on bce7350. Not headset-tested. Details: [FACING_CHECK.md](FACING_CHECK.md).
