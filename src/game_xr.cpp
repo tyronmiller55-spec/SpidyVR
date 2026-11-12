@@ -41,6 +41,8 @@
 #include "spidy/game_warp.hpp"
 #include "spidy/hand_pose.hpp"
 #include "spidy/impact_sound.hpp"
+#include "spidy/leg_control.hpp"
+#include "spidy/leg_hold.hpp"
 #include "spidy/native_eye_frame.hpp"
 #include "spidy/native_eye_gpu.hpp"
 #include "spidy/native_eye_history.hpp"
@@ -866,6 +868,15 @@ DWORD WINAPI run(void*) {
         // pushed up its LT + RT (the zip to a point, a vent).
         game_pad::StickPush stickPush;
         game_pad::ZipPress zipPress;
+        // LEG CONTROL (leg_control.hpp, leg_hold.hpp): Y+X held give the right
+        // stick to the legs where they may move (legBaseLast: last frame's
+        // finding); legStickActive: the legs have it this frame.
+        leg_control::Simulation legSim;
+        leg_hold::Hold legHold;
+        leg_hold::Hold::Output legHoldOut;
+        bool legStickActive{}, legBaseLast{}, legModeLogged{}, legPrevVelocitySet{}, legPrevBodySet{};
+        Vec3 legPrevVelocity{}, legAccel{};
+        Quat legPrevBody{};
         game_pad::FlipZipPriority flipZipPriority;
         // EYE AIM: the zip waits for the game's camera to come onto what the
         // eyes look at (EyeZip); frames of play with EYE AIM on and, of those,
@@ -1867,6 +1878,38 @@ DWORD WINAPI run(void*) {
                         SpidyXrData.flatScreen = flatScreen;
                         InterlockedIncrement64(&SpidyXrData.sequence);
                     }
+                    // LEG CONTROL's hold (leg_hold.hpp): Y+X held engage the legs,
+                    // before anything reads X, Y or the right stick this frame. From
+                    // the chord until both are let go of, neither reaches the game or
+                    // the mod (no web strike or zip, no gadget wheel); one alone waits
+                    // up to 80 ms for the other. Let go, the legs stay while the right
+                    // stick is moved; neutral ends them. Off, X and Y pass as they are.
+                    {
+                        const bool master =
+                            values.legControl && (values.controlledFlips || values.realisticFlips) &&
+                            values.body && !flatScreen && viewing && gameplay && motion.active && spiderMan &&
+                            !calibrationInput && !phone.open() && !padLayer.latched();
+                        leg_hold::Hold::Input in;
+                        in.seconds = frame.seconds;
+                        in.x = (frame.buttons & buttonX) != 0;
+                        in.y = (frame.buttons & buttonY) != 0;
+                        in.stickX = frame.hands[1].stickX;
+                        in.stickY = frame.hands[1].stickY;
+                        in.master = master;
+                        in.allowed = master && legBaseLast && !gadgetWheel.open() &&
+                                     !(namedPress.claimed() &
+                                       (game_pad::NamedPress::controlX | game_pad::NamedPress::controlY));
+                        legHoldOut = legHold.update(in);
+                        frame.buttons = (frame.buttons & ~static_cast<uint32_t>(buttonX | buttonY)) |
+                                        (legHoldOut.x ? static_cast<uint32_t>(buttonX) : 0u) |
+                                        (legHoldOut.y ? static_cast<uint32_t>(buttonY) : 0u);
+                        if (legHoldOut.engagedNow) {
+                            runtime.haptic(0, .2f);
+                            diag_log::writef("legs: engaged (%s)", leg_hold::whyName(legHoldOut.why));
+                        }
+                        if (legHoldOut.disengagedNow)
+                            diag_log::writef("legs: disengaged (%s)", leg_hold::whyName(legHoldOut.why));
+                    }
                     if (!frame.jump)
                         jumpFromScreen = false;
                     else if (wasScreen)
@@ -2238,6 +2281,12 @@ DWORD WINAPI run(void*) {
                     if (zipPriority || (flipZipPlay && zipPress.active())) {
                         controller.hands[1].stickX = controller.hands[1].stickY = 0;
                     }
+                    // LEG CONTROL has the right stick (where the legs could move
+                    // last frame): it turns nothing and goes to the game as rest.
+                    legStickActive = gesturesPlay && legHoldOut.engaged && legBaseLast;
+                    rig.legStick(legStickActive);
+                    if (legStickActive)
+                        controller.hands[1].stickX = controller.hands[1].stickY = 0;
                     // Whether the game's time runs, for the rig to tell a scene's end from a menu's (after a
                     // scene the view faces where the game's camera does). Only with first-person cutscenes or
                     // the theater screen disabled (options bits 22, 24): without them play resumes after a
@@ -4023,8 +4072,9 @@ DWORD WINAPI run(void*) {
                         // the game zips to. Not while basic flips have the stick.
                         const auto& zipStick = frame.hands[1];
                         const bool zipWanted =
-                            zipPress.active() || (zipStick.stickY >= game_pad::StickPush::pushed &&
-                                                  std::abs(zipStick.stickX) <= game_pad::StickPush::aside);
+                            zipPress.active() ||
+                            (!legStickActive && zipStick.stickY >= game_pad::StickPush::pushed &&
+                             std::abs(zipStick.stickX) <= game_pad::StickPush::aside);
                         const Vec3 gazeLook = motion.gazePose.orientation.rotate({0, 0, -1});
                         const bool eyesZip = (values.eyeAim & vr_settings::eyeAimZips) && motion.gazeValid &&
                                              finite(gazeLook) && length(gazeLook) > .5f && zipWanted &&
@@ -4143,7 +4193,7 @@ DWORD WINAPI run(void*) {
                         const bool flipZip = motion.basicFlipControls && (zipPriority || zipPress.active());
                         if (flipZipPriority.began()) stickPush.update(0, true, 0, 0);
                         const bool sticking =
-                            steering && !calibrationInput && !layerOn &&
+                            steering && !calibrationInput && !layerOn && !legStickActive &&
                             (!motion.basicFlipControls || flipZip) &&
                             !(named & (game_pad::NamedPress::stickUp | game_pad::NamedPress::stickLeft |
                                        game_pad::NamedPress::stickRight));
@@ -4154,6 +4204,10 @@ DWORD WINAPI run(void*) {
                             stickPush.cancel();
                             zipPress.cancel();
                         }
+                        // LEG CONTROL: the legs' stick is no heal or zip, and must
+                        // see neutral again first.
+                        if (legStickActive)
+                            stickPush.cancel();
                         walk.heal = !motion.basicFlipControls && push == game_pad::StickPush::Way::down;
                         // Held on into the game's aim mode (its own time slowed), LT stays down alone,
                         // and letting go zips to the point its aim holds (ZipPress).
@@ -5122,6 +5176,83 @@ DWORD WINAPI run(void*) {
                                       : h > standingEye
                                           ? standingEye + (h - standingEye) * std::min(1.f, frame.seconds * 4)
                                           : standingEye - std::min(standingEye - h, frame.seconds * .01f);
+                    // LEG CONTROL (ADVANCED; leg_control.hpp): only in the air on
+                    // nothing (swinging or falling free, never the ground, a wall,
+                    // a crawl or a web line). The legs swing with the body's
+                    // specific force and turn, and their swing turns the body back
+                    // (rig.legCoupling, applied by the flips on the next update).
+                    {
+                        const bool legAir =
+                            swingState.owned && !motion.standing && !swingState.grounded &&
+                            !swingState.mount &&
+                            swingState.wall == static_cast<uint32_t>(game_swing::Surface::none) &&
+                            lineState.phase != 2 && lineState.phase != 3;
+                        const bool legBase =
+                            values.legControl && (values.controlledFlips || values.realisticFlips) &&
+                            values.body && bodyStarted && !flatScreen && legAir && !calibrationInput;
+                        const bool legEasing = legBase && !legHoldOut.engaged && legHoldOut.easing;
+                        const bool legMode = legBase && (legHoldOut.engaged || legEasing);
+                        legBaseLast = legBase;
+                        const float legDt =
+                            std::isfinite(frame.seconds) ? std::clamp(frame.seconds, 0.f, .1f) : 0.f;
+                        const Vec3 vel = swingState.velocity;
+                        if (legMode && finite(vel) && legPrevVelocitySet && legDt > 1e-4f) {
+                            const Vec3 raw = limited((vel - legPrevVelocity) / legDt, 60.f);
+                            legAccel = legAccel + (raw - legAccel) * (1 - std::exp(-legDt / .06f));
+                        } else if (!legMode) {
+                            legAccel = {};
+                        }
+                        legPrevVelocity = finite(vel) ? vel : Vec3{};
+                        legPrevVelocitySet = legMode && finite(vel);
+                        const Quat body = Quat::yaw(motion.swing.trackingYaw) * motion.swing.tilt;
+                        Vec3 look = frame.head.orientation.rotate({0, 0, -1});
+                        look.y = 0;
+                        const Vec3 levelLook = length(look) > .1f ? normalized(look) : Vec3{0, 0, -1};
+                        const Vec3 fwd = body.rotate(levelLook), upB = body.rotate({0, 1, 0});
+                        const Vec3 leftB = cross(upB, fwd);
+                        leg_control::Motion legMotion;
+                        if (legMode && legPrevVelocitySet) {
+                            const Vec3 force = legAccel + Vec3{0, 9.81f, 0};
+                            legMotion.specificForce = {dot(force, fwd), dot(force, leftB), dot(force, upB)};
+                        }
+                        if (legMode && legPrevBodySet && legDt > 1e-4f) {
+                            Quat d = body * legPrevBody.conjugate();
+                            if (d.w < 0)
+                                d = {-d.x, -d.y, -d.z, -d.w};
+                            const Vec3 w = Vec3{d.x, d.y, d.z} * (2 / legDt);
+                            legMotion.angularVelocity = {dot(w, fwd), dot(w, leftB), dot(w, upB)};
+                        }
+                        legPrevBody = body;
+                        legPrevBodySet = legMode;
+                        auto params = leg_control::fromPercent(values.legStiffnessPct, values.legDampingPct,
+                                                               values.legCouplingPct);
+                        if (legEasing) {
+                            // Let go of: the legs spring back to straight, critically damped.
+                            params.frequencyHz = std::max(params.frequencyHz, 2.5f);
+                            params.dampingRatio = 1.f;
+                            params.looseness = 0.f;
+                        }
+                        const float stickX = legStickActive ? frame.hands[1].stickX : 0.f;
+                        const float stickY = legStickActive ? frame.hands[1].stickY : 0.f;
+                        const auto legOut =
+                            legSim.update(legDt, legMode, std::isfinite(stickX) ? stickX : 0.f,
+                                          std::isfinite(stickY) ? stickY : 0.f, legMotion, params);
+                        std::array<float, 6> angles{};
+                        for (int i = 0; i < 2; ++i) {
+                            angles[i * 3] = legOut.legs[i].pitch;
+                            angles[i * 3 + 1] = legOut.legs[i].side;
+                            angles[i * 3 + 2] = legOut.legs[i].knee;
+                        }
+                        native_body::setLegControl(legMode, angles);
+                        if (legMode)
+                            rig.legCoupling(legOut.reactionPitch, legOut.reactionRoll, legOut.spinScale);
+                        if (legMode != legModeLogged) {
+                            legModeLogged = legMode;
+                            diag_log::writef("leg control: %s",
+                                             legMode ? (legEasing ? "easing to straight" : "on (air)")
+                                                     : "off");
+                        }
+                    }
                     if (bodyStarted) {
                         // The hero's body follows the headset and the controllers,
                         // placed from the same feet as the eyes.

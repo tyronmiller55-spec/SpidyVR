@@ -1,4 +1,5 @@
 #include "spidy/body_ik.hpp"
+#include "spidy/leg_control.hpp"
 #include <algorithm>
 #include <cmath>
 #include <limits>
@@ -1050,6 +1051,45 @@ Result solve(Pose& pose, const Rig& rig, const Targets& targets, const Config& c
             const Quat back = between(pose.direction(leg.foot, {1, 0, 0}), pose.direction(leg.foot, {0, 1, 0}),
                                       turn.rotate(footAxes[i][0]), turn.rotate(footAxes[i][1]));
             pose.turn(rig.below[leg.foot], partial(back, w), pose.position(leg.foot));
+        }
+    }
+    // LEG CONTROL: the right stick's pose with the legs' own swing
+    // (leg_control.hpp), over the game's air pose, in over
+    // leg_control::blendSeconds while in the air on nothing and out as
+    // smoothly on a landing or a wall. A kick takes the legs at once.
+    {
+        const bool controlOn = t.legControl && t.airborne && !r.grounded && !t.kick && !t.wallRun &&
+                               !t.crawl && !t.surfaceHands && !t.plant && !t.kneel;
+        state.legControlWeight =
+            t.kick ? 0.f
+                   : approach(state.legControlWeight, controlOn ? 1.f : 0.f, dt / leg_control::blendSeconds);
+        if (controlOn)
+            state.legAngles = t.legAngles;
+        const float legW = w * state.legControlWeight;
+        if (legW > .001f) {
+            for (int i = 0; i < 2; ++i) {
+                const auto& leg = legs[i];
+                const auto& a = state.legAngles[i];
+                const leg_control::Angles angles{a.pitch, a.side, a.knee};
+                const Vec3 hip = pose.position(leg.upper);
+                const Vec3 base = pose.position(leg.foot);
+                const float reach = (rig.thigh[i] + rig.shin[i]) * s;
+                const Vec3 dir = leg_control::footDirection(angles, forward, left, up);
+                if (!finite(dir) || length(dir) < .5f)
+                    continue;
+                const Vec3 dest = hip + dir * leg_control::footReach(angles, reach);
+                const Vec3 foot = base + (dest - base) * state.legControlWeight;
+                const Vec3 pole = leg_control::kneePole(angles, forward, up);
+                limb(pose, rig, leg.upper, leg.lower, leg.foot, foot, pole, w);
+                Vec3 out = foot - hip;
+                Vec3 toe = out - up * dot(out, up);
+                toe = length(toe) > .08f * s ? normalized(toe) : forward;
+                Vec3 sole = up - toe * dot(up, toe);
+                sole = length(sole) > .1f ? normalized(sole) : up;
+                const Quat along = between(pose.direction(leg.foot, rig.footForward[i]),
+                                           pose.direction(leg.foot, rig.footUp[i]), toe, sole);
+                pose.turn(rig.below[leg.foot], partial(along, legW), pose.position(leg.foot));
+            }
         }
     }
     Quat fullTurn;

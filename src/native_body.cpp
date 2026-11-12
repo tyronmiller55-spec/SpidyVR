@@ -86,6 +86,9 @@ bool heroProportionsSet{};
 // The tracking space's yaw at the last command the body followed.
 float trackingYaw{};
 bool trackingYawSet{};
+// LEG CONTROL (setLegControl, solveLock): mapped onto Targets::legControl.
+bool legControlOn{};
+std::array<float, 6> legControlAngles{};
 LARGE_INTEGER lastSolve{}, frequency{};
 std::atomic<bool> captureWanted{};
 // The hero's instance turn at its latest pose job, for the render's check
@@ -463,6 +466,10 @@ void solveHero(float* out, uintptr_t job, uintptr_t instance) {
             t.facing = toModel * wanted.facing;
             if (const Quat tilt = wanted.tilt; tilt.x != 0 || tilt.y != 0 || tilt.z != 0)
                 t.tilt = toModel * tilt * toWorld;
+            t.legControl = t.airborne && legControlOn;
+            for (int i = 0; i < 2; ++i)
+                t.legAngles[i] = {legControlAngles[i * 3], legControlAngles[i * 3 + 1],
+                                  legControlAngles[i * 3 + 2]};
             for (int i = 0; i < 2; ++i) {
                 const auto& h = wanted.hands[i];
                 t.hands[i] = {h.tracked != 0, toModel.rotate(h.grip), toModel * h.orientation, h.fist,
@@ -697,6 +704,13 @@ native_body::Status native_body::status() {
 }
 float native_body::crawlOutwardWeight() {
     return drawn() ? outwardWeight.load() : 0.f;
+}
+void native_body::setLegControl(bool on, const std::array<float, 6>& legs) {
+    AcquireSRWLockExclusive(&solveLock);
+    legControlOn = on;
+    if (on)
+        legControlAngles = legs;
+    ReleaseSRWLockExclusive(&solveLock);
 }
 bool native_body::proportions(body_calibration::Proportions& out) {
     AcquireSRWLockShared(&solveLock);

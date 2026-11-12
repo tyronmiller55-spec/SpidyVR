@@ -2115,6 +2115,22 @@ void App::options(ImVec2 origin, ImVec2 size) {
             stepCombo("##flipspeed", kFlipSpeeds, kFlipSpeedValues, static_cast<int>(std::size(kFlipSpeedValues)),
                       &o.flipSpeed);
         });
+        settingOption(
+            Item::legControl, "Leg control (advanced)",
+            "In the air or swinging, hold Y+X and the right stick poses the legs: forward a jackknife, back "
+            "a rearward splay, left or right both legs swung. Let go and they stay while you move the "
+            "stick; back to neutral ends them. Loose legs turn your body back a little. Needs Controlled "
+            "or Realistic flips.",
+            S(42), [&] { tabToggle("##legcontrol", Item::legControl); });
+        settingOption(Item::legStiffness, "Leg stiffness",
+                      "How firmly the legs hold the stick's pose. Lower swings more.", S(150),
+                      [&] { tabCombo("##legstiffness", Item::legStiffness); });
+        settingOption(Item::legDamping, "Leg damping",
+                      "How fast the legs' swing settles. Lower keeps them swinging.", S(150),
+                      [&] { tabCombo("##legdamping", Item::legDamping); });
+        settingOption(Item::legCoupling, "Leg coupling",
+                      "How much the legs' swing turns your body in the air.", S(150),
+                      [&] { tabCombo("##legcoupling", Item::legCoupling); });
     });
     group(4, 1, "Momentum tuning", [&] {
         settingOption(Item::automaticStrength, "Rotation strength",

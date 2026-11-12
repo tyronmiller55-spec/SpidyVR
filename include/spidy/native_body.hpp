@@ -1,6 +1,7 @@
 #pragma once
 #include "body_calibration.hpp"
 #include "math.hpp"
+#include <array>
 #include <cstddef>
 #include <cstdint>
 
@@ -256,6 +257,11 @@ bool drawn();
 Status status();
 // Internal VR-worker feedback; no exported packet or protocol layout changes.
 float crawlOutwardWeight();
+// LEG CONTROL (leg_control.hpp): each leg's pitch, side and knee (left leg
+// first) for the next pose jobs (body::Targets::legAngles), used only while
+// the body is in the air on nothing. on false: none, and the legs blend back
+// to the game's air pose. Like crawlOutwardWeight, no Command layout change.
+void setLegControl(bool on, const std::array<float, 6>& legs);
 // Where the hero's shoulders and wrists are at his own size, from the rig of
 // his latest pose job; false (and `out` untouched) before one was read.
 bool proportions(body_calibration::Proportions& out);

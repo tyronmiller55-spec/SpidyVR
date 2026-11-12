@@ -155,6 +155,16 @@ struct Values {
     // A fast hand closes into a fist with nobody to punch too (the tab's AIR
     // FISTS; hand_pose.hpp). Off: only with an enemy marked or within reach.
     bool airFists = true;
+    // LEG CONTROL (the tab's LEG CONTROL (ADVANCED); leg_control.hpp,
+    // leg_hold.hpp): with CONTROLLED or REALISTIC FLIPS, in the air, Y+X held
+    // give the right stick to the legs (centre straight, forward a jackknife,
+    // left/right both legs swung, back a rearward splay); they swing loose
+    // with the body's motion and turn it back (angular momentum). Off by
+    // default. LEG STIFFNESS, LEG DAMPING: percent of the springs' defaults
+    // (1.6 Hz, 0.35); LEG COUPLING: percent of the legs' full turn on the body.
+    // The player's own (spidy_vr.ini leg_* keys), not in shared profiles.
+    bool legControl = false;
+    int legStiffnessPct = 100, legDampingPct = 100, legCouplingPct = 50;
     // Aiming with the eyes (the tab's EYE AIM; eyeAimShots, eyeAimZips): web
     // balls go where the eyes look, from the hand that pulled; a zip goes to
     // the point the eyes look at, the game's camera being turned onto it.
@@ -460,8 +470,12 @@ enum class Item : uint8_t {
     palmShooters,
     webLines,
     airFists,
+    legControl,
+    legStiffness,
+    legDamping,
+    legCoupling,
 };
-inline constexpr Item lastItem = Item::airFists;
+inline constexpr Item lastItem = Item::legCoupling;
 // Where a row shows: in the tab; on the pause menu's first page instead,
 // under RESUME: VR VIEW (the user, October 15: "move the VIEW: GAME SCREEN to
 // the first menu (the one with resume)"); or only in the launcher's options:
@@ -485,7 +499,7 @@ struct Row {
     Place place{};
 };
 // Stable row/setting numbers; categories below determine presentation order.
-const std::array<Row, 95>& rows();
+const std::array<Row, 99>& rows();
 const Row* rowFor(Item);
 enum class Category : uint8_t { setup, webs, swinging, movement, flips, feedback, display, count };
 inline constexpr size_t categoryCount = static_cast<size_t>(Category::count);

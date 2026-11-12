@@ -792,6 +792,10 @@ int main() {
         t.joystickRunCamera = false;
         t.halfPunchDamage = true;
         t.airFists = false;
+        t.legControl = true;
+        t.legStiffnessPct = 150;
+        t.legDampingPct = 50;
+        t.legCouplingPct = 75;
         t.webTie = true;
         t.webLines = true;
         t.singleHandYankPercent = 200;
@@ -856,6 +860,7 @@ int main() {
                   "body_haptics_combat=1\nbody_haptics_movement=1\nscreen_size=1\nscreen_depth=2\nhud=2\n"
                   "ui_style=0\ncombat_visuals=1\nnear_clip_mm=20\nseated=0\nflips=0\ncontrolled_flips=0\nflip_speed=180\nhand_climb=0\n"
                   "joystick_wall_run_camera=1\nwall_run_camera_tilt=1\nhalf_punch_damage=0\nair_fists=1\n"
+                  "leg_control=0\nleg_stiffness_pct=100\nleg_damping_pct=100\nleg_coupling_pct=50\n"
                   "web_tie=0\n"
                   "native_run=0\nair_slingshot=0\nweb_angle_degrees=0\nwrist_shooters=0\ndodge_tumble=0\n"
                   "run_curve=0\nnative_run_at_percent=70\nrun_logs=0\nrunning_leap=0\nearly_jump=0\n"

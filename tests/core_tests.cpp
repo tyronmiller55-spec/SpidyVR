@@ -23632,7 +23632,7 @@ int main() {
                                   Item::automaticHandStrength, Item::automaticFalloff,     Item::automaticHandThreshold,
                                   Item::automaticAirBrake,     Item::automaticCombat};
         // The realistic flips' rows come last, after the EXPERIMENTAL rows before them.
-        constexpr size_t firstRealistic = 84;
+        constexpr size_t firstRealistic = 88;
         check(all.size() == firstRealistic + std::size(realistic), "the realistic flips' rows are not the last");
         for (size_t i = 0; i < std::size(realistic); ++i)
             check(all[firstRealistic + i].item == realistic[i], "the realistic flips' rows out of order");
@@ -23645,6 +23645,14 @@ int main() {
                   defaultChoice(Item::airFists) == 1 && !withTabOnly({}, "air_fists=0\n").airFists &&
                   withTabOnly({}, "").airFists,
               "AIR FISTS: an ON switch before the realistic flips, kept as air_fists");
+        // LEG CONTROL (leg_control.hpp): an OFF switch and its three tuning rows after AIR FISTS, shown on
+        // the Flips page under FLIP SPEED and kept as leg_*.
+        check(all[84].item == Item::legControl && std::strcmp(all[84].title, "LEG CONTROL (ADVANCED)") == 0 &&
+                  all[84].choices.empty() && all[84].place == Place::tab && !Values{}.legControl &&
+                  all[85].item == Item::legStiffness && all[86].item == Item::legDamping &&
+                  all[87].item == Item::legCoupling && withTabOnly({}, "leg_control=1\n").legControl &&
+                  withTabOnly({}, "leg_coupling_pct=900\n").legCouplingPct == 100,
+              "LEG CONTROL: an OFF switch and its rows before the realistic flips, kept as leg_*");
         check(all[50].item == Item::controlledFlips && all[53].item == Item::joystickRunCamera &&
                   all[54].item == Item::wallRunCameraTilt && all[55].item == Item::halfPunchDamage,
               "custom switches misplaced");
@@ -23850,7 +23858,7 @@ int main() {
                                                          : Place::tab),
                   "a row in the wrong place");
         }
-        check(std::count_if(all.begin(), all.end(), [](const Row& r) { return r.place == Place::tab; }) == 90,
+        check(std::count_if(all.begin(), all.end(), [](const Row& r) { return r.place == Place::tab; }) == 94,
               "the tab's own rows");
         check(all[1].item == Item::webStyle && std::strcmp(all[1].title, "WEB STYLE") == 0 &&
                   all[1].choices.size() == 2 && std::strcmp(all[1].choices[0], "REALISTIC") == 0 &&
@@ -24134,7 +24142,8 @@ int main() {
                   "flip_reprojection=0\nsteady_hud=0\nreel_haptics=0\nswing_haptics=0\n"
                   "pc_media=0\nsingle_hand_yank_percent=100\nweb_tie=0\nnative_run=0\nair_slingshot=0\nweb_angle_"
                   "degrees=0\nwrist_shooters=0\n"
-                  "dodge_tumble=0\nrun_curve=0\nnative_run_at_percent=70\nrun_logs=0\nrunning_leap=0\nearly_jump=0\nsoft_landing=0\nspidy_run=0\nspidy_run_from_standing=0\nweb_aim_source=0\nforearm_blend=100\nweb_landing_smooth=0\nweb_landing_impact_speed=24\nsteady_states=0\ncombat_responsive=0\nspidy_run_jump=1\nforearm_aim_limit=180\npalm_shooters=0\nweb_lines=0\nair_fists=1\n",
+                  "dodge_tumble=0\nrun_curve=0\nnative_run_at_percent=70\nrun_logs=0\nrunning_leap=0\nearly_jump=0\nsoft_landing=0\nspidy_run=0\nspidy_run_from_standing=0\nweb_aim_source=0\nforearm_blend=100\nweb_landing_smooth=0\nweb_landing_impact_speed=24\nsteady_states=0\ncombat_responsive=0\nspidy_run_jump=1\nforearm_aim_limit=180\npalm_shooters=0\nweb_lines=0\nair_fists=1\n"
+                  "leg_control=0\nleg_stiffness_pct=100\nleg_damping_pct=100\nleg_coupling_pct=50\n",
               "the defaults' text");
         Values changed = defaults;
         changed.recordingFov = 140;

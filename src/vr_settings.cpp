@@ -136,6 +136,13 @@ static_assert(std::size(webLandingImpactChoices) == std::size(webLandingImpactSt
 constexpr int forearmBlends[] = {0, 25, 50, 75, 100};
 constexpr const char* forearmBlendChoices[] = {"0%", "25%", "50%", "75%", "100%"};
 static_assert(std::size(forearmBlendChoices) == std::size(forearmBlends));
+// LEG CONTROL's springs and coupling, percent.
+constexpr int legSpringSteps[] = {25, 50, 75, 100, 150, 200};
+constexpr const char* legSpringChoices[] = {"25%", "50%", "75%", "100%", "150%", "200%"};
+static_assert(std::size(legSpringChoices) == std::size(legSpringSteps));
+constexpr int legCouplingSteps[] = {0, 25, 50, 75, 100};
+constexpr const char* legCouplingChoices[] = {"OFF", "25%", "50%", "75%", "100%"};
+static_assert(std::size(legCouplingChoices) == std::size(legCouplingSteps));
 } // namespace
 
 std::span<const int> steps(Item item) {
@@ -157,6 +164,11 @@ std::span<const int> steps(Item item) {
         return hudSizes;
     case Item::flipSpeed:
         return flipSpeeds;
+    case Item::legStiffness:
+    case Item::legDamping:
+        return legSpringSteps;
+    case Item::legCoupling:
+        return legCouplingSteps;
     case Item::screenDepth:
         return depthSteps;
     case Item::elasticWeb:
@@ -239,6 +251,12 @@ float numberOf(Item item, const Values& v) {
         return static_cast<float>(v.hud);
     case Item::flipSpeed:
         return static_cast<float>(v.flipSpeed);
+    case Item::legStiffness:
+        return static_cast<float>(v.legStiffnessPct);
+    case Item::legDamping:
+        return static_cast<float>(v.legDampingPct);
+    case Item::legCoupling:
+        return static_cast<float>(v.legCouplingPct);
     case Item::screenDepth:
         return static_cast<float>(v.screenDepth);
     case Item::elasticWeb:
@@ -346,6 +364,8 @@ template <class V> auto switchOf(Item item, V& v) -> decltype(&v.aimMarkers) {
         return &v.webLines;
     case Item::airFists:
         return &v.airFists;
+    case Item::legControl:
+        return &v.legControl;
     case Item::view:
         return &v.flatScreen;
     case Item::realisticFlips:
@@ -450,11 +470,14 @@ Values sanitized(Values v) {
     v.automaticHandStrength = std::clamp(v.automaticHandStrength, 0, 200);
     v.automaticFalloff = std::clamp(v.automaticFalloff, 500, 3000);
     v.automaticHandThreshold = std::clamp(v.automaticHandThreshold, 50, 300);
+    v.legStiffnessPct = std::clamp(v.legStiffnessPct, 25, 200);
+    v.legDampingPct = std::clamp(v.legDampingPct, 25, 200);
+    v.legCouplingPct = std::clamp(v.legCouplingPct, 0, 100);
     return v;
 }
-const std::array<Row, 95>& rows() {
+const std::array<Row, 99>& rows() {
     // The help fits the game's description column beside the rows.
-    static const std::array<Row, 95> all{{
+    static const std::array<Row, 99> all{{
         {Item::none, "WEBS", nullptr, {}},
         {Item::webStyle, "WEB STYLE",
          "Arcade: webs pass lamp posts, signs and cars, and swings stay above the street.", webStyleChoices},
@@ -695,6 +718,16 @@ const std::array<Row, 95>& rows() {
          "AIR FISTS",
          "A fast hand closes into a fist with nobody to punch. Off: only near enemies.",
          {}},
+        {Item::legControl,
+         "LEG CONTROL (ADVANCED)",
+         "Hold Y+X midair: right stick poses the legs. With CONTROLLED or REALISTIC FLIPS.",
+         {}},
+        {Item::legStiffness, "LEG STIFFNESS", "How firmly the legs hold the stick's pose. Lower swings more.",
+         legSpringChoices},
+        {Item::legDamping, "LEG DAMPING", "How fast the legs' swing settles. Lower keeps them swinging.",
+         legSpringChoices},
+        {Item::legCoupling, "LEG COUPLING", "How much the legs' swing turns your body in the air.",
+         legCouplingChoices},
         {Item::realisticFlips,
          "REALISTIC FLIPS",
          "Momentum rotation from arms and webs. FLIPS also enables left-stick steering.",
@@ -763,6 +796,7 @@ const std::array<Screen, categoryCount>& screens() {
     };
     static constexpr Item flips[] = {
         Item::realisticFlips, Item::flips, Item::controlledFlips, Item::flipSpeed,
+        Item::legControl, Item::legStiffness, Item::legDamping, Item::legCoupling,
         Item::automaticStrength, Item::automaticSpeed, Item::automaticMinimumSpeed, Item::automaticReleaseFlip,
         Item::automaticResponse, Item::automaticHandStrength, Item::automaticFalloff, Item::automaticHandThreshold,
         Item::automaticAirBrake, Item::automaticCombat, Item::dodgeTumble, Item::flipReprojection,
@@ -812,6 +846,14 @@ const char* inactiveReason(Item item, const Values& v) {
         return !v.webLandingSmooth ? "Enable Smooth web landing first." : nullptr;
     case Item::controlledFlips:
         return v.realisticFlips ? "Realistic flips takes priority over Controlled flips." : nullptr;
+    case Item::legControl:
+        return !v.controlledFlips && !v.realisticFlips ? "Enable Controlled or Realistic flips first."
+                                                       : nullptr;
+    case Item::legStiffness:
+    case Item::legDamping:
+    case Item::legCoupling:
+        return !v.legControl || (!v.controlledFlips && !v.realisticFlips) ? "Enable Leg control first."
+                                                                          : nullptr;
     case Item::flips:
         return v.controlledFlips && !v.realisticFlips ? "Controlled flips takes priority over basic Flips." : nullptr;
     case Item::flipSpeed:
@@ -904,6 +946,15 @@ bool choose(Item item, int index, Values& v) {
         break;
     case Item::flipSpeed:
         v.flipSpeed = s[index];
+        break;
+    case Item::legStiffness:
+        v.legStiffnessPct = s[index];
+        break;
+    case Item::legDamping:
+        v.legDampingPct = s[index];
+        break;
+    case Item::legCoupling:
+        v.legCouplingPct = s[index];
         break;
     case Item::screenDepth:
         v.screenDepth = s[index];
@@ -1079,6 +1130,10 @@ constexpr TabOnly tabOnly[] = {
     {"palm_shooters", &Values::palmShooters, nullptr},
     {"web_lines", &Values::webLines, nullptr},
     {"air_fists", &Values::airFists, nullptr},
+    {"leg_control", &Values::legControl, nullptr},
+    {"leg_stiffness_pct", nullptr, &Values::legStiffnessPct},
+    {"leg_damping_pct", nullptr, &Values::legDampingPct},
+    {"leg_coupling_pct", nullptr, &Values::legCouplingPct},
 };
 } // namespace
 std::string tabOnlyText(const Values& v) {

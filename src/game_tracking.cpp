@@ -181,11 +181,29 @@ Quat FlipMotion::update(const Sample& sample) {
         if (phase_ == Phase::level)
             turned_ = 0;
         phase_ = Phase::rotating;
-        spin_ += (want * steeringRate() - spin_) * (1 - std::exp(-dt / spinUpSeconds));
+        const float spinScale =
+            std::isfinite(sample.spinScale) ? std::clamp(sample.spinScale, .5f, 2.f) : 1.f;
+        spin_ += (want * (steeringRate() * spinScale) - spin_) * (1 - std::exp(-dt / spinUpSeconds));
         const float speed = length(spin_);
         if (speed > 1e-6f) {
             tilt_ = unit(tilt_ * Quat::around(spin_ / speed, speed * dt));
             turned_ += speed * dt;
+        }
+    }
+    // LEG CONTROL: the legs' swing turns the body back (angular momentum
+    // kept), about the head's level right and forward, as a flip's stick
+    // turn is; not while settling upright or once landed. A tilt it leaves
+    // is held and comes upright on landing or A, as a flip's does.
+    if (air && !landed && phase_ != Phase::settling) {
+        const Vec3 turn = legTurnVector(sample.head, sample.legPitch, sample.legRoll);
+        const float angle = length(turn);
+        if (angle > 1e-7f) {
+            if (phase_ == Phase::level) {
+                turned_ = 0;
+                phase_ = Phase::held;
+            }
+            tilt_ = unit(tilt_ * Quat::around(turn / angle, angle));
+            turned_ += angle;
         }
     }
     if (phase_ == Phase::settling) {
@@ -413,14 +431,15 @@ GameMotionFrame GameTrackingRig::update(const XrFrame& f, Vec3 feet, Vec3 gameFo
     const bool basicFlipAir = flips_ && !controlledFlips_ && !autoSettings_.enabled &&
                               airborne && !holds && !onSurface;
     out.basicFlipControls = basicFlipAir;
-    const float turn = handValid(f.hands[1]) ? f.hands[1].stickX : 0;
+    const float turn = handValid(f.hands[1]) && !legStick_ ? f.hands[1].stickX : 0;
     // A stick held into play turns nothing until it is let go: out of a menu,
     // or through a stutter after a snap it already made. A smooth turn goes
     // on through a stutter.
     if (resumed)
         turnHeld_ = std::abs(turn) > .3f && (smooth_ <= 0 || longBreak);
-    if (basicFlipAir) {
-        // A side push consumed by a flip must not become a snap on landing.
+    if (basicFlipAir || legStick_) {
+        // A side push consumed by a flip or the legs must not become a snap
+        // on landing.
         turnHeld_ = true;
     } else if (smooth_ > 0) {
         // Past the dead zone, as fast as the stick is tilted; full speed
@@ -432,7 +451,7 @@ GameMotionFrame GameTrackingRig::update(const XrFrame& f, Vec3 feet, Vec3 gameFo
         rig_.turn(turn > 0 ? -snap_ : snap_, f.head.position);
         turnHeld_ = true;
     }
-    if (!basicFlipAir && std::abs(turn) < .3f)
+    if (!basicFlipAir && !legStick_ && std::abs(turn) < .3f)
         turnHeld_ = false;
     // The wall or ceiling that holds the player: no flips there, and A is a
     // jump off it.
@@ -471,6 +490,11 @@ GameMotionFrame GameTrackingRig::update(const XrFrame& f, Vec3 feet, Vec3 gameFo
     }
     flip.head = f.head.orientation;
     flip.seconds = f.seconds;
+    flip.legPitch = legPitch_;
+    flip.legRoll = legRoll_;
+    flip.spinScale = spinScale_;
+    legPitch_ = legRoll_ = 0;
+    spinScale_ = 1;
     if (autoSettings_.enabled ? automatic_.level() : flip_.level())
         rig_.pivot = f.head.position;
     // REALISTIC FLIPS: the swing's flight and the arms turn the player
@@ -503,6 +527,11 @@ GameMotionFrame GameTrackingRig::update(const XrFrame& f, Vec3 feet, Vec3 gameFo
         if (controls.brake || automatic_.recovering() || calm)
             automaticHands_.reset();
         flight.handMomentum = automaticHands_.update(f, autoSettings_.handThreshold);
+        // LEG CONTROL with REALISTIC FLIPS: the legs' swing turns the body
+        // back and their spread sets its inertia, inside the angular-momentum
+        // model rather than on top of it.
+        flight.legTurn = legTurnVector(f.head.orientation, flip.legPitch, flip.legRoll);
+        flight.legInertia = 1 / std::clamp(flip.spinScale, .5f, 2.f);
         rig_.tilt = automatic_.update(flight, flip.airborne, flip.surface, rig_.yaw, f.seconds, autoSettings_,
                                       controls);
         // Where the spin leaves the player facing is the heading: the yaw

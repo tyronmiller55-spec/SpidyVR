@@ -195,6 +195,15 @@ struct Targets {
     // the body stands as the player would level, then turns with them about
     // the eyes. Tilted, the legs keep the game's pose, as in the air.
     Quat tilt{};
+    // LEG CONTROL (leg_control.hpp): each leg's hip angles and knee bend in
+    // the body's frame (pitch forward +, side toward the body's left +), from
+    // the right stick and the legs' own swing. Only in the air (airborne, on
+    // nothing, no kick); there it takes the place of the game's air pose.
+    struct LegAngles {
+        float pitch{}, side{}, knee{};
+    };
+    bool legControl{};
+    std::array<LegAngles, 2> legAngles{};
     // The game's legs are no stance here - its own wall crawl, splayed on
     // the wall, or the air pose of the hero Spidy's own wall holds. Planted,
     // the feet go flat on the floor (the plane through `floor`, square to
@@ -355,6 +364,10 @@ struct State {
         Quat orientation{};
     };
     std::array<Held, 2> held{};
+    // LEG CONTROL's share, 0..1, in and out over leg_control::blendSeconds,
+    // and the last pose given (held through the blend out).
+    float legControlWeight{};
+    std::array<Targets::LegAngles, 2> legAngles{};
 };
 // Turns the body's yaw by `radians` about the up, at once: the player snap
 // turned (body and all), or the model turned under the body (the hero's
