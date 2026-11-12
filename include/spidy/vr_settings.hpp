@@ -500,6 +500,16 @@ struct Values {
     // heading once it is this far from his facing (degrees); 0 OFF. 35 by
     // default. turn_in_place_deg.
     int turnInPlaceDeg = 35;
+    // PASSIVE LEGS (leg_layers.hpp; November 12 06:18): in SpidyVR's air with
+    // LEG CONTROL not engaged, the legs' spring runs with no stick, so momentum
+    // moves them; this share of it shown (0 OFF). 60 by default. passive_legs_pct.
+    int passiveLegsPct = 60;
+    // PASSIVE COUPLING: the passive legs' turn on the body, percent of LEG
+    // COUPLING's. 15 by default. passive_coupling_pct.
+    int passiveCouplingPct = 15;
+    // AIR CROUCH / REACH SPREAD (leg_layers.hpp's auto poses). leg_air_crouch, leg_reach_spread.
+    bool legAirCrouch = true;
+    bool legReachSpread = true;
     // POINT JUMP (point_jump.hpp; the user, November 11; EngineBot's plan):
     // touching a surface, A+B (or hold B, then A) charges a jump the way you
     // look. A tap is a quick jump at the tap speed; held up to CHARGE TIME a
@@ -716,8 +726,13 @@ enum class Item : uint8_t {
     // November 12 (Step B): ANIM YAW SWAY, TURN-IN-PLACE ANGLE (view_yaw_lock.hpp), VR CAMERA & STABILIZATION.
     animYawSway,
     turnInPlace,
+    // November 12 (legs): PASSIVE LEGS, PASSIVE COUPLING, AIR CROUCH, REACH SPREAD (leg_layers.hpp), VR LEGS (ADVANCED).
+    passiveLegs,
+    passiveCoupling,
+    legAirCrouch,
+    legReachSpread,
 };
-inline constexpr Item lastItem = Item::turnInPlace;
+inline constexpr Item lastItem = Item::legReachSpread;
 // SLOW-MO LENGTH's last step: no time limit (until L3 toggles it off).
 inline constexpr int slowMotionEndless = 91;
 // Real seconds a full meter lasts for a SLOW-MO LENGTH value; 0 = endless.
@@ -747,7 +762,7 @@ struct Row {
     Place place{};
 };
 // Stable row/setting numbers; categories below determine presentation order.
-const std::array<Row, 149>& rows();
+const std::array<Row, 153>& rows();
 const Row* rowFor(Item);
 // camera, shooters and legs (November 11, the user: "I can't find legs or
 // camera settings in any of the menus. Make sure it's clearly labeled"): tabs

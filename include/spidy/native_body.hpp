@@ -316,7 +316,7 @@ float tuckWeight();
 // may move its legs in the air (body::airLegsAllowed). on false: none, and the
 // legs blend back over body::airLegBlendSeconds. Side channel: no Command
 // layout or version change.
-void setLegControl(bool on, const std::array<body::Targets::LegAngles, 2>& legs);
+void setLegControl(bool on, const std::array<body::Targets::LegAngles, 2>& legs, float amount = 1.f);
 // Slice C tracking-lock diag (side channel; no Command / Forearms layout change).
 // Latest armsOnly chest vs player yaw and overlay weights after a pose job.
 struct OverlayTracking {

@@ -178,20 +178,56 @@ class Simulation {
             out.legs = centrePose;
             return out;
         }
-        out.active = true;
         x = finiteOr(x, 0), y = finiteOr(y, 0);
-        if (!started_) {
-            started_ = true;
-            legs_ = centrePose;
-            vel_ = {};
-            stickX_ = x;
-            stickY_ = y;
-            prevW_ = finite(motion.angularVelocity) ? motion.angularVelocity : Vec3{};
-        }
+        start(x, y, motion);
         const float follow = p.stickSeconds > 1e-4f ? 1 - std::exp(-dt / p.stickSeconds) : 1.f;
         stickX_ += (x - stickX_) * follow;
         stickY_ += (y - stickY_) * follow;
         target_ = blend(stickX_, stickY_);
+        return step(dt, motion, p);
+    }
+    // As update(), toward an authored pose instead of the stick's (PASSIVE
+    // LEGS, the auto poses, the flail; leg_layers.hpp): the target eased over
+    // stickSeconds, the same spring. The state carries across both, so a
+    // change of layer never pops; the stick's smoothing restarts from `x, y`.
+    Output updateTarget(float seconds, bool active, const Legs& pose, float x, float y, const Motion& motion,
+                        const Params& p) {
+        Output out;
+        const float dt = std::isfinite(seconds) ? std::clamp(seconds, 0.f, .1f) : 0.f;
+        if (!active) {
+            reset();
+            out.legs = centrePose;
+            return out;
+        }
+        start(finiteOr(x, 0), finiteOr(y, 0), motion);
+        stickX_ = finiteOr(x, 0);
+        stickY_ = finiteOr(y, 0);
+        const float follow = p.stickSeconds > 1e-4f ? 1 - std::exp(-dt / p.stickSeconds) : 1.f;
+        for (int i = 0; i < 2; ++i) {
+            Angles want = pose[i];
+            want.pitch = std::clamp(finiteOr(want.pitch, 0), pitchMin, pitchMax);
+            want.side = std::clamp(finiteOr(want.side, 0), -sideMax, sideMax);
+            want.knee = std::clamp(finiteOr(want.knee, 0), 0.f, kneeMax);
+            target_[i] = lerp(target_[i], want, follow);
+        }
+        return step(dt, motion, p);
+    }
+
+  private:
+    void start(float x, float y, const Motion& motion) {
+        if (started_)
+            return;
+        started_ = true;
+        legs_ = centrePose;
+        target_ = centrePose;
+        vel_ = {};
+        stickX_ = x;
+        stickY_ = y;
+        prevW_ = finite(motion.angularVelocity) ? motion.angularVelocity : Vec3{};
+    }
+    Output step(float dt, const Motion& motion, const Params& p) {
+        Output out;
+        out.active = true;
         const Vec3 f = finite(motion.specificForce) ? limited(motion.specificForce, 60.f) : Vec3{};
         const Vec3 w = finite(motion.angularVelocity) ? limited(motion.angularVelocity, 20.f) : Vec3{};
         const Vec3 alpha = dt > 1e-4f ? limited((w - prevW_) / dt, 80.f) : Vec3{};
@@ -258,7 +294,6 @@ class Simulation {
         return out;
     }
 
-  private:
     Legs legs_ = centrePose, target_ = centrePose;
     std::array<Angles, 2> vel_{};
     float stickX_{}, stickY_{};

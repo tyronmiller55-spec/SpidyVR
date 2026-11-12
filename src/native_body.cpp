@@ -99,6 +99,7 @@ bool airTuckHeld{};
 // LEG CONTROL (setLegControl): mapped onto Targets::legControl when airborne.
 bool legControlOn{};
 std::array<body::Targets::LegAngles, 2> legControlAngles{};
+float legControlAmount = 1.f; // PASSIVE LEGS' shown share (setLegControl)
 // ANIMATED HYBRID jump / air adopt (beginJumpAdopt): wanted since this tick (0 none), the live
 // pose snapshot taken at the first bodyOn job, and that first frame's result.
 uint64_t adoptWantedTick{};
@@ -590,6 +591,7 @@ void solveHero(float* out, uintptr_t job, uintptr_t instance) {
             t.tuck = airLegs && airTuckHeld;
             t.legControl = airLegs && legControlOn;
             t.legAngles = legControlAngles;
+            t.legAmount = legControlAmount;
             t.eyes = toModel.rotate(wanted.eyes);
             t.facing = toModel * wanted.facing;
             if (const Quat tilt = wanted.tilt; tilt.x != 0 || tilt.y != 0 || tilt.z != 0)
@@ -1087,11 +1089,13 @@ void native_body::setTuck(bool held) {
     ReleaseSRWLockExclusive(&solveLock);
 }
 
-void native_body::setLegControl(bool on, const std::array<body::Targets::LegAngles, 2>& legs) {
+void native_body::setLegControl(bool on, const std::array<body::Targets::LegAngles, 2>& legs, float amount) {
     AcquireSRWLockExclusive(&solveLock);
     legControlOn = on;
-    if (on)
+    if (on) {
         legControlAngles = legs;
+        legControlAmount = std::isfinite(amount) ? std::clamp(amount, 0.f, 1.f) : 1.f;
+    }
     ReleaseSRWLockExclusive(&solveLock);
 }
 

@@ -711,7 +711,8 @@ int main() {
                                  row.item == Item::soundTrace ||
                                  // JUMP TO SPIDYVR, AIR VIEW EASE (November 12): the player's own.
                                  row.item == Item::jumpHandoff || row.item == Item::airViewEase ||
-                                 row.item == Item::animYawSway || row.item == Item::turnInPlace;
+                                 row.item == Item::animYawSway || row.item == Item::turnInPlace ||
+                                 (row.item >= Item::passiveLegs && row.item <= Item::legReachSpread);
             check(std::count_if(begin, end, [&](const ProfileSetting& s) { return s.item == row.item; }) ==
                       (leftOut ? 0 : 1),
                   row.title);
@@ -735,7 +736,7 @@ int main() {
                 key == "move_haptics_pct" || key == "view_yaw_source" || key == "sound_trace" ||
                 // JUMP TO SPIDYVR, AIR VIEW EASE (November 12): the player's own.
                 key == "jump_handoff_ms" || key == "air_view_ease_ms" || key == "anim_yaw_sway_pct" ||
-                key == "turn_in_place_deg")
+                key == "turn_in_place_deg" || key.rfind("passive_", 0) == 0)
                 continue;
             ++lines;
             check(at(key) < std::size(profileSettings) &&

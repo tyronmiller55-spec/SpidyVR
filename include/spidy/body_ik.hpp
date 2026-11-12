@@ -196,6 +196,9 @@ struct Targets {
     };
     bool legControl{};
     std::array<LegAngles, 2> legAngles{};
+    // The share of them shown, 0..1 (PASSIVE LEGS' percent; 1 for the stick,
+    // the flail and the auto poses; leg_layers.hpp). legControlWeight eases to it.
+    float legAmount = 1.f;
     // Directional running cycle; head and arms remain tracked.
     bool wallRun{};
     Vec3 runNormal{}, runAhead{};

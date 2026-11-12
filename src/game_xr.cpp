@@ -79,6 +79,7 @@
 #include "spidy/sound_trace.hpp"
 #include "spidy/stable_yaw.hpp"
 #include "spidy/view_yaw_lock.hpp"
+#include "spidy/leg_layers.hpp"
 #include "spidy/animated_arms.hpp"
 #include "spidy/frame_stats.hpp"
 #include "spidy/seated.hpp"
@@ -947,6 +948,14 @@ DWORD WINAPI run(void*) {
         bool legPrevVelocitySet{};
         Quat legPrevBody{};
         bool legPrevBodySet{};
+        // The legs' layers (leg_layers.hpp; November 12 06:18): ACTIVE (the stick),
+        // FLAIL (Y+X + B in the air), AUTO POSES (AIR CROUCH, REACH SPREAD) and
+        // PASSIVE LEGS, one spring. legsAirLast: last frame's legs-may-move air
+        // (the flail's B gate runs before this frame's is known).
+        leg_layers::Mixer legMixer;
+        leg_layers::FlailGate flailGate;
+        bool legsAirLast{}, flailNow{};
+        bool reachHand[2]{};
         game_pad::ZipPress zipPress;
         game_pad::FlipZipPriority flipZipPriority;
         // EYE AIM: the zip waits for the game's camera to come onto what the
@@ -2132,6 +2141,25 @@ DWORD WINAPI run(void*) {
                     // chord is held), the charge's rumble, and the launch sent to the
                     // swing (SpidySwingPointJump). Off (the default), A and B pass as
                     // they are.
+                    // FLAIL (leg_layers.hpp): in the air with Y+X physically held, B is
+                    // the legs' - taken here, before POINT JUMP's A+B, the dodge and the
+                    // tuck read it - until it is let go of.
+                    {
+                        const bool flailAllowed = values.legControl &&
+                                                  (values.controlledFlips || values.realisticFlips) && values.body &&
+                                                  !flatScreen && viewing && gameplay && motion.active && spiderMan &&
+                                                  !calibrationInput && !phone.open() && !padLayer.latched();
+                        const auto flail = flailGate.update(flailAllowed, legsAirLast, (frame.buttons & buttonX) != 0,
+                                                            (frame.buttons & buttonY) != 0,
+                                                            (frame.buttons & buttonB) != 0);
+                        if (flail.swallowB)
+                            frame.buttons &= ~static_cast<uint32_t>(buttonB);
+                        flailNow = flail.flail;
+                        if (flail.started)
+                            diag_log::write("legs: flail B taken (Y+X held in the air): no dodge, tuck or point jump");
+                        if (flail.ended)
+                            diag_log::write("legs: flail B let go of");
+                    }
                     pointJumpFired = false;
                     {
                         const auto pj = point_jump::paramsOf(values);
@@ -7531,10 +7559,63 @@ DWORD WINAPI run(void*) {
                                                  values.body && !flatScreen &&
                                                  legsAirOnly && !calibrationInput;
                             const bool legEasing = legBase && !legHoldOut.engaged && legHoldOut.easing;
-                            const bool legMode = legBase && (legHoldOut.engaged || legEasing);
                             legStickOwns = legBase && legHoldOut.engaged;
                             legBaseLast = legBase;
+                            // The legs' layers (leg_layers.hpp): PASSIVE LEGS needs no LEG
+                            // CONTROL (nor a flip mode to be seen; its turn on the body is
+                            // the flips' to apply). One spring for every layer.
+                            const bool legAir = values.body && !flatScreen && legsAirOnly && !calibrationInput;
+                            legsAirLast = legAir;
                             const float legDt = std::isfinite(frame.seconds) ? std::clamp(frame.seconds, 0.f, .1f) : 0.f;
+                            const Quat body = Quat::yaw(motion.swing.trackingYaw) * motion.swing.tilt;
+                            Vec3 look = frame.head.orientation.rotate({0, 0, -1});
+                            look.y = 0;
+                            const Vec3 levelLook = length(look) > .1f ? normalized(look) : Vec3{0, 0, -1};
+                            const Vec3 fwd = body.rotate(levelLook), upB = body.rotate({0, 1, 0});
+                            const Vec3 leftB = cross(upB, fwd);
+                            Vec3 bodySpin{};
+                            if (legAir && legPrevBodySet && legDt > 1e-4f) {
+                                Quat d = body * legPrevBody.conjugate();
+                                if (d.w < 0)
+                                    d = {-d.x, -d.y, -d.z, -d.w};
+                                bodySpin = Vec3{d.x, d.y, d.z} * (2 / legDt);
+                            }
+                            // REACH SPREAD: each tracked hand against the player's pelvis, in
+                            // the level frame he faces (tracking space: his own body).
+                            {
+                                const Vec3 pelvis = frame.head.position -
+                                                    Vec3{0, leg_layers::pelvisDrop(seatStanding), 0};
+                                const Vec3 leftT = cross(Vec3{0, 1, 0}, levelLook);
+                                for (int i = 0; i < 2; ++i) {
+                                    const bool tracked = frame.hands[i].valid && validTrackedPose(frame.hands[i].grip) &&
+                                                         validTrackedPose(frame.head);
+                                    const Vec3 d = frame.hands[i].grip.position - pelvis;
+                                    reachHand[i] = legAir && tracked &&
+                                                   leg_layers::handBetween({dot(d, levelLook), dot(d, leftT), d.y},
+                                                                           reachHand[i]);
+                                }
+                            }
+                            leg_layers::Input layerIn;
+                            layerIn.dt = legDt;
+                            layerIn.air = legAir;
+                            layerIn.active = legBase && legHoldOut.engaged;
+                            layerIn.easing = legEasing;
+                            layerIn.stickX = legStickX;
+                            layerIn.stickY = legStickY;
+                            layerIn.flail = flailNow && legAir;
+                            layerIn.crouch.upDot = upB.y;
+                            layerIn.crouch.vy = finite(swingState.velocity) ? swingState.velocity.y : 0.f;
+                            layerIn.crouch.spin = length(bodySpin);
+                            layerIn.crouch.webbed = swingState.webs[0].attached || swingState.webs[1].attached;
+                            layerIn.handBetween[0] = reachHand[0];
+                            layerIn.handBetween[1] = reachHand[1];
+                            leg_layers::Settings layerSet;
+                            layerSet.passivePct = values.passiveLegsPct;
+                            layerSet.passiveCouplingPct = values.passiveCouplingPct;
+                            layerSet.crouch = values.legAirCrouch;
+                            layerSet.reach = values.legReachSpread;
+                            const auto layered = legMixer.update(layerIn, layerSet);
+                            const bool legMode = layered.run;
                             const Vec3 vel = swingState.velocity;
                             if (legMode && finite(vel) && legPrevVelocitySet && legDt > 1e-4f) {
                                 const Vec3 raw = limited((vel - legPrevVelocity) / legDt, 60.f);
@@ -7544,45 +7625,55 @@ DWORD WINAPI run(void*) {
                             }
                             legPrevVelocity = finite(vel) ? vel : Vec3{};
                             legPrevVelocitySet = legMode && finite(vel);
-                            const Quat body = Quat::yaw(motion.swing.trackingYaw) * motion.swing.tilt;
-                            Vec3 look = frame.head.orientation.rotate({0, 0, -1});
-                            look.y = 0;
-                            const Vec3 levelLook = length(look) > .1f ? normalized(look) : Vec3{0, 0, -1};
-                            const Vec3 fwd = body.rotate(levelLook), upB = body.rotate({0, 1, 0});
-                            const Vec3 leftB = cross(upB, fwd);
                             leg_control::Motion legMotion;
                             if (legMode && legPrevVelocitySet) {
                                 const Vec3 force = legAccel + Vec3{0, 9.81f, 0};
                                 legMotion.specificForce = {dot(force, fwd), dot(force, leftB), dot(force, upB)};
                             }
-                            if (legMode && legPrevBodySet && legDt > 1e-4f) {
-                                Quat d = body * legPrevBody.conjugate();
-                                if (d.w < 0)
-                                    d = {-d.x, -d.y, -d.z, -d.w};
-                                const Vec3 w = Vec3{d.x, d.y, d.z} * (2 / legDt);
-                                legMotion.angularVelocity = {dot(w, fwd), dot(w, leftB), dot(w, upB)};
-                            }
+                            if (legMode && legPrevBodySet && legDt > 1e-4f)
+                                legMotion.angularVelocity = {dot(bodySpin, fwd), dot(bodySpin, leftB), dot(bodySpin, upB)};
                             legPrevBody = body;
-                            legPrevBodySet = legMode;
+                            legPrevBodySet = legAir;
                             auto params = leg_control::fromPercent(values.legStiffnessPct, values.legDampingPct,
                                                                    values.legCouplingPct);
-                            if (legEasing) {
+                            params.coupling *= layered.couplingScale;
+                            if (layered.easing) {
                                 params.frequencyHz = std::max(params.frequencyHz, 2.5f);
                                 params.dampingRatio = 1.f;
                                 params.looseness = 0.f;
                             }
-                            const auto legOut = legSim.update(legDt, legMode, legEasing ? 0.f : legStickX,
-                                                              legEasing ? 0.f : legStickY, legMotion, params);
+                            const auto legOut =
+                                layered.useStick
+                                    ? legSim.update(legDt, legMode, layered.easing ? 0.f : legStickX,
+                                                    layered.easing ? 0.f : legStickY, legMotion, params)
+                                    : legSim.updateTarget(legDt, legMode, layered.pose, legStickX, legStickY, legMotion,
+                                                          params);
                             std::array<body::Targets::LegAngles, 2> angles{};
                             for (int i = 0; i < 2; ++i)
                                 angles[i] = {legOut.legs[i].pitch, legOut.legs[i].side, legOut.legs[i].knee};
-                            native_body::setLegControl(legMode, angles);
-                            if (legMode)
+                            native_body::setLegControl(legMode, angles, layered.amount);
+                            // The legs' turn on the body: the flips' momentum models take it
+                            // (CONTROLLED: FlipMotion; REALISTIC: RealisticFlip).
+                            if (legMode && (values.controlledFlips || values.realisticFlips))
                                 rig.legCoupling(legOut.reactionPitch, legOut.reactionRoll, legOut.spinScale);
-                            if (legMode != legModeLogged) {
+                            if (layered.layerChanged) {
                                 legModeLogged = legMode;
-                                diag_log::writef("leg control: %s", legMode ? (legEasing ? "easing to straight" : "on (air)") : "off");
+                                diag_log::writef("legs: layer %s (shown %.0f%%, coupling %.0f%% of LEG COUPLING)",
+                                                 leg_layers::layerName(layered.layer), layered.amount * 100.f,
+                                                 layered.couplingScale * 100.f);
                             }
+                            if (layered.crouchChanged)
+                                diag_log::writef("legs: air crouch %s (up %.0f deg, air %.2f s, vy %.1f m/s, spin %.1f rad/s%s)",
+                                                 layered.crouchOn ? "on" : "off",
+                                                 std::acos(std::clamp(upB.y, -1.f, 1.f)) * (180.f / 3.14159265f),
+                                                 legMixer.airSeconds(), layerIn.crouch.vy, layerIn.crouch.spin,
+                                                 layerIn.crouch.webbed ? ", webbed" : "");
+                            if (layered.reachChanged)
+                                diag_log::writef("legs: reach spread %s (%s)", layered.reachOn ? "on" : "off",
+                                                 reachHand[0] && reachHand[1] ? "both hands"
+                                                 : reachHand[0]               ? "left hand"
+                                                 : reachHand[1]               ? "right hand"
+                                                                              : "no hand");
                         }
                         // Slice T: hold B (dodge) to tuck. Triggers and grips stay
                         // web. Not while the pad layer is latched, or during a kick.

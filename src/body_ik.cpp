@@ -1424,7 +1424,9 @@ Result solve(Pose& pose, const Rig& rig, const Targets& targets, const Config& c
     {
         const bool controlOn = t.legControl && airLegsAllowed(t) && !r.grounded;
         state.legControlWeight = t.kick ? 0.f
-            : approach(state.legControlWeight, controlOn ? 1.f : 0.f, dt / airLegBlendSeconds);
+            : approach(state.legControlWeight,
+                       controlOn ? (std::isfinite(t.legAmount) ? std::clamp(t.legAmount, 0.f, 1.f) : 1.f) : 0.f,
+                       dt / airLegBlendSeconds);
         if (controlOn)
             state.legAngles = t.legAngles; // held through the blend out
         const float legW = w * state.legControlWeight;

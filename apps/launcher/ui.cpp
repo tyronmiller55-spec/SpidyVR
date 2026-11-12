@@ -2603,6 +2603,23 @@ void App::options(ImVec2 origin, ImVec2 size) {
             settingOption(Item::legCoupling, "Leg coupling",
                    "How much the legs' swing turns your body in the air.",
                    S(150), [&] { tabCombo("##legcoupling", Item::legCoupling); });
+            settingOption(Item::passiveLegs, "Passive legs",
+                   "In SpidyVR's air without Leg control engaged, the legs swing on their own with your "
+                   "momentum (swings, spins, slowing down). This much of it is shown; Off keeps the old legs. "
+                   "Works without Leg control; 60% by default.",
+                   S(150), [&] { tabCombo("##passivelegs", Item::passiveLegs); });
+            settingOption(Item::passiveCoupling, "Passive coupling",
+                   "How much the passive legs' swing turns you, as a share of Leg coupling (you still have to "
+                   "swing for a big effect). Needs Controlled or Realistic flips to turn you. 15% by default.",
+                   S(150), [&] { tabCombo("##passivecoupling", Item::passiveCoupling); });
+            settingOption(Item::legAirCrouch, "Air crouch",
+                   "Upright in the air with hang time or near the top of a jump, not spinning: the legs fold "
+                   "into the ground jump's midair crouch. On by default.",
+                   S(42), [&] { tabToggle("##legaircrouch", Item::legAirCrouch); });
+            settingOption(Item::legReachSpread, "Reach spread",
+                   "A hand reaching down between your legs: they spread and lift forward with bent knees to "
+                   "clear your arm. On by default.",
+                   S(42), [&] { tabToggle("##legreachspread", Item::legReachSpread); });
         });
         group(pointJumpPage, 0, "Point jump (experimental)", [&] {
             settingOption(Item::pointJump, "Point jump",

@@ -3,6 +3,16 @@
 Every build, newest first, with what changed, why, and what was measured.
 Per-check results are in [VALIDATION.md](VALIDATION.md).
 
+## PASSIVE LEGS, AIR CROUCH, REACH SPREAD, FLAIL (the legs build of the Nov 12 plan)
+
+The user, Nov 12 06:18 PST. Built on 319e734 (feat/stable-view-yaw). Not headset-tested. Details: [PASSIVE_LEGS.md](PASSIVE_LEGS.md).
+
+- **PASSIVE LEGS (default 60% shown):** in SpidyVR's air without LEG CONTROL engaged, the leg spring runs with no stick (swing, spin, deceleration). **PASSIVE COUPLING** is 15% of LEG COUPLING by default. No LEG CONTROL needed; the turn on the body applies with CONTROLLED or REALISTIC FLIPS. `passive_legs_pct`, `passive_coupling_pct`.
+- **AIR CROUCH** (on): upright within 30 deg, 0.45 s airborne or near the apex, under 1.5 rad/s, no web: the jump's midair crouch. **REACH SPREAD** (on): a hand below the pelvis between the thighs spreads and lifts the legs. `leg_air_crouch`, `leg_reach_spread`.
+- **FLAIL:** in the air with Y+X physically held, B plays a run cycle instead of the tuck. B is taken before the dodge, the tuck and the A+B point jump until it is released. Needs LEG CONTROL.
+- Priority stick > flail > auto poses > passive, through one spring (no pops). Logs: `legs: layer`, `legs: air crouch`, `legs: reach spread`, `legs: flail B`.
+- **Tests:** `spidy_passive_legs_tests` (56); core 918/918; launcher 43/43; ctest 17/17.
+
 ## FULL HEAD LOCK ON THE STABLE HEADING, ANIM YAW SWAY, TURN-IN-PLACE (Step B of the Nov 12 plan)
 
 The user, Nov 12 05:56 PST. Built on edeba41 (feat/jump-handoff). Not headset-tested. Details: [STABLE_VIEW_YAW.md](STABLE_VIEW_YAW.md).

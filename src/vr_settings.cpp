@@ -245,6 +245,14 @@ constexpr int turnInPlaces[] = {0, 20, 25, 30, 35, 45, 60, 90};
 constexpr const char* turnInPlaceChoices[] = {"OFF", "20 DEG", "25 DEG", "30 DEG",
                                               "35 DEG", "45 DEG", "60 DEG", "90 DEG"};
 static_assert(std::size(turnInPlaceChoices) == std::size(turnInPlaces));
+// PASSIVE LEGS (leg_layers.hpp): passive_legs_pct, the share shown; 0 OFF.
+constexpr int passiveLegsSteps[] = {0, 20, 40, 60, 80, 100};
+constexpr const char* passiveLegsChoices[] = {"OFF", "20%", "40%", "60%", "80%", "100%"};
+static_assert(std::size(passiveLegsChoices) == std::size(passiveLegsSteps));
+// PASSIVE COUPLING: passive_coupling_pct, percent of LEG COUPLING.
+constexpr int passiveCouplingSteps[] = {0, 5, 10, 15, 25, 50, 100};
+constexpr const char* passiveCouplingChoices[] = {"OFF", "5%", "10%", "15%", "25%", "50%", "100%"};
+static_assert(std::size(passiveCouplingChoices) == std::size(passiveCouplingSteps));
 } // namespace
 
 std::span<const int> steps(Item item) {
@@ -335,6 +343,10 @@ std::span<const int> steps(Item item) {
         return animYawSways;
     case Item::turnInPlace:
         return turnInPlaces;
+    case Item::passiveLegs:
+        return passiveLegsSteps;
+    case Item::passiveCoupling:
+        return passiveCouplingSteps;
     case Item::pointJumpMinSpeed:
         return pointJumpMinSpeeds;
     case Item::pointJumpMaxSpeed:
@@ -498,6 +510,10 @@ float numberOf(Item item, const Values& v) {
         return static_cast<float>(v.animYawSwayPct);
     case Item::turnInPlace:
         return static_cast<float>(v.turnInPlaceDeg);
+    case Item::passiveLegs:
+        return static_cast<float>(v.passiveLegsPct);
+    case Item::passiveCoupling:
+        return static_cast<float>(v.passiveCouplingPct);
     case Item::pointJumpMinSpeed:
         return static_cast<float>(v.pointJumpMinSpeed);
     case Item::pointJumpMaxSpeed:
@@ -653,6 +669,10 @@ template <class V> auto switchOf(Item item, V& v) -> decltype(&v.aimMarkers) {
         return &v.headProbe;
     case Item::soundTrace:
         return &v.soundTrace;
+    case Item::legAirCrouch:
+        return &v.legAirCrouch;
+    case Item::legReachSpread:
+        return &v.legReachSpread;
     case Item::animatedMoves:
         return &v.animatedMoves;
     case Item::animatedAir:
@@ -734,6 +754,8 @@ Values sanitized(Values v) {
     v.airViewEaseMs = std::clamp(v.airViewEaseMs, 0, 1000);
     v.animYawSwayPct = std::clamp(v.animYawSwayPct, 0, 100);
     v.turnInPlaceDeg = std::clamp(v.turnInPlaceDeg, 0, 180);
+    v.passiveLegsPct = std::clamp(v.passiveLegsPct, 0, 100);
+    v.passiveCouplingPct = std::clamp(v.passiveCouplingPct, 0, 100);
     v.pointJumpChordMs = std::clamp(v.pointJumpChordMs, 20, 150);
     v.pointJumpTapMs = std::clamp(v.pointJumpTapMs, 50, 400);
     v.pointJumpFullMs = std::clamp(v.pointJumpFullMs, 300, 2000);
@@ -775,9 +797,9 @@ Values sanitized(Values v) {
     v.automaticHandThreshold = std::clamp(v.automaticHandThreshold, 50, 300);
     return v;
 }
-const std::array<Row, 149>& rows() {
+const std::array<Row, 153>& rows() {
     // The help fits the game's description column beside the rows.
-    static const std::array<Row, 149> all{{
+    static const std::array<Row, 153> all{{
         {Item::none, "WEBS", nullptr, {}},
         {Item::webStyle, "WEB STYLE",
          "Arcade: webs pass lamp posts, signs and cars, and swings stay above the street.", webStyleChoices},
@@ -1164,6 +1186,16 @@ const std::array<Row, 149>& rows() {
          "Full lock, stable yaw: share of the head's yaw sway shown. 100%: the old feel.", animYawSwayChoices},
         {Item::turnInPlace, "TURN-IN-PLACE ANGLE",
          "Standing: he turns to where you look past this angle. OFF: he never does.", turnInPlaceChoices},
+        // November 12 (legs): leg_layers.hpp.
+        {Item::passiveLegs, "PASSIVE LEGS",
+         "In the air without LEG CONTROL: legs swing with momentum, this much shown.", passiveLegsChoices},
+        {Item::passiveCoupling, "PASSIVE COUPLING",
+         "How much passive legs turn you, as a share of LEG COUPLING. Swing for more.",
+         passiveCouplingChoices},
+        {Item::legAirCrouch, "AIR CROUCH",
+         "Upright with hang time: the legs fold into the jump's midair crouch.", {}},
+        {Item::legReachSpread, "REACH SPREAD",
+         "A hand down between your legs: they spread and lift to clear it.", {}},
         {Item::realisticFlips,
          "REALISTIC FLIPS",
          "Momentum rotation from arms and webs. FLIPS also enables left-stick steering.",
@@ -1272,6 +1304,7 @@ const std::array<Screen, categoryCount>& screens() {
     // saying why (shownWhenInactive).
     static constexpr Item legs[] = {
         Item::legControl, Item::legStiffness, Item::legDamping, Item::legCoupling,
+        Item::passiveLegs, Item::passiveCoupling, Item::legAirCrouch, Item::legReachSpread,
     };
     // POINT JUMP (November 11): its switch, trigger and feel.
     static constexpr Item pointJump[] = {
@@ -1364,6 +1397,10 @@ const char* inactiveReason(Item item, const Values& v) {
         return !v.pointJump ? "Turn POINT JUMP on first." : nullptr;
     case Item::recordingSmoothing:
         return v.recordingFov == 0 ? "Enable Recording FOV first." : nullptr;
+    case Item::passiveCoupling:
+        return v.passiveLegsPct == 0 ? "Turn PASSIVE LEGS on first."
+               : !v.controlledFlips && !v.realisticFlips ? "Turns you only with CONTROLLED or REALISTIC FLIPS."
+                                                         : nullptr;
     default:
         return nullptr;
     }
@@ -1599,6 +1636,12 @@ bool choose(Item item, int index, Values& v) {
     case Item::turnInPlace:
         v.turnInPlaceDeg = s[index];
         break;
+    case Item::passiveLegs:
+        v.passiveLegsPct = s[index];
+        break;
+    case Item::passiveCoupling:
+        v.passiveCouplingPct = s[index];
+        break;
     case Item::pointJumpMinSpeed:
         v.pointJumpMinSpeed = s[index];
         v.pointJumpMaxSpeed = std::max(v.pointJumpMaxSpeed, v.pointJumpMinSpeed);
@@ -1812,6 +1855,10 @@ constexpr TabOnly tabOnly[] = {
     {"air_view_ease_ms", nullptr, &Values::airViewEaseMs},
     {"anim_yaw_sway_pct", nullptr, &Values::animYawSwayPct},
     {"turn_in_place_deg", nullptr, &Values::turnInPlaceDeg},
+    {"passive_legs_pct", nullptr, &Values::passiveLegsPct},
+    {"passive_coupling_pct", nullptr, &Values::passiveCouplingPct},
+    {"leg_air_crouch", &Values::legAirCrouch, nullptr},
+    {"leg_reach_spread", &Values::legReachSpread, nullptr},
     {"air_fists", &Values::airFists, nullptr},
     {"camera_pitch_pct", nullptr, &Values::cameraPitchPct},
     {"camera_roll_pct", nullptr, &Values::cameraRollPct},
