@@ -23813,7 +23813,9 @@ int main() {
                                   Item::automaticHandStrength, Item::automaticFalloff,     Item::automaticHandThreshold,
                                   Item::automaticAirBrake,     Item::automaticCombat};
         // The realistic flips' rows come last, after the EXPERIMENTAL rows before them.
-        constexpr size_t firstRealistic = 116; // RUN SPEED, SLOW-MO LENGTH, SOFT LOCK, the ten camera rows, the four leg rows, AIR FISTS
+        // RUN SPEED, SLOW-MO LENGTH, SOFT LOCK, the ten camera rows, the four leg rows, AIR FISTS, then (November 11)
+        // SHOOTERS, LOCK STRENGTH, CAMERA MOTION, PITCH, ROLL, BOB UP/DOWN, BOB SIDE and HEAD ANGLE.
+        constexpr size_t firstRealistic = 124;
         check(all.size() == firstRealistic + std::size(realistic), "the realistic flips' rows are not the last");
         for (size_t i = 0; i < std::size(realistic); ++i)
             check(all[firstRealistic + i].item == realistic[i], "the realistic flips' rows out of order");
@@ -24326,7 +24328,9 @@ int main() {
                   "camera_stabilization=0\ncamera_vertical_ms=0\ncamera_horizontal_ms=0\ncamera_angle_ms=0\n"
                   "camera_light_vertical_ms=75\ncamera_light_horizontal_ms=50\ncamera_light_angle_ms=75\n"
                   "camera_heavy_vertical_ms=200\ncamera_heavy_horizontal_ms=150\ncamera_heavy_angle_ms=200\n"
-                  "spherical_aim=1\nleg_control=0\nleg_stiffness_pct=100\nleg_damping_pct=100\nleg_coupling_pct=50\nleg_double_tap_ms=300\nair_fists=1\n",
+                  "spherical_aim=1\nleg_control=0\nleg_stiffness_pct=100\nleg_damping_pct=100\nleg_coupling_pct=50\nleg_double_tap_ms=300\nair_fists=1\n"
+                  "camera_pitch_pct=100\ncamera_roll_pct=100\ncamera_bob_vertical_pct=100\ncamera_bob_side_pct=100\n"
+                  "camera_head_angle_deg=0\n",
               "the defaults' text");
         Values changed = defaults;
         changed.recordingFov = 140;
