@@ -55,6 +55,11 @@ add_test(NAME action_frame COMMAND spidy_action_frame_tests)
 add_executable(spidy_solved_hand_frame_tests tests/solved_hand_frame_tests.cpp)
 target_link_libraries(spidy_solved_hand_frame_tests PRIVATE spidy_core)
 add_test(NAME solved_hand_frame COMMAND spidy_solved_hand_frame_tests)
+# CAMERA MOTION, SHOOTERS: LOCKED TO ARM and where their rows are (portable).
+add_executable(spidy_stabilization_shooter_tests tests/stabilization_shooter_tests.cpp)
+target_link_libraries(spidy_stabilization_shooter_tests PRIVATE spidy_core)
+target_compile_definitions(spidy_stabilization_shooter_tests PRIVATE SPIDY_SOURCE_DIR="${CMAKE_SOURCE_DIR}")
+add_test(NAME stabilization_shooter COMMAND spidy_stabilization_shooter_tests)
 
 find_package(Threads REQUIRED)
 add_executable(spidy_action_protocol_tests tests/action_protocol_tests.cpp)

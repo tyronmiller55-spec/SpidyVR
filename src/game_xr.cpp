@@ -44,6 +44,8 @@
 #include "spidy/game_warp.hpp"
 #include "spidy/hand_pose.hpp"
 #include "spidy/headset_smoothing.hpp"
+#include "spidy/camera_motion.hpp"
+#include "spidy/shooter_lock.hpp"
 #include "spidy/spherical_aim.hpp"
 #include "spidy/leg_control.hpp"
 #include "spidy/aim_filter.hpp"
@@ -1197,6 +1199,8 @@ DWORD WINAPI run(void*) {
         Pose animHeadRef{};
         bool animHeadRefSet{};
         headset_smoothing::Filter animHeadSmooth;
+        camera_motion::Bob animHeadBob;
+        Vec3 cameraBobShift{};
         // The check that keeps that reference seated on the neck over every switch (head_seat.hpp).
         head_seat::Glide animHeadSeat{};
         int animSeatStateWas = -1;
@@ -3065,6 +3069,17 @@ DWORD WINAPI run(void*) {
                         if (native_body::viewAnchorWorld(headWorld) == 1 &&
                             arm_frame::worldAnchor(armFrameWas, headWorld, level, armWorldEyesWas,
                                                    armView.anchor)) {
+                            // CAMERA MOTION: the hands map onto the head the eyes are on
+                            // (its tilt, HEAD ANGLE, the bob's shift), so they stay where
+                            // the player's hands are in the view.
+                            if (armFrameWas != animated_view::Frame::world) {
+                                // The amounts in force (published below last frame:
+                                // the identity unless the eyes are on the animated head).
+                                armView.anchor = camera_motion::stabilize(armView.anchor, camera_motion::live());
+                                armView.anchor[12] += cameraBobShift.x;
+                                armView.anchor[13] += cameraBobShift.y;
+                                armView.anchor[14] += cameraBobShift.z;
+                            }
                             const bool world = armFrameWas == animated_view::Frame::world;
                             armView.reference = world ? frame.head : animHeadRef;
                             armView.turn = world ? 0.f : animHeadTurn;
@@ -3360,9 +3375,11 @@ DWORD WINAPI run(void*) {
                         // back to the controller's line whenever the body cannot say. The
                         // swing puts the turn on the webs' line alone (WebTurns).
                         // WRIST SHOOTERS (v6): parallel to the forearm, the same turns.
-                        if ((values.webAimSource == static_cast<int>(web_aim::Source::forearm) ||
-                             values.wristShooters) &&
-                            swingWebTurns) {
+                        // SHOOTERS: LOCKED TO ARM (shooter_lock.hpp; November 11: "my model
+                        // forearm wrist shooters aren't working at all"): the old WEB AIM /
+                        // WRIST SHOOTERS keys read as one choice, the visible arm used in
+                        // Native Animation too, the line exactly on the forearm.
+                        if (shooter_lock::mode(values) == shooter_lock::Mode::arm && swingWebTurns) {
                             using web_aim::Fallback;
                             const auto& snapshot = sampleHandFrame();
                             const auto& arms = snapshot.forearms;
@@ -3386,12 +3403,15 @@ DWORD WINAPI run(void*) {
                                     why = Fallback::gameCamera;
                                 else if (!input.hands[i].tracked)
                                     why = Fallback::untracked;
-                                // ARMS IN ANIMATION: the web leaves along the tracked
-                                // hand (the controller's line), never turned onto the
-                                // animation's forearm - a contorted pose bent it 39 deg
-                                // (median) and past 90 deg in 173 lines on Nov 9 22:27.
-                                else if (armView.valid)
-                                    why = Fallback::armsOverlay;
+                                // ARMS IN ANIMATION: before November 11 the web was refused
+                                // the arm here whenever armView was valid (a contorted pose
+                                // of the ANIMATION's forearm bent it on Nov 9 22:27), so in
+                                // Native Animation LOCKED TO ARM never followed the arm: 2972
+                                // of 5768 "spherical aim:" lines on Nov 11 22:38 said "arms
+                                // overlay" with trust 0. The arm drawn now is the SpidyVR arm
+                                // solved onto the tracked hand (the overlay, faded in below),
+                                // so it is the one to follow; the wrist miss and the overlay's
+                                // weight still guard it.
                                 else if (!native_body::drawn() || !f.valid)
                                     why = Fallback::notSolved;
                                 else if (forearmStaleFrames > web_aim::forearmStaleFrames ||
@@ -3455,7 +3475,8 @@ DWORD WINAPI run(void*) {
                                     : -1.f;
                                 const float trustNow =
                                     solvedOk ? spherical_aim::trust(f.handError, offModel, modelReady) : 0.f;
-                                if (values.sphericalAim && solvedOk && !armView.valid &&
+                                // Learned in animation too: the arm is the tracked hand's.
+                                if (values.sphericalAim && solvedOk &&
                                     trustNow >= spherical_aim::learnTrust)
                                     forearmModels[i].learn(solvedDir, solvedAim, dt);
                                 Vec3 webLine = solvedDir;
@@ -3466,7 +3487,8 @@ DWORD WINAPI run(void*) {
                                     forearmBlends[i].reset();
                                 const bool haveLine = spherical_aim::unitish(webLine);
                                 if (haveLine) {
-                                    target = web_aim::forearmWorldTurn(webLine, aimNow, static_cast<int>(i));
+                                    // Exactly on the forearm: no inward wrist cap (0 degrees).
+                                    target = web_aim::forearmWorldTurn(webLine, aimNow, static_cast<int>(i), 0.f);
                                     if (forearmAims[i].primed)
                                         forearmJitter[i] = std::max(
                                             forearmJitter[i],
@@ -3474,16 +3496,12 @@ DWORD WINAPI run(void*) {
                                                 57.29578f);
                                     forearmTargets[i] = target;
                                 }
-                                const float limit = web_aim::forearmInwardDegrees;
-                                const bool clamped =
-                                    why == Fallback::none && signedDeg < -limit + .05f;
+                                const float limit = 0.f; // LOCKED TO ARM: no wrist cap
+                                const bool clamped = false;
                                 // 180: do not pull the turn back toward the controller.
                                 forearmAims[i].update(haveLine, target, dt, 180.f);
                                 // WRIST SHOOTERS without MODEL FOREARM takes all of it.
-                                webTurnsNow[i] = forearmAims[i].turn(
-                                    values.webAimSource == static_cast<int>(web_aim::Source::forearm)
-                                        ? values.forearmBlend
-                                        : 100);
+                                webTurnsNow[i] = forearmAims[i].turn(shooter_lock::strength(values));
                                 turns.turns[i] = webTurnsNow[i];
                                 // In the diagnostics only as it changes
                                 // (diag_log::ChangeOnly); the timeline as before.
@@ -3535,7 +3553,7 @@ DWORD WINAPI run(void*) {
                                             "forearm sign: %s %+.1f deg (positive toward palm, treated as "
                                             "out; inward cap %.0f)%s",
                                             i ? "R" : "L", static_cast<double>(signedDeg),
-                                            static_cast<double>(web_aim::forearmInwardDegrees),
+                                            static_cast<double>(limit),
                                             clamped ? ", inward capped" : "");
                                     if (logNow || diagNow)
                                         diag_log::writef(
@@ -3553,6 +3571,19 @@ DWORD WINAPI run(void*) {
                                                            spherical_aim::angleBetween(
                                                                webLine, aimNow.rotate({0, 0, -1})) *
                                                            57.29578f)
+                                                     : -1.0);
+                                    if (logNow || diagNow)
+                                        diag_log::writef(
+                                            "shooter lock: %s %s, %s, strength %d%%, line off controller %.0f deg",
+                                            i ? "R" : "L", shooter_lock::modeName(shooter_lock::mode(values)),
+                                            !haveLine ? shooter_lock::sourceName(shooter_lock::Source::none)
+                                            : solvedOk && forearmBlends[i].trust > .5f
+                                                ? shooter_lock::sourceName(shooter_lock::Source::visibleArm)
+                                                : shooter_lock::sourceName(shooter_lock::Source::learnedArm),
+                                            shooter_lock::strength(values),
+                                            haveLine ? static_cast<double>(spherical_aim::angleBetween(
+                                                           webLine, aimNow.rotate({0, 0, -1})) *
+                                                       57.29578f)
                                                      : -1.0);
                                     if (logNow)
                                         forearmJitter[i] = 0;
@@ -6001,6 +6032,7 @@ DWORD WINAPI run(void*) {
                     if ((!vrPlay || fpPlayBlip) && fpScene) {
                         headset_smoothing::liveLevel.store(0, std::memory_order_relaxed);
                         headset_smoothing::publish({});
+                        camera_motion::publish({});
                         // A first-person scene: the headset's own two eyes, inside the head of the character
                         // the scene plays. The eyes are sent relative to that head (anchored 2); the native
                         // views put them on the head of the frame they render (stereo_probe.cpp,
@@ -7179,6 +7211,13 @@ DWORD WINAPI run(void*) {
                     headset_smoothing::liveLevel.store(
                         headFollowEyes ? values.animatedHeadsetSmooth : 0, std::memory_order_relaxed);
                     headset_smoothing::publish(cameraSmooth);
+                    // CAMERA MOTION (camera_motion.hpp): the amounts in force, on the
+                    // render thread's eyes and on this thread's head and hands alike.
+                    const camera_motion::Amounts cameraAmounts =
+                        headFollowEyes ? camera_motion::fromValues(values) : camera_motion::Amounts{};
+                    camera_motion::publish(cameraAmounts);
+                    if (!headFollowEyes)
+                        animHeadBob.reset(), cameraBobShift = {};
                     if (!headFollowEyes)
                         animHeadSmooth.reset();
                     native_eyes::Command eyes;
@@ -7268,6 +7307,16 @@ DWORD WINAPI run(void*) {
                     if (headFollowEyes && (eyes.anchored == 2 || eyes.anchored == 4)) {
                         if (eyes.anchored == 4 ? game_fp::frameLevel(animHeadNow)
                                                : game_fp::frame(animHeadNow)) {
+                            // CAMERA MOTION first (how much), then CAMERA SMOOTHING (how
+                            // smoothly), as the render thread does. The bob's shift is
+                            // kept for the hands' anchor next frame.
+                            const Vec3 rawAt{animHeadNow[12], animHeadNow[13], animHeadNow[14]};
+                            animHeadNow = camera_motion::stabilize(
+                                animHeadNow, cameraAmounts, &animHeadBob,
+                                finite(motion.anchor) ? &motion.anchor : nullptr, frame.seconds);
+                            cameraBobShift = Vec3{animHeadNow[12], animHeadNow[13], animHeadNow[14]} - rawAt;
+                            if (!finite(cameraBobShift))
+                                cameraBobShift = {};
                             animHeadNow = animHeadSmooth.update(
                                 animHeadNow, frame.seconds, cameraSmooth,
                                 finite(motion.anchor) ? &motion.anchor : nullptr);

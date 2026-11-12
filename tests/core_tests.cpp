@@ -23896,9 +23896,9 @@ int main() {
         check(all[62].item == Item::webAngle && std::strcmp(all[62].title, "WEB ANGLE") == 0 &&
                   all[62].choices.size() == 7 && std::strcmp(all[62].choices[3], "0") == 0 &&
                   all[62].place == Place::tab && all[63].item == Item::wristShooters &&
-                  std::strcmp(all[63].title, "WRIST SHOOTERS") == 0 && all[63].choices.empty() &&
-                  all[63].place == Place::tab,
-              "WEB ANGLE and WRIST SHOOTERS: in the tab, after AIR SLINGSHOT");
+                  std::strcmp(all[63].title, "WRIST SHOOTERS (OLD)") == 0 && all[63].choices.empty() &&
+                  all[63].place == Place::launcher,
+              "WEB ANGLE in the tab; WRIST SHOOTERS kept (now under SHOOTERS), after AIR SLINGSHOT");
         check(all[64].item == Item::dodgeTumble && std::strcmp(all[64].title, "DODGE TUMBLE") == 0 &&
                   all[64].choices.size() == 3 && std::strcmp(all[64].choices[0], "OFF") == 0 &&
                   std::strcmp(all[64].choices[2], "ROLL") == 0 && all[64].place == Place::tab,
@@ -23929,12 +23929,14 @@ int main() {
                   std::strcmp(all[71].title, "RUN FROM STANDING") == 0 && all[71].choices.empty() &&
                   all[71].place == Place::tab,
               "RUN FROM STANDING: a switch in the tab, after SPIDY RUN");
-        check(all[72].item == Item::webAimSource && std::strcmp(all[72].title, "WEB AIM") == 0 &&
+        // November 11: WEB AIM and FOREARM BLEND are SHOOTERS and LOCK STRENGTH's values now; the rows stay
+        // (indices stable, older files load) off the in-game tab.
+        check(all[72].item == Item::webAimSource && std::strcmp(all[72].title, "WEB AIM (OLD)") == 0 &&
                   all[72].choices.size() == 2 && std::strcmp(all[72].choices[1], "MODEL FOREARM") == 0 &&
-                  all[72].place == Place::tab && all[73].item == Item::forearmBlend &&
-                  std::strcmp(all[73].title, "FOREARM BLEND") == 0 && all[73].choices.size() == 5 &&
-                  std::strcmp(all[73].choices[4], "100%") == 0 && all[73].place == Place::tab,
-              "WEB AIM and FOREARM BLEND: in the tab, after RUN FROM STANDING");
+                  all[72].place == Place::launcher && all[73].item == Item::forearmBlend &&
+                  std::strcmp(all[73].title, "FOREARM BLEND (OLD)") == 0 && all[73].choices.size() == 5 &&
+                  std::strcmp(all[73].choices[4], "100%") == 0 && all[73].place == Place::launcher,
+              "WEB AIM and FOREARM BLEND: kept after RUN FROM STANDING");
         {
             Values v;
             check(v.spidyRun && defaultChoice(Item::spidyRun) == 1, "SPIDY RUN on by default");
@@ -27936,7 +27938,7 @@ int main() {
                   all[89].choices.size() == 9 && std::strcmp(all[89].choices[0], "OFF") == 0 &&
                   std::strcmp(all[89].choices[8], "500 MS") == 0 && all[89].place == Place::tab,
               "ANIMATED HYBRID SPEED row");
-        check(lastItem == Item::airFists && Item::legCoupling < lastItem && Item::animatedHeadsetSmooth < lastItem &&
+        check(lastItem == Item::cameraHeadAngle && Item::airFists < lastItem && Item::legCoupling < lastItem && Item::animatedHeadsetSmooth < lastItem &&
                   Item::softLock < Item::cameraStabilization,
               "SMOOTHING not included in the last Item bound");
     });
@@ -30864,12 +30866,14 @@ int main() {
         check(rowFor(Item::legStiffness) && rowFor(Item::legDamping) && rowFor(Item::legCoupling) &&
                   rowFor(Item::legCoupling)->choices.size() == 5,
               "the tuning rows");
-        bool inFlips = false;
-        for (const Item item : screens()[4].items)
-            inFlips = inFlips || item == Item::legControl;
-        check(inFlips, "not on the flips screen");
+        // November 11 ("I can't find legs ... in any of the menus"): its own tab, VR LEGS (ADVANCED).
+        bool inLegs = false;
+        for (const Item item : screens()[static_cast<size_t>(Category::legs)].items)
+            inLegs = inLegs || item == Item::legControl;
+        check(inLegs, "not on the legs screen");
         Values plain;
-        check(inactiveReason(Item::legControl, plain) != nullptr, "usable without controlled flips");
+        check(inactiveReason(Item::legControl, plain) != nullptr && shownWhenInactive(Item::legControl),
+              "without controlled flips: explained, still shown");
         plain.controlledFlips = true;
         check(inactiveReason(Item::legControl, plain) == nullptr && inactiveReason(Item::legStiffness, plain),
               "the reasons");
@@ -31088,7 +31092,7 @@ int main() {
     test("Native Animation: combined menu inventory and upstream-compatible v39 settings packet", [] {
         using namespace vr_settings;
         const auto& all = rows();
-        check(all.size() == 127 && static_cast<unsigned>(lastItem) < 256, "row/Item bounds");
+        check(all.size() == 135 && static_cast<unsigned>(lastItem) < 256, "row/Item bounds");
         std::array<unsigned, 256> seen{};
         size_t start = all.size();
         for (size_t i = 0; i < all.size(); ++i) {

@@ -1815,6 +1815,19 @@ void App::nativeAnimation(ImVec2 origin, ImVec2 size) {
                    ImGui::PopFont();
                });
     });
+    group(0, "Camera & stabilization", [&] {
+        option("Camera motion",
+               "How much of the animation's own camera motion reaches your view: Full (as before), Light, "
+               "Heavy or Comfort. Pitch, roll and bob are set one by one in Options > Camera & Stabilization.",
+               S(150), [&] { tabCombo("##nativecameramotion", Item::cameraMotion); });
+        option("Head angle",
+               "Tilts the animated view below (Down) or above (Up) the horizon. Level is as before.",
+               S(150), [&] { tabCombo("##nativeheadangle", Item::cameraHeadAngle); });
+        option("Stabilization",
+               "Smooths what the animation adds (Off, Light, Heavy); the response times are in Options > "
+               "Camera & Stabilization. Your head stays 1:1.",
+               S(150), [&] { tabCombo("##nativestabilization", Item::cameraStabilization); });
+    });
     group(1, "Run controls", [&] {
         option("Native run",
                "Hold the left stick far enough to use the game's own run and parkour. "
@@ -2002,8 +2015,10 @@ void App::options(ImVec2 origin, ImVec2 size) {
         if (o.stockMonitorView && (item == Item::recordingFov || item == Item::recordingSmoothing))
             reason = "Turn Normal camera on the monitor off in Diagnostics first.";
         const std::string explanation = reason ? std::string(reason) + " " + help : help;
+        // A row shownWhenInactive (LEGS) stays usable; the note says what it needs.
+        const bool disabled = reason != nullptr && !spidy::vr_settings::shownWhenInactive(item);
         option(title, explanation.c_str(), controlWidth, [&] {
-            ImGui::BeginDisabled(reason != nullptr);
+            ImGui::BeginDisabled(disabled);
             control();
             ImGui::EndDisabled();
         }, reason != nullptr);
@@ -2099,30 +2114,10 @@ void App::options(ImVec2 origin, ImVec2 size) {
                "Web balls and zips go where your eyes look. Only where the headset and its VR runtime track "
                "the eyes (Quest Pro, Varjo, Pimax Crystal...); elsewhere hands and head aim as before.",
                S(150), [&] { tabCombo("##eyeaim", Item::eyeAim); });
-        settingOption(Item::webAimSource, "Web aim (experimental)",
-               "Controller follows your controller. Model forearm follows the visible arm, with the blend "
-               "and angle limit below. Wrist shooters is a shortcut to full forearm aim when Controller is selected.",
-               S(150), [&] { tabCombo("##webaimsource", Item::webAimSource); });
-        settingOption(Item::forearmBlend, "Forearm blend",
-               "With web aim MODEL FOREARM: how much of the forearm's line the webs take, from 0% (the "
-               "controller's) to 100% (the forearm's). 100% by default.",
-               S(150), [&] { tabCombo("##forearmblend", Item::forearmBlend); });
-        settingOption(Item::forearmAimLimit,
-            "Forearm aim limit",
-            "How far web aim MODEL FOREARM and wrist shooters may turn your webs off the controller's line "
-            "onto the forearm. NO LIMIT by default; 35 degrees keeps the webs near the controller.",
-            S(150), [&] { tabCombo("##forearmaimlimit", Item::forearmAimLimit); });
-        settingOption(Item::wristShooters, "Wrist shooters",
-               "Uses full forearm aim when Web aim is Controller. Model forearm already provides this, "
-               "with adjustable blend. If the body cannot supply an arm pose, aiming falls back to the controller.",
-               S(42), [&] { tabToggle("##wristshooters", Item::wristShooters); });
-        settingOption(Item::palmShooters, "Palm shooters",
-               "Adds a palm-side quarter turn to your chosen aim direction. Combines with forearm aim and Web angle.",
-               S(42), [&] { tabToggle("##palmshooters", Item::palmShooters); });
-        settingOption(Item::webAngle, "Web angle",
-               "Tilts the line your webs leave your hands along, up or down from the controller's, 15 to 45 "
-               "degrees. 0: along the controller, as before. Punches keep the controller's own.",
-               S(150), [&] { tabCombo("##webangle", Item::webAngle); });
+        settingOption(Item::shooterMode, "Web shooters: see the Web Shooters page",
+               "Where your webs leave your hand (Controller, Locked to arm, Palm) is set on the Web Shooters "
+               "page, with lock strength and web angle.",
+               S(150), [&] { tabCombo("##shootermodeaiming", Item::shooterMode); });
     });
     group(1, 0, "Web tricks", [&] {
         settingOption(Item::webTie, "Web tie (experimental)",
@@ -2474,6 +2469,101 @@ void App::options(ImVec2 origin, ImVec2 size) {
                "How softly the recording view turns with your head; the headset's view is never smoothed.",
                S(150), [&] { tabCombo("##recordingsmoothing", Item::recordingSmoothing); });
     });
+    {
+        using spidy::vr_settings::Category;
+        const int cameraPage = static_cast<int>(Category::camera);
+        const int shootersPage = static_cast<int>(Category::shooters);
+        const int legsPage = static_cast<int>(Category::legs);
+        group(cameraPage, 0, "Camera motion (how much)", [&] {
+            settingOption(Item::cameraMotion, "Camera motion preset",
+                   "How much of the animation's own camera motion reaches your view while Native Animation "
+                   "carries it. Full is as before; Light, Heavy and Comfort calm it step by step. Picking one "
+                   "fills the four rows below; changing any of them shows Custom.",
+                   S(150), [&] { tabCombo("##cameramotion", Item::cameraMotion); });
+            settingOption(Item::cameraPitch, "Pitch",
+                   "The animation nodding your view up and down. 0% keeps it level, 100% is all of it. Your "
+                   "own head always moves the view 1:1.",
+                   S(150), [&] { tabCombo("##camerapitch", Item::cameraPitch); });
+            settingOption(Item::cameraRoll, "Roll",
+                   "The animation leaning the horizon. 0% keeps it level (like Head: Level, but the view "
+                   "still turns with Spider-Man). Flips still turn fully.",
+                   S(150), [&] { tabCombo("##cameraroll", Item::cameraRoll); });
+            settingOption(Item::cameraBobVertical, "Bob up/down",
+                   "The head bobbing up and down with steps and landings. 0% steady, 100% all of it. Where "
+                   "you are (your feet) is never changed.",
+                   S(150), [&] { tabCombo("##camerabobv", Item::cameraBobVertical); });
+            settingOption(Item::cameraBobSide, "Bob side",
+                   "The head swaying side to side and fore-aft. 0% steady, 100% all of it.",
+                   S(150), [&] { tabCombo("##camerabobs", Item::cameraBobSide); });
+            settingOption(Item::cameraHeadAngle, "Head angle",
+                   "Tilts the animated view below (Down) or above (Up) the horizon, up to 30 degrees. Level "
+                   "is as before. Your own head still moves the view 1:1 on top.",
+                   S(150), [&] { tabCombo("##cameraheadangle", Item::cameraHeadAngle); });
+        });
+        group(cameraPage, 1, "Camera smoothing (how smoothly)", [&] {
+            settingOption(Item::cameraStabilization, "Stabilization",
+                   "Off uses the Camera rows below; Light and Heavy use their own rows, with heavier speed "
+                   "damping. Smooths only what the animation adds; your head stays 1:1.",
+                   S(150), [&] { tabCombo("##camerastab", Item::cameraStabilization); });
+            settingOption(Item::cameraVertical, "Camera vertical", "Up/down smoothing with Stabilization Off.",
+                   S(150), [&] { tabCombo("##cameravertical", Item::cameraVertical); });
+            settingOption(Item::cameraHorizontal, "Camera horizontal", "Side/forward smoothing with Stabilization Off.",
+                   S(150), [&] { tabCombo("##camerahorizontal", Item::cameraHorizontal); });
+            settingOption(Item::cameraAngle, "Camera angle", "Turn smoothing with Stabilization Off.",
+                   S(150), [&] { tabCombo("##cameraangle", Item::cameraAngle); });
+            settingOption(Item::lightVertical, "Light vertical", "Up/down smoothing with Stabilization Light.",
+                   S(150), [&] { tabCombo("##lightvertical", Item::lightVertical); });
+            settingOption(Item::lightHorizontal, "Light horizontal", "Side/forward smoothing with Stabilization Light.",
+                   S(150), [&] { tabCombo("##lighthorizontal", Item::lightHorizontal); });
+            settingOption(Item::lightAngle, "Light angle", "Turn smoothing with Stabilization Light.",
+                   S(150), [&] { tabCombo("##lightangle", Item::lightAngle); });
+            settingOption(Item::heavyVertical, "Heavy vertical", "Up/down smoothing with Stabilization Heavy.",
+                   S(150), [&] { tabCombo("##heavyvertical", Item::heavyVertical); });
+            settingOption(Item::heavyHorizontal, "Heavy horizontal", "Side/forward smoothing with Stabilization Heavy.",
+                   S(150), [&] { tabCombo("##heavyhorizontal", Item::heavyHorizontal); });
+            settingOption(Item::heavyAngle, "Heavy angle", "Turn smoothing with Stabilization Heavy.",
+                   S(150), [&] { tabCombo("##heavyangle", Item::heavyAngle); });
+        });
+        group(shootersPage, 0, "Web shooters", [&] {
+            settingOption(Item::shooterMode, "Shooters",
+                   "Controller: webs leave along the controller, as before. Locked to arm: along the forearm "
+                   "of the arm you see, in Native Animation too, falling back to your learned forearm when "
+                   "the arm cannot be read. Palm: a quarter turn out of the palm.",
+                   S(150), [&] { tabCombo("##shootermode", Item::shooterMode); });
+            settingOption(Item::shooterLock, "Lock strength",
+                   "With Locked to arm: how much of the arm's line your webs take. 100% is fully on your arm; "
+                   "lower leans back toward the controller.",
+                   S(150), [&] { tabCombo("##shooterlock", Item::shooterLock); });
+            settingOption(Item::webAngle, "Web angle",
+                   "Tilts the line your webs leave along, up or down, 15 to 45 degrees, on top of Shooters. "
+                   "0: as chosen above. Punches keep the controller's own.",
+                   S(150), [&] { tabCombo("##webangleshooters", Item::webAngle); });
+        });
+        group(shootersPage, 1, "Replaced settings", [&] {
+            ImGui::PushTextWrapPos(0);
+            ImGui::TextDisabled("Web aim, Forearm blend, Forearm aim limit, Wrist shooters and Palm shooters are "
+                                "now the two rows on the left. Your saved values carry over: Model forearm or "
+                                "Wrist shooters is Locked to arm, Forearm blend is Lock strength, Palm shooters "
+                                "is Palm. Forearm aim limit is no longer used.");
+            ImGui::PopTextWrapPos();
+        });
+        group(legsPage, 0, "Legs (advanced)", [&] {
+            settingOption(Item::legControl, "Leg control (advanced)",
+                   "In midair or while swinging, the right stick poses your legs: forward a jackknife, back a "
+                   "rearward splay, left and right splays. Double tap up zips, down heals. Needs Controlled "
+                   "flips on and Realistic flips off: turning this on sets both.",
+                   S(42), [&] { tabToggle("##legcontrol", Item::legControl); });
+            settingOption(Item::legStiffness, "Leg stiffness",
+                   "How firmly the legs hold the stick's pose. Lower swings more.",
+                   S(150), [&] { tabCombo("##legstiffness", Item::legStiffness); });
+            settingOption(Item::legDamping, "Leg damping",
+                   "How fast the legs' swing settles. Lower keeps them swinging.",
+                   S(150), [&] { tabCombo("##legdamping", Item::legDamping); });
+            settingOption(Item::legCoupling, "Leg coupling",
+                   "How much the legs' swing turns your body in the air.",
+                   S(150), [&] { tabCombo("##legcoupling", Item::legCoupling); });
+        });
+    }
     group(static_cast<int>(spidy::vr_settings::categoryCount) + 1, 0, "Troubleshooting", [&] {
         settingOption(Item::none, "Normal camera on the monitor",
                "Only for a display driver error as VR starts: the game keeps its own camera, and the "

@@ -435,6 +435,10 @@ void change(Item item, int index) {
                   Item::animatedTorso, Item::animatedModelYaw, Item::animatedAir, Item::animatedOnly,
                   Item::animatedSteering, Item::animatedAirSpin, Item::nativeRun, Item::spidyRun})
                 pending.set(static_cast<size_t>(companion));
+        } else if (item == vr_settings::Item::legControl) {
+            // LEG CONTROL ON also sets the flips it needs (vr_settings::choose).
+            for (const auto companion : {Item::legControl, Item::controlledFlips, Item::realisticFlips})
+                pending.set(static_cast<size_t>(companion));
         } else {
             pending.set(static_cast<size_t>(item));
         }
@@ -547,7 +551,10 @@ bool __fastcall activeHook(void* system, int setting) {
     if (r < 0)
         return originalActive(system, setting);
     AcquireSRWLockShared(&lock);
-    const bool active = vr_settings::inactiveReason(itemOf(r), shown) == nullptr;
+    // A row shownWhenInactive stays selectable; its help says what it needs
+    // (LEGS (ADVANCED): the user could not find them with REALISTIC FLIPS on).
+    const bool active = vr_settings::inactiveReason(itemOf(r), shown) == nullptr ||
+                        vr_settings::shownWhenInactive(itemOf(r));
     ReleaseSRWLockShared(&lock);
     return active;
 }

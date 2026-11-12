@@ -435,6 +435,22 @@ struct Values {
     // How much speed a fast one-hand web yank adds, percent (the tab's SINGLE
     // HAND YANK STRENGTH; Swing::singleHandYankStrength): 100 as before.
     int singleHandYankPercent = 100;
+    // CAMERA MOTION (the user, November 11 22:59: "Native Animation is moving
+    // too much for players, and leveling steals all of the feeling. We need to
+    // let the player dial that stuff in"; camera_motion.hpp). While the
+    // animated head carries the view (ANIMATED HEAD FULL or LEVEL), how much
+    // of the animation's own camera motion reaches the eyes, percent: PITCH
+    // and ROLL its tilt (100 all of it, as before; 0 level, like HEAD LEVEL
+    // but keeping the animation's heading), BOB UP/DOWN and BOB SIDE its
+    // head bob relative to the feet (the feet themselves stay exact). HEAD
+    // ANGLE (the user, November 11 23:02: "a setting for head angle, from
+    // below to above the horizon"): degrees the animated view is tilted
+    // above (positive) or below the horizon. The headset's own look and lean
+    // stay 1:1 on top. The CAMERA MOTION row is a preset over the four
+    // percentages (no key of its own). 100/100/100/100 and 0 by default: as
+    // before.
+    int cameraPitchPct = 100, cameraRollPct = 100, cameraBobVerticalPct = 100, cameraBobSidePct = 100;
+    int cameraHeadAngleDeg = 0;
     bool operator==(const Values&) const = default;
 };
 inline constexpr int eyeAimShots = 1, eyeAimZips = 2;
@@ -602,8 +618,19 @@ enum class Item : uint8_t {
     legDamping,
     legCoupling,
     airFists,
+    // November 11: the web shooters' one choice and its strength (views over
+    // wrist_shooters, web_aim_source, palm_shooters and forearm_blend:
+    // shooter_lock.hpp), and CAMERA MOTION (camera_motion.hpp).
+    shooterMode,
+    shooterLock,
+    cameraMotion,
+    cameraPitch,
+    cameraRoll,
+    cameraBobVertical,
+    cameraBobSide,
+    cameraHeadAngle,
 };
-inline constexpr Item lastItem = Item::airFists;
+inline constexpr Item lastItem = Item::cameraHeadAngle;
 // SLOW-MO LENGTH's last step: no time limit (until L3 toggles it off).
 inline constexpr int slowMotionEndless = 91;
 // Real seconds a full meter lasts for a SLOW-MO LENGTH value; 0 = endless.
@@ -633,9 +660,13 @@ struct Row {
     Place place{};
 };
 // Stable row/setting numbers; categories below determine presentation order.
-const std::array<Row, 127>& rows();
+const std::array<Row, 135>& rows();
 const Row* rowFor(Item);
-enum class Category : uint8_t { setup, webs, swinging, movement, flips, feedback, display, nativeAnimation, count };
+// camera, shooters and legs (November 11, the user: "I can't find legs or
+// camera settings in any of the menus. Make sure it's clearly labeled"): tabs
+// of their own, after the older ones so their numbers stay.
+enum class Category : uint8_t { setup, webs, swinging, movement, flips, feedback, display, nativeAnimation,
+                                camera, shooters, legs, count };
 inline constexpr size_t categoryCount = static_cast<size_t>(Category::count);
 struct Screen {
     const char* title;
@@ -646,6 +677,11 @@ const std::array<Screen, categoryCount>& screens();
 // Null while the control has an effect, otherwise a short explanation. Stored
 // preferences are retained when a parent is off or a different mode overrides them.
 const char* inactiveReason(Item, const Values&);
+// A row that stays selectable while inactiveReason explains why it does
+// nothing yet (LEG CONTROL and its tuning: the user could not find them while
+// REALISTIC FLIPS was on). Choosing LEG CONTROL ON then also turns CONTROLLED
+// FLIPS on and REALISTIC FLIPS off, so the row always does what it says.
+bool shownWhenInactive(Item);
 // RESET ALL affects only the active category's in-game controls, including inactive ones.
 Values resetCategory(Category, Values);
 // The most choices a row shows (game_menu's buffers): a row with more would

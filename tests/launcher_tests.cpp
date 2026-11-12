@@ -697,7 +697,11 @@ int main() {
                                  row.item == Item::flipReprojection || row.item == Item::steadyHud ||
                                  row.item == Item::nativeAnimation ||
                                  // Camera smoothing (comfort) and LEG CONTROL (first pass): the player's own, not shared.
-                                 (row.item >= Item::cameraStabilization && row.item <= Item::legCoupling);
+                                 (row.item >= Item::cameraStabilization && row.item <= Item::legCoupling) ||
+                                 // SHOOTERS and LOCK STRENGTH: views over WRIST SHOOTERS, WEB AIM,
+                                 // FOREARM BLEND and PALM SHOOTERS, which a profile already holds; CAMERA
+                                 // MOTION and its amounts and HEAD ANGLE: comfort, the player's own.
+                                 (row.item >= Item::shooterMode && row.item <= Item::cameraHeadAngle);
             check(std::count_if(begin, end, [&](const ProfileSetting& s) { return s.item == row.item; }) ==
                       (leftOut ? 0 : 1),
                   row.title);

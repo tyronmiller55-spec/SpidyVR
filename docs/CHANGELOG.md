@@ -3,6 +3,15 @@
 Every build, newest first, with what changed, why, and what was measured.
 Per-check results are in [VALIDATION.md](VALIDATION.md).
 
+## Native Animation: camera motion amounts, HEAD ANGLE, SHOOTERS: LOCKED TO ARM, findable camera and legs
+
+The user, Nov 11 22:59-23:07 PST: Native Animation "moving too much", leveling "steals all of the feeling", model forearm wrist shooters "not working at all", "too many wrist settings", a head angle setting, and "I can't find legs or camera settings in any of the menus". Built on d0584e7. Not headset-tested. Details and the old-to-new mapping: [CAMERA_AND_SHOOTERS.md](CAMERA_AND_SHOOTERS.md).
+
+- **Camera motion:** CAMERA MOTION (FULL, LIGHT, HEAVY, COMFORT, CUSTOM) fills PITCH, ROLL, BOB UP/DOWN and BOB SIDE (0-100% of the animation's own motion that reaches your view), plus HEAD ANGLE (DOWN 30 to UP 30). Personal `camera_*` ini keys; the defaults return the head unchanged.
+- **Shooters:** one SHOOTERS row (CONTROLLER, LOCKED TO ARM, PALM) and LOCK STRENGTH replace WRIST SHOOTERS, WEB AIM, FOREARM BLEND, FOREARM AIM LIMIT and PALM SHOOTERS, reading and writing the same keys. Root cause of "not working": the visible arm was refused in Native Animation (2,972 of 5,768 aim lines `arms overlay`), learning was off there, and a fixed 15 degree inward clamp applied.
+- **Menus:** new tabs VR CAMERA & STABILIZATION, VR WEB SHOOTERS and VR LEGS (ADVANCED) in game, and the same pages in the launcher (which had no camera or leg controls at all), plus a camera card on the launcher's Native Animation tab. LEG rows explain what they need instead of being unusable; LEG CONTROL ON sets CONTROLLED FLIPS on and REALISTIC FLIPS off.
+- **Tests:** `spidy_stabilization_shooter_tests` (728 checks: tilt and bob scaling, head angle sign, flip continuity, presets, ini round trip, old-key mapping, lock geometry, every new row reachable in game and present in the launcher); launcher 43/43; core tests updated for the moved rows.
+
 ## Native Animation: OpenXR connection, wait for an unavailable headset, connection log
 
 The user, Nov 11 12:06 PST: "VR is constantly dropping now, can't even get in ... only SpidyVR is dropping connection". Not headset-tested.

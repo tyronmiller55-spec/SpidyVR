@@ -1,4 +1,6 @@
 #include "spidy/vr_settings.hpp"
+#include "spidy/camera_motion.hpp"
+#include "spidy/shooter_lock.hpp"
 #include "spidy/recording_fov.hpp"
 #include "spidy/seated.hpp"
 #include <algorithm>
@@ -131,6 +133,27 @@ static_assert(std::size(cameraSmoothChoices) == std::size(cameraSmoothSteps));
 constexpr int cameraStabilizations[] = {0, 1, 2};
 constexpr const char* cameraStabilizationChoices[] = {"OFF", "LIGHT", "HEAVY"};
 static_assert(std::size(cameraStabilizationChoices) == std::size(cameraStabilizations));
+// SHOOTERS (shooter_lock::Mode) and LOCK STRENGTH, percent.
+constexpr int shooterModes[] = {0, 1, 2};
+constexpr const char* shooterModeChoices[] = {"CONTROLLER", "LOCKED TO ARM", "PALM"};
+static_assert(std::size(shooterModeChoices) == std::size(shooterModes));
+constexpr int shooterLockSteps[] = {25, 50, 75, 90, 100};
+constexpr const char* shooterLockChoices[] = {"25%", "50%", "75%", "90%", "100%"};
+static_assert(std::size(shooterLockChoices) == std::size(shooterLockSteps));
+// CAMERA MOTION's presets (camera_motion::presets, then CUSTOM), its amounts
+// (percent of the animation's motion) and HEAD ANGLE (degrees).
+constexpr int cameraMotions[] = {0, 1, 2, 3, 4};
+constexpr const char* cameraMotionChoices[] = {"FULL", "LIGHT", "HEAVY", "COMFORT", "CUSTOM"};
+static_assert(std::size(cameraMotionChoices) == std::size(cameraMotions) &&
+              std::size(cameraMotions) == camera_motion::presetCount + 1);
+constexpr int cameraAmountSteps[] = {0, 15, 25, 35, 50, 65, 75, 90, 100};
+constexpr const char* cameraAmountChoices[] = {"0% (STILL)", "15%", "25%", "35%", "50%",
+                                               "65%",        "75%", "90%", "100% (FULL)"};
+static_assert(std::size(cameraAmountChoices) == std::size(cameraAmountSteps));
+constexpr int cameraHeadAngles[] = {-30, -20, -10, -5, 0, 5, 10, 20, 30};
+constexpr const char* cameraHeadAngleChoices[] = {"DOWN 30", "DOWN 20", "DOWN 10", "DOWN 5", "LEVEL",
+                                                  "UP 5",    "UP 10",   "UP 20",   "UP 30"};
+static_assert(std::size(cameraHeadAngleChoices) == std::size(cameraHeadAngles));
 // LEG CONTROL's springs and coupling, percent.
 constexpr int legSpringSteps[] = {25, 50, 75, 100, 150, 200};
 constexpr const char* legSpringChoices[] = {"25%", "50%", "75%", "100%", "150%", "200%"};
@@ -235,6 +258,19 @@ std::span<const int> steps(Item item) {
         return legSpringSteps;
     case Item::legCoupling:
         return legCouplingSteps;
+    case Item::shooterMode:
+        return shooterModes;
+    case Item::shooterLock:
+        return shooterLockSteps;
+    case Item::cameraMotion:
+        return cameraMotions;
+    case Item::cameraPitch:
+    case Item::cameraRoll:
+    case Item::cameraBobVertical:
+    case Item::cameraBobSide:
+        return cameraAmountSteps;
+    case Item::cameraHeadAngle:
+        return cameraHeadAngles;
     case Item::runSpeed:
         return runSpeeds;
     case Item::slowMotionLength:
@@ -358,6 +394,22 @@ float numberOf(Item item, const Values& v) {
         return static_cast<float>(v.legDampingPct);
     case Item::legCoupling:
         return static_cast<float>(v.legCouplingPct);
+    case Item::shooterMode:
+        return static_cast<float>(shooter_lock::mode(v));
+    case Item::shooterLock:
+        return static_cast<float>(shooter_lock::strength(v));
+    case Item::cameraMotion:
+        return static_cast<float>(camera_motion::presetOf(v));
+    case Item::cameraPitch:
+        return static_cast<float>(v.cameraPitchPct);
+    case Item::cameraRoll:
+        return static_cast<float>(v.cameraRollPct);
+    case Item::cameraBobVertical:
+        return static_cast<float>(v.cameraBobVerticalPct);
+    case Item::cameraBobSide:
+        return static_cast<float>(v.cameraBobSidePct);
+    case Item::cameraHeadAngle:
+        return static_cast<float>(v.cameraHeadAngleDeg);
     case Item::runSpeed:
         return static_cast<float>(v.runSpeedPercent);
     case Item::slowMotionLength:
@@ -569,6 +621,10 @@ Values sanitized(Values v) {
     v.legStiffnessPct = std::clamp(v.legStiffnessPct, 25, 200);
     v.legDampingPct = std::clamp(v.legDampingPct, 25, 200);
     v.legCouplingPct = std::clamp(v.legCouplingPct, 0, 100);
+    for (int Values::*pct : {&Values::cameraPitchPct, &Values::cameraRollPct, &Values::cameraBobVerticalPct,
+                             &Values::cameraBobSidePct})
+        v.*pct = std::clamp(v.*pct, 0, 100);
+    v.cameraHeadAngleDeg = std::clamp(v.cameraHeadAngleDeg, -camera_motion::maxHeadAngle, camera_motion::maxHeadAngle);
     v.legDoubleTapMs = std::clamp(v.legDoubleTapMs, 150, 600);
     v.runSpeedPercent = std::clamp(v.runSpeedPercent, 50, 200);
     v.slowMotionSeconds = std::clamp(v.slowMotionSeconds, 3, slowMotionEndless);
@@ -597,9 +653,9 @@ Values sanitized(Values v) {
     v.automaticHandThreshold = std::clamp(v.automaticHandThreshold, 50, 300);
     return v;
 }
-const std::array<Row, 127>& rows() {
+const std::array<Row, 135>& rows() {
     // The help fits the game's description column beside the rows.
-    static const std::array<Row, 127> all{{
+    static const std::array<Row, 135> all{{
         {Item::none, "WEBS", nullptr, {}},
         {Item::webStyle, "WEB STYLE",
          "Arcade: webs pass lamp posts, signs and cars, and swings stay above the street.", webStyleChoices},
@@ -770,9 +826,10 @@ const std::array<Row, 127>& rows() {
         {Item::webAngle, "WEB ANGLE", "Tilts the webs up or down from the controller's line. 0 as before.",
          webAngleChoices},
         {Item::wristShooters,
-         "WRIST SHOOTERS",
-         "Full forearm aim. WEB AIM: MODEL FOREARM already does this, with blend control.",
-         {}},
+         "WRIST SHOOTERS (OLD)",
+         "Replaced by SHOOTERS: LOCKED TO ARM. Kept so older settings files still load.",
+         {},
+         Place::launcher},
         {Item::dodgeTumble, "DODGE TUMBLE",
          "The view leans or rolls with the game's dodge, so you see it was one.", dodgeTumbleChoices},
         {Item::runCurve,
@@ -799,10 +856,12 @@ const std::array<Row, 127>& rows() {
          "RUN FROM STANDING",
          "With SPIDY RUN: hold the stick fully to start it from a stand. Off as before.",
          {}},
-        {Item::webAimSource, "WEB AIM",
-         "MODEL FOREARM: webs follow the body's forearm. CONTROLLER as before.", webAimSourceChoices},
-        {Item::forearmBlend, "FOREARM BLEND",
-         "With WEB AIM: MODEL FOREARM, blend from the controller (0%) to forearm (100%).", forearmBlendChoices},
+        {Item::webAimSource, "WEB AIM (OLD)",
+         "Replaced by SHOOTERS. Kept so older settings files still load.", webAimSourceChoices,
+         Place::launcher},
+        {Item::forearmBlend, "FOREARM BLEND (OLD)",
+         "Replaced by LOCK STRENGTH. Kept so older settings files still load.", forearmBlendChoices,
+         Place::launcher},
         {Item::webLandingSmooth,
          "SMOOTH WEB LANDING",
          "Holding a web, a landing under WEB LANDING IMPACT is soft and keeps its speed.",
@@ -822,12 +881,14 @@ const std::array<Row, 127>& rows() {
          "SPIDY RUN JUMP",
          "A in SPIDY RUN or the landing carry jumps at once, keeping the speed. Off: v5's.",
          {}},
-        {Item::forearmAimLimit, "FOREARM AIM LIMIT",
-         "How far MODEL FOREARM and WRIST SHOOTERS turn off the controller's line.", forearmAimLimitChoices},
+        {Item::forearmAimLimit, "FOREARM AIM LIMIT (RETIRED)",
+         "No longer used: LOCKED TO ARM follows the whole arm. Kept for older files.", forearmAimLimitChoices,
+         Place::launcher},
         {Item::palmShooters,
-         "PALM SHOOTERS",
-         "Adds a palm-side quarter turn to your chosen web aim direction.",
-         {}},
+         "PALM SHOOTERS (OLD)",
+         "Replaced by SHOOTERS: PALM. Kept so older settings files still load.",
+         {},
+         Place::launcher},
         {Item::headProbe,
          "HEAD PROBE",
          "Diagnostics only: logs Spidey's head against the headset. Changes nothing.",
@@ -911,7 +972,7 @@ const std::array<Row, 127>& rows() {
         {Item::heavyAngle, "HEAVY ANGLE", "Turn smoothing used by STABILIZATION HEAVY.", cameraSmoothChoices},
         {Item::legControl,
          "LEG CONTROL (ADVANCED)",
-         "Controlled flips: midair right stick poses the legs. Double tap: zip/heal.",
+         "Midair right stick poses the legs. ON also turns CONTROLLED FLIPS on.",
          {}},
         {Item::legStiffness, "LEG STIFFNESS", "How firmly the legs hold the stick's pose. Lower swings more.",
          legSpringChoices},
@@ -955,6 +1016,30 @@ const std::array<Row, 127>& rows() {
          "FLIPS IN COMBAT",
          "Off: with enemies near, arms and webs stop turning you and you come upright.",
          {}},
+        {Item::shooterMode, "SHOOTERS",
+         "Where webs leave. LOCKED TO ARM: along the arm you see. CONTROLLER: as before.",
+         shooterModeChoices},
+        {Item::shooterLock, "LOCK STRENGTH",
+         "LOCKED TO ARM: how much of the arm's line webs take. 100% is fully on your arm.",
+         shooterLockChoices},
+        {Item::cameraMotion, "CAMERA MOTION",
+         "How much animation moves your view. Fills the rows below; edit for CUSTOM.",
+         cameraMotionChoices},
+        {Item::cameraPitch, "PITCH",
+         "Animation nodding your view up/down. 0% level, 100% full. Head stays 1:1.",
+         cameraAmountChoices},
+        {Item::cameraRoll, "ROLL",
+         "Animation leaning the horizon. 0% level, 100% full. Flips always turn fully.",
+         cameraAmountChoices},
+        {Item::cameraBobVertical, "BOB UP/DOWN",
+         "Animation head bob up and down. 0% steady, 100% full. Your feet stay exact.",
+         cameraAmountChoices},
+        {Item::cameraBobSide, "BOB SIDE",
+         "Animation head sway side to side and fore-aft. 0% steady, 100% full.",
+         cameraAmountChoices},
+        {Item::cameraHeadAngle, "HEAD ANGLE",
+         "Tilts the animated view below (DOWN) or above (UP) the horizon. LEVEL as before.",
+         cameraHeadAngleChoices},
     }};
     return all;
 }
@@ -974,8 +1059,7 @@ const std::array<Screen, categoryCount>& screens() {
     static constexpr Item webs[] = {
         Item::webStyle, Item::webButton, Item::aimMarkers, Item::airWebs,
         Item::smartAnchor, Item::webRange, Item::webSpeed, Item::eyeAim,
-        Item::webAimSource, Item::forearmBlend, Item::forearmAimLimit, Item::wristShooters,
-        Item::palmShooters, Item::webAngle, Item::webTie, Item::webLines,
+        Item::webTie, Item::webLines,
     };
     static constexpr Item swinging[] = {
         Item::swingSpeed, Item::weight, Item::elasticWeb, Item::softRelease,
@@ -991,7 +1075,6 @@ const std::array<Screen, categoryCount>& screens() {
     };
     static constexpr Item flips[] = {
         Item::realisticFlips, Item::flips, Item::controlledFlips, Item::flipSpeed,
-        Item::legControl, Item::legStiffness, Item::legDamping, Item::legCoupling,
         Item::automaticStrength, Item::automaticSpeed, Item::automaticMinimumSpeed, Item::automaticReleaseFlip,
         Item::automaticResponse, Item::automaticHandStrength, Item::automaticFalloff, Item::automaticHandThreshold,
         Item::automaticAirBrake, Item::automaticCombat, Item::dodgeTumble, Item::flipReprojection,
@@ -1004,9 +1087,6 @@ const std::array<Screen, categoryCount>& screens() {
     static constexpr Item display[] = {
         Item::screenSize, Item::screenDepth, Item::hud, Item::steadyHud,
         Item::uiStyle, Item::nearClip, Item::recordingFov, Item::recordingSmoothing,
-        Item::cameraStabilization, Item::cameraVertical, Item::cameraHorizontal, Item::cameraAngle,
-        Item::lightVertical, Item::lightHorizontal, Item::lightAngle,
-        Item::heavyVertical, Item::heavyHorizontal, Item::heavyAngle,
     };
     static constexpr Item nativeAnimation[] = {
         Item::nativeAnimation, Item::animatedHead, Item::animatedHeadsetSmooth,
@@ -1014,6 +1094,27 @@ const std::array<Screen, categoryCount>& screens() {
         Item::animatedMoves, Item::animatedHybrid, Item::animatedAir, Item::animatedOnly,
         Item::animatedSteering, Item::animatedAirSpin, Item::headProbe, Item::runSpeed,
         Item::slowMotionLength, Item::softLock,
+    };
+    // CAMERA & STABILIZATION (November 11): how much the animation moves the
+    // view (amounts, HEAD ANGLE), then how smoothly (the response times).
+    static constexpr Item camera[] = {
+        Item::cameraMotion, Item::cameraPitch, Item::cameraRoll, Item::cameraBobVertical,
+        Item::cameraBobSide, Item::cameraHeadAngle,
+        Item::cameraStabilization, Item::cameraVertical, Item::cameraHorizontal, Item::cameraAngle,
+        Item::lightVertical, Item::lightHorizontal, Item::lightAngle,
+        Item::heavyVertical, Item::heavyHorizontal, Item::heavyAngle,
+    };
+    // WEB SHOOTERS (November 11): one choice and its strength, WEB ANGLE on
+    // top; the old rows they replace stay in the launcher's file only.
+    static constexpr Item shooters[] = {
+        Item::shooterMode, Item::shooterLock, Item::webAngle,
+        Item::webAimSource, Item::forearmBlend, Item::forearmAimLimit, Item::wristShooters,
+        Item::palmShooters,
+    };
+    // LEGS (ADVANCED) (November 11): shown even while unavailable, the help
+    // saying why (shownWhenInactive).
+    static constexpr Item legs[] = {
+        Item::legControl, Item::legStiffness, Item::legDamping, Item::legCoupling,
     };
     static const std::array<Screen, categoryCount> all{{
         {"Setup", "VR SETUP", setup},
@@ -1024,6 +1125,9 @@ const std::array<Screen, categoryCount>& screens() {
         {"Haptics", "VR HAPTICS", feedback},
         {"Display", "VR DISPLAY", display},
         {"Native Animation", "VR NATIVE ANIMATION", nativeAnimation},
+        {"Camera & Stabilization", "VR CAMERA & STABILIZATION", camera},
+        {"Web Shooters", "VR WEB SHOOTERS", shooters},
+        {"Legs (Advanced)", "VR LEGS (ADVANCED)", legs},
     }};
     return all;
 }
@@ -1033,6 +1137,8 @@ const char* inactiveReason(Item item, const Values& v) {
         return v.smoothTurn > 0 ? "Turn Smooth turn off to use Snap turn." : nullptr;
     case Item::smartAnchor:
         return v.airWebs ? "Turn Webs hold in open air off to use Smart anchor." : nullptr;
+    case Item::shooterLock:
+        return shooter_lock::mode(v) != shooter_lock::Mode::arm ? "Set SHOOTERS to LOCKED TO ARM first." : nullptr;
     case Item::wristShooters:
         return v.webAimSource == 1 ? "Web aim already follows the model forearm." : nullptr;
     case Item::forearmBlend:
@@ -1053,11 +1159,16 @@ const char* inactiveReason(Item item, const Values& v) {
     case Item::controlledFlips:
         return v.realisticFlips ? "Realistic flips takes priority over Controlled flips." : nullptr;
     case Item::legControl:
-        return !v.controlledFlips || v.realisticFlips ? "Enable Controlled flips to use Leg control." : nullptr;
+        return v.realisticFlips ? "Off while REALISTIC FLIPS is on. ON here turns it off, CONTROLLED FLIPS on."
+               : !v.controlledFlips ? "Needs CONTROLLED FLIPS. ON here turns it on."
+                                    : nullptr;
     case Item::legStiffness:
     case Item::legDamping:
     case Item::legCoupling:
-        return !v.legControl || !v.controlledFlips || v.realisticFlips ? "Enable Leg control first." : nullptr;
+        return !v.legControl ? "Turn LEG CONTROL on first."
+               : v.realisticFlips || !v.controlledFlips
+                   ? "LEG CONTROL needs CONTROLLED FLIPS on, REALISTIC FLIPS off."
+                   : nullptr;
     case Item::flips:
         return v.controlledFlips && !v.realisticFlips ? "Controlled flips takes priority over basic Flips." : nullptr;
     case Item::flipSpeed:
@@ -1087,6 +1198,18 @@ const char* inactiveReason(Item item, const Values& v) {
         return v.recordingFov == 0 ? "Enable Recording FOV first." : nullptr;
     default:
         return nullptr;
+    }
+}
+bool shownWhenInactive(Item item) {
+    switch (item) {
+    case Item::legControl:
+    case Item::legStiffness:
+    case Item::legDamping:
+    case Item::legCoupling:
+    case Item::shooterLock:
+        return true;
+    default:
+        return false;
     }
 }
 Values resetCategory(Category category, Values v) {
@@ -1130,6 +1253,27 @@ bool choose(Item item, int index, Values& v) {
             v.animatedAir = v.animatedOnly = v.animatedSteering = false;
             v.animatedAirSpin = 0;
         }
+        return !(v == before);
+    }
+    if (item == Item::legControl && index == 1) {
+        // LEG CONTROL ON does what it says: it needs CONTROLLED FLIPS, which
+        // REALISTIC FLIPS overrides (shownWhenInactive).
+        const Values before = v;
+        v.legControl = v.controlledFlips = true;
+        v.realisticFlips = false;
+        return !(v == before);
+    }
+    if (item == Item::shooterMode || item == Item::shooterLock || item == Item::cameraMotion) {
+        const auto s = steps(item);
+        if (index < 0 || index >= static_cast<int>(s.size()))
+            return false;
+        const Values before = v;
+        if (item == Item::shooterMode)
+            shooter_lock::setMode(v, static_cast<shooter_lock::Mode>(s[index]));
+        else if (item == Item::shooterLock)
+            shooter_lock::setStrength(v, s[index]);
+        else
+            camera_motion::applyPreset(v, s[index]);
         return !(v == before);
     }
     if (bool* on = switchOf(item, v)) {
@@ -1245,6 +1389,21 @@ bool choose(Item item, int index, Values& v) {
         break;
     case Item::legCoupling:
         v.legCouplingPct = s[index];
+        break;
+    case Item::cameraPitch:
+        v.cameraPitchPct = s[index];
+        break;
+    case Item::cameraRoll:
+        v.cameraRollPct = s[index];
+        break;
+    case Item::cameraBobVertical:
+        v.cameraBobVerticalPct = s[index];
+        break;
+    case Item::cameraBobSide:
+        v.cameraBobSidePct = s[index];
+        break;
+    case Item::cameraHeadAngle:
+        v.cameraHeadAngleDeg = s[index];
         break;
     case Item::runSpeed:
         v.runSpeedPercent = s[index];
@@ -1438,6 +1597,11 @@ constexpr TabOnly tabOnly[] = {
     {"leg_coupling_pct", nullptr, &Values::legCouplingPct},
     {"leg_double_tap_ms", nullptr, &Values::legDoubleTapMs},
     {"air_fists", &Values::airFists, nullptr},
+    {"camera_pitch_pct", nullptr, &Values::cameraPitchPct},
+    {"camera_roll_pct", nullptr, &Values::cameraRollPct},
+    {"camera_bob_vertical_pct", nullptr, &Values::cameraBobVerticalPct},
+    {"camera_bob_side_pct", nullptr, &Values::cameraBobSidePct},
+    {"camera_head_angle_deg", nullptr, &Values::cameraHeadAngleDeg},
 };
 } // namespace
 std::string tabOnlyText(const Values& v) {

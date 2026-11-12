@@ -4,6 +4,7 @@
 #include "spidy/eye_resolution.hpp"
 #include "spidy/game_fp.hpp"
 #include "spidy/headset_smoothing.hpp"
+#include "spidy/camera_motion.hpp"
 #include "spidy/native_appearance.hpp"
 #include "spidy/native_body.hpp"
 #include "spidy/native_eye_frame.hpp"
@@ -764,6 +765,10 @@ void resolveScene(native_eyes::Command& c) {
         // SMOOTHING level folded in); the travel relative to the hero's feet.
         Vec3 feet{};
         const bool haveFeet = heroPosition(feet) && finite(feet);
+        // CAMERA MOTION first: how much of the animation's tilt and bob, and
+        // HEAD ANGLE (camera_motion::live; the identity unless set).
+        static camera_motion::Bob parentBob;
+        head = camera_motion::stabilize(head, camera_motion::live(), &parentBob, haveFeet ? &feet : nullptr, dt);
         head = parentSmooth.update(head, dt, headset_smoothing::live(), haveFeet ? &feet : nullptr);
         c = native_eyes::resolvedOnHead(c, head);
     } else
