@@ -38,7 +38,7 @@ struct Entry {
 // SpidySoundTrace, exported by the ray module.
 struct Ring {
     static constexpr uint32_t capacity = 2048;
-    uint32_t magic = 0x53535452, version = 1, bytes = sizeof(Ring);
+    uint32_t magic = 0x53535443, version = 1, bytes = sizeof(Ring); // "SSTC"
     std::atomic<uint32_t> status{}; // 0 off, 1 tracing, 3 failed (error)
     std::atomic<uint32_t> error{};  // 9801 another build; 9810+ MH_Initialize, 9830+ MH_CreateHook, 9850+ MH_EnableHook
     std::atomic<uint32_t> heroHandle{};

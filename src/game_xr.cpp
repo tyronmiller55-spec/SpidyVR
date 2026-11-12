@@ -9011,7 +9011,7 @@ extern "C" __declspec(dllexport) DWORD WINAPI SpidyXrStart(void* input) {
     soundTrace = reinterpret_cast<const sound_trace::Ring*>(GetProcAddress(rays, "SpidySoundTrace"));
     soundTraceMode = reinterpret_cast<DWORD(WINAPI*)(void*)>(GetProcAddress(rays, "SpidySoundTraceMode"));
     if (const sound_trace::Ring* expected = soundTrace;
-        expected && (expected->magic != 0x53535452 || expected->version != 1 || expected->bytes != sizeof(sound_trace::Ring)))
+        expected && (expected->magic != 0x53535443 || expected->version != 1 || expected->bytes != sizeof(sound_trace::Ring)))
         soundTrace = nullptr;
     if (!soundTrace)
         soundTraceMode = nullptr;

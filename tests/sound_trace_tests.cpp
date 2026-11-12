@@ -35,7 +35,7 @@ int main() {
     // The ring: written in order, collected in a window, oldest first.
     {
         auto ring = std::make_unique<Ring>();
-        check(ring->magic == 0x53535452 && ring->version == 1 && ring->bytes == sizeof(Ring), "header");
+        check(ring->magic == 0x53535443 && ring->version == 1 && ring->bytes == sizeof(Ring), "header");
         for (int i = 0; i < 10; ++i)
             record(*ring, ms(100 * i), 0x1000 + i, 7, 0);
         Hit hits[16];
