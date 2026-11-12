@@ -55,6 +55,12 @@ constexpr int maxHeadAngle = 30;
 struct Amounts {
     float pitch = 1, roll = 1, bobVertical = 1, bobSide = 1; // shares 0..1
     float headAngle = 0;                                     // radians, + above the horizon
+    // The up the view is levelled to and HEAD ANGLE is measured from: world up
+    // today. A frame that turns the body or the view over (a handstand, an
+    // inverted view) supplies its own; every scaling is then done in that frame
+    // (tilted and Bob are equivariant under it, tests check), so nothing here
+    // assumes world +Y. Not one of the amounts: identity ignores it.
+    Vec3 up{0, 1, 0};
     bool tiltIdentity() const {
         return pitch >= .9995f && roll >= .9995f && std::abs(headAngle) < 1e-6f;
     }
@@ -135,10 +141,7 @@ inline float tiltAngle(Quat q) {
 }
 // The orientation with its tilt scaled (pitch and roll apart) and HEAD ANGLE
 // added to its pitch; its heading untouched.
-inline Quat tilted(Quat q, const Amounts& a) {
-    q = unit(q);
-    if (a.tiltIdentity())
-        return q;
+inline Quat tiltedAboutWorldUp(Quat q, const Amounts& a) {
     const Quat twist = heading(q);
     Quat swing = unit(q * twist.conjugate());
     if (swing.w < 0)
@@ -176,6 +179,25 @@ inline Quat tilted(Quat q, const Amounts& a) {
     }
     return out;
 }
+// Rotation taking the reference up onto +Y (identity for world up).
+inline Quat toUpFrame(const Amounts& a) {
+    const float n = length(a.up);
+    if (!std::isfinite(n) || n < 1e-6f)
+        return {};
+    const Vec3 u = a.up * (1 / n);
+    if (u.y > .999999f)
+        return {};
+    return unit(arc(u, {0, 1, 0}));
+}
+// The tilt scaled about `a.up`, HEAD ANGLE added once (to the pitch, toward
+// that up).
+inline Quat tilted(Quat q, const Amounts& a) {
+    q = unit(q);
+    if (a.tiltIdentity())
+        return q;
+    const Quat r = toUpFrame(a);
+    return unit(r.conjugate() * tiltedAboutWorldUp(unit(r * q), a));
+}
 
 // The bob about a slow baseline, scaled. One per thread that shows the head.
 class Bob {
@@ -187,9 +209,16 @@ class Bob {
         ready_ = false;
     }
     // `offset` the head's position less the feet's; the offset to use.
+    // Up/down is along `a.up`, side is across it.
     Vec3 update(Vec3 offset, float seconds, const Amounts& a) {
         if (!finite(offset))
             return offset;
+        const Quat r = toUpFrame(a);
+        return r.conjugate().rotate(updateAboutWorldUp(r.rotate(offset), seconds, a));
+    }
+
+  private:
+    Vec3 updateAboutWorldUp(Vec3 offset, float seconds, const Amounts& a) {
         if (a.bobIdentity()) {
             // Kept current, so turning it on later starts from here.
             base_ = offset;

@@ -97,6 +97,47 @@ void cameraTilt() {
     check(worst < 6 * deg, "a full flip under 0% pitch/roll turns smoothly, no pop where up turns over");
 }
 
+// Forward compatibility (a future handstand / inverted view): with a reference
+// up supplied, the result turns with the frame (equivariant), so nothing
+// assumes world +Y; HEAD ANGLE is added once, toward that up.
+void cameraFrame() {
+    using namespace camera_motion;
+    const Quat frames[] = {Quat::around({0, 0, 1}, 180 * deg), Quat::around({1, 0, 0}, 180 * deg),
+                           Quat::around(normalized(Vec3{1, 2, .5f}), 73 * deg)};
+    Amounts base;
+    base.pitch = .3f;
+    base.roll = 0;
+    base.headAngle = 12 * deg;
+    base.bobVertical = 0;
+    base.bobSide = .5f;
+    for (const Quat f : frames) {
+        Amounts inFrame = base;
+        inFrame.up = f.rotate({0, 1, 0});
+        for (const Quat q : {head(40 * deg, 20 * deg, 10 * deg), head(-120 * deg, -35 * deg, 25 * deg)}) {
+            const Quat expected = f * tilted(q, base);
+            const Quat got = tilted(f * q, inFrame);
+            float worst = 0;
+            for (const Vec3 axis : {Vec3{1, 0, 0}, Vec3{0, 1, 0}, Vec3{0, 0, 1}})
+                worst = std::max(worst, length(expected.rotate(axis) - got.rotate(axis)));
+            check(worst < 2e-4f, "levelling and HEAD ANGLE turn with a supplied up (an inverted frame works)");
+        }
+        Bob world, framed;
+        float worst = 0;
+        for (int i = 0; i < 300; ++i) {
+            const float t = static_cast<float>(i) / 90;
+            const Vec3 raw{.04f * std::sin(t * 11.f), 1.6f + .05f * std::sin(t * 14.f), .02f * std::cos(t * 9.f)};
+            const Vec3 a = f.rotate(world.update(raw, 1.f / 90, base));
+            const Vec3 b = framed.update(f.rotate(raw), 1.f / 90, inFrame);
+            worst = std::max(worst, length(a - b));
+        }
+        check(worst < 1e-4f, "the bob's up/down follows the supplied up");
+    }
+    // Once: HEAD ANGLE on a level head is exactly the angle, not twice it.
+    Amounts up20;
+    up20.headAngle = 20 * deg;
+    check(near(pitchOf(tilted(head(0, 0, 0), up20)), 20 * deg, 1e-4f), "HEAD ANGLE applied exactly once");
+}
+
 void cameraBob() {
     using namespace camera_motion;
     Amounts a;
@@ -316,6 +357,7 @@ void menus() {
 
 int main() {
     cameraTilt();
+    cameraFrame();
     cameraBob();
     cameraMatrix();
     cameraSettings();

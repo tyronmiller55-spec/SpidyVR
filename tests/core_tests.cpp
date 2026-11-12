@@ -24032,7 +24032,11 @@ int main() {
         for (const auto& row : all) {
             const bool launcherOnly =
                 row.item == Item::automaticMinimumSpeed || row.item == Item::automaticResponse ||
-                row.item == Item::automaticFalloff || row.item == Item::automaticHandThreshold;
+                row.item == Item::automaticFalloff || row.item == Item::automaticHandThreshold ||
+                // November 11: the five wrist rows SHOOTERS and LOCK STRENGTH replaced, kept for old files.
+                row.item == Item::wristShooters || row.item == Item::webAimSource ||
+                row.item == Item::forearmBlend || row.item == Item::forearmAimLimit ||
+                row.item == Item::palmShooters;
             check(row.place == (row.item == Item::view ? Place::page
                                 : launcherOnly           ? Place::launcher
                                                          : Place::tab),
