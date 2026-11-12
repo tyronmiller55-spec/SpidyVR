@@ -49,7 +49,7 @@
 #include "spidy/shooter_lock.hpp"
 #include "spidy/spherical_aim.hpp"
 #include "spidy/leg_control.hpp"
-#include "spidy/leg_toggle.hpp"
+#include "spidy/leg_hold.hpp"
 #include "spidy/aim_filter.hpp"
 #include "spidy/arm_frame.hpp"
 #include "spidy/kinematics.hpp"
@@ -918,26 +918,22 @@ DWORD WINAPI run(void*) {
         // pushed up its LT + RT (the zip to a point, a vent).
         game_pad::StickPush stickPush;
         // LEG CONTROL (leg_control.hpp): with CONTROLLED FLIPS on and the body
-        // airborne or swinging free, the right stick poses the legs; a double
-        // tap up zips, down heals (StickDoubleTap). legStickOwns: the legs'
+        // airborne or swinging free, the right stick poses the legs while they
+        // are engaged (LEG HOLD: Y+X, then the stick moved). legStickOwns: the legs'
         // block below found the mode on this frame; legStickActive: last
         // frame's, latched where the stick is read (the rig, the zip/heal).
-        game_pad::StickDoubleTap legTap;
         leg_control::Simulation legSim;
         bool legStickOwns{}, legStickActive{}, legModeLogged{};
-        // LEG TOGGLE (leg_toggle.hpp; the user, November 12): the legs on and
-        // off in play, a thumb rest tap or X+Y held. Off each session.
-        leg_toggle::ThumbrestTap legThumbTap;
-        leg_toggle::XYHold legXY;
-        leg_toggle::Toggle legToggle;
-        int legToggleInputLogged = -1;
+        // LEG HOLD (leg_hold.hpp; the user, November 12 01:33, t67u): Y+X held
+        // engage the legs, the right stick moved keeps them, neutral ends them.
+        leg_hold::Hold legHold;
+        leg_hold::Hold::Output legHoldOut;
         bool legBaseLast{};
         float legStickX{}, legStickY{};
         Vec3 legPrevVelocity{}, legAccel{};
         bool legPrevVelocitySet{};
         Quat legPrevBody{};
         bool legPrevBodySet{};
-        uint32_t legActionsLogged{};
         game_pad::ZipPress zipPress;
         game_pad::FlipZipPriority flipZipPriority;
         // EYE AIM: the zip waits for the game's camera to come onto what the
@@ -2256,55 +2252,40 @@ DWORD WINAPI run(void*) {
                             }
                         }
                     }
-                    // LEG TOGGLE (leg_toggle.hpp; the user, November 12 00:44, t64u,
-                    // t65u): LEG CONTROL's legs on and off in play, on the frame the
-                    // tap or hold is read, before anything reads X or Y or the right
-                    // stick. A thumb rest tap (Touch's left thumb rest), or X+Y held
-                    // 0.2 s (also where no thumb rest binding was taken). Never the
-                    // left stick's click: that is slow motion.
+                    // LEG HOLD (leg_hold.hpp; the user, November 12 01:33, t67u): Y+X
+                    // held engage LEG CONTROL's legs, before anything reads X, Y or the
+                    // right stick this frame. From the chord until both are let go of,
+                    // neither reaches the game or the mod (no web strike / zip, no gadget
+                    // wheel); one alone waits up to 80 ms for the other. Let go, the legs
+                    // stay while the right stick is moved; neutral ends them on that
+                    // frame. Never the left stick's click: that is slow motion.
                     {
                         const bool master = values.legControl && (values.controlledFlips || values.realisticFlips) &&
-                                            values.body && !flatScreen;
-                        const auto chosen = leg_toggle::fromSetting(values.legToggleInput);
-                        const auto input = leg_toggle::effective(chosen, runtime.thumbrestBound());
-                        const bool togglePlay =
-                            master && viewing && gameplay && motion.active && spiderMan && !calibrationInput &&
-                            !phone.open() && !gadgetWheel.open() && !padLayer.latched();
-                        bool tapped = false;
-                        {
-                            const auto& left = frame.hands[0];
-                            const float tilt = left.valid ? std::hypot(left.stickX, left.stickY) : 0.f;
-                            const bool tap = legThumbTap.update(frame.seconds, left.valid && frame.thumbrest, tilt,
-                                                                left.valid && left.stickClick);
-                            tapped = tap && togglePlay && input == leg_toggle::Input::thumbrest;
+                                            values.body && !flatScreen && viewing && gameplay && motion.active &&
+                                            spiderMan && !calibrationInput && !phone.open() && !padLayer.latched();
+                        leg_hold::Hold::Input in;
+                        in.seconds = frame.seconds;
+                        in.x = (frame.buttons & buttonX) != 0;
+                        in.y = (frame.buttons & buttonY) != 0;
+                        in.stickX = frame.hands[1].stickX;
+                        in.stickY = frame.hands[1].stickY;
+                        in.master = master;
+                        // A chord may start where the legs could move (last frame's finding),
+                        // with no prompt naming X or Y and the wheel shut.
+                        in.allowed = master && legBaseLast && !gadgetWheel.open() &&
+                                     !(namedPress.claimed() &
+                                       (game_pad::NamedPress::controlX | game_pad::NamedPress::controlY));
+                        legHoldOut = legHold.update(in);
+                        frame.buttons = (frame.buttons & ~static_cast<uint32_t>(buttonX | buttonY)) |
+                                        (legHoldOut.x ? static_cast<uint32_t>(buttonX) : 0u) |
+                                        (legHoldOut.y ? static_cast<uint32_t>(buttonY) : 0u);
+                        frame.reset = legHoldOut.y;
+                        if (legHoldOut.engagedNow) {
+                            runtime.haptic(0, .2f);
+                            diag_log::writef("legs: engaged (%s)", leg_hold::whyName(legHoldOut.why));
                         }
-                        {
-                            const bool x = (frame.buttons & buttonX) != 0, y = (frame.buttons & buttonY) != 0;
-                            const bool xyFree = togglePlay && input == leg_toggle::Input::xyHold &&
-                                                !(namedPress.claimed() &
-                                                  (game_pad::NamedPress::controlX | game_pad::NamedPress::controlY));
-                            const auto hold = legXY.update(frame.seconds, xyFree && x, xyFree && y);
-                            if (hold.mask) {
-                                frame.buttons &= ~static_cast<uint32_t>(buttonX | buttonY);
-                                frame.reset = false;
-                            }
-                            tapped = tapped || hold.tap;
-                        }
-                        legToggle.update(frame.seconds, input, master, tapped);
-                        if (legToggle.changed()) {
-                            runtime.haptic(0, .25f);
-                            diag_log::writef("leg toggle: %s (%s%s)", legToggle.on() ? "ON" : "OFF",
-                                             leg_toggle::inputName(input),
-                                             input != chosen ? ", no thumb rest binding" : "");
-                        }
-                        if (master && values.legToggleInput != legToggleInputLogged) {
-                            legToggleInputLogged = values.legToggleInput;
-                            diag_log::writef("leg toggle: input %s%s (thumb rest %s); legs start %s",
-                                             leg_toggle::inputName(input),
-                                             input != chosen ? " (thumb rest tap chosen)" : "",
-                                             runtime.thumbrestBound() ? "bound" : "not bound",
-                                             legToggle.on() ? "ON" : "OFF");
-                        }
+                        if (legHoldOut.disengagedNow)
+                            diag_log::writef("legs: disengaged (%s)", leg_hold::whyName(legHoldOut.why));
                     }
                     if (!frame.jump)
                         jumpFromScreen = false;
@@ -2722,7 +2703,7 @@ DWORD WINAPI run(void*) {
                         in.basicFlips = values.flips && !values.controlledFlips && !values.realisticFlips;
                         // Toggled off, the right stick is no leg's: its up/down zips
                         // and heals (no pitch, no break), as without LEG CONTROL.
-                        in.legs = flipBreakLegs && legToggle.on();
+                        in.legs = flipBreakLegs && legHoldOut.engaged;
                         in.zipPriority = zipPriority;
                         // With LEG CONTROL the push that broke is the legs' from this
                         // frame (a double tap's first push counts toward the zip/heal).
@@ -2733,8 +2714,8 @@ DWORD WINAPI run(void*) {
                     // play): it turns nothing and goes to the game as rest.
                     // LEG TOGGLE on this frame: off, the stick is the turn's at once;
                     // on where the legs could move last frame, the legs' at once.
-                    legStickActive = gesturesPlay && legToggle.on() &&
-                                     (legStickOwns || (legToggle.changed() && legBaseLast));
+                    legStickActive = gesturesPlay && legHoldOut.engaged &&
+                                     (legStickOwns || (legHoldOut.engagedNow && legBaseLast));
                     legStickOwns = false;
                     rig.legStick(legStickActive);
                     if (legStickActive)
@@ -5235,28 +5216,18 @@ DWORD WINAPI run(void*) {
                             (!motion.basicFlipControls || flipZip) &&
                             !(named & (game_pad::NamedPress::stickUp | game_pad::NamedPress::stickLeft |
                                        game_pad::NamedPress::stickRight));
-                        // LEG CONTROL (the user, November 10 21:06: "Make zip and heal
-                        // work in midair, but you have to double tap them"): while the
-                        // legs own the stick, a double tap up is the zip (the second
-                        // push held aims, let go zips) and down the heal, through the
-                        // same relays below; single pushes are the legs'. Off that
-                        // mode StickPush is as it was, and must see neutral first.
+                        // LEG HOLD (the user, November 12 01:33): while the legs own the
+                        // stick it poses them only: no turn, no zip, no heal (the November 10
+                        // double tap is gone). Off that mode StickPush is as it was, and must
+                        // see neutral first.
                         game_pad::StickPush::Way push = game_pad::StickPush::Way::none;
-                        if (const float window = static_cast<float>(values.legDoubleTapMs) * .001f;
-                            std::abs(legTap.windowSeconds() - std::clamp(window, .15f, .6f)) > 1e-4f)
-                            legTap = game_pad::StickDoubleTap(window);
                         if (legStickActive) {
-                            push = legTap.update(frame.seconds, sticking, turning.stickX, turning.stickY);
-                            legStickX = sticking ? legTap.legX() : 0.f;
-                            legStickY = sticking ? legTap.legY() : 0.f;
+                            legStickX = sticking ? turning.stickX : 0.f;
+                            legStickY = sticking ? turning.stickY : 0.f;
+                            if (!std::isfinite(legStickX) || !std::isfinite(legStickY))
+                                legStickX = legStickY = 0;
                             stickPush.cancel();
-                            if (legTap.actions() != legActionsLogged) {
-                                legActionsLogged = legTap.actions();
-                                diag_log::writef("leg control: double tap %s",
-                                                 push == game_pad::StickPush::Way::up ? "up, zip" : "down, heal");
-                            }
                         } else {
-                            legTap.update(frame.seconds, false, 0, 0);
                             legStickX = legStickY = 0;
                             push = motion.basicFlipControls && !flipZip ?
                                 game_pad::StickPush::Way::none :
@@ -7226,9 +7197,9 @@ DWORD WINAPI run(void*) {
                                                  (values.controlledFlips || values.realisticFlips) &&
                                                  values.body && !flatScreen &&
                                                  legsAirOnly && !calibrationInput;
-                            const bool legEasing = legBase && !legToggle.on() && legToggle.easing();
-                            const bool legMode = legBase && (legToggle.on() || legEasing);
-                            legStickOwns = legBase && legToggle.on();
+                            const bool legEasing = legBase && !legHoldOut.engaged && legHoldOut.easing;
+                            const bool legMode = legBase && (legHoldOut.engaged || legEasing);
+                            legStickOwns = legBase && legHoldOut.engaged;
                             legBaseLast = legBase;
                             const float legDt = std::isfinite(frame.seconds) ? std::clamp(frame.seconds, 0.f, .1f) : 0.f;
                             const Vec3 vel = swingState.velocity;

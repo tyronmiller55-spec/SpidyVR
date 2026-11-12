@@ -69,10 +69,10 @@ add_executable(spidy_point_jump_tests tests/point_jump_tests.cpp)
 target_link_libraries(spidy_point_jump_tests PRIVATE spidy_core)
 target_compile_definitions(spidy_point_jump_tests PRIVATE SPIDY_SOURCE_DIR="${CMAKE_SOURCE_DIR}")
 add_test(NAME point_jump COMMAND spidy_point_jump_tests)
-# LEG TOGGLE (leg_toggle.hpp): thumb rest tap, X+Y hold, toggle, easing, setting, layout (portable).
-add_executable(spidy_leg_toggle_tests tests/leg_toggle_tests.cpp)
-target_link_libraries(spidy_leg_toggle_tests PRIVATE spidy_core)
-add_test(NAME leg_toggle COMMAND spidy_leg_toggle_tests)
+# LEG HOLD (leg_hold.hpp): Y+X chord, suppression, stick persistence, neutral cancel, easing (portable).
+add_executable(spidy_leg_hold_tests tests/leg_hold_tests.cpp)
+target_link_libraries(spidy_leg_hold_tests PRIVATE spidy_core)
+add_test(NAME leg_hold COMMAND spidy_leg_hold_tests)
 # PUNCH VIEW EASE (view_ease.hpp): hold and ease at a punch's switch, cancels, rig offset, setting (portable).
 add_executable(spidy_view_ease_tests tests/view_ease_tests.cpp)
 target_link_libraries(spidy_view_ease_tests PRIVATE spidy_core)

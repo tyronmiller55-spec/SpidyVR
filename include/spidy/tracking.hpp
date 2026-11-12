@@ -46,9 +46,6 @@ struct XrFrame {
     float seconds = 1.f / 90;
     bool focused{}, valid{}, jump{}, reset{}, recentered{};
     uint32_t buttons{};
-    // The left thumb rest touched (Touch's extra, XrRuntime::thumbrestBound):
-    // the leg toggle's tap.
-    bool thumbrest{};
 };
 inline bool validTrackedPose(Pose p) {
     const auto q = p.orientation;

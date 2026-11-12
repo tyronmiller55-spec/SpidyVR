@@ -33,8 +33,6 @@ enum class ControllerInput : uint8_t {
     x,
     y,
     menu,
-    // Touch's left thumb rest, touched (an extra: the leg toggle).
-    thumbrest,
     // The Steam Frame's own (frameOnly).
     view,
     dpadUp,
@@ -76,9 +74,6 @@ struct ControllerLayout {
     const char* profile;
     const char* extension;
     std::span<const ControllerBinding> bindings;
-    // Bindings tried with `bindings` and dropped, the layout kept, where the
-    // runtime refuses them (XrRuntime::suggest).
-    std::span<const ControllerBinding> extras{};
 };
 namespace controller_layout {
 using enum ControllerInput;
@@ -103,11 +98,6 @@ inline constexpr ControllerBinding touch[] = {
     {b, "/user/hand/right/input/b/click"},
     {x, "/user/hand/left/input/x/click"},
     {menu, "/user/hand/left/input/menu/click"},
-};
-// Touch's extras: the left thumb rest's touch (core in the Touch profile since
-// OpenXR 1.0, and on Quest 3 / 3S Touch Plus), the leg toggle's tap.
-inline constexpr ControllerBinding touchExtras[] = {
-    {thumbrest, "/user/hand/left/input/thumbrest/touch"},
 };
 // Index: A and B on each hand, the left ones Spidy's X and Y. No menu
 // button: their system button is the runtime's.
@@ -163,7 +153,7 @@ inline constexpr ControllerBinding frame[] = {
     {dpadRight, "/user/hand/left/input/dpad_right/click"},
 };
 inline constexpr ControllerLayout all[] = {
-    {ControllerKind::touch, "/interaction_profiles/oculus/touch_controller", nullptr, touch, touchExtras},
+    {ControllerKind::touch, "/interaction_profiles/oculus/touch_controller", nullptr, touch},
     {ControllerKind::index, "/interaction_profiles/valve/index_controller", nullptr, index},
     {ControllerKind::frame, "/interaction_profiles/valve/frame_controller_valve",
      "XR_VALVE_frame_controller_interaction", frame},

@@ -2556,18 +2556,13 @@ void App::options(ImVec2 origin, ImVec2 size) {
         });
         group(legsPage, 0, "Legs (advanced)", [&] {
             settingOption(Item::legControl, "Leg control (advanced)",
-                   "In midair or while swinging, the right stick poses your legs: forward a jackknife, back a "
-                   "rearward splay, left and right splays. Double tap up zips, down heals. Works with Controlled "
+                   "Hold Y and X together in midair or while swinging and the right stick poses your legs: "
+                   "forward a jackknife, back a rearward splay, left and right splays. Y and X do nothing else "
+                   "while held together. Let go of them and the legs stay while you keep moving the stick (your "
+                   "left thumb is free for the left stick); the right stick back to centre ends them. Works with Controlled "
                    "flips or Realistic flips (the legs' swing and spread feed Realistic flips' momentum); "
                    "with neither, turning this on turns Controlled flips on.",
                    S(42), [&] { tabToggle("##legcontrol", Item::legControl); });
-            settingOption(Item::legToggleInput, "Leg toggle",
-                   "How you turn the legs on and off in play (each session starts with them off). Thumb rest "
-                   "tap: tap the left controller's thumb rest (Quest Touch / Touch Plus) - a resting thumb "
-                   "is no tap. Hold X+Y: hold both about 0.2 s (also used where the controller has no thumb "
-                   "rest). Always on: as before. With the legs off the right stick turns, zips and heals as "
-                   "it does without Leg control.",
-                   S(150), [&] { tabCombo("##legtoggle", Item::legToggleInput); });
             settingOption(Item::legStiffness, "Leg stiffness",
                    "How firmly the legs hold the stick's pose. Lower swings more.",
                    S(150), [&] { tabCombo("##legstiffness", Item::legStiffness); });

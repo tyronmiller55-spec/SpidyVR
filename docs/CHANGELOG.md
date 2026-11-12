@@ -3,6 +3,16 @@
 Every build, newest first, with what changed, why, and what was measured.
 Per-check results are in [VALIDATION.md](VALIDATION.md).
 
+## Native Animation: LEG HOLD (Y+X engages the legs; replaces LEG TOGGLE)
+
+The user, Nov 12 01:33 PST: the thumb rest tap didn't work; legs on Y+X with no setting; web zip and the gadget menu off while both are held; legs stay while the right stick is moved after letting go; neutral cancels. Built on 694861c. Not headset-tested. Details: [LEG_HOLD.md](LEG_HOLD.md).
+
+- **Engage:** Y+X held (80 ms chord window for one pressed first; a lone button reaches the game late by at most 80 ms, or as a tap). Neither button reaches the game from the chord until both are let go of: no web strike/zip, no gadget wheel, no release edge.
+- **Persist / cancel:** let go, the legs stay while the right stick is deflected; under 0.18 for 80 ms (hysteresis to 0.30) disengages and the stick turns/zips/heals again that frame. Neutral while still holding Y+X keeps them.
+- **Engaged stick:** legs only, no turn/zip/heal (double tap removed). Gates, coupling, easing and flip-break rules as before; left stick click stays slow-mo.
+- **Removed:** thumb rest tap and its binding (Touch layout as before), LEG TOGGLE / `leg_toggle_input` (old lines ignored).
+- **Tests:** `spidy_leg_hold_tests` (183 checks); core 918/918; launcher 43/43; ctest 11/11.
+
 ## Native Animation: PUNCH VIEW EASE (hold and ease)
 
 The user, Nov 12 01:13 PST: approved option 1 for the punch view jump (median 0.69 m at punch switches). Built on bec50c8. Not headset-tested. Details: [PUNCH_VIEW_EASE.md](PUNCH_VIEW_EASE.md).
@@ -16,7 +26,7 @@ The user, Nov 12 01:13 PST: approved option 1 for the punch view jump (median 0.
 
 ## Native Animation: LEG TOGGLE (thumb rest tap, HOLD X+Y)
 
-The user, Nov 12 00:44-00:46 PST: with LEG CONTROL "I lose all of my other functionality, including the ability to rotate left and right"; toggle the legs in real time with the left thumb rest (a deliberate tap), never the left stick click (slow-mo), fallback HOLD X+Y. Built on c128662. Not headset-tested. Details: [LEG_TOGGLE.md](LEG_TOGGLE.md).
+The user, Nov 12 00:44-00:46 PST: with LEG CONTROL "I lose all of my other functionality, including the ability to rotate left and right"; toggle the legs in real time with the left thumb rest (a deliberate tap), never the left stick click (slow-mo), fallback HOLD X+Y. Built on c128662. Not headset-tested. Superseded by LEG HOLD (above).
 
 - **Toggle:** LEG CONTROL stays the master. New LEG TOGGLE (`leg_toggle_input`): THUMB REST TAP (default), HOLD X+Y, ALWAYS ON (as before). Legs start OFF each session; OFF the right stick turns, zips and heals as without LEG CONTROL everywhere, midair included; ON midair it poses the legs as before. Same-frame effect; haptic tick and `leg toggle:` log line.
 - **Thumb rest:** `/user/hand/left/input/thumbrest/touch` added to the Touch profile as an extra (retried without it if refused, so the Touch layout is never lost); a tap is 30-350 ms after 0.2 s untouched, left stick still and unclicked. No binding: THUMB REST TAP reads X+Y.
