@@ -80,6 +80,7 @@
 #include "spidy/stable_yaw.hpp"
 #include "spidy/view_yaw_lock.hpp"
 #include "spidy/leg_layers.hpp"
+#include "spidy/facing_check.hpp"
 #include "spidy/animated_arms.hpp"
 #include "spidy/frame_stats.hpp"
 #include "spidy/seated.hpp"
@@ -542,6 +543,19 @@ float SpidyFlatAspect();
 }
 namespace {
 using BridgeCall = DWORD(WINAPI*)(void*);
+// FACING CHECK lines: 'facing check: <event> <view|hero> expected X got Y (verdict)'.
+void logFacing(const facing_check::Check& c, const facing_check::Out& o) {
+    constexpr float toDeg = 180.f / 3.14159265f;
+    const char* ev = facing_check::eventName(c.event);
+    if (o.view.verdict != facing_check::Verdict::none)
+        diag_log::writef("facing check: %s view expected %.0f got %.0f (%s)%s", ev, o.view.expected * toDeg,
+                         o.view.got * toDeg, facing_check::verdictName(o.view.verdict),
+                         o.view.verdict == facing_check::Verdict::corrected ? ", view turned back" : "");
+    if (o.hero.verdict != facing_check::Verdict::none)
+        diag_log::writef("facing check: %s hero expected %.0f got %.0f (%s)%s", ev, o.hero.expected * toDeg,
+                         o.hero.got * toDeg, facing_check::verdictName(o.hero.verdict),
+                         o.hero.verdict == facing_check::Verdict::corrected ? ", walk stick turns him" : "");
+}
 XrConfig config;
 BridgeCall submitInput{}, sampleBridge{}, stopBridge{}, retargetBridge{};
 BridgeCall startRays{}, submitRays{}, stopRays{};
@@ -1184,6 +1198,13 @@ DWORD WINAPI run(void*) {
         // fullLockGate: the R stick turns it (Full on the ground, not softlock).
         view_yaw_lock::Lock viewLock{};
         view_yaw_lock::TurnInPlace turnInPlace{};
+        // FACING CHECK (facing_check.hpp): armed on each ownership event, a forced
+        // hero turn waiting for the next frame's walk stick.
+        facing_check::Check facingCheck{};
+        bool facingHeroPending = false;
+        float facingHeroYaw = 0;
+        facing_check::Event facingTurnEvent = facing_check::Event::landing;
+        uint32_t facingArmSeen = 0, facingFrames = 0;
         view_yaw_lock::Divergence viewDivergence{};
         view_yaw_lock::TurnWatch viewTurnWatch{};
         bool viewLockActive{}, fullLockGate{}, viewLockSnapped{};
@@ -2319,6 +2340,22 @@ DWORD WINAPI run(void*) {
                                     static_cast<int>(fire.held * 1000 + .5f),
                                     fire.waited > .001f ? ", waited for the surface or the zip guard" : "",
                                     velocity.x, velocity.y, velocity.z, pointJumpSurface);
+                                // FACING CHECK: what the headset showed, and the launch way
+                                // when the player launched roughly where they looked.
+                                {
+                                    float before = NAN;
+                                    if (!hybridShown.valid || !hybrid_handoff::shownYaw(hybridShown, before))
+                                        before = NAN;
+                                    if (!std::isfinite(before) && motion.active)
+                                        before = hybrid_handoff::lookYaw(
+                                            motion.headPose.orientation.rotate({0, 0, -1}));
+                                    const float launchYaw =
+                                        std::hypot(velocity.x, velocity.z) > 1.f
+                                            ? hybrid_handoff::lookYaw({velocity.x, 0, velocity.z})
+                                            : NAN;
+                                    facingCheck.arm(facing_check::Event::pointLaunch, before,
+                                                    facing_check::launchExpected(before, launchYaw));
+                                }
                             } else {
                                 ++pointJumpRefused;
                                 diag_log::writef("point jump: the swing refused the launch (%lu)",
@@ -5987,7 +6024,19 @@ DWORD WINAPI run(void*) {
                                 tin.angle = view_yaw_lock::angleOf(values.turnInPlaceDeg);
                                 tin.rTurning = frame.hands[1].valid &&
                                                viewLock.turning(frame.hands[1].stickX, values.smoothTurn);
+                                // FACING CHECK's hero turn: any angle, right after the event,
+                                // lock or no lock, the landing's frames allowed.
+                                tin.force = facingHeroPending;
+                                tin.forceYaw = facingHeroYaw;
+                                tin.forceAllowed = yieldingPose && heroOk && swingFresh && swingState.grounded &&
+                                                   hybridInputL < stable_yaw::steerZone && !fightLately &&
+                                                   !dodging && !zipping && !legStickActive;
+                                facingHeroPending = false;
                                 const auto turned = turnInPlace.update(tin);
+                                if (turned.dropped)
+                                    diag_log::writef("facing check: %s hero turn dropped (no standing frame within "
+                                                     "400 ms: moving, fighting or the left stick held)",
+                                                     facing_check::eventName(facingTurnEvent));
                                 if (turned.push) {
                                     const auto stick = animated_model_yaw::worldToStick(
                                         hybrid_steer::viewForward(turned.pushYaw), motion.walkForwardAxis,
@@ -5995,12 +6044,23 @@ DWORD WINAPI run(void*) {
                                     walk.right = stick.right;
                                     walk.forward = stick.forward;
                                 }
-                                if (turned.started)
+                                if (turned.started && turned.forced)
+                                    diag_log::writef("facing check: %s hero turn start, gap %+.0f deg, hero %.0f to %.0f",
+                                                     facing_check::eventName(facingTurnEvent), turned.startGap * toDeg,
+                                                     heroYaw * toDeg, facingHeroYaw * toDeg);
+                                else if (turned.started)
                                     diag_log::writef(
                                         "turn in place: start (#%u, %s) gap %+.0f deg, angle %d, hero %.0f heading %.0f",
                                         turnInPlace.starts, turned.byStick ? "R stick" : "look", turned.startGap * toDeg,
                                         values.turnInPlaceDeg, heroYaw * toDeg, viewLockHeading * toDeg);
-                                if (turned.ended != view_yaw_lock::TurnInPlace::End::none)
+                                if (turned.ended != view_yaw_lock::TurnInPlace::End::none && turned.forced)
+                                    diag_log::writef("facing check: %s hero turn %s after %d ms, turned %+.0f of %+.0f, "
+                                                     "left %+.0f deg",
+                                                     facing_check::eventName(facingTurnEvent),
+                                                     view_yaw_lock::endName(turned.ended),
+                                                     static_cast<int>(turned.seconds * 1000 + .5f),
+                                                     turned.swept * toDeg, turned.startGap * toDeg, turned.gap * toDeg);
+                                else if (turned.ended != view_yaw_lock::TurnInPlace::End::none)
                                     diag_log::writef(
                                         "turn in place: %s after %d ms, hero turned %+.0f of %+.0f deg (%.0f deg/s), "
                                         "left %+.0f%s; %u done, %u gave up, %u interrupted, %u wrong way",
@@ -7148,6 +7208,15 @@ DWORD WINAPI run(void*) {
                                     hybrid_owner::enterVrName(hybridOwner.lastEnterVr),
                                     hybridBlend.enterEyeDPos, hybridBlend.enterEyeDYaw,
                                     hybrid_handoff::handoffSec * 1000.f);
+                                // FACING CHECK: the view the player saw is what SpidyVR's view
+                                // must start on (a point launch armed at its launch keeps its own).
+                                if (!(facingCheck.armed && facingCheck.event == facing_check::Event::pointLaunch))
+                                    facingCheck.arm(hybridOwner.lastEnterVr == hybrid_owner::EnterVr::pointJump
+                                                        ? facing_check::Event::pointLaunch
+                                                    : hybridOwner.lastEnterVr == hybrid_owner::EnterVr::timed
+                                                        ? facing_check::Event::jumpHandoff
+                                                        : facing_check::Event::takeover,
+                                                    eyesOk ? worldYaw : NAN);
                             }
                             // Landing on the feet ends an ease at once (the animation's
                             // view takes over); any other switch back too.
@@ -7240,6 +7309,18 @@ DWORD WINAPI run(void*) {
                                                      "%.1f) eyeBlend %.0f ms, headbone n/a",
                                                      why, landMs, why, landMs, landSpeed,
                                                      hybrid_handoff::handoffSec * 1000.f);
+                                // FACING CHECK: the view SpidyVR showed last is the facing the
+                                // player expects on the animation's side, view and hero.
+                                {
+                                    float before = NAN;
+                                    if (!hybrid_handoff::validShown(hybridShown, handoffNs) ||
+                                        !hybrid_handoff::shownYaw(hybridShown, before))
+                                        before = fromOk ? fromYaw : NAN;
+                                    facingCheck.arm(hybridOwner.lastEnterAnim == hybrid_owner::EnterAnim::land
+                                                        ? facing_check::Event::landing
+                                                        : facing_check::Event::animReentry,
+                                                    before);
+                                }
                             }
                         } else {
                             hybridOwner = {};
@@ -7277,6 +7358,40 @@ DWORD WINAPI run(void*) {
                                     kin.handValid[0] ? 1u : 0u, length(kin.handVelocity[0]), kin.handValid[1] ? 1u : 0u,
                                     length(kin.handVelocity[1]), kin.actorYaw * 57.29578f, kin.viewYaw * 57.29578f,
                                     armView.valid ? "per-frame" : "none");
+                            }
+                        }
+                        // FACING CHECK, SpidyVR's side: the view after a takeover or a
+                        // point launch against the view before it; the rig's yaw turns it back
+                        // (about the eyes). Not on the edge's own frame (the rig adopts then).
+                        {
+                            if (facingCheck.events != facingArmSeen) {
+                                facingArmSeen = facingCheck.events;
+                                facingFrames = 0;
+                            }
+                            if (facingCheck.armed) {
+                                ++facingFrames;
+                                if (hybridOwner.domain == hybrid_owner::Domain::vr) {
+                                    facing_check::Sample fs;
+                                    const bool headOk = motion.active && validTrackedPose(motion.headPose);
+                                    fs.viewOk = headOk && facingFrames >= 2;
+                                    fs.view = headOk ? hybrid_handoff::lookYaw(
+                                                           motion.headPose.orientation.rotate({0, 0, -1}))
+                                                     : 0.f;
+                                    fs.viewFixable = validTrackedPose(frame.head);
+                                    fs.heroMatters = false;
+                                    const auto fc = facingCheck.update(frame.seconds, fs);
+                                    if (fc.viewFix != 0.f) {
+                                        const Vec3 eyesNow{(motion.eyes[0][12] + motion.eyes[1][12]) * .5f,
+                                                           (motion.eyes[0][13] + motion.eyes[1][13]) * .5f,
+                                                           (motion.eyes[0][14] + motion.eyes[1][14]) * .5f};
+                                        rig.adoptEyes(eyesNow, stable_yaw::wrap(fs.view + fc.viewFix), frame.head);
+                                    }
+                                    logFacing(facingCheck, fc);
+                                } else if (facingFrames > 45) {
+                                    // The animation's side never sampled it (no head lock this
+                                    // stint): let it run out and say so.
+                                    logFacing(facingCheck, facingCheck.update(frame.seconds, {}));
+                                }
                             }
                         }
                         // Jump adopt's first frame, once the pose job has seeded it.
@@ -8069,7 +8184,7 @@ DWORD WINAPI run(void*) {
                             if (lockWanted) {
                                 if ((!viewLock.set || viewLockRelatch) && boneOk) {
                                     viewLock.latch(boneYaw, heroYawNow, sway);
-                                    turnInPlace.reset();
+                                    turnInPlace.resetLook();
                                     diag_log::writef("view yaw lock: latched at %.0f deg (head bone %.0f, hero %.0f), "
                                                      "sway %d%%, turn-in-place %d deg, #%u",
                                                      viewLock.yaw * toDeg, boneYaw * toDeg,
@@ -8088,6 +8203,43 @@ DWORD WINAPI run(void*) {
                             }
                             viewLockActive = lockWanted && viewLock.set;
                             fullLockGate = viewLockActive && followFull;
+                            // FACING CHECK, the animation's side: the view (the lock + sway +
+                            // headset, or the head bone + headset without the lock) and the
+                            // hero's facing against what SpidyVR showed / the view before.
+                            if (facingCheck.armed && hybridOwner.domain != hybrid_owner::Domain::vr) {
+                                float checkBone = boneYaw;
+                                bool checkBoneOk = boneOk;
+                                if (!checkBoneOk) {
+                                    Mat4 h{};
+                                    checkBoneOk = game_fp::heroHead(h) && view_yaw_lock::nativeYaw(h, checkBone);
+                                }
+                                float hmdNow = 0;
+                                if (validTrackedPose(frame.head))
+                                    hmdNow = stable_yaw::wrap(
+                                        hybrid_handoff::lookYaw(screenAhead(frame.head, 0).orientation.rotate({0, 0, -1})) -
+                                        hybrid_handoff::lookYaw(animHeadRef.orientation.rotate({0, 0, -1})));
+                                view_yaw_lock::State probeLock;
+                                probeLock.on = viewLockActive;
+                                probeLock.yaw = viewLock.yaw;
+                                probeLock.sway = sway;
+                                probeLock.heroYaw = heroYawNow;
+                                facing_check::Sample fs;
+                                fs.viewOk = checkBoneOk && (!lockWanted || viewLockActive);
+                                fs.view = stable_yaw::wrap(view_yaw_lock::shownYaw(probeLock, checkBone) + hmdNow);
+                                fs.viewFixable = viewLockActive;
+                                fs.heroMatters = true;
+                                fs.heroOk = std::isfinite(heroYawNow);
+                                fs.hero = heroYawNow;
+                                const auto fc = facingCheck.update(frame.seconds, fs);
+                                if (fc.viewFix != 0.f)
+                                    viewLock.yaw = stable_yaw::wrap(viewLock.yaw + fc.viewFix);
+                                if (fc.heroTurn) {
+                                    facingHeroPending = true;
+                                    facingHeroYaw = fc.heroYaw;
+                                    facingTurnEvent = facingCheck.event;
+                                }
+                                logFacing(facingCheck, fc);
+                            }
                             view_yaw_lock::State lock;
                             lock.on = viewLockActive;
                             lock.yaw = viewLock.yaw;

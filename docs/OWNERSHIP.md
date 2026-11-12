@@ -79,6 +79,10 @@ The following were removed: launch facing, the facing seed after a handoff, and 
 
 In the air, the R stick turns the camera as in the main game. The player's own L stick is still mapped to the view, as on the ground.
 
+## Facing check on every event (Nov 12 07:14)
+
+Every ownership event (landing, point launch, jump handoff, anim re-entry, takeover) checks the facing within 0.3 s against the view shown before it: a view more than 45 deg off is turned back (yaw lock or rig), a hero more than 90 deg off on the animation's side is turned to it by the walk stick (forced TURN-IN-PLACE). Details: [FACING_CHECK.md](FACING_CHECK.md).
+
 ## Defaults chosen (flag if wrong)
 
 - **Air cancel input** = grip, the web-hold button. If WEB BUTTON is swapped, it is the trigger. Web balls never cancel.

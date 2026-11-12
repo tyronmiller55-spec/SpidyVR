@@ -3,6 +3,16 @@
 Every build, newest first, with what changed, why, and what was measured.
 Per-check results are in [VALIDATION.md](VALIDATION.md).
 
+## FACING CHECK on every ownership event, sway fade (on the legs build)
+
+The user, Nov 12 07:14 PST: "there are times where it turns me 180 on landing or launch. Maybe we need a check on each event." Built on bce7350. Not headset-tested. Details: [FACING_CHECK.md](FACING_CHECK.md).
+
+- **The cause (06:37 session, 319e734):** on a landing the game's animation plays on the actor's own facing, which SpidyVR's air never moves (it stayed within 10 deg for 32 of 75 VR stints, wandered for the rest) and is not where the player looks. At 52 of 199 yaw-lock latches the head bone (the SpidyVR body, under the view) and the actor were more than 135 deg apart; within ~0.3 s the animation turned the hero round onto the actor's facing. With the lock the view mostly held (the old head-bone view turned with him); the hero ended more than 90 deg off the view after 52 of 166 sampled landings, and TURN-IN-PLACE fixed only 8 (18 interrupted on the landing's frames, 26 never ran: moving, or under the angle's cooldown). The 20% sway also slid the view ~35 deg on each such landing (a fifth of a 180 gap, latched then lost).
+- **FACING CHECK:** each landing, point launch, jump handoff, anim re-entry and other takeover arms a check with the view the headset showed before it (for a point launch the launch direction when within 90 deg of the view; a backward wall launch keeps the view). Within 0.3 s: the view more than 45 deg off is turned back the same frame (the anim side's yaw lock, or SpidyVR's rig about the eyes); the hero more than 90 deg off, on the animation's side, gets a forced walk-stick turn to it (TURN-IN-PLACE's closed loop: any angle, waits up to 0.4 s for a standing frame, rides out 0.25 s gaps, kept through a lock relatch). No facing write, no guessed address.
+- **ANIM YAW SWAY fade:** the sway counts in full for a head within 45 deg of the hero's facing, fades out by 90 deg (100% is still the bone itself). No slide and no 72 deg wrap jump on a 180 gap.
+- Logs: `facing check: <event> view|hero expected X got Y (ok|corrected|off, not fixable here|not sampled)`, `facing check: <event> hero turn start|done|gave up|interrupted|dropped`.
+- No new setting, offsets or shared-struct version. Tests: `facing_check` (the 31.70 and 408.44 landings, the late latch, the sway slide and wrap, backward and forward point launches, the 1225.5 point jump and 41.70 handoff turns, tolerances, misses, the forced turn's wait/ride-out/drop/relatch).
+
 ## PASSIVE LEGS, AIR CROUCH, REACH SPREAD, FLAIL (the legs build of the Nov 12 plan)
 
 The user, Nov 12 06:18 PST. Built on 319e734 (feat/stable-view-yaw). Not headset-tested. Details: [PASSIVE_LEGS.md](PASSIVE_LEGS.md).

@@ -56,12 +56,31 @@ struct State {
 };
 
 // The yaw the eyes' anchor shows for a head bone yaw.
+// The sway's share of the head bone's yaw off the hero's facing. A head turned within
+// 45 degrees of the body is the animation's sway (all of it); past 90 the bone is not
+// the animation's head over the hero - the SpidyVR body under the view on a landing's
+// first frames, the hero facing the other way (06:37 session: 52 of 199 latches more
+// than 135 degrees apart) - and none of it counts. Without the fade, a 180-degree gap
+// put 36 degrees of sway (20%) into the latch that slid out as the game turned the
+// hero, and the wrap at 180 could jump the view by 72.
+inline float swayOffset(float boneYaw, float heroYaw, float sway) {
+    if (!std::isfinite(boneYaw) || !std::isfinite(heroYaw) || !std::isfinite(sway))
+        return 0.f;
+    const float off = wrap(boneYaw - heroYaw);
+    const float a = std::abs(off);
+    constexpr float full = 45.f * degrees, none = 90.f * degrees;
+    const float k = std::clamp(sway, 0.f, 1.f);
+    if (k >= 1.f) // 100% is the head bone itself (the old feel; the lock is off there anyway)
+        return off;
+    const float fade = a <= full ? 1.f : a >= none ? 0.f : (none - a) / (none - full);
+    return k * off * fade;
+}
+
 inline float shownYaw(const State& s, float boneYaw) {
     if (!s.on || !std::isfinite(s.yaw) || !std::isfinite(boneYaw))
         return boneYaw;
-    const float sway = std::isfinite(s.sway) ? std::clamp(s.sway, 0.f, 1.f) : 0.f;
     const float hero = std::isfinite(s.heroYaw) ? s.heroYaw : boneYaw;
-    return wrap(s.yaw + sway * wrap(boneYaw - hero));
+    return wrap(s.yaw + swayOffset(boneYaw, hero, s.sway));
 }
 
 inline float yawOf(Vec3 forward) {
@@ -168,7 +187,7 @@ struct Lock {
         if (!std::isfinite(boneYaw))
             return;
         const float h = std::isfinite(heroYaw) ? heroYaw : boneYaw;
-        yaw = wrap(boneYaw - std::clamp(sway, 0.f, 1.f) * wrap(boneYaw - h));
+        yaw = wrap(boneYaw - swayOffset(boneYaw, h, sway));
         set = true;
         flick = false;
         ++latches;
@@ -212,6 +231,7 @@ inline constexpr float followAngle = 20.f * degrees; // while the right stick tu
 inline constexpr float stopAngle = 12.f * degrees;
 inline constexpr float giveUpSeconds = 2.5f, cooldownSeconds = 1.f;
 inline constexpr float pushTilt = .35f, pushTiltHard = .5f; // harder after 0.3 s without 5 degrees
+inline constexpr float forceWaitSeconds = .4f, forcePauseSeconds = .25f; // facing check turns
 inline float angleOf(int setting) {
     return setting > 0 ? static_cast<float>(std::clamp(setting, 1, 180)) * degrees : 0.f;
 }
@@ -224,6 +244,12 @@ struct TurnInPlace {
         float heroYaw = 0;
         float angle = 0;      // TURN-IN-PLACE ANGLE (radians); 0: off
         bool rTurning = false;
+        // FACING CHECK (facing_check.hpp): turn him to forceYaw now, whatever the angle and
+        // the cooldown; forceAllowed replaces `allowed` for it (a landing's frames: the
+        // animation still settling, the hero may still be moving).
+        bool force = false;
+        float forceYaw = 0;
+        bool forceAllowed = false;
     };
     struct Out {
         bool push = false;
@@ -237,36 +263,73 @@ struct TurnInPlace {
         float seconds = 0;   // how long (on ended)
         bool wrongWay = false; // on ended: he went more than 20 degrees the other way at some point
         bool byStick = false;  // started by the right stick (not the headset / drift)
+        bool forced = false;   // on started / ended: a facing check's turn
+        bool dropped = false;  // a facing check's turn that never got to start (0.4 s)
     };
     bool turning = false;
     float elapsed = 0, swept = 0, startGap = 0, lastHero = 0, cooldown = 0, worst = 0;
     bool byStick = false;
-    uint32_t starts = 0, done = 0, gaveUp = 0, interrupted = 0, wrongWays = 0;
+    bool forced = false, forcePending = false;
+    float forcedYaw = 0, forceWait = 0, paused = 0;
+    uint32_t starts = 0, done = 0, gaveUp = 0, interrupted = 0, wrongWays = 0, forcedStarts = 0;
 
     Out update(const In& in) {
         Out out;
         const float dt = std::isfinite(in.dt) ? std::clamp(in.dt, 0.f, .1f) : 0.f;
         cooldown = std::max(0.f, cooldown - dt);
-        const bool ok = in.allowed && in.angle > 0 && std::isfinite(in.heading) && std::isfinite(in.heroYaw);
-        out.gap = ok ? wrap(in.heading - in.heroYaw) : 0.f;
+        if (in.force && std::isfinite(in.forceYaw)) {
+            forcePending = true;
+            forcedYaw = wrap(in.forceYaw);
+            forceWait = 0;
+            if (turning) { // retarget the turn under way
+                forced = true;
+                forcePending = false;
+            }
+        }
+        const bool wantForce = forced || forcePending;
+        const float heading = wantForce ? forcedYaw : in.heading;
+        const bool ok = (wantForce ? in.forceAllowed : in.allowed && in.angle > 0) && std::isfinite(heading) &&
+                        std::isfinite(in.heroYaw);
+        out.gap = ok ? wrap(heading - in.heroYaw) : 0.f;
         if (!ok) {
+            if (forcePending && !turning) {
+                forceWait += dt;
+                if (forceWait > forceWaitSeconds) {
+                    forcePending = false;
+                    out.dropped = true;
+                }
+                return out;
+            }
+            // A forced turn rides out a short gap (a landing's frames) before it stops.
+            if (turning && forced && paused < forcePauseSeconds) {
+                paused += dt;
+                return out;
+            }
             if (turning)
                 finish(out, End::interrupted);
             return out;
         }
+        paused = 0;
         if (!turning) {
-            const bool past = std::abs(out.gap) > in.angle;
+            const bool past = std::abs(out.gap) > in.angle && in.angle > 0;
             const bool follow = in.rTurning && std::abs(out.gap) > followAngle;
-            if ((past && cooldown <= 0) || follow) {
+            const bool force = forcePending;
+            if (force && std::abs(out.gap) < stopAngle) {
+                forcePending = false; // already facing it
+            } else if (force || (past && cooldown <= 0) || follow) {
                 turning = true;
+                forced = force;
+                forcePending = false;
                 elapsed = swept = worst = 0;
                 startGap = out.gap;
                 lastHero = in.heroYaw;
-                byStick = follow && !past;
+                byStick = !force && follow && !past;
                 ++starts;
+                forcedStarts += force ? 1u : 0u;
                 out.started = true;
                 out.startGap = startGap;
                 out.byStick = byStick;
+                out.forced = force;
             }
         } else {
             elapsed += dt;
@@ -286,19 +349,27 @@ struct TurnInPlace {
         }
         if (turning) {
             out.push = true;
-            out.pushYaw = in.heading;
+            out.pushYaw = heading;
             out.tilt = elapsed > .3f && std::abs(swept) < 5.f * degrees ? pushTiltHard : pushTilt;
         }
         return out;
     }
     void reset() {
-        turning = false;
-        cooldown = 0;
+        turning = forced = forcePending = false;
+        cooldown = paused = forceWait = 0;
+    }
+    // A relatch of the lock resets the look's turn, never a facing check's.
+    void resetLook() {
+        if (!forced && !forcePending)
+            reset();
     }
 
 private:
     void finish(Out& out, End why) {
         out.ended = why;
+        out.forced = forced;
+        forced = false;
+        paused = 0;
         out.startGap = startGap;
         out.swept = swept;
         out.seconds = elapsed;
