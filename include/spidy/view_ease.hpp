@@ -29,7 +29,7 @@ inline constexpr float turnFrame = .35f, turnTotal = .8f;
 // Offsets smaller than this are no ease; larger than this are no handoff's.
 inline constexpr float minOffset = .01f, maxOffset = 3.f;
 
-enum class End : uint8_t { none, finished, teleport, turn, handoff, recenter, invalid, reset };
+enum class End : uint8_t { none, finished, teleport, turn, handoff, recenter, invalid, reset, landed };
 inline const char* endName(End e) {
     switch (e) {
     case End::finished:
@@ -46,6 +46,8 @@ inline const char* endName(End e) {
         return "cancelled (invalid)";
     case End::reset:
         return "cancelled (tracking reset)";
+    case End::landed:
+        return "cancelled (landed)";
     default:
         return "none";
     }

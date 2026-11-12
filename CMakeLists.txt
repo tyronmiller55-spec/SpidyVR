@@ -89,6 +89,10 @@ add_test(NAME stable_yaw COMMAND spidy_stable_yaw_tests)
 add_executable(spidy_sound_trace_tests tests/sound_trace_tests.cpp)
 target_link_libraries(spidy_sound_trace_tests PRIVATE spidy_core)
 add_test(NAME sound_trace COMMAND spidy_sound_trace_tests)
+# JUMP TO SPIDYVR (hybrid_owner.hpp) and AIR VIEW EASE: the timer, kinds, breaks, eases, settings (portable).
+add_executable(spidy_jump_handoff_tests tests/jump_handoff_tests.cpp)
+target_link_libraries(spidy_jump_handoff_tests PRIVATE spidy_core)
+add_test(NAME jump_handoff COMMAND spidy_jump_handoff_tests)
 
 find_package(Threads REQUIRED)
 add_executable(spidy_action_protocol_tests tests/action_protocol_tests.cpp)

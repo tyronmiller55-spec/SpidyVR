@@ -708,7 +708,9 @@ int main() {
                                  row.item == Item::punchViewEase ||
                                  // MOVE HAPTICS, VIEW YAW SOURCE, SOUND TRACE (November 12): the player's own.
                                  row.item == Item::moveHaptics || row.item == Item::viewYawSource ||
-                                 row.item == Item::soundTrace;
+                                 row.item == Item::soundTrace ||
+                                 // JUMP TO SPIDYVR, AIR VIEW EASE (November 12): the player's own.
+                                 row.item == Item::jumpHandoff || row.item == Item::airViewEase;
             check(std::count_if(begin, end, [&](const ProfileSetting& s) { return s.item == row.item; }) ==
                       (leftOut ? 0 : 1),
                   row.title);
@@ -729,7 +731,9 @@ int main() {
                 // PUNCH VIEW EASE (November 12): comfort, the player's own.
                 key == "punch_view_ease_ms" ||
                 // MOVE HAPTICS, VIEW YAW SOURCE, SOUND TRACE (November 12): the player's own.
-                key == "move_haptics_pct" || key == "view_yaw_source" || key == "sound_trace")
+                key == "move_haptics_pct" || key == "view_yaw_source" || key == "sound_trace" ||
+                // JUMP TO SPIDYVR, AIR VIEW EASE (November 12): the player's own.
+                key == "jump_handoff_ms" || key == "air_view_ease_ms")
                 continue;
             ++lines;
             check(at(key) < std::size(profileSettings) &&

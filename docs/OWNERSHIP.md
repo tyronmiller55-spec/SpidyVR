@@ -16,12 +16,12 @@ Source: the user, Nov 9 09:34 PST. Code: `include/spidy/hybrid_owner.hpp`, the `
 |---|---|---|
 | Ground, perch, the game's crawl, parkour | ANIM | VR → ANIM the moment he lands (`land`, or `mount` onto the game's crawl) |
 | Ground + grip or trigger | ANIM | **None.** Grip only enables SpidyVR's arm features on the animated arms (webs, web balls, punches, markers). The one exception is a punch's web strike under FULL ARMS (next rows). |
-| Jump, vault, point launch, Y zip, fall: any midair native animation | ANIM | **Nov 11 23:39:** plays from the press or takeoff **through the fall to the landing**. Its end is still read (`animEndSeen`, diagnostics) but no longer hands to VR (`animEndHandsToVr = false`). |
+| Jump, vault, point launch, Y zip, fall: any midair native animation | ANIM, then VR on the timer | **Nov 12 05:41 (JUMP TO SPIDYVR, `jump_handoff_ms`, default 500):** a plain jump, a fall, a zip launch, a vault or a wall launch plays animated for the timer's time in the air, then hands to VR (`jump-timer`; diag `jump handoff: <kind> after X ms`). A zip launch's timer counts from its rise; the zip's pull itself stays ANIM. The timer waits while he fights, dodges or zips. Landing before the timer: no switch. **STAY TO LANDING** (0) keeps the Nov 11 23:39 rule: the animation plays through the fall to the landing. |
 | Midair animation + a flip's pitch or tilt (either stick, see below) | VR | `flip-break`, **on the frame the input is read** (`HybridOwner::breakForFlip`, before that frame's tracking, hands and body). |
 | Midair animation + grip | VR | Grip cancel (`grip-cancel`). It is consumed and fires no web or ball. **Nov 11:** on the frame the gate consumes it (`breakForCancel`). |
 | Midair animation + Spidy's wall | VR | `wallrun` |
 | Midair animation + a SpidyVR web attaching | VR | `web` |
-| Air after a break (flip, grip, web, wall) | VR | It stays VR until landing; landing on the feet always returns to ANIM (`land`). |
+| Air after a break (flip, grip, web, wall) or the jump timer | VR | It stays VR until landing; landing on the feet always returns to ANIM (`land`). |
 | Y zip pressed from VR in the air | ANIM | `zip`, once the game begins the zip. A zip the game refuses never leaves VR. |
 | Spidy wall run / wall jump | VR | none |
 | Wall run that came out of a Native Run, stick let go on the wall | ANIM | `run-release`. It stays ANIM on that wall. |
@@ -33,6 +33,9 @@ Source: the user, Nov 9 09:34 PST. Code: `include/spidy/hybrid_owner.hpp`, the `
 - No ownership switch happens on the ground, except a FULL ARMS punch's web strike (the user, Nov 9 22:27: "Punching can pull you out of the animation and teleport you") and a POINT JUMP's launch (Nov 11, approved).
 - Otherwise, switching happens only in midair, on wall runs, and at Native Run's release.
 - The position lock (`position lock:` diag) runs on every switch.
+- **View handoff (Nov 12 05:41):** a punch, the jump timer, a flip break and a grip cancel hold the view where it was and ease it onto the new eyes (one code path, `view_ease.hpp` / `beginViewEase`; the rig placement moves, so eyes, hands, webs and body move together). Punch: PUNCH VIEW EASE; the others: AIR VIEW EASE (`air_view_ease_ms`, 250 by default; OFF = the old snap). Landing cancels an ease (`cancelled (landed)`). Diag: `<why> view ease: start offset X m, dur N ms` and `<why> view ease: <end> after N ms`.
+- **Legs across the timer:** Y+X may engage the legs during a midair animation (it is not zipped); an engaged hold carries into VR, and the air legs blend in over 0.2 s.
+- Same-frame breaks (flip, grip cancel, web, Spidy's wall) still come first, before the timer; right-stick turning never breaks; point jump and swing releases are instant.
 
 ## Flip break (the user, Nov 11 23:39 and 23:41)
 

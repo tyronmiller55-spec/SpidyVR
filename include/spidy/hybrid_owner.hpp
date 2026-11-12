@@ -78,7 +78,33 @@ enum class EnterVr : uint8_t {
     punch,   // FULL ARMS: a SpidyVR punch opened a web strike (its lunge / teleport)
     flip,    // a flip's pitch or tilt input from either stick in a midair animation (breakForFlip)
     pointJump, // POINT JUMP fired off a surface (Frame::pointJump; the ground exception)
+    timed,     // JUMP TO SPIDYVR (November 12): a midair animation's timer ran out (Frame::jumpHandoffNs)
 };
+
+// JUMP TO SPIDYVR (the user, November 12 04:56 / 05:07 / 05:41: "All jumps
+// should switch to Spidy VR after about a half of a second"; plain jumps, zip
+// launches, vaults and wall launches): which midair animation the timer ended.
+enum class JumpKind : uint8_t { none, jump, fall, zipLaunch, vault, wallLaunch };
+inline const char* jumpKindName(JumpKind k) {
+    switch (k) {
+    case JumpKind::jump:
+        return "jump";
+    case JumpKind::fall:
+        return "fall";
+    case JumpKind::zipLaunch:
+        return "zip launch";
+    case JumpKind::vault:
+        return "vault";
+    case JumpKind::wallLaunch:
+        return "wall launch";
+    default:
+        return "none";
+    }
+}
+// A jump asked for (A) within this before the takeoff makes the air a jump.
+constexpr int64_t jumpAskRecentNs = 400'000'000;
+// Rising faster than this (m/s) during the air phase makes it a jump, not a fall.
+constexpr float jumpRiseVel = 1.f;
 
 inline const char* enterVrName(EnterVr e) {
     switch (e) {
@@ -106,6 +132,8 @@ inline const char* enterVrName(EnterVr e) {
         return "flip-break";
     case EnterVr::pointJump:
         return "point-jump";
+    case EnterVr::timed:
+        return "jump-timer";
     default:
         return "none";
     }
@@ -255,7 +283,28 @@ struct Frame {
     float velY = NAN;
     // The left (walk) stick's tilt 0..1; negative unknown.
     float moveStick = -1.f;
+    // JUMP TO SPIDYVR: a midair animation (jump, fall, vault, wall launch; a
+    // zip's point launch from its rise) hands to VR this long into the air;
+    // 0 stays to the landing (the November 11 23:39 rule).
+    int64_t jumpHandoffNs = 0;
 };
+
+// The view ease (view_ease.hpp) a switch to VR takes, in ms (0: the snap):
+// a punch's PUNCH VIEW EASE; the timed jump handoff, a flip break and the grip
+// cancel AIR VIEW EASE (November 12 05:41: "the punch hold-and-ease view
+// handoff ... to the timed jump handoff plus flip-break and grip-cancel").
+inline int viewEaseMs(EnterVr why, int punchMs, int airMs) {
+    switch (why) {
+    case EnterVr::punch:
+        return std::max(punchMs, 0);
+    case EnterVr::timed:
+    case EnterVr::flip:
+    case EnterVr::cancel:
+        return std::max(airMs, 0);
+    default:
+        return 0;
+    }
+}
 
 // Airborne: off the ground and not on the game's own crawl. The floor-crawl
 // flag counts as no surface (it lights during rooftop parkour).
@@ -381,6 +430,10 @@ struct HybridOwner {
     // A midair animation's end as the proxy reads it, now only seen (not a
     // switch; animEndHandsToVr): set on the frame it is first read.
     bool animEndSeen{};
+    // JUMP TO SPIDYVR: what the timed handoff ended (on the frame of a
+    // `timed` switch) and how long he had been in that air (ms).
+    JumpKind lastJumpKind = JumpKind::none;
+    int64_t lastJumpAirNs{};
 
     // A FLIP BREAK (the user, November 11 23:39 / 23:41: "Any cancel or
     // pitch/tilt will break animation on that exact frame"; turning left or
@@ -400,6 +453,22 @@ struct HybridOwner {
     }
 
     Domain update(const Frame& f, int64_t nowNs) {
+        const Domain d = step(f, nowNs);
+        if (!f.cutscene) {
+            prevSupported_ = supported(f.state);
+            prevWall_ = f.state.wall;
+            prevRunRt_ = f.state.runRt && !f.state.owned;
+            if (f.jumpAsk)
+                jumpAskNs_ = nowNs;
+        }
+        return d;
+    }
+    JumpKind airKind() const {
+        return airKind_;
+    }
+
+  private:
+    Domain step(const Frame& f, int64_t nowNs) {
         enterVr = enterAnim = false;
         lastEnterVr = EnterVr::none;
         lastEnterAnim = EnterAnim::none;
@@ -560,8 +629,19 @@ struct HybridOwner {
                 // off the point and ends at its top (the fall held); a zip
                 // with no launch after it plays until he lands or perches, or
                 // the game's longest zip.
-                if (!asked && std::isfinite(f.velY) && f.velY > zipRiseVel)
+                if (!asked && std::isfinite(f.velY) && f.velY > zipRiseVel && !zipRose) {
                     zipRose = true;
+                    zipLaunchNs_ = nowNs;
+                }
+                // JUMP TO SPIDYVR: the zip's point launch hands over its timer
+                // after the launch began (not while the zip still pulls him).
+                if (zipRose && f.jumpHandoffNs > 0 && !asked && !fighting && !combatSticky &&
+                    nowNs - zipLaunchNs_ >= f.jumpHandoffNs) {
+                    const int64_t air = nowNs - zipLaunchNs_;
+                    clearZip();
+                    goTimed(JumpKind::zipLaunch, air, nowNs);
+                    return domain;
+                }
                 if (zipRose && std::isfinite(f.velY) && f.velY <= 0.f) {
                     if (fallNs < 0)
                         fallNs = nowNs;
@@ -571,12 +651,19 @@ struct HybridOwner {
                 const bool launchOver = zipRose && fallNs >= 0 && nowNs - fallNs >= fallHoldNs;
                 if (asked || (nowNs - zipNs < zipMaxNs && !launchOver))
                     return domain;
-                clearZip();
                 animEndSeen = true;
+                const bool rose = zipRose;
+                clearZip();
                 if (animEndHandsToVr)
                     goVr(EnterVr::animEnd, nowNs);
-                else
-                    airAnimNs = nowNs, fallNs = -1, animEndLatched_ = true; // plays to the landing
+                else {
+                    // Plays to the landing, or (JUMP TO SPIDYVR) on into the air's timer.
+                    // A launch's air counts from its rise (its timer goes on).
+                    airAnimNs = rose && zipLaunchNs_ >= 0 ? zipLaunchNs_ : nowNs;
+                    fallNs = -1, animEndLatched_ = true;
+                    airKind_ = rose ? JumpKind::zipLaunch : JumpKind::fall;
+                    airRose_ = rose;
+                }
                 return domain;
             } else {
                 clearZip();
@@ -593,7 +680,19 @@ struct HybridOwner {
             airAnimNs = nowNs;
             fallNs = -1;
             animEndLatched_ = false;
+            // What this air is, from the frame before the takeoff.
+            airRose_ = false;
+            if (prevWall_ == surfaceGame || prevWall_ == surfaceWall)
+                airKind_ = JumpKind::wallLaunch;
+            else if (prevRunRt_ || (f.state.runRt && !f.state.owned))
+                airKind_ = JumpKind::vault;
+            else if (jumpAskNs_ >= 0 && nowNs - jumpAskNs_ <= jumpAskRecentNs)
+                airKind_ = JumpKind::jump;
+            else
+                airKind_ = JumpKind::fall;
         }
+        if (std::isfinite(f.velY) && f.velY > jumpRiseVel)
+            airRose_ = true;
         if (f.cancelGrip) {
             goVr(EnterVr::cancel, nowNs);
             return domain;
@@ -618,8 +717,19 @@ struct HybridOwner {
                 return domain;
             }
         }
+        // JUMP TO SPIDYVR: the timer ends the midair animation (never during a
+        // fight, a dodge or a zip; landing first keeps it the animation's).
+        if (f.jumpHandoffNs > 0 && !busy && inAir >= f.jumpHandoffNs) {
+            JumpKind kind = airKind_;
+            if (kind == JumpKind::fall && airRose_)
+                kind = JumpKind::jump;
+            goTimed(kind, inAir, nowNs);
+            return domain;
+        }
         return domain;
     }
+
+  public:
 
     // True while the game's animation owns the body (and the head follows it).
     bool animOwns(bool movesOn, const head_probe::StateInputs& s) const {
@@ -633,6 +743,15 @@ struct HybridOwner {
     }
 
   private:
+    void goTimed(JumpKind kind, int64_t airNs, int64_t nowNs) {
+        lastJumpKind = kind == JumpKind::none ? JumpKind::fall : kind;
+        lastJumpAirNs = airNs;
+        goVr(EnterVr::timed, nowNs);
+    }
+    JumpKind airKind_ = JumpKind::none;
+    bool airRose_{}, prevSupported_{true}, prevRunRt_{};
+    unsigned prevWall_{};
+    int64_t jumpAskNs_{-1}, zipLaunchNs_{-1};
     EnterVr carry_ = EnterVr::none; // an early break this frame (breakNow)
     bool breakNow(EnterVr why, const head_probe::StateInputs& s, bool cutscene, int64_t nowNs) {
         if (cutscene || domain != Domain::anim || supported(s) || s.wall == surfaceWall)

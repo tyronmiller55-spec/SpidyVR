@@ -481,6 +481,16 @@ struct Values {
     // played around takeoffs, landings and point jumps. Plays nothing,
     // changes nothing. On by default. sound_trace.
     bool soundTrace = true;
+    // JUMP TO SPIDYVR (hybrid_owner.hpp; the user, November 12 05:07/05:41:
+    // plain jumps, zip launches, vaults and wall launches hand off to SpidyVR
+    // after a timer): ms into a midair animation's air; 0 STAY TO LANDING (the
+    // November 11 23:39 rule). 500 by default. jump_handoff_ms.
+    int jumpHandoffMs = 500;
+    // AIR VIEW EASE (view_ease.hpp, the punch's hold and ease): the timed
+    // jump handoff, a flip break and the grip cancel hold the view where the
+    // animation showed it and ease it onto the feet over this; 0 OFF (SNAP),
+    // the old snap. 250 by default. air_view_ease_ms.
+    int airViewEaseMs = 250;
     // POINT JUMP (point_jump.hpp; the user, November 11; EngineBot's plan):
     // touching a surface, A+B (or hold B, then A) charges a jump the way you
     // look. A tap is a quick jump at the tap speed; held up to CHARGE TIME a
@@ -690,8 +700,12 @@ enum class Item : uint8_t {
     moveHaptics,
     viewYawSource,
     soundTrace,
+    // November 12: JUMP TO SPIDYVR (hybrid_owner.hpp), NATIVE ANIMATION; AIR
+    // VIEW EASE (view_ease.hpp), VR CAMERA & STABILIZATION.
+    jumpHandoff,
+    airViewEase,
 };
-inline constexpr Item lastItem = Item::soundTrace;
+inline constexpr Item lastItem = Item::airViewEase;
 // SLOW-MO LENGTH's last step: no time limit (until L3 toggles it off).
 inline constexpr int slowMotionEndless = 91;
 // Real seconds a full meter lasts for a SLOW-MO LENGTH value; 0 = endless.
@@ -721,7 +735,7 @@ struct Row {
     Place place{};
 };
 // Stable row/setting numbers; categories below determine presentation order.
-const std::array<Row, 145>& rows();
+const std::array<Row, 147>& rows();
 const Row* rowFor(Item);
 // camera, shooters and legs (November 11, the user: "I can't find legs or
 // camera settings in any of the menus. Make sure it's clearly labeled"): tabs

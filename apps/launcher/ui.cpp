@@ -1803,6 +1803,11 @@ void App::nativeAnimation(ImVec2 origin, ImVec2 size) {
                "Stable: running steers by a steady heading that only your headset and the right stick turn, "
                "so Spider-Man can't run in circles. Body (old): steering follows the animated head.",
                S(150), [&] { tabCombo("##nativeviewyawsource", Item::viewYawSource); });
+        option("Jump to SpidyVR",
+               "Plain jumps, zip launches, vaults and wall launches hand over from the animation to SpidyVR "
+               "this long into the air. Stay to landing: the old way (animation until you land). Flips, grip "
+               "cancel, webs and walls still break at once; landing returns to the animation. Default: 500 ms.",
+               S(150), [&] { tabCombo("##nativejumphandoff", Item::jumpHandoff); });
         option("Hybrid speed",
                "How long 15 m/s in the air takes to switch to SpidyVR. Off disables speed takeover; "
                "webs, mid-air turns and wall runs still take over. Default: 200 ms.",
@@ -2523,6 +2528,11 @@ void App::options(ImVec2 origin, ImVec2 size) {
                    "while you move). Hands and webs move with the view. Off: the old instant jump. 250 ms by "
                    "default.",
                    S(150), [&] { tabCombo("##punchviewease", Item::punchViewEase); });
+            settingOption(Item::airViewEase, "Air view ease",
+                   "The same hold and ease for the timed jump handoff, a flip break and the grip cancel: the "
+                   "view stays where the animation showed it and eases onto your feet; hands and webs move with "
+                   "it. Off: the old instant snap. 250 ms by default.",
+                   S(150), [&] { tabCombo("##airviewease", Item::airViewEase); });
             settingOption(Item::cameraVertical, "Camera vertical", "Up/down smoothing with Stabilization Off.",
                    S(150), [&] { tabCombo("##cameravertical", Item::cameraVertical); });
             settingOption(Item::cameraHorizontal, "Camera horizontal", "Side/forward smoothing with Stabilization Off.",

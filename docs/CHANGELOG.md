@@ -3,6 +3,15 @@
 Every build, newest first, with what changed, why, and what was measured.
 Per-check results are in [VALIDATION.md](VALIDATION.md).
 
+## JUMP TO SPIDYVR, AIR VIEW EASE (build 2 of the Nov 12 plan)
+
+The user, Nov 12 05:41 PST. Built on 1008510 (feat/haptics-stable-yaw). Not headset-tested. Details: [JUMP_HANDOFF.md](JUMP_HANDOFF.md); rule in [OWNERSHIP.md](OWNERSHIP.md).
+
+- **JUMP TO SPIDYVR (STAY TO LANDING / 300 / 400 / 500 / 700 / 1000 ms, default 500):** plain jumps, falls, zip launches (from the rise), vaults and wall launches hand to SpidyVR after the timer (`jump-timer`; `jump handoff: <kind> after X ms`). Waits during combat, dodges and zips. Same-frame breaks, landing, point jump and swing releases unchanged. `jump_handoff_ms`.
+- **AIR VIEW EASE (OFF (SNAP) / 150-400 ms, default 250):** the punch hold-and-ease, same path, on the timer, flip break and grip cancel; landing cancels it. `air_view_ease_ms`.
+- **Legs:** Y+X engages during a midair animation so a hold carries across.
+- **Tests:** `spidy_jump_handoff_tests` (57); core 918/918; launcher 43/43; ctest 15/15.
+
 ## MOVE HAPTICS, VIEW YAW SOURCE: STABLE, SOUND TRACE (build 1 of the Nov 12 plan)
 
 The user, Nov 12 05:07 PST (t70u): implement build 1 (move haptics, rotation desync Step A, sound trace). Built on 0a593c0. Not headset-tested. Details: [HAPTICS_STABLE_YAW.md](HAPTICS_STABLE_YAW.md).

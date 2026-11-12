@@ -936,6 +936,11 @@ DWORD WINAPI run(void*) {
         leg_hold::Hold legHold;
         leg_hold::Hold::Output legHoldOut;
         bool legBaseLast{};
+        // JUMP TO SPIDYVR: last frame was a midair animation under HYBRID. LEG
+        // HOLD's Y+X may start there too, so a hold made before the timed handoff
+        // carries across it (the legs move from the switch, or a right-stick
+        // pitch breaks at once as the flip break's legs rule says).
+        bool legChordAirAnimLast{};
         float legStickX{}, legStickY{};
         Vec3 legPrevVelocity{}, legAccel{};
         bool legPrevVelocitySet{};
@@ -1144,6 +1149,9 @@ DWORD WINAPI run(void*) {
         bool hybridJumpAsk{};
         int64_t positionLockCheckNs{-1}; // POSITION LOCK residual check time
         unsigned punchEaseEndsLogged{}; // PUNCH VIEW EASE: ends already logged
+        // Which switch the view ease now running (or last) began at: "punch",
+        // "jump handoff", "flip-break", "grip-cancel" (AIR VIEW EASE).
+        const char* easeWhy = "punch";
         std::array<aim_filter::Direction, 2> aimSteady; // WRIST MARKER SMOOTHING (shot = marker)
         bool hybridLeapAir{};
         bool hybridAdoptWaiting{};
@@ -2317,7 +2325,7 @@ DWORD WINAPI run(void*) {
                         in.master = master;
                         // A chord may start where the legs could move (last frame's finding),
                         // with no prompt naming X or Y and the wheel shut.
-                        in.allowed = master && legBaseLast && !gadgetWheel.open() &&
+                        in.allowed = master && (legBaseLast || legChordAirAnimLast) && !gadgetWheel.open() &&
                                      !(namedPress.claimed() &
                                        (game_pad::NamedPress::controlX | game_pad::NamedPress::controlY));
                         legHoldOut = legHold.update(in);
@@ -2805,10 +2813,11 @@ DWORD WINAPI run(void*) {
                                         {camera[8], camera[9], camera[10]}, gameplay,
                                         swingState.owned ? Vec3{0, 1, 0} : heroUp, flipAir, hold,
                                         {camera[4], camera[5], camera[6]});
-                    // PUNCH VIEW EASE: how each ease ended, once.
+                    // PUNCH / AIR VIEW EASE: how each ease ended, once.
                     if (rig.viewEase().ends() != punchEaseEndsLogged) {
                         punchEaseEndsLogged = rig.viewEase().ends();
-                        diag_log::writef("punch view ease: %s after %d ms", view_ease::endName(rig.viewEase().lastEnd()),
+                        diag_log::writef("%s view ease: %s after %d ms", easeWhy,
+                                         view_ease::endName(rig.viewEase().lastEnd()),
                                          static_cast<int>(rig.viewEase().elapsed() * 1000 + .5f));
                     }
                     {
@@ -6743,12 +6752,18 @@ DWORD WINAPI run(void*) {
                         hybridFrame.velY = swingFresh && std::isfinite(swingState.velocity.y)
                                                ? swingState.velocity.y
                                                : NAN;
+                        // JUMP TO SPIDYVR: the midair animation's timer (0 stays to the landing).
+                        hybridFrame.jumpHandoffNs = static_cast<int64_t>(values.jumpHandoffMs) * 1'000'000ll;
                         hybridFrame.moveStick = frame.hands[0].valid && std::isfinite(frame.hands[0].stickX) &&
                                                         std::isfinite(frame.hands[0].stickY)
                                                     ? std::hypot(frame.hands[0].stickX, frame.hands[0].stickY)
                                                     : -1.f;
+                        legChordAirAnimLast = false;
                         if (hybridOn) {
                             hybridOwner.update(hybridFrame, handoffNs);
+                            legChordAirAnimLast = hybridOwner.domain == hybrid_owner::Domain::anim &&
+                                                  hybrid_owner::midairAnimation(true, animState) &&
+                                                  !hybridFrame.cutscene;
                             if (hybridOwner.enterVr || hybridOwner.enterAnim) {
                                 ++armEpoch; // another owner's hands: velocities start afresh
                                 actionFrameFloor = pose.serial;
@@ -6770,6 +6785,11 @@ DWORD WINAPI run(void*) {
                                                  hybrid_owner::domainName(hybridOwner.domain),
                                                  hybridOwner.enterAnim ? "vr->anim this frame"
                                                                        : "already anim");
+                            if (hybridOwner.enterVr && hybridOwner.lastEnterVr == hybrid_owner::EnterVr::timed)
+                                diag_log::writef("jump handoff: %s after %d ms (timer %d ms)",
+                                                 hybrid_owner::jumpKindName(hybridOwner.lastJumpKind),
+                                                 static_cast<int>(hybridOwner.lastJumpAirNs / 1'000'000),
+                                                 values.jumpHandoffMs);
                             if (hybridOwner.enterVr) {
                                 // Slice 2 G→T (anim→vr): capture the view the player is seeing,
                                 // re-anchor tracking onto it, warm-reclaim IK, start
@@ -6854,17 +6874,40 @@ DWORD WINAPI run(void*) {
                                         // lock; eyes, hands, webs and body move together (the
                                         // rig's placement), the lock under them unchanged. Punch
                                         // only; 0 is the old snap. Any other switch ends one.
-                                        const bool punchEase =
-                                            hybridOwner.lastEnterVr == hybrid_owner::EnterVr::punch &&
-                                            values.punchViewEaseMs > 0 && eyesOk;
-                                        if (punchEase &&
-                                            rig.beginViewEase(worldEyes, frame.head,
-                                                              static_cast<float>(values.punchViewEaseMs) * .001f)) {
-                                            punchEaseEndsLogged = rig.viewEase().ends();
-                                            diag_log::writef("punch view ease: start offset %.2f m, dur %d ms",
-                                                             rig.viewEase().startOffset(), values.punchViewEaseMs);
-                                        } else {
+                                        // AIR VIEW EASE (November 12 05:41): the same hold and
+                                        // ease for the timed jump handoff, a flip break and the
+                                        // grip cancel (hybrid_owner::viewEaseMs); 0 the snap.
+                                        const int easeMs = hybrid_owner::viewEaseMs(
+                                            hybridOwner.lastEnterVr, values.punchViewEaseMs, values.airViewEaseMs);
+                                        const auto why = hybridOwner.lastEnterVr;
+                                        const char* easeName = why == hybrid_owner::EnterVr::punch  ? "punch"
+                                                               : why == hybrid_owner::EnterVr::timed ? "jump handoff"
+                                                               : why == hybrid_owner::EnterVr::flip  ? "flip-break"
+                                                                                                     : "grip-cancel";
+                                        // Log the previous ease's end under its own name first.
+                                        if (rig.viewEase().active()) {
                                             rig.cancelViewEase(view_ease::End::handoff);
+                                            punchEaseEndsLogged = rig.viewEase().ends();
+                                            diag_log::writef("%s view ease: %s after %d ms", easeWhy,
+                                                             view_ease::endName(rig.viewEase().lastEnd()),
+                                                             static_cast<int>(rig.viewEase().elapsed() * 1000 + .5f));
+                                        }
+                                        if (easeMs > 0 && eyesOk &&
+                                            rig.beginViewEase(worldEyes, frame.head, static_cast<float>(easeMs) * .001f)) {
+                                            easeWhy = easeName;
+                                            punchEaseEndsLogged = rig.viewEase().ends();
+                                            diag_log::writef("%s view ease: start offset %.2f m, dur %d ms", easeName,
+                                                             rig.viewEase().startOffset(), easeMs);
+                                        } else {
+                                            if (easeMs > 0 && eyesOk)
+                                                diag_log::writef("%s view ease: none (offset %.2f m outside 0.01-3 m)",
+                                                                 easeName, length(worldEyes - (lockFeet + Vec3{0, frame.head.position.y, 0})));
+                                            else if (why == hybrid_owner::EnterVr::timed ||
+                                                     why == hybrid_owner::EnterVr::flip ||
+                                                     why == hybrid_owner::EnterVr::cancel)
+                                                diag_log::writef("%s view ease: off (snap)", easeName);
+                                            rig.cancelViewEase(view_ease::End::handoff);
+                                            punchEaseEndsLogged = rig.viewEase().ends();
                                         }
                                     } else if (eyesOk) {
                                         rig.adoptEyes(worldEyes, worldYaw, frame.head);
@@ -6964,8 +7007,12 @@ DWORD WINAPI run(void*) {
                                     hybridBlend.enterEyeDPos, hybridBlend.enterEyeDYaw,
                                     hybrid_handoff::handoffSec * 1000.f);
                             }
+                            // Landing on the feet ends an ease at once (the animation's
+                            // view takes over); any other switch back too.
                             if (hybridOwner.enterAnim)
-                                rig.cancelViewEase(view_ease::End::handoff);
+                                rig.cancelViewEase(hybridOwner.lastEnterAnim == hybrid_owner::EnterAnim::land
+                                                       ? view_ease::End::landed
+                                                       : view_ease::End::handoff);
                             if (hybridOwner.enterAnim) {
                                 if (hybridAdoptWaiting)
                                     diag_log::write(

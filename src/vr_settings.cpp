@@ -227,6 +227,14 @@ static_assert(std::size(moveHapticChoices) == std::size(moveHapticLevels));
 constexpr int viewYawSources[] = {0, 1};
 constexpr const char* viewYawSourceChoices[] = {"BODY (OLD)", "STABLE"};
 static_assert(std::size(viewYawSourceChoices) == std::size(viewYawSources));
+// JUMP TO SPIDYVR (hybrid_owner.hpp): jump_handoff_ms; 0 stays to the landing.
+constexpr int jumpHandoffs[] = {0, 300, 400, 500, 700, 1000};
+constexpr const char* jumpHandoffChoices[] = {"STAY TO LANDING", "300 MS", "400 MS", "500 MS", "700 MS", "1000 MS"};
+static_assert(std::size(jumpHandoffChoices) == std::size(jumpHandoffs));
+// AIR VIEW EASE (view_ease.hpp): air_view_ease_ms; 0 is the old snap.
+constexpr int airViewEases[] = {0, 150, 200, 250, 300, 400};
+constexpr const char* airViewEaseChoices[] = {"OFF (SNAP)", "150 MS", "200 MS", "250 MS", "300 MS", "400 MS"};
+static_assert(std::size(airViewEaseChoices) == std::size(airViewEases));
 } // namespace
 
 std::span<const int> steps(Item item) {
@@ -309,6 +317,10 @@ std::span<const int> steps(Item item) {
         return moveHapticLevels;
     case Item::viewYawSource:
         return viewYawSources;
+    case Item::jumpHandoff:
+        return jumpHandoffs;
+    case Item::airViewEase:
+        return airViewEases;
     case Item::pointJumpMinSpeed:
         return pointJumpMinSpeeds;
     case Item::pointJumpMaxSpeed:
@@ -464,6 +476,10 @@ float numberOf(Item item, const Values& v) {
         return static_cast<float>(v.moveHapticsPct);
     case Item::viewYawSource:
         return static_cast<float>(v.viewYawSource);
+    case Item::jumpHandoff:
+        return static_cast<float>(v.jumpHandoffMs);
+    case Item::airViewEase:
+        return static_cast<float>(v.airViewEaseMs);
     case Item::pointJumpMinSpeed:
         return static_cast<float>(v.pointJumpMinSpeed);
     case Item::pointJumpMaxSpeed:
@@ -696,6 +712,8 @@ Values sanitized(Values v) {
     v.punchViewEaseMs = std::clamp(v.punchViewEaseMs, 0, 1000);
     v.moveHapticsPct = std::clamp(v.moveHapticsPct, 0, 200);
     v.viewYawSource = std::clamp(v.viewYawSource, 0, 1);
+    v.jumpHandoffMs = std::clamp(v.jumpHandoffMs, 0, 2000);
+    v.airViewEaseMs = std::clamp(v.airViewEaseMs, 0, 1000);
     v.pointJumpChordMs = std::clamp(v.pointJumpChordMs, 20, 150);
     v.pointJumpTapMs = std::clamp(v.pointJumpTapMs, 50, 400);
     v.pointJumpFullMs = std::clamp(v.pointJumpFullMs, 300, 2000);
@@ -737,9 +755,9 @@ Values sanitized(Values v) {
     v.automaticHandThreshold = std::clamp(v.automaticHandThreshold, 50, 300);
     return v;
 }
-const std::array<Row, 145>& rows() {
+const std::array<Row, 147>& rows() {
     // The help fits the game's description column beside the rows.
-    static const std::array<Row, 145> all{{
+    static const std::array<Row, 147> all{{
         {Item::none, "WEBS", nullptr, {}},
         {Item::webStyle, "WEB STYLE",
          "Arcade: webs pass lamp posts, signs and cars, and swings stay above the street.", webStyleChoices},
@@ -1115,6 +1133,12 @@ const std::array<Row, 145>& rows() {
          viewYawSourceChoices},
         {Item::soundTrace, "SOUND TRACE",
          "Diagnostics: logs game sound ids around jumps and landings. Changes nothing.", {}},
+        // November 12: JUMP TO SPIDYVR (hybrid_owner.hpp), AIR VIEW EASE (view_ease.hpp).
+        {Item::jumpHandoff, "JUMP TO SPIDYVR",
+         "Jumps, zip launches, vaults, wall launches: SpidyVR after this. STAY: old way.",
+         jumpHandoffChoices},
+        {Item::airViewEase, "AIR VIEW EASE",
+         "Jump timer, flip and grip breaks: view held, then eased. OFF: the old snap.", airViewEaseChoices},
         {Item::realisticFlips,
          "REALISTIC FLIPS",
          "Momentum rotation from arms and webs. FLIPS also enables left-stick steering.",
@@ -1199,7 +1223,7 @@ const std::array<Screen, categoryCount>& screens() {
         Item::nativeAnimation, Item::animatedHead, Item::animatedHeadsetSmooth,
         Item::animatedArms, Item::animatedTorso, Item::animatedModelYaw, Item::animatedHybridSpeed,
         Item::animatedMoves, Item::animatedHybrid, Item::animatedAir, Item::animatedOnly,
-        Item::animatedSteering, Item::viewYawSource, Item::animatedAirSpin, Item::headProbe, Item::soundTrace,
+        Item::animatedSteering, Item::viewYawSource, Item::jumpHandoff, Item::animatedAirSpin, Item::headProbe, Item::soundTrace,
         Item::runSpeed,
         Item::slowMotionLength, Item::softLock,
     };
@@ -1208,7 +1232,7 @@ const std::array<Screen, categoryCount>& screens() {
     static constexpr Item camera[] = {
         Item::cameraMotion, Item::cameraPitch, Item::cameraRoll, Item::cameraBobVertical,
         Item::cameraBobSide, Item::cameraHeadAngle,
-        Item::cameraStabilization, Item::punchViewEase, Item::cameraVertical, Item::cameraHorizontal, Item::cameraAngle,
+        Item::cameraStabilization, Item::punchViewEase, Item::airViewEase, Item::cameraVertical, Item::cameraHorizontal, Item::cameraAngle,
         Item::lightVertical, Item::lightHorizontal, Item::lightAngle,
         Item::heavyVertical, Item::heavyHorizontal, Item::heavyAngle,
     };
@@ -1538,6 +1562,12 @@ bool choose(Item item, int index, Values& v) {
     case Item::viewYawSource:
         v.viewYawSource = s[index];
         break;
+    case Item::jumpHandoff:
+        v.jumpHandoffMs = s[index];
+        break;
+    case Item::airViewEase:
+        v.airViewEaseMs = s[index];
+        break;
     case Item::pointJumpMinSpeed:
         v.pointJumpMinSpeed = s[index];
         v.pointJumpMaxSpeed = std::max(v.pointJumpMaxSpeed, v.pointJumpMinSpeed);
@@ -1747,6 +1777,8 @@ constexpr TabOnly tabOnly[] = {
     {"move_haptics_pct", nullptr, &Values::moveHapticsPct},
     {"view_yaw_source", nullptr, &Values::viewYawSource},
     {"sound_trace", &Values::soundTrace, nullptr},
+    {"jump_handoff_ms", nullptr, &Values::jumpHandoffMs},
+    {"air_view_ease_ms", nullptr, &Values::airViewEaseMs},
     {"air_fists", &Values::airFists, nullptr},
     {"camera_pitch_pct", nullptr, &Values::cameraPitchPct},
     {"camera_roll_pct", nullptr, &Values::cameraRollPct},
