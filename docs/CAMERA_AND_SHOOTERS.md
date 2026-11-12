@@ -4,7 +4,8 @@ Branch `feat/stabilization-wrist-lock` (from d0584e7). The user, Nov 11 22:59 PS
 too much for players, and leveling steals all of the feeling ... my model forearm wrist shooters aren't working
 at all ... There are too many wrist settings that constantly mess with each other." 23:02: "a setting for head
 angle, from below to above the horizon". 23:07: "I can't find legs or camera settings in any of the menus."
-Not headset-tested.
+
+**Headset status (Nov 12):** in the published build 0a593c0, tested in the user's 37-minute session from 03:49 PST with CAMERA MOTION at pitch 75%, roll 50%, bob 75%/75%, HEAD ANGLE LEVEL, LEG CONTROL with CONTROLLED and REALISTIC FLIPS. The legs are now engaged by holding **Y+X** (LEG HOLD, see [LEG_HOLD.md](LEG_HOLD.md)); there is no thumb rest control and no LEG TOGGLE setting.
 
 ## Where things are now
 

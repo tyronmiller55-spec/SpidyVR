@@ -12,6 +12,8 @@ Source: the user, Nov 9 09:34 PST. Code: `include/spidy/hybrid_owner.hpp`, the `
 
 > Animation owns the ground, parkour, landings and jumps. SpidyVR owns the air and wall running / wall jumping.
 
+**Current build (0a593c0, the ✅ CURRENT release, Nov 12):** a jump (and any midair native animation) stays the game's all the way to the landing; it is broken to SpidyVR only by a flip's pitch or tilt (right stick up/down, the left stick's controlled or realistic flip steering) or a grip cancel, on the frame the input is read. Right stick left/right (turning) never breaks it. With LEG CONTROL, right-stick pitch breaks only while the legs are engaged (Y+X held, or the stick still deflected after letting go). POINT JUMP hands over to SpidyVR on its launch frame. Landing on the feet returns to animation. **Planned, not in this build:** handing a jump's fall to SpidyVR about 0.5 s after the takeoff.
+
 | Where / what | Owner | Switch |
 |---|---|---|
 | Ground, perch, the game's crawl, parkour | ANIM | VR → ANIM the moment he lands (`land`, or `mount` onto the game's crawl) |

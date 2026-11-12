@@ -802,35 +802,37 @@ in the launcher or Settings > VR FLIPS)
                          REALISTIC FLIPS keeps priority and its own controls
   FLIP SPEED ........... adjusts this mode too
 
-Leg control (advanced, first pass: off until LEG CONTROL (ADVANCED) is
-switched on in Settings > VR FLIPS; needs CONTROLLED FLIPS on and REALISTIC
-FLIPS off)
+Leg control (advanced: off until LEG CONTROL (ADVANCED) is switched on in
+Settings > VR LEGS (ADVANCED), or the launcher's Legs (advanced) section;
+works with CONTROLLED FLIPS or REALISTIC FLIPS, and turning it on with
+neither turns CONTROLLED FLIPS on)
   Where ................ only in the air: swinging or falling free. Never on
                          the ground, a wall, a wall run, a crawl or parkour;
                          the legs blend back to the animation in about 0.2 s
                          on a landing or a wall
+  Hold Y+X ............. engages the legs: while engaged the right stick
+                         poses them only (no turn, zip or heal). Y and X
+                         do nothing else while held together (no web zip,
+                         no gadget wheel)
   Right stick .......... poses the legs, blending smoothly: centre straight,
                          forward a jackknife, left or right both legs swung
-                         that way, back a rearward splay. It does not turn
-                         you while it poses the legs
-  Strong push up/down .. waits a quarter second (it may be a double tap's
-                         first push), then poses the legs
-  Double tap up ........ the zip: hold the second push to aim (slow time),
-                         let go to zip
-  Double tap down ...... the heal; the second push held is the heal's hold
+                         that way, back a rearward splay
+  Let go of Y+X ........ the legs stay engaged while you keep moving the
+                         stick; back to neutral for a moment and the stick
+                         turns, zips and heals again
   Loose legs ........... they swing with your swing and spins, and their
                          swing turns your body back a little (a jackknife
-                         tips you nose down; tighter legs spin a flip faster)
+                         tips you nose down; tucked legs spin a flip faster,
+                         stretched legs slow it, with REALISTIC FLIPS too)
   LEG STIFFNESS ........ how firmly they hold the pose (100% unless you pick
                          25 to 200%; lower swings more)
   LEG DAMPING .......... how fast the swing settles (100%, 25 to 200%)
   LEG COUPLING ......... how much the legs turn your body (50%, OFF to 100%)
   spidy_vr.ini ......... leg_control, leg_stiffness_pct, leg_damping_pct,
-                         leg_coupling_pct, and leg_double_tap_ms (300 unless
-                         you set 150 to 600: the double tap's window). Kept
-                         with your own settings, not in shared profiles
-  Off, or not in the air: the right stick is as it always was (turn, zip,
-  heal)
+                         leg_coupling_pct. Kept with your own settings, not
+                         in shared profiles
+  Not engaged, off, or not in the air: the right stick is as it always was
+  (turn, zip, heal)
 
 Realistic flips (experimental, off until you switch REALISTIC FLIPS on in
 Settings > VR FLIPS or "Realistic flips" in the launcher's options, where

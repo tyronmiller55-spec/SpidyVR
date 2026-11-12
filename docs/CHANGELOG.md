@@ -3,6 +3,14 @@
 Every build, newest first, with what changed, why, and what was measured.
 Per-check results are in [VALIDATION.md](VALIDATION.md).
 
+## Published: 0a593c0 is the current tested build (Nov 12)
+
+The user, Nov 12 05:14 PST: "update the current build on Git with the last build I tested". Build `0a593c0` (`Spidy-0.8.6-legs-yx-0a593c0-win64.zip`, SHA256 `ddaa502d9b346a031d175d200dc12675076b9f80be34233364e887f25b1dfaa1`) replaces `d0584e7` as the ✅ CURRENT release on SpidyVR-NativeAnimation. No code change in this entry: documentation only.
+
+- **Tested:** the user's 37-minute session from 03:49 PST Nov 12 on this exact build ("the game is amazing", point jump "works perfectly"). In that session's diagnostics: 56 point jump charges, 42 `legs: engaged (Y+X held)`, 146 punch view ease lines, 145 flip break lines.
+- **Cumulative over d0584e7:** CAMERA MOTION amounts and HEAD ANGLE, SHOOTERS: LOCKED TO ARM, findable CAMERA & STABILIZATION / WEB SHOOTERS / LEGS (ADVANCED) sections, LEG CONTROL with REALISTIC FLIPS, same-frame flip break and grip cancel, jumps animated to the landing (07447b8); POINT JUMP (c128662); PUNCH VIEW EASE (694861c); LEG HOLD on Y+X (0a593c0, replacing bec50c8's LEG TOGGLE).
+- **Known limits:** PUNCH VIEW EASE and the Y+X leg hold have had one session. Turning can drift out of step with the body (running in circles); a fix is in progress. A jump stays animated all the way to the landing in this build; handing a jump's fall to SpidyVR about 0.5 s after the takeoff is planned, not in this build. Haptics work is next.
+
 ## Native Animation: LEG HOLD (Y+X engages the legs; replaces LEG TOGGLE)
 
 The user, Nov 12 01:33 PST: the thumb rest tap didn't work; legs on Y+X with no setting; web zip and the gadget menu off while both are held; legs stay while the right stick is moved after letting go; neutral cancels. Built on 694861c. Not headset-tested. Details: [LEG_HOLD.md](LEG_HOLD.md).

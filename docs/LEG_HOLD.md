@@ -4,7 +4,9 @@ The user, Nov 12 01:33 PST (t67u): "Legs will use y+x, thumb rest didn't work. W
 and leave it as y+x. Also, make sure that web zip and gadget menu are disabled while the player is holding
 both buttons. Legs should stay active as long as the player is still manipulating the stick, even if they
 let go of the buttons. Neutral on the right stick cancels legs." Built on 694861c (feat/punch-view-ease).
-Replaces LEG TOGGLE (bec50c8). Not headset-tested.
+Replaces LEG TOGGLE (bec50c8).
+
+**Headset status (Nov 12):** tested in the user's 37-minute session from 03:49 PST on build 0a593c0 (the published ✅ CURRENT build). Y+X engaged the legs 42 times; one session so far, so treat it as lightly tested.
 
 ## Behaviour (`include/spidy/leg_hold.hpp`)
 
