@@ -219,6 +219,14 @@ static_assert(std::size(pointJumpPushChoices) == std::size(pointJumpPushes));
 constexpr int punchViewEases[] = {0, 150, 200, 250, 300, 400};
 constexpr const char* punchViewEaseChoices[] = {"OFF (SNAP)", "150 MS", "200 MS", "250 MS", "300 MS", "400 MS"};
 static_assert(std::size(punchViewEaseChoices) == std::size(punchViewEases));
+// MOVE HAPTICS (move_haptics.hpp): move_haptics_pct, its own strength.
+constexpr int moveHapticLevels[] = {0, 25, 50, 75, 100, 125, 150, 175, 200};
+constexpr const char* moveHapticChoices[] = {"OFF", "25%", "50%", "75%", "100%", "125%", "150%", "175%", "200%"};
+static_assert(std::size(moveHapticChoices) == std::size(moveHapticLevels));
+// VIEW YAW SOURCE (stable_yaw.hpp): view_yaw_source.
+constexpr int viewYawSources[] = {0, 1};
+constexpr const char* viewYawSourceChoices[] = {"BODY (OLD)", "STABLE"};
+static_assert(std::size(viewYawSourceChoices) == std::size(viewYawSources));
 } // namespace
 
 std::span<const int> steps(Item item) {
@@ -297,6 +305,10 @@ std::span<const int> steps(Item item) {
         return pointJumpTriggers;
     case Item::punchViewEase:
         return punchViewEases;
+    case Item::moveHaptics:
+        return moveHapticLevels;
+    case Item::viewYawSource:
+        return viewYawSources;
     case Item::pointJumpMinSpeed:
         return pointJumpMinSpeeds;
     case Item::pointJumpMaxSpeed:
@@ -448,6 +460,10 @@ float numberOf(Item item, const Values& v) {
         return static_cast<float>(v.pointJumpTrigger);
     case Item::punchViewEase:
         return static_cast<float>(v.punchViewEaseMs);
+    case Item::moveHaptics:
+        return static_cast<float>(v.moveHapticsPct);
+    case Item::viewYawSource:
+        return static_cast<float>(v.viewYawSource);
     case Item::pointJumpMinSpeed:
         return static_cast<float>(v.pointJumpMinSpeed);
     case Item::pointJumpMaxSpeed:
@@ -601,6 +617,8 @@ template <class V> auto switchOf(Item item, V& v) -> decltype(&v.aimMarkers) {
         return &v.palmShooters;
     case Item::headProbe:
         return &v.headProbe;
+    case Item::soundTrace:
+        return &v.soundTrace;
     case Item::animatedMoves:
         return &v.animatedMoves;
     case Item::animatedAir:
@@ -676,6 +694,8 @@ Values sanitized(Values v) {
     v.legDoubleTapMs = std::clamp(v.legDoubleTapMs, 150, 600);
     v.pointJumpTrigger = std::clamp(v.pointJumpTrigger, 0, 1);
     v.punchViewEaseMs = std::clamp(v.punchViewEaseMs, 0, 1000);
+    v.moveHapticsPct = std::clamp(v.moveHapticsPct, 0, 200);
+    v.viewYawSource = std::clamp(v.viewYawSource, 0, 1);
     v.pointJumpChordMs = std::clamp(v.pointJumpChordMs, 20, 150);
     v.pointJumpTapMs = std::clamp(v.pointJumpTapMs, 50, 400);
     v.pointJumpFullMs = std::clamp(v.pointJumpFullMs, 300, 2000);
@@ -717,9 +737,9 @@ Values sanitized(Values v) {
     v.automaticHandThreshold = std::clamp(v.automaticHandThreshold, 50, 300);
     return v;
 }
-const std::array<Row, 142>& rows() {
+const std::array<Row, 145>& rows() {
     // The help fits the game's description column beside the rows.
-    static const std::array<Row, 142> all{{
+    static const std::array<Row, 145> all{{
         {Item::none, "WEBS", nullptr, {}},
         {Item::webStyle, "WEB STYLE",
          "Arcade: webs pass lamp posts, signs and cars, and swings stay above the street.", webStyleChoices},
@@ -1086,6 +1106,15 @@ const std::array<Row, 142>& rows() {
         // November 12: PUNCH VIEW EASE (view_ease.hpp).
         {Item::punchViewEase, "PUNCH VIEW EASE",
          "A punch's switch to VR: view held, then eased onto your feet. OFF: the old snap.", punchViewEaseChoices},
+        // November 12: MOVE HAPTICS (move_haptics.hpp), VIEW YAW SOURCE
+        // (stable_yaw.hpp), SOUND TRACE (sound_trace.hpp).
+        {Item::moveHaptics, "MOVE HAPTICS",
+         "Jump and landing thumps. Own strength: CONTROLLER VIBRATION doesn't scale it.", moveHapticChoices},
+        {Item::viewYawSource, "VIEW YAW SOURCE",
+         "STABLE: steer by a steady heading (no circling). BODY: old head-bone steering.",
+         viewYawSourceChoices},
+        {Item::soundTrace, "SOUND TRACE",
+         "Diagnostics: logs game sound ids around jumps and landings. Changes nothing.", {}},
         {Item::realisticFlips,
          "REALISTIC FLIPS",
          "Momentum rotation from arms and webs. FLIPS also enables left-stick steering.",
@@ -1158,7 +1187,7 @@ const std::array<Screen, categoryCount>& screens() {
         Item::automaticAirBrake, Item::automaticCombat, Item::dodgeTumble, Item::flipReprojection,
     };
     static constexpr Item feedback[] = {
-        Item::haptics, Item::reelHaptics, Item::swingHaptics, Item::bodyHaptics,
+        Item::haptics, Item::moveHaptics, Item::reelHaptics, Item::swingHaptics, Item::bodyHaptics,
         Item::hapticWebs, Item::hapticWind, Item::hapticCombat, Item::hapticMovement,
         Item::blowSounds, Item::pcMedia,
     };
@@ -1170,7 +1199,8 @@ const std::array<Screen, categoryCount>& screens() {
         Item::nativeAnimation, Item::animatedHead, Item::animatedHeadsetSmooth,
         Item::animatedArms, Item::animatedTorso, Item::animatedModelYaw, Item::animatedHybridSpeed,
         Item::animatedMoves, Item::animatedHybrid, Item::animatedAir, Item::animatedOnly,
-        Item::animatedSteering, Item::animatedAirSpin, Item::headProbe, Item::runSpeed,
+        Item::animatedSteering, Item::viewYawSource, Item::animatedAirSpin, Item::headProbe, Item::soundTrace,
+        Item::runSpeed,
         Item::slowMotionLength, Item::softLock,
     };
     // CAMERA & STABILIZATION (November 11): how much the animation moves the
@@ -1502,6 +1532,12 @@ bool choose(Item item, int index, Values& v) {
     case Item::punchViewEase:
         v.punchViewEaseMs = s[index];
         break;
+    case Item::moveHaptics:
+        v.moveHapticsPct = s[index];
+        break;
+    case Item::viewYawSource:
+        v.viewYawSource = s[index];
+        break;
     case Item::pointJumpMinSpeed:
         v.pointJumpMinSpeed = s[index];
         v.pointJumpMaxSpeed = std::max(v.pointJumpMaxSpeed, v.pointJumpMinSpeed);
@@ -1708,6 +1744,9 @@ constexpr TabOnly tabOnly[] = {
     {"leg_coupling_pct", nullptr, &Values::legCouplingPct},
     {"leg_double_tap_ms", nullptr, &Values::legDoubleTapMs},
     {"punch_view_ease_ms", nullptr, &Values::punchViewEaseMs},
+    {"move_haptics_pct", nullptr, &Values::moveHapticsPct},
+    {"view_yaw_source", nullptr, &Values::viewYawSource},
+    {"sound_trace", &Values::soundTrace, nullptr},
     {"air_fists", &Values::airFists, nullptr},
     {"camera_pitch_pct", nullptr, &Values::cameraPitchPct},
     {"camera_roll_pct", nullptr, &Values::cameraRollPct},

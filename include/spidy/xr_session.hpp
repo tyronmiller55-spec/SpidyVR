@@ -68,6 +68,9 @@ class XrRuntime {
     // One pulse: 25 ms unless `seconds` says longer (up to half a second: a
     // landed blow's kick).
     void haptic(int hand, float strength, float seconds = .025f);
+    // MOVE HAPTICS (move_haptics.hpp): a pulse at its own strength, not
+    // scaled by the controller vibration setting (hapticStrength).
+    void hapticUnscaled(int hand, float amplitude, float seconds = .025f);
     // Scales every haptic pulse: 0 none, 1 as asked (the VR settings' controller vibration).
     void hapticStrength(float scale) {
         hapticScale_ = std::isfinite(scale) ? std::clamp(scale, 0.f, 1.f) : 1.f;
@@ -212,6 +215,7 @@ class XrRuntime {
     Pose screenPose_{};
     float screenAspect_ = 16.f / 9, screenWidth_ = 3.2f;
     float hapticScale_ = 1;
+    void pulse(int hand, float amplitude, float seconds);
     XrFrameTiming frameTiming_{};
     XrTime referenceChangeTime_{};
     XrReferenceSpaceType referenceType_ = XR_REFERENCE_SPACE_TYPE_STAGE;

@@ -889,6 +889,8 @@ void visit(const native_rays::QueryContext& world) {
         // Until October 11 any attached web kept its hand from punching:
         // in that day's 14:49 session both hands moved at 4.4 m/s with their
         // webs out and landed nothing.
+        // SOUND TRACE: the player's handle, for the trace's hero flag.
+        game_sound::hero(config.record);
         if (game_punch::running()) {
             const auto grab = game_grab::data();
             game_punch::Player fighter;

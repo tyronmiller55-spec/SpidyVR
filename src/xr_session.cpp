@@ -738,13 +738,19 @@ XrFrame XrRuntime::input(XrTime time) {
     return frame;
 }
 void XrRuntime::haptic(int hand, float strength, float seconds) {
-    if (hand < 0 || hand > 1 || state_ != XR_SESSION_STATE_FOCUSED)
+    pulse(hand, std::clamp(strength, 0.f, 1.f) * hapticScale_, seconds);
+}
+void XrRuntime::hapticUnscaled(int hand, float amplitude, float seconds) {
+    pulse(hand, amplitude, seconds);
+}
+void XrRuntime::pulse(int hand, float amplitude, float seconds) {
+    if (hand < 0 || hand > 1 || state_ != XR_SESSION_STATE_FOCUSED || !std::isfinite(amplitude))
         return;
     XrHapticActionInfo info{XR_TYPE_HAPTIC_ACTION_INFO};
     info.action = haptic_;
     info.subactionPath = handPaths_[hand];
     XrHapticVibration vibration{XR_TYPE_HAPTIC_VIBRATION};
-    vibration.amplitude = std::clamp(strength, 0.f, 1.f) * hapticScale_;
+    vibration.amplitude = std::clamp(amplitude, 0.f, 1.f);
     if (!(vibration.amplitude > 0))
         return;
     vibration.duration =

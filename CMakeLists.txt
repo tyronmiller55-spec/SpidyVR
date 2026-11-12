@@ -77,6 +77,18 @@ add_test(NAME leg_hold COMMAND spidy_leg_hold_tests)
 add_executable(spidy_view_ease_tests tests/view_ease_tests.cpp)
 target_link_libraries(spidy_view_ease_tests PRIVATE spidy_core)
 add_test(NAME view_ease COMMAND spidy_view_ease_tests)
+# MOVE HAPTICS (move_haptics.hpp): takeoffs, landings, the point jump's double thump, the scale (portable).
+add_executable(spidy_move_haptics_tests tests/move_haptics_tests.cpp)
+target_link_libraries(spidy_move_haptics_tests PRIVATE spidy_core)
+add_test(NAME move_haptics COMMAND spidy_move_haptics_tests)
+# VIEW YAW SOURCE: STABLE (stable_yaw.hpp): the closed loop, the heading, the yaw watch (portable).
+add_executable(spidy_stable_yaw_tests tests/stable_yaw_tests.cpp)
+target_link_libraries(spidy_stable_yaw_tests PRIVATE spidy_core)
+add_test(NAME stable_yaw COMMAND spidy_stable_yaw_tests)
+# SOUND TRACE (sound_trace.hpp): the ring and the event lines (portable).
+add_executable(spidy_sound_trace_tests tests/sound_trace_tests.cpp)
+target_link_libraries(spidy_sound_trace_tests PRIVATE spidy_core)
+add_test(NAME sound_trace COMMAND spidy_sound_trace_tests)
 
 find_package(Threads REQUIRED)
 add_executable(spidy_action_protocol_tests tests/action_protocol_tests.cpp)

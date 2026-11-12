@@ -75,6 +75,9 @@
 #include "spidy/hybrid_owner.hpp"
 #include "spidy/hybrid_handoff.hpp"
 #include "spidy/hybrid_steer.hpp"
+#include "spidy/move_haptics.hpp"
+#include "spidy/sound_trace.hpp"
+#include "spidy/stable_yaw.hpp"
 #include "spidy/animated_arms.hpp"
 #include "spidy/frame_stats.hpp"
 #include "spidy/seated.hpp"
@@ -554,6 +557,10 @@ const game_dodge::Data* dodgeResults{};
 const game_dodge::Live* dodgeLive{};
 // The tab's BLOW SOUNDS to the ray module (SpidySoundMode; optional).
 DWORD(WINAPI* soundMode)(void*){};
+// SOUND TRACE (sound_trace.hpp): the game's sound calls, read in place, and
+// the setting to the ray module; null from an older ray module.
+const sound_trace::Ring* soundTrace{};
+DWORD(WINAPI* soundTraceMode)(void*){};
 BridgeCall startSwing{}, submitSwing{}, sampleSwing{}, stopSwing{}, retargetSwing{}, sampleGrab{}, sampleAim{};
 // Optional: pose coupling from the visual tuck (an older ray module has none).
 BridgeCall setSwingPoseCoupling{};
@@ -944,6 +951,7 @@ DWORD WINAPI run(void*) {
         uint32_t eyeAimFrames{}, gazeFrames{}, eyeShots{};
         bool toldNoGaze{};
         bool interacting{}, dodging{}, healing{}, zipping{};
+        bool zipBegan{}; // a zip press began this frame (MOVE HAPTICS)
         // The player asked the game for a move of its own while the swing carried him
         // in the air (game_swing::AirYield), for the next swing command.
         bool askingGame{};
@@ -1147,6 +1155,16 @@ DWORD WINAPI run(void*) {
         // Parkour steering under HYBRID: the head-locked view's yaw, low-passed.
         hybrid_steer::YawFilter hybridViewYaw{};
         int64_t hybridSteerDiagAt{};
+        // VIEW YAW SOURCE: STABLE's heading (stable_yaw.hpp), the hero-vs-steer
+        // watch and the runaway-turn detector.
+        stable_yaw::Heading stableHeading{};
+        stable_yaw::GapWatch yawGap{};
+        stable_yaw::Runaway yawRunaway{};
+        // MOVE HAPTICS (move_haptics.hpp) and SOUND TRACE's events (sound_trace.hpp).
+        move_haptics::Detector moveDetector{};
+        move_haptics::Scheduler moveScheduler{};
+        sound_trace::Watch soundWatch{};
+        uint32_t moveHapticPulses{};
         // Slices 2–3: 180 ms eye/yaw blend + delayed arms wipe on G↔T edges.
         struct HybridBlend {
             bool active{};
@@ -1675,6 +1693,12 @@ DWORD WINAPI run(void*) {
             // BLOW SOUNDS: the game's own impacts only on GAME.
             if (soundMode)
                 soundMode(reinterpret_cast<void*>(static_cast<uintptr_t>(values.blowSounds)));
+            // SOUND TRACE: diagnostics only, the hook on or off.
+            if (soundTraceMode) {
+                const DWORD traceError = soundTraceMode(values.soundTrace ? reinterpret_cast<void*>(1) : nullptr);
+                diag_log::writef("sound trace: %s%s", values.soundTrace ? "on" : "off",
+                                 traceError ? (" (error " + std::to_string(traceError) + ")").c_str() : "");
+            }
             if (!swingStarted || !swingSettings)
                 return;
             game_swing::Settings s;
@@ -2177,13 +2201,20 @@ DWORD WINAPI run(void*) {
                             const float held = pointChord.held();
                             if (held > pj.tapSeconds) {
                                 const float c = point_jump::charge(held, pj);
+                                // MOVE HAPTICS' strength, not CONTROLLER VIBRATION's.
+                                const float moveScale = static_cast<float>(values.moveHapticsPct) / 100;
+                                const auto buzz = [&](int hand, float amplitude) {
+                                    const auto p = move_haptics::scaled({hand, amplitude, .025f}, moveScale);
+                                    if (p.amplitude > 0)
+                                        runtime.hapticUnscaled(hand, p.amplitude, p.seconds);
+                                };
                                 if (!pointJumpCharged) {
                                     pointJumpCharged = true;
-                                    runtime.haptic(1, .3f);
+                                    buzz(1, .3f);
                                     feel(body_haptics::Kind::leapCharge);
                                 } else {
-                                    runtime.haptic(0, .08f + .3f * c);
-                                    runtime.haptic(1, .1f + .4f * c);
+                                    buzz(0, .08f + .3f * c);
+                                    buzz(1, .1f + .4f * c);
                                 }
                             }
                         }
@@ -2212,8 +2243,22 @@ DWORD WINAPI run(void*) {
                                 pointJumpFired = pointJumpHold = true;
                                 pointJumpHoldAge = 0;
                                 pointJumpOffLogged = false;
-                                runtime.haptic(0, .8f, .12f);
-                                runtime.haptic(1, 1.f, .12f);
+                                // MOVE HAPTICS: the point jump's double thump, at its
+                                // own strength (the second thump 110 ms on).
+                                {
+                                    const float moveScale = static_cast<float>(values.moveHapticsPct) / 100;
+                                    const auto first = move_haptics::scaled(move_haptics::pointFirst(), moveScale);
+                                    if (first.amplitude > 0) {
+                                        runtime.hapticUnscaled(0, first.amplitude, first.seconds);
+                                        runtime.hapticUnscaled(1, first.amplitude, first.seconds);
+                                        moveScheduler.add(move_haptics::pointGap,
+                                                          move_haptics::scaled(move_haptics::pointSecond(), moveScale));
+                                        ++moveHapticPulses;
+                                    }
+                                    moveDetector.pointJump();
+                                    diag_log::writef("move haptics: point jump %.1f m/s -> %.2f x2 (move haptics %d%%)",
+                                                     speedNow, first.amplitude, values.moveHapticsPct);
+                                }
                                 feel(body_haptics::Kind::leap);
                                 diag_log::writef(
                                     "point jump: charge %.2f -> %.1f m/s dir (%.2f, %.2f, %.2f) n (%.2f, %.2f, %.2f) "
@@ -2779,6 +2824,9 @@ DWORD WINAPI run(void*) {
                     }
                     bool hybridInputViewOk = false;
                     float hybridInputViewYaw = 0.f;
+                    // The player's own turn (headset since the latch + R-stick turns), for
+                    // the runaway-turn detector (stable_yaw.hpp).
+                    float hybridInputIntentYaw = 0.f;
                     Vec3 hybridInputMove{};
                     const float hybridInputL =
                         frame.hands[0].valid ? std::hypot(frame.hands[0].stickX, frame.hands[0].stickY) : 0.f;
@@ -2808,10 +2856,31 @@ DWORD WINAPI run(void*) {
                                     refYaw =
                                         hybrid_handoff::lookYaw(animHeadRef.orientation.rotate({0, 0, -1}));
                                 }
-                                const float target =
-                                    hybrid_steer::viewYaw(hybrid_handoff::lookYaw(ahead), trackedYaw, refYaw,
-                                                          animHeadRefSet ? animHeadTurn : 0.f);
-                                hybridInputViewYaw = hybridViewYaw.update(target, frame.seconds);
+                                const float headBoneYaw = hybrid_handoff::lookYaw(ahead);
+                                const float headTurnNow = animHeadRefSet ? animHeadTurn : 0.f;
+                                hybridInputIntentYaw = stable_yaw::wrap(trackedYaw - refYaw + headTurnNow);
+                                if (stable_yaw::sourceOf(values.viewYawSource) == stable_yaw::Source::stable) {
+                                    // VIEW YAW SOURCE: STABLE - a heading of its own, never
+                                    // turned by the head bone while he runs (stable_yaw.hpp).
+                                    stable_yaw::Input in;
+                                    in.dt = frame.seconds;
+                                    in.headBoneYaw = headBoneYaw;
+                                    in.hmdDelta = trackedYaw - refYaw;
+                                    in.headTurn = headTurnNow;
+                                    in.leftTilt = hybridInputL;
+                                    in.rightX = hybridInputR;
+                                    in.levelTurns = levelHead;
+                                    in.smoothDegPerSec = values.smoothTurn;
+                                    in.snapDeg = values.snapTurn;
+                                    const float target = stableHeading.update(in);
+                                    hybridInputIntentYaw = stable_yaw::wrap(hybridInputIntentYaw + stableHeading.ownTurn);
+                                    hybridInputViewYaw =
+                                        hybridViewYaw.update(target, frame.seconds, stable_yaw::stableTau);
+                                } else {
+                                    const float target =
+                                        hybrid_steer::viewYaw(headBoneYaw, trackedYaw, refYaw, headTurnNow);
+                                    hybridInputViewYaw = hybridViewYaw.update(target, frame.seconds);
+                                }
                                 hybridInputViewOk = true;
                             }
                         }
@@ -2825,8 +2894,13 @@ DWORD WINAPI run(void*) {
                                     ? hybrid_steer::viewMove(frame.hands[0].stickX, frame.hands[0].stickY,
                                                              hybridInputViewYaw)
                                     : Vec3{};
-                            hybridInputMove = animated_model_yaw::composeMove(walk, hybridInputR,
-                                                                              {body[8], body[9], body[10]});
+                            // STABLE: the R stick turns the heading itself while
+                            // the left stick runs (no second turn request).
+                            hybridInputMove = animated_model_yaw::composeMove(
+                                walk,
+                                stable_yaw::composeTurn(stable_yaw::sourceOf(values.viewYawSource),
+                                                        hybridInputR, hybridInputL),
+                                {body[8], body[9], body[10]});
                             // Only ground locomotion consumes the shared vector. Never
                             // renormalize or redirect web/wall/air physical velocities.
                             if (swingFresh && swingState.grounded && !hybridInputCrawl &&
@@ -2837,6 +2911,7 @@ DWORD WINAPI run(void*) {
                         }
                     } else {
                         hybridViewYaw.reset();
+                        stableHeading.reset();
                     }
                     if (values.eyeAim && motion.active && !flatScreen) {
                         ++eyeAimFrames;
@@ -5616,8 +5691,52 @@ DWORD WINAPI run(void*) {
                                     walk.right = viewed.right;
                                     walk.forward = viewed.forward;
                                 }
+                                // Hero vs steer yaw (10 Hz while steering, an event
+                                // when the gap crosses 45 degrees) and runaway turns.
+                                {
+                                    constexpr float toDeg = 180.f / 3.14159265f;
+                                    const bool steeringNow = hybridViewOk && moveHand.valid &&
+                                                             hybridInputL >= hybrid_steer::deadzone;
+                                    const bool heroOk = finite(actorAhead) &&
+                                                        std::hypot(actorAhead.x, actorAhead.z) > .2f;
+                                    const float heroYaw = heroOk ? hybrid_handoff::actorLookYaw(actorAhead) : NAN;
+                                    const bool steerOk = length(hybridInputMove) > .05f;
+                                    const float steerYaw = steerOk ? hybrid_handoff::lookYaw(hybridInputMove) : NAN;
+                                    const float gap = stable_yaw::wrap(steerYaw - heroYaw);
+                                    const float rRaw = frame.hands[1].valid ? frame.hands[1].stickX : 0.f;
+                                    const char* src =
+                                        stable_yaw::sourceName(stable_yaw::sourceOf(values.viewYawSource));
+                                    const auto watched =
+                                        yawGap.update(frame.seconds, steeringNow && heroOk && steerOk, gap);
+                                    if (watched.line)
+                                        diag_log::writef(
+                                            "yaw sync: hero %.0f view %.0f steer %.0f gap %.0f L %.2f R %.2f src %s",
+                                            heroYaw * toDeg, hybridViewYawNow * toDeg, steerYaw * toDeg,
+                                            gap * toDeg, hybridInputL, rRaw, src);
+                                    if (watched.edge == stable_yaw::GapWatch::Edge::opened)
+                                        diag_log::writef("yaw sync: gap over 45 (#%u) hero %.0f steer %.0f gap %.0f src %s",
+                                                         yawGap.crossings, heroYaw * toDeg, steerYaw * toDeg,
+                                                         gap * toDeg, src);
+                                    else if (watched.edge == stable_yaw::GapWatch::Edge::closed)
+                                        diag_log::writef("yaw sync: gap back under 40 after %d ms src %s",
+                                                         static_cast<int>(watched.wideSeconds * 1000 + .5f), src);
+                                    const auto runaway = yawRunaway.update(
+                                        frame.seconds, heroYaw, hybridInputIntentYaw, steeringNow && heroOk,
+                                        moveHand.valid ? moveHand.stickX : 0.f, moveHand.valid ? moveHand.stickY : 0.f,
+                                        rRaw);
+                                    if (runaway.fired)
+                                        diag_log::writef(
+                                            "yaw sync: RUNAWAY TURN #%u hero swept %+.0f deg in %d ms, own turn "
+                                            "%+.0f, stick (%.2f,%.2f) R %.2f src %s",
+                                            yawRunaway.reports, runaway.sweep * toDeg,
+                                            static_cast<int>(runaway.seconds * 1000 + .5f),
+                                            runaway.headingMove * toDeg, moveHand.stickX, moveHand.stickY, rRaw, src);
+                                }
                             } else {
                                 hybridViewYaw.reset();
+                                stableHeading.reset();
+                                yawGap.update(frame.seconds, false, 0.f);
+                                yawRunaway.clear();
                             }
                             if (hybrid_steer::steeringApplies(values.animatedSteering, yieldingPose,
                                                               hybridViewSteer)) {
@@ -5659,7 +5778,12 @@ DWORD WINAPI run(void*) {
                             const bool modelYawClears =
                                 hybridViewSteer && hybridViewOk
                                     ? hybrid_steer::clearsLook(
-                                          modelYawOwns, frame.hands[1].valid ? frame.hands[1].stickX : 0.f)
+                                          modelYawOwns,
+                                          // STABLE: while the left stick runs, the R stick
+                                          // turns the heading the camera follows.
+                                          stable_yaw::composeTurn(
+                                              stable_yaw::sourceOf(values.viewYawSource),
+                                              frame.hands[1].valid ? frame.hands[1].stickX : 0.f, hybridInputL))
                                     : modelYawOwns;
                             const bool blendHold =
                                 hybridBlend.active &&
@@ -5669,6 +5793,7 @@ DWORD WINAPI run(void*) {
                                 cameraLook.reset();
                                 cameraPitch.reset();
                                 hybridViewYaw.reset();
+                                stableHeading.reset();
                                 hybridBlend.recheckMove = false;
                             }
                             if (modelYawClears || airSpinOwnsStick || hybridYawHold ||
@@ -5911,6 +6036,7 @@ DWORD WINAPI run(void*) {
                         heals += walk.heal && !healing;
                         healing = walk.heal;
                         zips += walk.zip && !zipping;
+                        zipBegan = walk.zip && !zipping;
                         zipping = walk.zip;
                     }
                     // Body haptics: what goes on, every frame, in VR play only (a
@@ -5958,6 +6084,52 @@ DWORD WINAPI run(void*) {
                             } else {
                                 feel(body_haptics::Kind::hit, -1, strength);
                             }
+                        }
+                        // MOVE HAPTICS: jumps, wall jumps, zip launches and landings
+                        // on the controllers, at MOVE HAPTICS' own strength; and the
+                        // same events for SOUND TRACE.
+                        {
+                            move_haptics::Input moved;
+                            moved.dt = frame.seconds;
+                            moved.live = immersive;
+                            moved.fresh = fresh;
+                            moved.airborne = felt.airborne;
+                            moved.onWall = felt.onWall;
+                            moved.webbed = fresh && (swingState.webs[0].attached || swingState.webs[1].attached);
+                            moved.zipPressed = zipBegan;
+                            moved.velocity = fresh ? swingState.velocity : Vec3{};
+                            const auto ev = moveDetector.update(moved);
+                            zipBegan = false;
+                            const float moveScale = static_cast<float>(values.moveHapticsPct) / 100;
+                            const auto play = [&](const move_haptics::Pulse& p) {
+                                if (!(p.amplitude > 0))
+                                    return;
+                                for (int hand = 0; hand < 2; ++hand)
+                                    if (p.hand < 0 || p.hand == hand)
+                                        runtime.hapticUnscaled(hand, p.amplitude, p.seconds);
+                            };
+                            moveScheduler.update(frame.seconds, play);
+                            if (ev.kind != move_haptics::Kind::none) {
+                                const auto p = move_haptics::scaled(ev.pulse, moveScale);
+                                play(p);
+                                moveHapticPulses += p.amplitude > 0;
+                                diag_log::writef("move haptics: %s %.1f m/s -> %.2f %d ms (move haptics %d%%)",
+                                                 move_haptics::kindName(ev.kind), ev.speed, p.amplitude,
+                                                 static_cast<int>(p.seconds * 1000 + .5f), values.moveHapticsPct);
+                                if (values.soundTrace && soundTrace) {
+                                    char what[48];
+                                    std::snprintf(what, sizeof(what), "%s %.1f m/s", move_haptics::kindName(ev.kind),
+                                                  ev.speed);
+                                    soundWatch.add(now.QuadPart, what);
+                                }
+                            }
+                            if (pointJumpFired && values.soundTrace && soundTrace)
+                                soundWatch.add(now.QuadPart, "point jump");
+                            if (values.soundTrace && soundTrace)
+                                soundWatch.update(soundTrace, now.QuadPart, frequency.QuadPart,
+                                                  [](const std::string& line) { diag_log::writef("%s", line.c_str()); });
+                            else
+                                soundWatch.clear();
                         }
                         const float landed =
                             landingWatch.update(frame.seconds, felt.airborne, fresh ? -swingState.velocity.y : 0.f);
@@ -8836,6 +9008,13 @@ extern "C" __declspec(dllexport) DWORD WINAPI SpidyXrStart(void* input) {
     aimGameThrow = reinterpret_cast<BridgeCall>(GetProcAddress(rays, "SpidyThrowAim"));
     soundResults = reinterpret_cast<const game_sound::Data*>(GetProcAddress(rays, "SpidySoundData"));
     soundMode = reinterpret_cast<DWORD(WINAPI*)(void*)>(GetProcAddress(rays, "SpidySoundMode"));
+    soundTrace = reinterpret_cast<const sound_trace::Ring*>(GetProcAddress(rays, "SpidySoundTrace"));
+    soundTraceMode = reinterpret_cast<DWORD(WINAPI*)(void*)>(GetProcAddress(rays, "SpidySoundTraceMode"));
+    if (const sound_trace::Ring* expected = soundTrace;
+        expected && (expected->magic != 0x53535452 || expected->version != 1 || expected->bytes != sizeof(sound_trace::Ring)))
+        soundTrace = nullptr;
+    if (!soundTrace)
+        soundTraceMode = nullptr;
     if (const game_sound::Data expected; soundResults && (soundResults->magic != expected.magic ||
                                                           soundResults->version != expected.version ||
                                                           soundResults->bytes != expected.bytes))

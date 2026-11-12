@@ -3,6 +3,17 @@
 Every build, newest first, with what changed, why, and what was measured.
 Per-check results are in [VALIDATION.md](VALIDATION.md).
 
+## MOVE HAPTICS, VIEW YAW SOURCE: STABLE, SOUND TRACE (build 1 of the Nov 12 plan)
+
+The user, Nov 12 05:07 PST (t70u): implement build 1 (move haptics, rotation desync Step A, sound trace). Built on 0a593c0. Not headset-tested. Details: [HAPTICS_STABLE_YAW.md](HAPTICS_STABLE_YAW.md).
+
+- **MOVE HAPTICS (0-200%, default 100%):** both controllers thump on a game jump, wall jump or zip launch (0.35 + 0.65 x speed/25 m/s), on an air zip launch, and on landings after 0.25 s+ in the air at 3 m/s+ (0.2 + 0.8 x (fall-4)/21; 0.7x onto a wall; step-downs skipped). Point jump: a double thump (1.0/70 ms, then 0.85/100 ms at +110 ms); its charge rumble too. Own strength: CONTROLLER VIBRATION no longer halves these. Over 100% caps amplitude at 1 and lengthens pulses up to 1.5x. `move_haptics_pct`; personal.
+- **VIEW YAW SOURCE: STABLE (default) / BODY (OLD):** HYBRID steering aims from a heading of its own: latched at the handoff, following where he looks while the left stick is idle, and while running changed only by the real HMD yaw, Level's R-stick turn or its own R-stick turn (smooth/snap) - never the head bone, which made held side pushes circle. The game camera follows the same heading; composeMove gets no second turn while running. `view_yaw_source`; personal.
+- **Yaw logging:** `yaw sync:` lines at 10 Hz while steering in animation, an event when hero-vs-steer crosses 45 deg (back under 40), and `RUNAWAY TURN` when the hero sweeps 90 deg+ in 1 s with a steady stick, R idle and no own turn.
+- **ANIM YAW SWAY:** deferred to Step B (Step A does not change what the eyes show).
+- **SOUND TRACE (default on):** a detour on the game's sound call 16d5e80 (already used, entry bytes checked; every argument forwarded unchanged) records id/handle/time into `SpidySoundTrace`; one `sound trace:` line per takeoff/landing/point jump with hero ids at ms offsets (-0.5..+1.0 s) and others within 150 ms. Diagnostics only; `sound_trace=0` disables the hook.
+- **Tests:** `spidy_move_haptics_tests` (47), `spidy_stable_yaw_tests` (44), `spidy_sound_trace_tests` (25); core 918/918; launcher 43/43; ctest 14/14.
+
 ## Native Animation: LEG HOLD (Y+X engages the legs; replaces LEG TOGGLE)
 
 The user, Nov 12 01:33 PST: the thumb rest tap didn't work; legs on Y+X with no setting; web zip and the gadget menu off while both are held; legs stay while the right stick is moved after letting go; neutral cancels. Built on 694861c. Not headset-tested. Details: [LEG_HOLD.md](LEG_HOLD.md).

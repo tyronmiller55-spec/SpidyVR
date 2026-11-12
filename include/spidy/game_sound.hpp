@@ -99,6 +99,11 @@ void sounding(bool on);
 // The player (`damager`, his actor record) landed `blow` on `victim` (an actor
 // record). Any thread; the game sounds it in the next frame().
 void blow(uint64_t damager, uint64_t victim, Blow blow);
+// SOUND TRACE (sound_trace.hpp): record the game's sound calls (SpidySoundTrace)
+// or not; applied once start() knows the build. Any thread.
+void tracing(bool on);
+// The player's actor record, for the trace's hero flag (his handle).
+void hero(uint64_t record);
 // The game's main thread: the blows since the last frame, sounded.
 void frame();
 Data data();

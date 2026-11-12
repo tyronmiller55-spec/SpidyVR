@@ -462,6 +462,25 @@ struct Values {
     // many ms (ease-out, never slower than a motion-masked bleed). 0: the old
     // snap. 250 by default. punch_view_ease_ms.
     int punchViewEaseMs = 250;
+    // MOVE HAPTICS (move_haptics.hpp; the user, November 12 04:56: "haptic
+    // feedback for all jumps and landings as well, scaled accordingly"): the
+    // controllers' pulses for jumps, wall jumps, zip launches, point jumps (a
+    // double thump) and landings, 0..200 percent. Its own strength: CONTROLLER
+    // VIBRATION does not scale these. 0 turns them off. move_haptics_pct.
+    int moveHapticsPct = 100;
+    // VIEW YAW SOURCE (stable_yaw.hpp; the user, November 12: "running sometimes
+    // gets stuck with Spiderman running in a circle"): where HYBRID's view-
+    // relative steering takes its heading. 1 STABLE (default): a world heading
+    // set when the left stick is pushed (or at the handoff), then moved only by
+    // the headset's own yaw and the right stick's turn, never by the hero's head
+    // bone, so it cannot chase the hero it steers. 0 BODY (OLD): the hero's head
+    // bone plus the headset's turn, as before. view_yaw_source.
+    int viewYawSource = 1;
+    // SOUND TRACE (game_sound.hpp, sound_trace.hpp; the user, November 12: yes
+    // to the trace): diagnostics only. Logs the ids of the game's sounds
+    // played around takeoffs, landings and point jumps. Plays nothing,
+    // changes nothing. On by default. sound_trace.
+    bool soundTrace = true;
     // POINT JUMP (point_jump.hpp; the user, November 11; EngineBot's plan):
     // touching a surface, A+B (or hold B, then A) charges a jump the way you
     // look. A tap is a quick jump at the tap speed; held up to CHARGE TIME a
@@ -666,8 +685,13 @@ enum class Item : uint8_t {
     pointJumpPush,
     // November 12: PUNCH VIEW EASE (view_ease.hpp), VR CAMERA & STABILIZATION.
     punchViewEase,
+    // November 12: MOVE HAPTICS (move_haptics.hpp), HAPTICS; VIEW YAW SOURCE
+    // (stable_yaw.hpp) and SOUND TRACE (sound_trace.hpp), NATIVE ANIMATION.
+    moveHaptics,
+    viewYawSource,
+    soundTrace,
 };
-inline constexpr Item lastItem = Item::punchViewEase;
+inline constexpr Item lastItem = Item::soundTrace;
 // SLOW-MO LENGTH's last step: no time limit (until L3 toggles it off).
 inline constexpr int slowMotionEndless = 91;
 // Real seconds a full meter lasts for a SLOW-MO LENGTH value; 0 = endless.
@@ -697,7 +721,7 @@ struct Row {
     Place place{};
 };
 // Stable row/setting numbers; categories below determine presentation order.
-const std::array<Row, 142>& rows();
+const std::array<Row, 145>& rows();
 const Row* rowFor(Item);
 // camera, shooters and legs (November 11, the user: "I can't find legs or
 // camera settings in any of the menus. Make sure it's clearly labeled"): tabs

@@ -1799,6 +1799,10 @@ void App::nativeAnimation(ImVec2 origin, ImVec2 size) {
         option("Model yaw",
                "Run with the left stick and turn with the right without losing running strength.", S(42),
                [&] { tabToggle("##nativemodelyaw", Item::animatedModelYaw); });
+        option("View yaw source",
+               "Stable: running steers by a steady heading that only your headset and the right stick turn, "
+               "so Spider-Man can't run in circles. Body (old): steering follows the animated head.",
+               S(150), [&] { tabCombo("##nativeviewyawsource", Item::viewYawSource); });
         option("Hybrid speed",
                "How long 15 m/s in the air takes to switch to SpidyVR. Off disables speed takeover; "
                "webs, mid-air turns and wall runs still take over. Default: 200 ms.",
@@ -1893,6 +1897,9 @@ void App::nativeAnimation(ImVec2 origin, ImVec2 size) {
                [&] { tabToggle("##nativesteering", Item::animatedSteering); });
         option("Air spin", "Legacy animated flips and momentum lean. Hybrid ignores this setting.", S(150),
                [&] { tabCombo("##nativeairspin", Item::animatedAirSpin); });
+        option("Sound trace",
+               "Diagnostics only: logs the game's sound ids around jumps and landings. Changes no sound.",
+               S(42), [&] { tabToggle("##soundtrace", Item::soundTrace); });
     });
     ImGui::EndDisabled();
     ImGui::SetCursorScreenPos(ImVec2(base.x, std::max(columnY[0], columnY[1]) - gap));
@@ -2334,6 +2341,10 @@ void App::options(ImVec2 origin, ImVec2 size) {
                [&] { tabToggle("##reelhaptics", Item::reelHaptics); });
         settingOption(Item::swingHaptics, "Swing haptics", "Swinging on a taut web ticks softly in that hand, faster as you speed up.",
                S(42), [&] { tabToggle("##swinghaptics", Item::swingHaptics); });
+        settingOption(Item::moveHaptics, "Move haptics",
+               "Jumps, wall jumps, zip launches and landings thump both controllers, scaled by speed; a point "
+               "jump gives a double thump. Its own strength (0-200%): Controller vibration does not scale it.",
+               S(150), [&] { tabCombo("##movehaptics", Item::moveHaptics); });
     });
     group(5, 1, "Body haptics", [&] {
         settingOption(Item::bodyHaptics, "Body haptics", "A bHaptics vest, sleeves and visor feel webs, blows, wind and Spider-Sense; the "

@@ -705,7 +705,10 @@ int main() {
                                  // POINT JUMP (November 11): the player's own controls and feel.
                                  (row.item >= Item::pointJump && row.item <= Item::pointJumpPush) ||
                                  // PUNCH VIEW EASE (November 12): comfort, the player's own.
-                                 row.item == Item::punchViewEase;
+                                 row.item == Item::punchViewEase ||
+                                 // MOVE HAPTICS, VIEW YAW SOURCE, SOUND TRACE (November 12): the player's own.
+                                 row.item == Item::moveHaptics || row.item == Item::viewYawSource ||
+                                 row.item == Item::soundTrace;
             check(std::count_if(begin, end, [&](const ProfileSetting& s) { return s.item == row.item; }) ==
                       (leftOut ? 0 : 1),
                   row.title);
@@ -724,7 +727,9 @@ int main() {
                 // POINT JUMP (November 11): the player's own, not in shared profiles.
                 key.rfind("point_jump", 0) == 0 ||
                 // PUNCH VIEW EASE (November 12): comfort, the player's own.
-                key == "punch_view_ease_ms")
+                key == "punch_view_ease_ms" ||
+                // MOVE HAPTICS, VIEW YAW SOURCE, SOUND TRACE (November 12): the player's own.
+                key == "move_haptics_pct" || key == "view_yaw_source" || key == "sound_trace")
                 continue;
             ++lines;
             check(at(key) < std::size(profileSettings) &&
