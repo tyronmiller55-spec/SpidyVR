@@ -2,6 +2,7 @@
 // and where their rows are (November 11: "I can't find legs or camera
 // settings in any of the menus"). Portable: no Windows, no headset.
 #include "spidy/camera_motion.hpp"
+#include "spidy/realistic_flip.hpp"
 #include "spidy/shooter_lock.hpp"
 #include "spidy/vr_settings.hpp"
 #include "spidy/web_aim.hpp"
@@ -281,6 +282,59 @@ void shooters() {
     check(!shooter_lock::visibleUsable(arm, false, 1, true), "a wrist off the hand is not");
 }
 
+// LEG CONTROL with REALISTIC FLIPS (November 11 23:35): the legs' spread sets
+// the body's inertia inside RealisticFlip (angular momentum kept), and their
+// swing turns the body without adding spin.
+void realisticLegs() {
+    RealisticFlipSettings settings;
+    settings.enabled = true;
+    const float dt = 1.f / 90;
+    const auto spun = [&](RealisticFlip& flip) {
+        RealisticFlight flight;
+        flight.valid = true;
+        flight.velocity = {0, 0, -6};
+        RealisticControls spin;
+        spin.manualActive = true;
+        spin.manualAngular = {-4, 0, 0};
+        for (int i = 0; i < 60; ++i)
+            flip.update(flight, true, false, 0, dt, settings, spin);
+        return flight;
+    };
+    RealisticFlip same, tucked;
+    RealisticFlight flight = spun(same);
+    spun(tucked);
+    same.update(flight, true, false, 0, dt, settings);
+    RealisticFlight tuck = flight;
+    tuck.legInertia = 1 / 1.5f; // a jackknife: spinScale 1.5
+    tucked.update(tuck, true, false, 0, dt, settings);
+    const float ratio = length(tucked.angularVelocity()) / length(same.angularVelocity());
+    check(ratio > 1.4f && ratio < 1.6f, "tucking the legs speeds the realistic spin by the inertia (momentum kept)");
+    // Extending again: back to the first rate.
+    tucked.update(flight, true, false, 0, dt, settings);
+    same.update(flight, true, false, 0, dt, settings);
+    check(std::abs(length(tucked.angularVelocity()) / length(same.angularVelocity()) - 1) < .05f,
+          "extending slows it back");
+    // The swing's counter-turn: the orientation turns, the spin does not.
+    RealisticFlip a, b;
+    spun(a);
+    spun(b);
+    RealisticFlight swing = flight;
+    swing.legTurn = legTurnVector(Quat{}, .05f, 0);
+    a.update(flight, true, false, 0, dt, settings);
+    b.update(swing, true, false, 0, dt, settings);
+    check(length(a.angularVelocity() - b.angularVelocity()) < 1e-5f, "the legs' turn adds no spin");
+    const float apart = std::acos(std::clamp(dot(a.orientation().rotate({0, 1, 0}), b.orientation().rotate({0, 1, 0})), -1.f, 1.f));
+    check(std::abs(apart - .05f) < .005f, "the legs' turn turns the body by it");
+    // On the ground nothing.
+    RealisticFlip ground;
+    RealisticFlight still;
+    still.valid = true;
+    still.legTurn = {.05f, 0, 0};
+    ground.update(still, false, false, 0, dt, settings);
+    check(ground.level(), "no leg turn on the ground");
+    check(legTurnVector(Quat{}, .2f, 0).x == .1f, "a frame's leg turn is capped as for controlled flips");
+}
+
 void menus() {
     using namespace vr_settings;
     // Each of these is reachable: a row on exactly one in-game tab, shown
@@ -317,14 +371,19 @@ void menus() {
                      Item::palmShooters})
         check(rowFor(old) && rowFor(old)->place == Place::launcher, "the old wrist rows are off the in-game tab");
     // LEGS: never hidden; the note says what it needs, and ON makes it work.
+    // November 11 23:35: with REALISTIC FLIPS too, left on.
     Values v;
     v.realisticFlips = true;
-    v.controlledFlips = true;
-    check(inactiveReason(Item::legControl, v) && shownWhenInactive(Item::legControl),
-          "with REALISTIC FLIPS on, LEG CONTROL stays visible and says why");
-    check(choose(Item::legControl, 1, v) && v.legControl && v.controlledFlips && !v.realisticFlips,
-          "LEG CONTROL ON turns on what it needs");
-    check(!inactiveReason(Item::legControl, v) && !inactiveReason(Item::legCoupling, v), "and then works");
+    check(!inactiveReason(Item::legControl, v), "LEG CONTROL usable with REALISTIC FLIPS");
+    check(choose(Item::legControl, 1, v) && v.legControl && v.realisticFlips && !v.controlledFlips,
+          "LEG CONTROL ON keeps REALISTIC FLIPS as it was");
+    check(!inactiveReason(Item::legCoupling, v), "leg tuning usable with REALISTIC FLIPS");
+    Values none;
+    check(inactiveReason(Item::legControl, none) && shownWhenInactive(Item::legControl),
+          "with no stick flips mode, LEG CONTROL stays visible and says why");
+    check(choose(Item::legControl, 1, none) && none.legControl && none.controlledFlips && !none.realisticFlips,
+          "with neither, LEG CONTROL ON turns CONTROLLED FLIPS on");
+    check(!inactiveReason(Item::legControl, none) && !inactiveReason(Item::legCoupling, none), "and then works");
     for (Item item : {Item::legStiffness, Item::legDamping, Item::legCoupling})
         check(shownWhenInactive(item), "leg tuning stays visible");
     // The launcher has a control for each (the launcher never had camera or
@@ -362,6 +421,7 @@ int main() {
     cameraMatrix();
     cameraSettings();
     shooters();
+    realisticLegs();
     menus();
     std::printf("%d stabilization/shooter checks passed\n", passed);
     return 0;

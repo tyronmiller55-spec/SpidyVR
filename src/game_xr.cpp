@@ -2433,6 +2433,53 @@ DWORD WINAPI run(void*) {
                     if (zipPriority || (flipZipPlay && zipPress.active())) {
                         controller.hands[1].stickX = controller.hands[1].stickY = 0;
                     }
+                    // FLIP BREAK (hybrid_owner::flipBreak; the user, November 11 23:39 /
+                    // 23:41): a flip's pitch or tilt breaks a midair animation on the
+                    // frame it is read, before this frame's tracking, hands and body
+                    // use the owner (review M1 for this path). The right stick's up /
+                    // down here, before the legs take the stick; the left stick's
+                    // after the rig has read the controlled flip's toggle (below).
+                    const bool flipBreakHybrid = values.animatedHybrid && values.animatedMoves;
+                    const bool flipBreakLegs = values.legControl &&
+                                               (values.controlledFlips || values.realisticFlips) &&
+                                               values.body && !flatScreen;
+                    head_probe::StateInputs flipBreakState;
+                    flipBreakState.playing = gesturesPlay && !padLayer.latched() && !phone.open() &&
+                                             !gadgetWheel.open();
+                    flipBreakState.fresh = swingFresh;
+                    flipBreakState.grounded = swingState.grounded != 0;
+                    flipBreakState.wall = swingState.wall;
+                    const auto tryFlipBreak = [&](const hybrid_owner::FlipInput& in) {
+                        if (!flipBreakHybrid || !flipAir || hybridOwner.domain != hybrid_owner::Domain::anim)
+                            return false;
+                        const auto why = hybrid_owner::flipBreak(in);
+                        if (why == hybrid_owner::FlipBreak::none)
+                            return false;
+                        const int64_t at = frame.predictedDisplayTime > 0
+                                               ? frame.predictedDisplayTime
+                                               : static_cast<int64_t>(GetTickCount64()) * 1'000'000ll;
+                        if (!hybridOwner.breakForFlip(flipBreakState,
+                                                      !flipBreakState.playing || !flipBreakState.fresh, at))
+                            return false;
+                        diag_log::writef("flip break: %s (R %.2f,%.2f L %.2f,%.2f), anim->vr this frame "
+                                         "(display %lld ns), position lock on the feet follows",
+                                         hybrid_owner::flipBreakName(why), in.rightX, in.rightY, in.leftX,
+                                         in.leftY, static_cast<long long>(at));
+                        return true;
+                    };
+                    {
+                        hybrid_owner::FlipInput in;
+                        in.rightValid = controller.hands[1].valid;
+                        in.rightX = controller.hands[1].stickX;
+                        in.rightY = controller.hands[1].stickY;
+                        in.basicFlips = values.flips && !values.controlledFlips && !values.realisticFlips;
+                        in.legs = flipBreakLegs;
+                        in.zipPriority = zipPriority;
+                        // With LEG CONTROL the push that broke is the legs' from this
+                        // frame (a double tap's first push counts toward the zip/heal).
+                        if (tryFlipBreak(in) && flipBreakLegs)
+                            legStickOwns = true;
+                    }
                     // LEG CONTROL owns the right stick (last frame's finding, in
                     // play): it turns nothing and goes to the game as rest.
                     legStickActive = legStickOwns && gesturesPlay;
@@ -2480,6 +2527,17 @@ DWORD WINAPI run(void*) {
                                         {camera[8], camera[9], camera[10]}, gameplay,
                                         swingState.owned ? Vec3{0, 1, 0} : heroUp, flipAir, hold,
                                         {camera[4], camera[5], camera[6]});
+                    {
+                        // FLIP BREAK, the left stick: the axes CONTROLLED FLIPS (toggled
+                        // on in the air) or REALISTIC FLIPS' steering read.
+                        hybrid_owner::FlipInput in;
+                        in.leftValid = frame.hands[0].valid;
+                        in.leftX = frame.hands[0].stickX;
+                        in.leftY = frame.hands[0].stickY;
+                        in.controlledActive = motion.controlledFlipControls;
+                        in.realisticSteering = values.realisticFlips && values.flips;
+                        tryFlipBreak(in);
+                    }
                     bool hybridInputViewOk = false;
                     float hybridInputViewYaw = 0.f;
                     Vec3 hybridInputMove{};
@@ -3140,6 +3198,17 @@ DWORD WINAPI run(void*) {
                             motion.active && !flatScreen && controlsVisible && spiderMan,
                             webButtons, shotButtons, trackedHands);
                         if (gripCancel.cancel) {
+                            // The cancel is SpidyVR's on this frame (review M1 for this
+                            // path), not at the owner's update further down.
+                            if (values.animatedHybrid && values.animatedMoves &&
+                                hybridOwner.breakForCancel(flipBreakState,
+                                                           !flipBreakState.playing || !flipBreakState.fresh,
+                                                           frame.predictedDisplayTime > 0
+                                                               ? frame.predictedDisplayTime
+                                                               : static_cast<int64_t>(GetTickCount64()) *
+                                                                     1'000'000ll))
+                                diag_log::writef("grip cancel: anim->vr this frame (display %lld ns)",
+                                                 static_cast<long long>(frame.predictedDisplayTime));
                             if (!++gripCancelToken) ++gripCancelToken;
                             hybridZipPress = hybridJumpAsk = false;
                             stickPush.cancel();
@@ -6863,8 +6932,11 @@ DWORD WINAPI run(void*) {
                         // force and turn, and their swing turns the body back
                         // (rig.legCoupling, applied by the flip on the next update).
                         {
-                            const bool legMode = values.legControl && values.controlledFlips &&
-                                                 !values.realisticFlips && values.body && !flatScreen &&
+                            // November 11 23:35: with REALISTIC FLIPS too (the rig feeds the
+                            // legs' turn and inertia into RealisticFlip's momentum model).
+                            const bool legMode = values.legControl &&
+                                                 (values.controlledFlips || values.realisticFlips) &&
+                                                 values.body && !flatScreen &&
                                                  legsAirOnly && !calibrationInput;
                             legStickOwns = legMode;
                             const float legDt = std::isfinite(frame.seconds) ? std::clamp(frame.seconds, 0.f, .1f) : 0.f;

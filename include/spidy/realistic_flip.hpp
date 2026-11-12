@@ -1,5 +1,7 @@
 #pragma once
 #include "tracking.hpp"
+#include <algorithm>
+#include <cmath>
 
 namespace spidy {
 // REALISTIC FLIPS (vr_settings::Values::realisticFlips and the nine rows under
@@ -31,7 +33,36 @@ struct RealisticFlight {
     // Pose coupling (swing_coupling.hpp): 1 = unchanged. Lower inertia
     // speeds an existing spin (a diver tucking); lower drag lets it last.
     float poseInertia = 1, poseDrag = 1;
+    // LEG CONTROL (leg_control.hpp; the user, November 11 23:35: "I want to
+    // change leg control so that it's on with Realistic Flips as well. I need
+    // that momentum rotation control"). legTurn: the body's counter-turn this
+    // frame from the legs' swing, a rotation vector in the tracking space
+    // (legTurnVector), radians; internal forces move the body without adding
+    // spin, so it turns the orientation once and leaves the momentum alone.
+    // legInertia: the body's moment of inertia relative to straight legs
+    // (1 / leg_control's spinScale): with poseInertia it scales the spin so
+    // angular momentum is kept (tucked spins faster, extended slower).
+    Vec3 legTurn{};
+    float legInertia = 1;
 };
+// The legs' reaction (radians about the head's level right, + nose up, and
+// its level forward) as a rotation vector in the tracking space; the same
+// axes for CONTROLLED FLIPS (FlipMotion) and REALISTIC FLIPS (RealisticFlip).
+inline Vec3 legTurnVector(Quat head, float pitch, float roll) {
+    pitch = std::isfinite(pitch) ? std::clamp(pitch, -.1f, .1f) : 0.f;
+    roll = std::isfinite(roll) ? std::clamp(roll, -.1f, .1f) : 0.f;
+    if (pitch == 0 && roll == 0)
+        return {};
+    const auto horizontal = [](Vec3 v) { return normalized(Vec3{v.x, 0, v.z}); };
+    const Vec3 look = head.rotate({0, 0, -1});
+    Vec3 forward = horizontal(look);
+    if (!(length(forward) >= .5f))
+        forward = horizontal(head.rotate({0, look.y < 0 ? 1.f : -1.f, 0}));
+    if (!(length(forward) >= .5f))
+        forward = {0, 0, -1};
+    const Vec3 right{-forward.z, 0, forward.x};
+    return right * pitch + forward * roll;
+}
 struct RealisticControls {
     bool brake{};
     Vec3 manualAngular{}; // tracking-local left-stick angular velocity
@@ -213,9 +244,14 @@ class RealisticFlip {
         const bool tether = flying && flight.attached && flight.coupling > 0 && length(flight.pull) > .01f;
         const bool enough = length(averageVelocity_) >= std::clamp(settings.minimumSpeed, 3, 16);
         const float strength = std::clamp(settings.strength, 25, 100) / 100.f;
-        const float inertia = std::clamp(
-            std::isfinite(flight.poseInertia) && flight.poseInertia > .05f ? flight.poseInertia : 1.f,
-            .55f, 1.35f);
+        // The arms' pose (swing_coupling) and the legs' spread (LEG CONTROL)
+        // together: one body, one moment of inertia.
+        const float legInertia =
+            std::isfinite(flight.legInertia) && flight.legInertia > .05f ? flight.legInertia : 1.f;
+        const float armInertia = std::clamp(
+            std::isfinite(flight.poseInertia) && flight.poseInertia > .05f ? flight.poseInertia : 1.f, .55f,
+            1.35f); // as before LEG CONTROL
+        const float inertia = std::clamp(armInertia * std::clamp(legInertia, .5f, 2.f), .4f, 1.8f);
         const float poseDrag = std::clamp(
             std::isfinite(flight.poseDrag) && flight.poseDrag > .05f ? flight.poseDrag : 1.f, .55f, 1.45f);
         if (flying && std::abs(inertia - poseInertia_) > 1e-4f) {
@@ -258,6 +294,13 @@ class RealisticFlip {
         airborne_ = aloft;
         momentum_ = limited(desired, rate);
         integrate(momentum_, acceleration, dt);
+        // The legs' counter-turn (zero net angular momentum: a cat's turn),
+        // in the air only; the spin above is untouched by it.
+        if (flying && finite(flight.legTurn)) {
+            const Vec3 turn = limited(flight.legTurn, .1f);
+            if (const float angle = length(turn); angle > 1e-7f)
+                tilt_ = unit(tilt_ * Quat::around(turn / angle, angle));
+        }
         if (tether || !flying || manual)
             momentum_ = angular_;
         return tilt_;

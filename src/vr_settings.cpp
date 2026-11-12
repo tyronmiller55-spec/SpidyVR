@@ -972,7 +972,7 @@ const std::array<Row, 135>& rows() {
         {Item::heavyAngle, "HEAVY ANGLE", "Turn smoothing used by STABILIZATION HEAVY.", cameraSmoothChoices},
         {Item::legControl,
          "LEG CONTROL (ADVANCED)",
-         "Midair right stick poses the legs. ON also turns CONTROLLED FLIPS on.",
+         "Midair right stick poses the legs. With CONTROLLED or REALISTIC FLIPS.",
          {}},
         {Item::legStiffness, "LEG STIFFNESS", "How firmly the legs hold the stick's pose. Lower swings more.",
          legSpringChoices},
@@ -1159,16 +1159,15 @@ const char* inactiveReason(Item item, const Values& v) {
     case Item::controlledFlips:
         return v.realisticFlips ? "Realistic flips takes priority over Controlled flips." : nullptr;
     case Item::legControl:
-        return v.realisticFlips ? "Off while REALISTIC FLIPS is on. ON here turns it off, CONTROLLED FLIPS on."
-               : !v.controlledFlips ? "Needs CONTROLLED FLIPS. ON here turns it on."
-                                    : nullptr;
+        return !v.controlledFlips && !v.realisticFlips
+                   ? "Needs CONTROLLED or REALISTIC FLIPS. ON here turns CONTROLLED FLIPS on."
+                   : nullptr;
     case Item::legStiffness:
     case Item::legDamping:
     case Item::legCoupling:
         return !v.legControl ? "Turn LEG CONTROL on first."
-               : v.realisticFlips || !v.controlledFlips
-                   ? "LEG CONTROL needs CONTROLLED FLIPS on, REALISTIC FLIPS off."
-                   : nullptr;
+               : !v.controlledFlips && !v.realisticFlips ? "LEG CONTROL needs CONTROLLED or REALISTIC FLIPS on."
+                                                         : nullptr;
     case Item::flips:
         return v.controlledFlips && !v.realisticFlips ? "Controlled flips takes priority over basic Flips." : nullptr;
     case Item::flipSpeed:
@@ -1256,11 +1255,13 @@ bool choose(Item item, int index, Values& v) {
         return !(v == before);
     }
     if (item == Item::legControl && index == 1) {
-        // LEG CONTROL ON does what it says: it needs CONTROLLED FLIPS, which
-        // REALISTIC FLIPS overrides (shownWhenInactive).
+        // LEG CONTROL ON does what it says: it works with CONTROLLED or
+        // REALISTIC FLIPS (November 11 23:35); with neither, CONTROLLED FLIPS
+        // comes on. REALISTIC FLIPS is left as the player set it.
         const Values before = v;
-        v.legControl = v.controlledFlips = true;
-        v.realisticFlips = false;
+        v.legControl = true;
+        if (!v.controlledFlips && !v.realisticFlips)
+            v.controlledFlips = true;
         return !(v == before);
     }
     if (item == Item::shooterMode || item == Item::shooterLock || item == Item::cameraMotion) {

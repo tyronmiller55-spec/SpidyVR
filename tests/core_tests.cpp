@@ -24043,7 +24043,7 @@ int main() {
                   "a row in the wrong place");
         }
         check(std::count_if(all.begin(), all.end(), [](const Row& r) { return r.place == Place::tab; }) ==
-                  122,
+                  125, // November 11: +8 (SHOOTERS, LOCK STRENGTH, CAMERA MOTION, PITCH, ROLL, BOB x2, HEAD ANGLE), -5 old wrist rows
               "the tab's own rows");
         check(all[1].item == Item::webStyle && std::strcmp(all[1].title, "WEB STYLE") == 0 &&
                   all[1].choices.size() == 2 && std::strcmp(all[1].choices[0], "REALISTIC") == 0 &&
@@ -28680,7 +28680,7 @@ int main() {
         check(!d.cancel && !d.holdVr && d.webBlocked == 0, "a ground grip was consumed as a cancel");
     });
 
-    test("OWNERSHIP UPDATE: a jump plays as the game's until it ends, VR only if still in the air", [] {
+    test("OWNERSHIP UPDATE: a jump plays as the game's through the fall to the landing (Nov 11 23:39)", [] {
         using namespace hybrid_owner;
         HybridOwner o;
         Frame f{};
@@ -28702,14 +28702,22 @@ int main() {
             check(o.update(f, t += 11'000'000) == Domain::anim && !o.enterVr, "the jump was interrupted rising");
             check(midairAnimation(o.animOwns(true, f.state), f.state), "not a midair animation");
         }
-        // The top: falling, but not yet for fallHoldNs.
+        // The top and the fall: the end is read (animEndSeen, once), but the
+        // jump stays the animation's to the landing (the user, November 11
+        // 23:39: "Jumps are in animation until it's broken with a rotation, or
+        // grip cancel"). R stick left / right turns nothing over.
         f.velY = -.5f;
-        const int64_t top = t + 11'000'000;
-        while ((t += 11'000'000) < top + fallHoldNs)
-            check(o.update(f, t) == Domain::anim, "left before the animation ended");
-        check(o.update(f, t) == Domain::vr && o.enterVr && o.lastEnterVr == EnterVr::animEnd &&
-                  std::strcmp(enterVrName(EnterVr::animEnd), "anim-end") == 0,
-              "the ended jump did not hand the air to SpidyVR");
+        int seen = 0;
+        for (int i = 0; i < 400; ++i) {
+            check(o.update(f, t += 11'000'000) == Domain::anim && !o.enterVr, "the fall left the animation");
+            seen += o.animEndSeen;
+        }
+        check(seen == 1 && !animEndHandsToVr, "the end not read once, or handed over");
+        // A rotation breaks it on the frame (breakForFlip): VR, momentum seeded from the air pose.
+        check(o.breakForFlip(f.state, false, t += 11'000'000) && o.domain == Domain::vr, "no flip break");
+        check(o.update(f, t) == Domain::vr && o.enterVr && o.lastEnterVr == EnterVr::flip &&
+                  std::strcmp(enterVrName(EnterVr::flip), "flip-break") == 0,
+              "the break not this frame's switch");
         check(adoptsFromAir(o.lastEnterVr, false), "an air hand-off not seeded from the live pose");
         // The air is SpidyVR's: rotate, speed, a fight nearby change nothing.
         f.state.fighting = true;
@@ -28802,13 +28810,17 @@ int main() {
             f.velY = 14.f - .12f * static_cast<float>(i);
             check(o.update(f, t += 11'000'000) == Domain::anim && !o.enterVr, "the launch was interrupted");
         }
-        // Over the top: VR once the fall holds.
+        // Over the top: the end is read, and the fall is the animation's to
+        // the landing (November 11 23:39).
         f.velY = -1.f;
-        int64_t fell = -1;
-        for (int i = 0; i < 40 && fell < 0; ++i)
-            if (o.update(f, t += 11'000'000) == Domain::vr)
-                fell = t;
-        check(fell > 0 && o.lastEnterVr == EnterVr::animEnd, "the launch never handed the air back");
+        bool seen = false;
+        for (int i = 0; i < 200; ++i) {
+            check(o.update(f, t += 11'000'000) == Domain::anim, "the launch's fall left the animation");
+            seen = seen || o.animEndSeen;
+        }
+        check(seen, "the launch's end not read");
+        f.state.grounded = true;
+        check(o.update(f, t += 11'000'000) == Domain::anim && !o.enterVr, "the landing switched");
     });
 
     test("OWNERSHIP UPDATE: Spidy's wall run is SpidyVR's; a SpidyVR web in the air takes the animation", [] {
@@ -28890,9 +28902,12 @@ int main() {
         o.update(f, t);
         f.state.grounded = false;
         const int64_t off = t + 11'000'000;
-        while ((t += 11'000'000) < off + airAnimMaxNs)
-            check(o.update(f, t) == Domain::anim, "left before its longest");
-        check(o.update(f, t) == Domain::vr && o.lastEnterVr == EnterVr::animEnd, "never ended");
+        bool seen = false;
+        while ((t += 11'000'000) < off + 2 * airAnimMaxNs) {
+            check(o.update(f, t) == Domain::anim, "left the animation (November 11: not at its end)");
+            seen = seen || o.animEndSeen;
+        }
+        check(seen, "its longest not read as its end");
         // A fight in the air (a launcher, an air combo) is the game's while it lasts.
         HybridOwner c;
         Frame g{};
@@ -28906,9 +28921,11 @@ int main() {
             check(c.update(g, t += 11'000'000) == Domain::anim, "an air fight was taken");
         g.state.fighting = false;
         bool ended = false;
-        for (int i = 0; i < 80 && !ended; ++i)
-            ended = c.update(g, t += 11'000'000) == Domain::vr;
-        check(ended && c.lastEnterVr == EnterVr::animEnd, "the air fight's end did not hand back");
+        for (int i = 0; i < 80; ++i) {
+            check(c.update(g, t += 11'000'000) == Domain::anim, "the air fight's end handed over");
+            ended = ended || c.animEndSeen;
+        }
+        check(ended, "the air fight's end not read");
     });
 
     test("OWNERSHIP UPDATE: a takeoff the swing dispatched is no landing; a cutscene freezes", [] {

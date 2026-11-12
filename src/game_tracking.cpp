@@ -197,14 +197,8 @@ Quat FlipMotion::update(const Sample& sample) {
     const float legPitch = std::isfinite(sample.legPitch) ? std::clamp(sample.legPitch, -.1f, .1f) : 0.f;
     const float legRoll = std::isfinite(sample.legRoll) ? std::clamp(sample.legRoll, -.1f, .1f) : 0.f;
     if (air && !landed && phase_ != Phase::settling && (legPitch != 0 || legRoll != 0)) {
-        const Vec3 look = sample.head.rotate({0, 0, -1});
-        Vec3 forward = horizontal(look);
-        if (length(forward) < .5f)
-            forward = horizontal(sample.head.rotate({0, look.y < 0 ? 1.f : -1.f, 0}));
-        if (length(forward) < .5f)
-            forward = {0, 0, -1};
-        const Vec3 right{-forward.z, 0, forward.x};
-        const Vec3 turn = right * legPitch + forward * legRoll;
+        // The same axes as REALISTIC FLIPS' (legTurnVector).
+        const Vec3 turn = legTurnVector(sample.head, legPitch, legRoll);
         const float angle = length(turn);
         if (angle > 1e-7f) {
             if (phase_ == Phase::level) {
@@ -586,6 +580,13 @@ GameMotionFrame GameTrackingRig::update(const XrFrame& f, Vec3 feet, Vec3 gameFo
         if (controls.brake || automatic_.recovering() || calm)
             automaticHands_.reset();
         flight.handMomentum = automaticHands_.update(f, autoSettings_.handThreshold);
+        // LEG CONTROL with REALISTIC FLIPS (November 11): the legs' swing
+        // turns the body back and their spread sets its inertia, inside the
+        // angular-momentum model rather than on top of it.
+        flight.legTurn = legTurnVector(f.head.orientation, flip.legPitch, flip.legRoll);
+        flight.legInertia = std::isfinite(flip.spinScale) && flip.spinScale > .05f
+                                ? 1 / std::clamp(flip.spinScale, .5f, 2.f)
+                                : 1.f;
         rig_.tilt = automatic_.update(flight, flip.airborne, flip.surface, rig_.yaw, f.seconds, autoSettings_,
                                       controls);
         // Where the spin leaves the player facing is the heading: the yaw

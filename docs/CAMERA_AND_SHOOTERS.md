@@ -17,8 +17,12 @@ same names, and the Native Animation tab has a Camera & stabilization card.
 | VR WEB SHOOTERS | Web Shooters | SHOOTERS, LOCK STRENGTH, WEB ANGLE (moved from VR WEBS) |
 | VR LEGS (ADVANCED) | Legs (Advanced) | LEG CONTROL (ADVANCED), LEG STIFFNESS, LEG DAMPING, LEG COUPLING (moved from VR FLIPS) |
 
-LEGS rows are never hidden or greyed: they say what they need ("Off while REALISTIC FLIPS is on. ON here turns it
-off, CONTROLLED FLIPS on."), and turning LEG CONTROL on sets CONTROLLED FLIPS on and REALISTIC FLIPS off.
+LEGS rows are never hidden or greyed: they say what they need ("Needs CONTROLLED or REALISTIC FLIPS. ON here turns
+CONTROLLED FLIPS on."). Since 23:35 LEG CONTROL works with REALISTIC FLIPS too: the legs' spread multiplies the arms'
+pose inertia inside RealisticFlip (the spin is scaled by old/new inertia, so angular momentum is kept: a jackknife
+spins faster, extending slows it), and the legs' swing turns the body back once per frame without adding spin (zero
+net angular momentum), on the same axes as CONTROLLED FLIPS (`legTurnVector`). Handstands (future) need CONTROLLED
+FLIPS.
 
 ## Camera motion (how much) and stabilization (how smoothly)
 
@@ -41,7 +45,9 @@ the animation looks. Past 100 degrees of tilt (a flip, hanging upside down) the 
 flip turns over smoothly. The bob is the head's offset from the feet around a 0.5 s baseline, scaled per axis
 (at most 15 cm up/down and 20 cm sideways removed; a jump of 1.5 m is a cut). Applied before the existing
 smoothing, on the render thread (`stereo_probe` resolveScene) and the XR thread (animated head, hands' anchor).
-Your headset moves the view 1:1 on top, always. HEAD LEVEL's heading latch and the midair soft lock are as they
+Your headset moves the view 1:1 on top, always. The levelling and HEAD ANGLE work about a supplied up (`Amounts::up`, world
+up today), so a future inverted view (handstand) supplies its own up and the same code holds; HEAD ANGLE is added
+once per head (render thread and XR thread each stabilize their own head, never one on top of the other). HEAD LEVEL's heading latch and the midair soft lock are as they
 were; at 0% PITCH and ROLL with HEAD FULL you get a level view that still follows the animation's heading.
 
 ## Web shooters: why model forearm "did not work at all"

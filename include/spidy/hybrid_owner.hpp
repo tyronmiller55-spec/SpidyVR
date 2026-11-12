@@ -12,8 +12,11 @@
 //   ground + grip / trigger          ANIM    none: grip only arms SpidyVR
 //                                            webs, balls, punches, markers
 //   jump, vault, point launch, zip   ANIM    plays from the press / takeoff
-//     (any midair native animation)          until the animation ends; then
-//                                            VR only if still in the air
+//     (any midair native animation)          to the landing (November 11
+//                                            23:39: no anim-end hand-off)
+//   midair animation + a flip's      VR      flip-break, on the frame read
+//     pitch or tilt (flipBreak)              (breakForFlip, before the frame
+//                                            uses the owner)
 //   midair animation + grip          VR      grip cancel (consumed, no shot)
 //   midair animation + Spidy wall    VR      wall run
 //   midair animation + SpidyVR web   VR      web (a web of SpidyVR's attached)
@@ -65,6 +68,7 @@ enum class EnterVr : uint8_t {
     cancel,  // consumed grip in a midair animation: VR without a web or other action
     animEnd, // a midair native animation ended with him still in the air
     punch,   // FULL ARMS: a SpidyVR punch opened a web strike (its lunge / teleport)
+    flip,    // a flip's pitch or tilt input from either stick in a midair animation (breakForFlip)
 };
 
 inline const char* enterVrName(EnterVr e) {
@@ -89,6 +93,8 @@ inline const char* enterVrName(EnterVr e) {
         return "anim-end";
     case EnterVr::punch:
         return "punch";
+    case EnterVr::flip:
+        return "flip-break";
     default:
         return "none";
     }
@@ -156,6 +162,16 @@ constexpr int64_t zipMaxNs = 3'000'000'000;
 constexpr int64_t airAnimMinNs = 300'000'000;
 constexpr int64_t fallHoldNs = 150'000'000;
 constexpr int64_t airAnimMaxNs = 2'500'000'000;
+// November 11 23:39 (the user: "Jumps are in animation until it's broken with
+// a rotation, or grip cancel"): a midair animation no longer hands the air to
+// SpidyVR when it ends (anim-end); it plays through the fall to the landing
+// unless a flip's pitch or tilt (breakForFlip), the grip cancel, Spidy's wall,
+// a SpidyVR web or a strike takes it. The proxy above still runs for the
+// diagnostics (animEndSeen) and false here restores nothing else.
+constexpr bool animEndHandsToVr = false;
+// Stick noise, not a gesture: a flip's pitch or tilt past this breaks the
+// animation (game_xr flipBreak).
+constexpr float flipBreakDeadZone = .2f;
 // After a zip, rising faster than this is its point launch.
 constexpr float zipRiseVel = 1.f;
 // Native Run's stick let go: below this tilt (NATIVE RUN's own off threshold
@@ -163,6 +179,40 @@ constexpr float zipRiseVel = 1.f;
 constexpr float runReleaseStick = .2f;
 // A Native Run counts for the wall run it leads into within this of RT.
 constexpr int64_t runRecentNs = 500'000'000;
+
+// What breaks a midair animation for a flip (the user, November 11 23:41:
+// "Turning left or right on the right stick should keep you in animation. Any
+// cancel or pitch/tilt will break animation on that exact frame"): the axes
+// the flip system in force reads for pitch and tilt, past a noise dead zone.
+//   right stick up/down (pitch): with basic FLIPS (the right stick flips) or
+//     LEG CONTROL (the right stick poses the legs; their swing pitches him).
+//     A diagonal counts when its up/down part is past the dead zone. Left /
+//     right (a snap or smooth turn) never breaks.
+//   left stick, any way (pitch and tilt): while CONTROLLED FLIPS is toggled
+//     on in the air (A), or REALISTIC FLIPS steers with it (FLIPS on).
+// The stick-up flick basic flips keep for a zip (zipPriority) is a zip.
+struct FlipInput {
+    bool rightValid{}, leftValid{};
+    float rightX{}, rightY{}, leftX{}, leftY{};
+    bool basicFlips{};        // FLIPS on, CONTROLLED and REALISTIC off
+    bool legs{};              // LEG CONTROL in force (with CONTROLLED or REALISTIC FLIPS)
+    bool controlledActive{};  // CONTROLLED FLIPS toggled on in the air this frame
+    bool realisticSteering{}; // REALISTIC FLIPS with FLIPS on: the left stick steers the spin
+    bool zipPriority{};       // the right stick's push is a zip
+};
+enum class FlipBreak : uint8_t { none, rightPitch, leftStick };
+inline const char* flipBreakName(FlipBreak b) {
+    return b == FlipBreak::rightPitch ? "right stick pitch" : b == FlipBreak::leftStick ? "left stick pitch/tilt" : "none";
+}
+inline FlipBreak flipBreak(const FlipInput& in, float deadZone = flipBreakDeadZone) {
+    if (in.rightValid && (in.basicFlips || in.legs) && !in.zipPriority && std::isfinite(in.rightY) &&
+        std::abs(in.rightY) > deadZone)
+        return FlipBreak::rightPitch;
+    if (in.leftValid && (in.controlledActive || in.realisticSteering) && std::isfinite(in.leftX) &&
+        std::isfinite(in.leftY) && std::hypot(in.leftX, in.leftY) > deadZone)
+        return FlipBreak::leftStick;
+    return FlipBreak::none;
+}
 
 struct Frame {
     head_probe::StateInputs state{};
@@ -313,11 +363,38 @@ struct HybridOwner {
     // Retired (always false / 0): kept so old diagnostics compile unchanged.
     bool cancelSticky{};
     unsigned lastNativeStart{};
+    // A midair animation's end as the proxy reads it, now only seen (not a
+    // switch; animEndHandsToVr): set on the frame it is first read.
+    bool animEndSeen{};
+
+    // A FLIP BREAK (the user, November 11 23:39 / 23:41: "Any cancel or
+    // pitch/tilt will break animation on that exact frame"; turning left or
+    // right on the right stick keeps the animation). Called by game_xr as soon
+    // as the input is read, before the frame's tracking and hands use the
+    // owner, so the frame it is read is SpidyVR's (review M1, for this path):
+    // the update that follows this frame keeps enterVr / lastEnterVr ==
+    // flip for the handoff (position lock on the feet, seed from the air
+    // pose, momentum kept). Only in a midair animation: on the ground nothing
+    // switches (the jump then breaks on its first airborne frame).
+    bool breakForFlip(const head_probe::StateInputs& s, bool cutscene, int64_t nowNs) {
+        return breakNow(EnterVr::flip, s, cutscene, nowNs);
+    }
+    // The grip cancel, the same way: on the frame the gate consumes the grip.
+    bool breakForCancel(const head_probe::StateInputs& s, bool cutscene, int64_t nowNs) {
+        return breakNow(EnterVr::cancel, s, cutscene, nowNs);
+    }
 
     Domain update(const Frame& f, int64_t nowNs) {
         enterVr = enterAnim = false;
         lastEnterVr = EnterVr::none;
         lastEnterAnim = EnterAnim::none;
+        animEndSeen = false;
+        // A flip break earlier this frame: its switch is this frame's.
+        if (carry_ != EnterVr::none) {
+            enterVr = true;
+            lastEnterVr = carry_;
+            carry_ = EnterVr::none;
+        }
 
         if (f.cutscene) {
             clearZip();
@@ -470,7 +547,11 @@ struct HybridOwner {
                 if (asked || (nowNs - zipNs < zipMaxNs && !launchOver))
                     return domain;
                 clearZip();
-                goVr(EnterVr::animEnd, nowNs);
+                animEndSeen = true;
+                if (animEndHandsToVr)
+                    goVr(EnterVr::animEnd, nowNs);
+                else
+                    airAnimNs = nowNs, fallNs = -1, animEndLatched_ = true; // plays to the landing
                 return domain;
             } else {
                 clearZip();
@@ -486,6 +567,7 @@ struct HybridOwner {
         if (airAnimNs < 0) {
             airAnimNs = nowNs;
             fallNs = -1;
+            animEndLatched_ = false;
         }
         if (f.cancelGrip) {
             goVr(EnterVr::cancel, nowNs);
@@ -504,9 +586,12 @@ struct HybridOwner {
         const bool busy = f.state.zipping || fighting || combatSticky;
         const int64_t inAir = nowNs - airAnimNs;
         const bool fell = fallNs >= 0 && nowNs - fallNs >= fallHoldNs && inAir >= airAnimMinNs;
-        if (!busy && (fell || inAir >= airAnimMaxNs)) {
-            goVr(EnterVr::animEnd, nowNs);
-            return domain;
+        if (!busy && (fell || inAir >= airAnimMaxNs) && !animEndLatched_) {
+            animEndSeen = animEndLatched_ = true;
+            if (animEndHandsToVr) {
+                goVr(EnterVr::animEnd, nowNs);
+                return domain;
+            }
         }
         return domain;
     }
@@ -523,6 +608,16 @@ struct HybridOwner {
     }
 
   private:
+    EnterVr carry_ = EnterVr::none; // an early break this frame (breakNow)
+    bool breakNow(EnterVr why, const head_probe::StateInputs& s, bool cutscene, int64_t nowNs) {
+        if (cutscene || domain != Domain::anim || supported(s) || s.wall == surfaceWall)
+            return false;
+        clearZip();
+        goVr(why, nowNs);
+        carry_ = why;
+        return true;
+    }
+    bool animEndLatched_{}; // the end read once per midair animation
     void clearZip() {
         zipNs = zipPressNs = -1;
         zipFromHold = false;

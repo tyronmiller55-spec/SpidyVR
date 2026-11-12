@@ -2550,8 +2550,9 @@ void App::options(ImVec2 origin, ImVec2 size) {
         group(legsPage, 0, "Legs (advanced)", [&] {
             settingOption(Item::legControl, "Leg control (advanced)",
                    "In midair or while swinging, the right stick poses your legs: forward a jackknife, back a "
-                   "rearward splay, left and right splays. Double tap up zips, down heals. Needs Controlled "
-                   "flips on and Realistic flips off: turning this on sets both.",
+                   "rearward splay, left and right splays. Double tap up zips, down heals. Works with Controlled "
+                   "flips or Realistic flips (the legs' swing and spread feed Realistic flips' momentum); "
+                   "with neither, turning this on turns Controlled flips on.",
                    S(42), [&] { tabToggle("##legcontrol", Item::legControl); });
             settingOption(Item::legStiffness, "Leg stiffness",
                    "How firmly the legs hold the stick's pose. Lower swings more.",

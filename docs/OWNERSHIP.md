@@ -16,11 +16,12 @@ Source: the user, Nov 9 09:34 PST. Code: `include/spidy/hybrid_owner.hpp`, the `
 |---|---|---|
 | Ground, perch, the game's crawl, parkour | ANIM | VR → ANIM the moment he lands (`land`, or `mount` onto the game's crawl) |
 | Ground + grip or trigger | ANIM | **None.** Grip only enables SpidyVR's arm features on the animated arms (webs, web balls, punches, markers). The one exception is a punch's web strike under FULL ARMS (next rows). |
-| Jump, vault, point launch, Y zip, fall: any midair native animation | ANIM | Plays from the press or takeoff until the animation ends, then hands to VR **only if he is still in the air** (`anim-end`). |
-| Midair animation + grip | VR | Grip cancel (`grip-cancel`). It is consumed and fires no web or ball. |
+| Jump, vault, point launch, Y zip, fall: any midair native animation | ANIM | **Nov 11 23:39:** plays from the press or takeoff **through the fall to the landing**. Its end is still read (`animEndSeen`, diagnostics) but no longer hands to VR (`animEndHandsToVr = false`). |
+| Midair animation + a flip's pitch or tilt (either stick, see below) | VR | `flip-break`, **on the frame the input is read** (`HybridOwner::breakForFlip`, before that frame's tracking, hands and body). |
+| Midair animation + grip | VR | Grip cancel (`grip-cancel`). It is consumed and fires no web or ball. **Nov 11:** on the frame the gate consumes it (`breakForCancel`). |
 | Midair animation + Spidy's wall | VR | `wallrun` |
 | Midair animation + a SpidyVR web attaching | VR | `web` |
-| Air after the animation ended | VR | It stays VR until landing. |
+| Air after a break (flip, grip, web, wall) | VR | It stays VR until landing; landing on the feet always returns to ANIM (`land`). |
 | Y zip pressed from VR in the air | ANIM | `zip`, once the game begins the zip. A zip the game refuses never leaves VR. |
 | Spidy wall run / wall jump | VR | none |
 | Wall run that came out of a Native Run, stick let go on the wall | ANIM | `run-release`. It stays ANIM on that wall. |
@@ -32,6 +33,26 @@ Source: the user, Nov 9 09:34 PST. Code: `include/spidy/hybrid_owner.hpp`, the `
 - Otherwise, switching happens only in midair, on wall runs, and at Native Run's release.
 - The position lock (`position lock:` diag) runs on every switch.
 
+## Flip break (the user, Nov 11 23:39 and 23:41)
+
+> "Flips with the left or right stick cancel animations on that frame ... landing on your feet always snaps back to animation. Jumps are in animation until it's broken with a rotation, or grip cancel." "Turning left or right on the right stick should keep you in animation. Any cancel or pitch/tilt will break animation on that exact frame."
+
+What counts (`hybrid_owner::flipBreak`; dead zone 0.2, noise only):
+
+| Input | Breaks when |
+|---|---|
+| Right stick left / right | **Never** (the snap or smooth turn). |
+| Right stick up / down (pitch), diagonals by their up/down part | Basic FLIPS (the right stick flips), or LEG CONTROL in force (with CONTROLLED or REALISTIC FLIPS; the legs' swing pitches him). Not FLIPS' zip flick (`zipPriority`). With no flips on the right stick, up / down stays the zip / heal push and breaks nothing. |
+| Left stick, any way (pitch and tilt) | CONTROLLED FLIPS toggled on in the air (A), or REALISTIC FLIPS with FLIPS on (its left-stick steering). Otherwise the left stick steers the game's jump and breaks nothing. |
+| Grip cancel | Always, in a midair animation (consumed, no shot). |
+
+How (game_xr, `flip break:` and `grip cancel: anim->vr this frame` diag lines with the display time):
+- The right stick is read before the legs take it and before `rig.update`; the left stick right after `rig.update` (it reports the controlled flip's toggle). Either calls `breakForFlip`, which switches the owner at once; the owner's update later in the same frame reports `enterVr` with `flip-break`, so the usual handoff runs that frame: position lock on the actor's feet, the pose seeded from the air (`adoptsFromAir`), the swing's velocity kept.
+- The tracking rig reads the same stick that frame, so a basic flip or a controlled / realistic flip turns from the first frame (a basic flip's stick must have been at rest once in the air, as before).
+- With LEG CONTROL the push that broke goes to the legs from that frame (`legStickOwns`): a double tap's first push counts, the zip / heal fires on the second tap as in VR air. In the air with LEG CONTROL a single up / down push is the legs', not a zip.
+- On the ground nothing switches; a jump breaks on its first airborne frame if the stick is held.
+- Review M1 (ownership decided a frame late) is fixed for these two paths only; the other switches still decide in the owner's update.
+
 ## When "the animation ended"
 
 The game does not tell the mod when a jump animation ends, so the mod uses a proxy (`hybrid_owner.hpp` constants). The animation counts as ended when all of these hold:
@@ -39,7 +60,7 @@ The game does not tell the mod when a jump animation ends, so the mod uses a pro
 - he has been falling (vertical velocity ≤ 0) for **0.15 s**;
 - no zip, fight or dodge is still going on.
 
-It always ends at **2.5 s** at the most.
+It always ends at **2.5 s** at the most. Since Nov 11 this is only read (diagnostics); the animation keeps the air until a break or the landing.
 
 The proxy has these consequences:
 - A short hop or step down lands inside 0.3 s and never switches.

@@ -60,6 +60,10 @@ add_executable(spidy_stabilization_shooter_tests tests/stabilization_shooter_tes
 target_link_libraries(spidy_stabilization_shooter_tests PRIVATE spidy_core)
 target_compile_definitions(spidy_stabilization_shooter_tests PRIVATE SPIDY_SOURCE_DIR="${CMAKE_SOURCE_DIR}")
 add_test(NAME stabilization_shooter COMMAND spidy_stabilization_shooter_tests)
+# FLIP BREAK and the November 11 ownership rules (portable).
+add_executable(spidy_flip_break_tests tests/flip_break_tests.cpp)
+target_link_libraries(spidy_flip_break_tests PRIVATE spidy_core)
+add_test(NAME flip_break COMMAND spidy_flip_break_tests)
 
 find_package(Threads REQUIRED)
 add_executable(spidy_action_protocol_tests tests/action_protocol_tests.cpp)
