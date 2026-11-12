@@ -2506,6 +2506,12 @@ void App::options(ImVec2 origin, ImVec2 size) {
                    "Off uses the Camera rows below; Light and Heavy use their own rows, with heavier speed "
                    "damping. Smooths only what the animation adds; your head stays 1:1.",
                    S(150), [&] { tabCombo("##camerastab", Item::cameraStabilization); });
+            settingOption(Item::punchViewEase, "Punch view ease",
+                   "When a punch hands you from the animation back to VR, the view stays where the animation "
+                   "showed it and eases onto your feet over this time (fast at first, settling last; sooner "
+                   "while you move). Hands and webs move with the view. Off: the old instant jump. 250 ms by "
+                   "default.",
+                   S(150), [&] { tabCombo("##punchviewease", Item::punchViewEase); });
             settingOption(Item::cameraVertical, "Camera vertical", "Up/down smoothing with Stabilization Off.",
                    S(150), [&] { tabCombo("##cameravertical", Item::cameraVertical); });
             settingOption(Item::cameraHorizontal, "Camera horizontal", "Side/forward smoothing with Stabilization Off.",

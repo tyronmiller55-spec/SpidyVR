@@ -290,6 +290,13 @@ float GameTrackingRig::lockToFeet(Vec3 feet, Vec3 worldEyes, float worldLookYaw,
         return 0.f;
     return std::hypot(worldEyes.x - feet.x, worldEyes.z - feet.z);
 }
+bool GameTrackingRig::beginViewEase(Vec3 worldEyes, const Pose& head, float seconds) {
+    if (!finite(worldEyes) || !validTrackedPose(head) || !finite(rig_.origin) || !std::isfinite(rig_.yaw)) {
+        viewEase_.cancel(view_ease::End::handoff);
+        return false;
+    }
+    return viewEase_.begin(worldEyes - rig_.toWorld(head).position, seconds);
+}
 float GameTrackingRig::residualAcross(const Pose& head, Vec3 feet) const {
     return hybrid_handoff::residualAcross(rig_.origin, rig_.yaw, head.position, feet);
 }
@@ -303,7 +310,10 @@ void GameTrackingRig::reset() {
     const bool joystickCamera = joystickRunCamera_;
     const FlipMotion flip = flip_;
     const auto autoSettings = autoSettings_;
+    auto ease = viewEase_;
+    ease.cancel(view_ease::End::reset);
     *this = {};
+    viewEase_ = ease;
     autoSettings_ = autoSettings;
     snap_ = snap;
     smooth_ = smooth;
@@ -850,6 +860,11 @@ GameMotionFrame GameTrackingRig::update(const XrFrame& f, Vec3 feet, Vec3 gameFo
     if (!runView && length(runViewOffset_) < .001f) runViewOffset_ = {};
     runViewActive_ = runView;
     placed.origin += runViewOffset_;
+    // PUNCH VIEW EASE: the eyes held where the animation showed them, easing
+    // onto the lock; the hands, webs and body go with them (below).
+    if (pendingRecenter_)
+        viewEase_.cancel(view_ease::End::recenter);
+    placed.origin += viewEase_.step(f.seconds, feet, rig_.yaw);
     // A cosmetic bank around the tracked eyes, only during momentum runs.
     // Keep it out of the stored climb heading and the joystick body-view turn.
     const Pose unbankedHead = placed.toWorld(f.head);

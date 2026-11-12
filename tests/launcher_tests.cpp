@@ -705,7 +705,9 @@ int main() {
                                  // POINT JUMP (November 11): the player's own controls and feel.
                                  (row.item >= Item::pointJump && row.item <= Item::pointJumpPush) ||
                                  // LEG TOGGLE (November 12): the player's own control.
-                                 row.item == Item::legToggleInput;
+                                 row.item == Item::legToggleInput ||
+                                 // PUNCH VIEW EASE (November 12): comfort, the player's own.
+                                 row.item == Item::punchViewEase;
             check(std::count_if(begin, end, [&](const ProfileSetting& s) { return s.item == row.item; }) ==
                       (leftOut ? 0 : 1),
                   row.title);
@@ -722,7 +724,9 @@ int main() {
                 key == "animated_full_arms" || key == "spherical_aim" ||
                 key.rfind("camera_", 0) == 0 || key.rfind("leg_", 0) == 0 ||
                 // POINT JUMP (November 11): the player's own, not in shared profiles.
-                key.rfind("point_jump", 0) == 0)
+                key.rfind("point_jump", 0) == 0 ||
+                // PUNCH VIEW EASE (November 12): comfort, the player's own.
+                key == "punch_view_ease_ms")
                 continue;
             ++lines;
             check(at(key) < std::size(profileSettings) &&

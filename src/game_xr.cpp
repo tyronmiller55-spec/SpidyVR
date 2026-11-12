@@ -1139,6 +1139,7 @@ DWORD WINAPI run(void*) {
         // adopt's first-frame diag waits on native_body::jumpAdopt's count.
         bool hybridJumpAsk{};
         int64_t positionLockCheckNs{-1}; // POSITION LOCK residual check time
+        unsigned punchEaseEndsLogged{}; // PUNCH VIEW EASE: ends already logged
         std::array<aim_filter::Direction, 2> aimSteady; // WRIST MARKER SMOOTHING (shot = marker)
         bool hybridLeapAir{};
         bool hybridAdoptWaiting{};
@@ -2778,6 +2779,12 @@ DWORD WINAPI run(void*) {
                                         {camera[8], camera[9], camera[10]}, gameplay,
                                         swingState.owned ? Vec3{0, 1, 0} : heroUp, flipAir, hold,
                                         {camera[4], camera[5], camera[6]});
+                    // PUNCH VIEW EASE: how each ease ended, once.
+                    if (rig.viewEase().ends() != punchEaseEndsLogged) {
+                        punchEaseEndsLogged = rig.viewEase().ends();
+                        diag_log::writef("punch view ease: %s after %d ms", view_ease::endName(rig.viewEase().lastEnd()),
+                                         static_cast<int>(rig.viewEase().elapsed() * 1000 + .5f));
+                    }
                     {
                         // FLIP BREAK, the left stick: the axes CONTROLLED FLIPS (toggled
                         // on in the air) or REALISTIC FLIPS' steering read.
@@ -6698,6 +6705,24 @@ DWORD WINAPI run(void*) {
                                         diag_log::writef("position lock: G->T origin on actor feet (%.1f, %.1f, "
                                                          "%.1f), anim-view offset discarded %.2f m",
                                                          lockFeet.x, lockFeet.y, lockFeet.z, discarded);
+                                        // PUNCH VIEW EASE (view_ease.hpp; the user, November 12
+                                        // 01:13): a punch's switch holds the view where the last
+                                        // animated frame showed it (worldEyes) and eases onto the
+                                        // lock; eyes, hands, webs and body move together (the
+                                        // rig's placement), the lock under them unchanged. Punch
+                                        // only; 0 is the old snap. Any other switch ends one.
+                                        const bool punchEase =
+                                            hybridOwner.lastEnterVr == hybrid_owner::EnterVr::punch &&
+                                            values.punchViewEaseMs > 0 && eyesOk;
+                                        if (punchEase &&
+                                            rig.beginViewEase(worldEyes, frame.head,
+                                                              static_cast<float>(values.punchViewEaseMs) * .001f)) {
+                                            punchEaseEndsLogged = rig.viewEase().ends();
+                                            diag_log::writef("punch view ease: start offset %.2f m, dur %d ms",
+                                                             rig.viewEase().startOffset(), values.punchViewEaseMs);
+                                        } else {
+                                            rig.cancelViewEase(view_ease::End::handoff);
+                                        }
                                     } else if (eyesOk) {
                                         rig.adoptEyes(worldEyes, worldYaw, frame.head);
                                         diag_log::write("position lock: no actor feet; anim view adopted");
@@ -6796,6 +6821,8 @@ DWORD WINAPI run(void*) {
                                     hybridBlend.enterEyeDPos, hybridBlend.enterEyeDYaw,
                                     hybrid_handoff::handoffSec * 1000.f);
                             }
+                            if (hybridOwner.enterAnim)
+                                rig.cancelViewEase(view_ease::End::handoff);
                             if (hybridOwner.enterAnim) {
                                 if (hybridAdoptWaiting)
                                     diag_log::write(

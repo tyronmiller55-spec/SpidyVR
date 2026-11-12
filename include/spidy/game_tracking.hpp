@@ -6,6 +6,7 @@
 #include "realistic_flip.hpp"
 #include "swing.hpp"
 #include "tracking.hpp"
+#include "view_ease.hpp"
 #include "wall_roll.hpp"
 #include <algorithm>
 #include <cmath>
@@ -494,6 +495,18 @@ class GameTrackingRig {
     float lockToFeet(Vec3 feet, Vec3 worldEyes, float worldLookYaw, const Pose& head);
     // Across-ground distance of the tracked head's floor point from `feet`.
     float residualAcross(const Pose& head, Vec3 feet) const;
+    // PUNCH VIEW EASE (view_ease.hpp): after lockToFeet, offset the whole
+    // tracked placement (eyes, head, hands, webs, body) so the eyes stay on
+    // `worldEyes` (what the last animated frame showed), easing to the lock
+    // over `seconds`. The lock (rig origin) is not changed. Returns whether
+    // an ease began; the offset is startOffset() of viewEase().
+    bool beginViewEase(Vec3 worldEyes, const Pose& head, float seconds);
+    void cancelViewEase(view_ease::End why) {
+        viewEase_.cancel(why);
+    }
+    const view_ease::Ease& viewEase() const {
+        return viewEase_;
+    }
     void reset();
 
   private:
@@ -550,6 +563,7 @@ class GameTrackingRig {
     float runCameraBank_{};
     unsigned runViewSupports_{};
     Vec3 runViewVelocity_{}, runViewOffset_{};
+    view_ease::Ease viewEase_;
     bool climbTrackingSet_{};
     Vec3 climbTrackingHead_{};
     float runIdleSeconds_{};

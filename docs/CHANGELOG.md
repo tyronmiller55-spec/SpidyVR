@@ -3,6 +3,17 @@
 Every build, newest first, with what changed, why, and what was measured.
 Per-check results are in [VALIDATION.md](VALIDATION.md).
 
+## Native Animation: PUNCH VIEW EASE (hold and ease)
+
+The user, Nov 12 01:13 PST: approved option 1 for the punch view jump (median 0.69 m at punch switches). Built on bec50c8. Not headset-tested. Details: [PUNCH_VIEW_EASE.md](PUNCH_VIEW_EASE.md).
+
+- **Hold and ease:** at a punch's ANIM -> VR switch the first VR frame shows the eyes where the last animated frame did; the offset to the position lock then eases out ((1-t)^3) over PUNCH VIEW EASE (250 ms default), never slower than 0.10 m/s + 0.2 x speed.
+- **Consistent:** applied to the tracked placement, so eyes, hands, webs and body move together; the lock over the feet is unchanged underneath.
+- **Cancels:** teleport, large turn, recenter, tracking reset, any other handoff, non-finite input.
+- **Setting:** PUNCH VIEW EASE (OFF (SNAP) / 150-400 ms) on VR CAMERA & STABILIZATION and the launcher Camera page; `punch_view_ease_ms`; personal.
+- **Scope:** punch switches only; other ANIM -> VR switches unchanged (flagged).
+- **Tests:** `spidy_view_ease_tests` (34 checks); core 918/918; launcher 43/43; ctest 11/11.
+
 ## Native Animation: LEG TOGGLE (thumb rest tap, HOLD X+Y)
 
 The user, Nov 12 00:44-00:46 PST: with LEG CONTROL "I lose all of my other functionality, including the ability to rotate left and right"; toggle the legs in real time with the left thumb rest (a deliberate tap), never the left stick click (slow-mo), fallback HOLD X+Y. Built on c128662. Not headset-tested. Details: [LEG_TOGGLE.md](LEG_TOGGLE.md).

@@ -456,6 +456,12 @@ struct Values {
     // before.
     int cameraPitchPct = 100, cameraRollPct = 100, cameraBobVerticalPct = 100, cameraBobSidePct = 100;
     int cameraHeadAngleDeg = 0;
+    // PUNCH VIEW EASE (view_ease.hpp; the user, November 12 01:13: "hold and
+    // ease"): at a punch's ANIM -> VR switch the view stays where the last
+    // animated frame showed it and eases onto the position lock over this
+    // many ms (ease-out, never slower than a motion-masked bleed). 0: the old
+    // snap. 250 by default. punch_view_ease_ms.
+    int punchViewEaseMs = 250;
     // POINT JUMP (point_jump.hpp; the user, November 11; EngineBot's plan):
     // touching a surface, A+B (or hold B, then A) charges a jump the way you
     // look. A tap is a quick jump at the tap speed; held up to CHARGE TIME a
@@ -660,8 +666,10 @@ enum class Item : uint8_t {
     pointJumpPush,
     // November 12: LEG TOGGLE (leg_toggle.hpp).
     legToggleInput,
+    // November 12: PUNCH VIEW EASE (view_ease.hpp), VR CAMERA & STABILIZATION.
+    punchViewEase,
 };
-inline constexpr Item lastItem = Item::legToggleInput;
+inline constexpr Item lastItem = Item::punchViewEase;
 // SLOW-MO LENGTH's last step: no time limit (until L3 toggles it off).
 inline constexpr int slowMotionEndless = 91;
 // Real seconds a full meter lasts for a SLOW-MO LENGTH value; 0 = endless.
@@ -691,7 +699,7 @@ struct Row {
     Place place{};
 };
 // Stable row/setting numbers; categories below determine presentation order.
-const std::array<Row, 142>& rows();
+const std::array<Row, 143>& rows();
 const Row* rowFor(Item);
 // camera, shooters and legs (November 11, the user: "I can't find legs or
 // camera settings in any of the menus. Make sure it's clearly labeled"): tabs
