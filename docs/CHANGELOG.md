@@ -3,6 +3,18 @@
 Every build, newest first, with what changed, why, and what was measured.
 Per-check results are in [VALIDATION.md](VALIDATION.md).
 
+## Native Animation: POINT JUMP (milestone 1, experimental, off by default)
+
+The user, Nov 11: touching any surface, charge a jump that launches the way you look; a tap is a quick jump, up to a second a bigger leap; reuse the charged leap's timing and rumble and the takeoff path; never the game's point launch smoke. EngineBot's plan. Built on 07447b8 (feat/stabilization-wrist-lock). Not headset-tested. Details: [POINT_JUMP.md](POINT_JUMP.md).
+
+- **Trigger:** A+B together (50 ms window; A or B alone is held back at most that long, a warning sends B at once) or hold B, then A (B alone dodges on release or after 250 ms). Chord held: neither button reaches the game; letting go fires; a grip cancels. `ChargeJump::consume()` so a chord never becomes a leap or a late A.
+- **Launch:** 9 m/s tap rising (ease-out) to 22 m/s at 1 s; the look plus 25% of the surface normal, at least 10 degrees out of the surface; 25% of the speed across the launch kept, never into the surface. Sent to the swing by a new side channel (`SpidySwingPointJump`, no Command or Settings version change); the swing applies it on its next step from the ground or Spidy's wall as `EventKind::PointJump`, which takes off like a charged leap (the game's jump to unstick). Never `jumpQueued_`, never a point launch.
+- **Gate:** contact or 120 ms coyote time; a 150 ms buffer for a release in the air; 250 ms cooldown plus a fresh contact; off during prompts naming A or B, the pad layer, calibration, vents, web lines, the game's crawl and takeoffs. **Zip guard (Q1):** after a game zip, a release waits until 400 ms after he lands from it, so the takeoff's jump press is never the game's point launch.
+- **Ownership:** the approved ground exception: `point-jump` takes the ground animation on the launch frame with the feet locked, holds VR through the takeoff, the air is VR's, landing returns to the animation (OWNERSHIP.md).
+- **Menus:** new in-game tab VR POINT JUMP and launcher page Point Jump (POINT JUMP, TRIGGER, TAP SPEED, MAX SPEED, CHARGE TIME, SURFACE PUSH); ini-only `point_jump_*` keys; the player's own, not in profiles. Rows sit before REALISTIC FLIPS (which stay last).
+- **Punch view jump:** checked against the 22:38 session (d0584e7): punch switches discarded a median 0.38 m (max 0.60 m) of anim-view offset, but the eyes moved a median 0.69 m (max 1.31 m) at those switches, so keeping the offset would remove only about half of the jump. Not changed in this build (not clearly low risk).
+- **Tests:** `spidy_point_jump_tests` (chord both modes, dodge rules, spider-sense, tap pass-through, cancel, charge curve, direction blend incl. 200 random surfaces never under 10 degrees, no launch into the surface, coyote, buffer, cooldown and fresh contact, zip guard, consume, ownership exception and landing snap-back, the side channel's validation, rows, keys and launcher controls); core adds the swing's point jump (ground only, never a point launch); launcher 43/43.
+
 ## Native Animation: camera motion amounts, HEAD ANGLE, SHOOTERS: LOCKED TO ARM, findable camera and legs
 
 The user, Nov 11 22:59-23:07 PST: Native Animation "moving too much", leveling "steals all of the feeling", model forearm wrist shooters "not working at all", "too many wrist settings", a head angle setting, and "I can't find legs or camera settings in any of the menus". Built on d0584e7. Not headset-tested. Details and the old-to-new mapping: [CAMERA_AND_SHOOTERS.md](CAMERA_AND_SHOOTERS.md).

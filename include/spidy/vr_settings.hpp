@@ -451,6 +451,23 @@ struct Values {
     // before.
     int cameraPitchPct = 100, cameraRollPct = 100, cameraBobVerticalPct = 100, cameraBobSidePct = 100;
     int cameraHeadAngleDeg = 0;
+    // POINT JUMP (point_jump.hpp; the user, November 11; EngineBot's plan):
+    // touching a surface, A+B (or hold B, then A) charges a jump the way you
+    // look. A tap is a quick jump at the tap speed; held up to CHARGE TIME a
+    // leap rising to MAX SPEED. The tab's VR POINT JUMP rows: POINT JUMP (off
+    // by default, experimental), TRIGGER, TAP SPEED and MAX SPEED (m/s),
+    // CHARGE TIME (ms) and SURFACE PUSH (percent of the surface's normal mixed
+    // into the look). The rest are spidy_vr.ini only (point_jump_* keys): the
+    // chord window, the tap's length, the curve (0 ease-out, 1 linear), the
+    // least angle out of the surface, the speed kept across the launch, the
+    // coyote time, the buffer, the cooldown, the guard after a game zip, B's
+    // hold before it is the dodge (TRIGGER 1), and whether it works in a fight.
+    // The player's own (comfort and controls), not in shared profiles.
+    bool pointJump = false, pointJumpInCombat = true;
+    int pointJumpTrigger = 0, pointJumpChordMs = 50, pointJumpTapMs = 150, pointJumpFullMs = 1000;
+    int pointJumpMinSpeed = 9, pointJumpMaxSpeed = 22, pointJumpCurve = 0, pointJumpNormalBias = 25;
+    int pointJumpMinOutDegrees = 10, pointJumpKeep = 25, pointJumpCoyoteMs = 120, pointJumpBufferMs = 150;
+    int pointJumpCooldownMs = 250, pointJumpZipGuardMs = 400, pointJumpDodgeHoldMs = 250;
     bool operator==(const Values&) const = default;
 };
 inline constexpr int eyeAimShots = 1, eyeAimZips = 2;
@@ -629,8 +646,15 @@ enum class Item : uint8_t {
     cameraBobVertical,
     cameraBobSide,
     cameraHeadAngle,
+    // November 11: POINT JUMP (point_jump.hpp), its own tab VR POINT JUMP.
+    pointJump,
+    pointJumpTrigger,
+    pointJumpMinSpeed,
+    pointJumpMaxSpeed,
+    pointJumpFull,
+    pointJumpPush,
 };
-inline constexpr Item lastItem = Item::cameraHeadAngle;
+inline constexpr Item lastItem = Item::pointJumpPush;
 // SLOW-MO LENGTH's last step: no time limit (until L3 toggles it off).
 inline constexpr int slowMotionEndless = 91;
 // Real seconds a full meter lasts for a SLOW-MO LENGTH value; 0 = endless.
@@ -660,13 +684,14 @@ struct Row {
     Place place{};
 };
 // Stable row/setting numbers; categories below determine presentation order.
-const std::array<Row, 135>& rows();
+const std::array<Row, 141>& rows();
 const Row* rowFor(Item);
 // camera, shooters and legs (November 11, the user: "I can't find legs or
 // camera settings in any of the menus. Make sure it's clearly labeled"): tabs
 // of their own, after the older ones so their numbers stay.
+// pointJump (November 11): POINT JUMP's own tab, last so the others keep theirs.
 enum class Category : uint8_t { setup, webs, swinging, movement, flips, feedback, display, nativeAnimation,
-                                camera, shooters, legs, count };
+                                camera, shooters, legs, pointJump, count };
 inline constexpr size_t categoryCount = static_cast<size_t>(Category::count);
 struct Screen {
     const char* title;

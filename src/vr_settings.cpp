@@ -197,6 +197,24 @@ static_assert(std::size(webLandingImpactChoices) == std::size(webLandingImpactSt
 constexpr int forearmBlends[] = {0, 25, 50, 75, 100};
 constexpr const char* forearmBlendChoices[] = {"0%", "25%", "50%", "75%", "100%"};
 static_assert(std::size(forearmBlendChoices) == std::size(forearmBlends));
+// POINT JUMP (point_jump.hpp): its trigger, speeds (m/s), charge time (ms)
+// and surface push (percent).
+constexpr int pointJumpTriggers[] = {0, 1};
+constexpr const char* pointJumpTriggerChoices[] = {"A+B TOGETHER", "HOLD B, THEN A"};
+static_assert(std::size(pointJumpTriggerChoices) == std::size(pointJumpTriggers));
+constexpr int pointJumpMinSpeeds[] = {6, 7, 8, 9, 10, 12, 14};
+constexpr const char* pointJumpMinSpeedChoices[] = {"6 M/S", "7 M/S", "8 M/S", "9 M/S", "10 M/S", "12 M/S", "14 M/S"};
+static_assert(std::size(pointJumpMinSpeedChoices) == std::size(pointJumpMinSpeeds));
+constexpr int pointJumpMaxSpeeds[] = {14, 16, 18, 20, 22, 26, 30};
+constexpr const char* pointJumpMaxSpeedChoices[] = {"14 M/S", "16 M/S", "18 M/S", "20 M/S",
+                                                    "22 M/S", "26 M/S", "30 M/S"};
+static_assert(std::size(pointJumpMaxSpeedChoices) == std::size(pointJumpMaxSpeeds));
+constexpr int pointJumpFulls[] = {500, 750, 1000, 1250, 1500};
+constexpr const char* pointJumpFullChoices[] = {"0.5 S", "0.75 S", "1 S", "1.25 S", "1.5 S"};
+static_assert(std::size(pointJumpFullChoices) == std::size(pointJumpFulls));
+constexpr int pointJumpPushes[] = {0, 10, 25, 40, 60};
+constexpr const char* pointJumpPushChoices[] = {"0%", "10%", "25%", "40%", "60%"};
+static_assert(std::size(pointJumpPushChoices) == std::size(pointJumpPushes));
 } // namespace
 
 std::span<const int> steps(Item item) {
@@ -271,6 +289,16 @@ std::span<const int> steps(Item item) {
         return cameraAmountSteps;
     case Item::cameraHeadAngle:
         return cameraHeadAngles;
+    case Item::pointJumpTrigger:
+        return pointJumpTriggers;
+    case Item::pointJumpMinSpeed:
+        return pointJumpMinSpeeds;
+    case Item::pointJumpMaxSpeed:
+        return pointJumpMaxSpeeds;
+    case Item::pointJumpFull:
+        return pointJumpFulls;
+    case Item::pointJumpPush:
+        return pointJumpPushes;
     case Item::runSpeed:
         return runSpeeds;
     case Item::slowMotionLength:
@@ -410,6 +438,16 @@ float numberOf(Item item, const Values& v) {
         return static_cast<float>(v.cameraBobSidePct);
     case Item::cameraHeadAngle:
         return static_cast<float>(v.cameraHeadAngleDeg);
+    case Item::pointJumpTrigger:
+        return static_cast<float>(v.pointJumpTrigger);
+    case Item::pointJumpMinSpeed:
+        return static_cast<float>(v.pointJumpMinSpeed);
+    case Item::pointJumpMaxSpeed:
+        return static_cast<float>(v.pointJumpMaxSpeed);
+    case Item::pointJumpFull:
+        return static_cast<float>(v.pointJumpFullMs);
+    case Item::pointJumpPush:
+        return static_cast<float>(v.pointJumpNormalBias);
     case Item::runSpeed:
         return static_cast<float>(v.runSpeedPercent);
     case Item::slowMotionLength:
@@ -509,6 +547,8 @@ template <class V> auto switchOf(Item item, V& v) -> decltype(&v.aimMarkers) {
         return &v.webLines;
     case Item::airFists:
         return &v.airFists;
+    case Item::pointJump:
+        return &v.pointJump;
     case Item::view:
         return &v.flatScreen;
     case Item::realisticFlips:
@@ -626,6 +666,21 @@ Values sanitized(Values v) {
         v.*pct = std::clamp(v.*pct, 0, 100);
     v.cameraHeadAngleDeg = std::clamp(v.cameraHeadAngleDeg, -camera_motion::maxHeadAngle, camera_motion::maxHeadAngle);
     v.legDoubleTapMs = std::clamp(v.legDoubleTapMs, 150, 600);
+    v.pointJumpTrigger = std::clamp(v.pointJumpTrigger, 0, 1);
+    v.pointJumpChordMs = std::clamp(v.pointJumpChordMs, 20, 150);
+    v.pointJumpTapMs = std::clamp(v.pointJumpTapMs, 50, 400);
+    v.pointJumpFullMs = std::clamp(v.pointJumpFullMs, 300, 2000);
+    v.pointJumpMinSpeed = std::clamp(v.pointJumpMinSpeed, 3, 20);
+    v.pointJumpMaxSpeed = std::clamp(v.pointJumpMaxSpeed, std::max(5, v.pointJumpMinSpeed), 40);
+    v.pointJumpCurve = std::clamp(v.pointJumpCurve, 0, 1);
+    v.pointJumpNormalBias = std::clamp(v.pointJumpNormalBias, 0, 100);
+    v.pointJumpMinOutDegrees = std::clamp(v.pointJumpMinOutDegrees, 0, 45);
+    v.pointJumpKeep = std::clamp(v.pointJumpKeep, 0, 100);
+    v.pointJumpCoyoteMs = std::clamp(v.pointJumpCoyoteMs, 0, 500);
+    v.pointJumpBufferMs = std::clamp(v.pointJumpBufferMs, 0, 500);
+    v.pointJumpCooldownMs = std::clamp(v.pointJumpCooldownMs, 0, 2000);
+    v.pointJumpZipGuardMs = std::clamp(v.pointJumpZipGuardMs, 0, 2000);
+    v.pointJumpDodgeHoldMs = std::clamp(v.pointJumpDodgeHoldMs, 100, 600);
     v.runSpeedPercent = std::clamp(v.runSpeedPercent, 50, 200);
     v.slowMotionSeconds = std::clamp(v.slowMotionSeconds, 3, slowMotionEndless);
     v.softLockMetres = std::clamp(v.softLockMetres, 0, 40);
@@ -653,9 +708,9 @@ Values sanitized(Values v) {
     v.automaticHandThreshold = std::clamp(v.automaticHandThreshold, 50, 300);
     return v;
 }
-const std::array<Row, 135>& rows() {
+const std::array<Row, 141>& rows() {
     // The help fits the game's description column beside the rows.
-    static const std::array<Row, 135> all{{
+    static const std::array<Row, 141> all{{
         {Item::none, "WEBS", nullptr, {}},
         {Item::webStyle, "WEB STYLE",
          "Arcade: webs pass lamp posts, signs and cars, and swings stay above the street.", webStyleChoices},
@@ -1008,6 +1063,17 @@ const std::array<Row, 135>& rows() {
         {Item::cameraHeadAngle, "HEAD ANGLE",
          "Tilts the animated view below (DOWN) or above (UP) the horizon. LEVEL as before.",
          cameraHeadAngleChoices},
+        {Item::pointJump,
+         "POINT JUMP (EXPERIMENTAL)",
+         "On a surface, A+B charges a jump the way you look. Tap: quick. Hold: bigger.",
+         {}},
+        {Item::pointJumpTrigger, "POINT JUMP TRIGGER",
+         "A+B together, or hold B then A (B alone still dodges on release).", pointJumpTriggerChoices},
+        {Item::pointJumpMinSpeed, "TAP SPEED", "A quick tap's launch speed.", pointJumpMinSpeedChoices},
+        {Item::pointJumpMaxSpeed, "MAX SPEED", "A full charge's launch speed.", pointJumpMaxSpeedChoices},
+        {Item::pointJumpFull, "CHARGE TIME", "How long to hold for the full charge.", pointJumpFullChoices},
+        {Item::pointJumpPush, "SURFACE PUSH",
+         "How much the jump leans out of the surface you stand on. 25% default.", pointJumpPushChoices},
         {Item::realisticFlips,
          "REALISTIC FLIPS",
          "Momentum rotation from arms and webs. FLIPS also enables left-stick steering.",
@@ -1116,6 +1182,11 @@ const std::array<Screen, categoryCount>& screens() {
     static constexpr Item legs[] = {
         Item::legControl, Item::legStiffness, Item::legDamping, Item::legCoupling,
     };
+    // POINT JUMP (November 11): its switch, trigger and feel.
+    static constexpr Item pointJump[] = {
+        Item::pointJump, Item::pointJumpTrigger, Item::pointJumpMinSpeed,
+        Item::pointJumpMaxSpeed, Item::pointJumpFull, Item::pointJumpPush,
+    };
     static const std::array<Screen, categoryCount> all{{
         {"Setup", "VR SETUP", setup},
         {"Webs", "VR WEBS", webs},
@@ -1128,6 +1199,7 @@ const std::array<Screen, categoryCount>& screens() {
         {"Camera & Stabilization", "VR CAMERA & STABILIZATION", camera},
         {"Web Shooters", "VR WEB SHOOTERS", shooters},
         {"Legs (Advanced)", "VR LEGS (ADVANCED)", legs},
+        {"Point Jump", "VR POINT JUMP", pointJump},
     }};
     return all;
 }
@@ -1193,6 +1265,12 @@ const char* inactiveReason(Item item, const Values& v) {
         return v.bodyHaptics == 0 ? "Raise Body haptics above zero first." : nullptr;
     case Item::steadyHud:
         return v.hud == 0 ? "Enable the HUD first." : nullptr;
+    case Item::pointJumpTrigger:
+    case Item::pointJumpMinSpeed:
+    case Item::pointJumpMaxSpeed:
+    case Item::pointJumpFull:
+    case Item::pointJumpPush:
+        return !v.pointJump ? "Turn POINT JUMP on first." : nullptr;
     case Item::recordingSmoothing:
         return v.recordingFov == 0 ? "Enable Recording FOV first." : nullptr;
     default:
@@ -1406,6 +1484,23 @@ bool choose(Item item, int index, Values& v) {
     case Item::cameraHeadAngle:
         v.cameraHeadAngleDeg = s[index];
         break;
+    case Item::pointJumpTrigger:
+        v.pointJumpTrigger = s[index];
+        break;
+    case Item::pointJumpMinSpeed:
+        v.pointJumpMinSpeed = s[index];
+        v.pointJumpMaxSpeed = std::max(v.pointJumpMaxSpeed, v.pointJumpMinSpeed);
+        break;
+    case Item::pointJumpMaxSpeed:
+        v.pointJumpMaxSpeed = s[index];
+        v.pointJumpMinSpeed = std::min(v.pointJumpMinSpeed, v.pointJumpMaxSpeed);
+        break;
+    case Item::pointJumpFull:
+        v.pointJumpFullMs = s[index];
+        break;
+    case Item::pointJumpPush:
+        v.pointJumpNormalBias = s[index];
+        break;
     case Item::runSpeed:
         v.runSpeedPercent = s[index];
         break;
@@ -1603,6 +1698,23 @@ constexpr TabOnly tabOnly[] = {
     {"camera_bob_vertical_pct", nullptr, &Values::cameraBobVerticalPct},
     {"camera_bob_side_pct", nullptr, &Values::cameraBobSidePct},
     {"camera_head_angle_deg", nullptr, &Values::cameraHeadAngleDeg},
+    {"point_jump", &Values::pointJump, nullptr},
+    {"point_jump_trigger", nullptr, &Values::pointJumpTrigger},
+    {"point_jump_chord_ms", nullptr, &Values::pointJumpChordMs},
+    {"point_jump_tap_ms", nullptr, &Values::pointJumpTapMs},
+    {"point_jump_full_ms", nullptr, &Values::pointJumpFullMs},
+    {"point_jump_min_speed", nullptr, &Values::pointJumpMinSpeed},
+    {"point_jump_max_speed", nullptr, &Values::pointJumpMaxSpeed},
+    {"point_jump_curve", nullptr, &Values::pointJumpCurve},
+    {"point_jump_normal_bias", nullptr, &Values::pointJumpNormalBias},
+    {"point_jump_min_out_degrees", nullptr, &Values::pointJumpMinOutDegrees},
+    {"point_jump_keep", nullptr, &Values::pointJumpKeep},
+    {"point_jump_coyote_ms", nullptr, &Values::pointJumpCoyoteMs},
+    {"point_jump_buffer_ms", nullptr, &Values::pointJumpBufferMs},
+    {"point_jump_cooldown_ms", nullptr, &Values::pointJumpCooldownMs},
+    {"point_jump_zip_guard_ms", nullptr, &Values::pointJumpZipGuardMs},
+    {"point_jump_dodge_hold_ms", nullptr, &Values::pointJumpDodgeHoldMs},
+    {"point_jump_in_combat", &Values::pointJumpInCombat, nullptr},
 };
 } // namespace
 std::string tabOnlyText(const Values& v) {

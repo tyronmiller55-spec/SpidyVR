@@ -310,6 +310,15 @@ class ChargeJump {
         }
         return {};
     }
+    // POINT JUMP (point_jump.hpp): a chord took this press. Whatever A was
+    // doing here (waiting for its tap, charging a leap) ends unsent: the
+    // chord never becomes a leap or a late A. Held on, A is spent until it is
+    // let go of.
+    void consume() {
+        phase_ = down_ ? Phase::spent : Phase::idle;
+        time_ = 0;
+        leap_ = 0;
+    }
     // A is held and a leap charges.
     bool charging() const {
         return phase_ == Phase::charging;

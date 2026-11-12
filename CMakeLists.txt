@@ -64,6 +64,11 @@ add_test(NAME stabilization_shooter COMMAND spidy_stabilization_shooter_tests)
 add_executable(spidy_flip_break_tests tests/flip_break_tests.cpp)
 target_link_libraries(spidy_flip_break_tests PRIVATE spidy_core)
 add_test(NAME flip_break COMMAND spidy_flip_break_tests)
+# POINT JUMP (point_jump.hpp): chord, charge, direction, gate, ownership, settings (portable).
+add_executable(spidy_point_jump_tests tests/point_jump_tests.cpp)
+target_link_libraries(spidy_point_jump_tests PRIVATE spidy_core)
+target_compile_definitions(spidy_point_jump_tests PRIVATE SPIDY_SOURCE_DIR="${CMAKE_SOURCE_DIR}")
+add_test(NAME point_jump COMMAND spidy_point_jump_tests)
 
 find_package(Threads REQUIRED)
 add_executable(spidy_action_protocol_tests tests/action_protocol_tests.cpp)

@@ -582,6 +582,21 @@ struct PoseCoupling {
     float inertia = 1;
 };
 static_assert(sizeof(PoseCoupling) == 16);
+// Side channel from XR (POINT JUMP, point_jump.hpp): launch at `velocity` on
+// the next step, from the ground or Spidy's wall (Swing::pointJump). `serial`
+// rises with each new launch; the same serial again is ignored. Not a Command
+// or Settings field and not versioned with them (an older swing module has no
+// SpidySwingPointJump export; XR then never fires). `normal`: the surface's,
+// for the diagnostics only.
+struct PointJumpAsk {
+    uint32_t magic = 0x5357504a, version = 1, bytes = sizeof(PointJumpAsk), serial{};
+    Vec3 velocity{}, normal{};
+};
+static_assert(sizeof(PointJumpAsk) == 40);
+inline bool validPointJump(const PointJumpAsk& a) {
+    return a.magic == 0x5357504a && a.version == 1 && a.bytes == sizeof(PointJumpAsk) && finite(a.velocity) &&
+           length(a.velocity) > .1f && length(a.velocity) <= 80.f && finite(a.normal);
+}
 // A web's edges as Bends hands them on: its anchor is the edge nearest the
 // hand, and each edge records the one before it, back to where it sticks.
 inline Bends::Hand edgesOf(const Web& w) {

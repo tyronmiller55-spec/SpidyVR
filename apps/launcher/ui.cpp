@@ -2474,6 +2474,7 @@ void App::options(ImVec2 origin, ImVec2 size) {
         const int cameraPage = static_cast<int>(Category::camera);
         const int shootersPage = static_cast<int>(Category::shooters);
         const int legsPage = static_cast<int>(Category::legs);
+        const int pointJumpPage = static_cast<int>(Category::pointJump);
         group(cameraPage, 0, "Camera motion (how much)", [&] {
             settingOption(Item::cameraMotion, "Camera motion preset",
                    "How much of the animation's own camera motion reaches your view while Native Animation "
@@ -2563,6 +2564,41 @@ void App::options(ImVec2 origin, ImVec2 size) {
             settingOption(Item::legCoupling, "Leg coupling",
                    "How much the legs' swing turns your body in the air.",
                    S(150), [&] { tabCombo("##legcoupling", Item::legCoupling); });
+        });
+        group(pointJumpPage, 0, "Point jump (experimental)", [&] {
+            settingOption(Item::pointJump, "Point jump",
+                   "Whenever you touch a surface (the ground, a perch, a wall you run on), press A and B "
+                   "together to jump the way you are looking. A tap is a quick jump; hold up to the charge "
+                   "time for a bigger leap, with the charged leap's rumble. No point-launch smoke. Off by default.",
+                   S(42), [&] { tabToggle("##pointjump", Item::pointJump); });
+            settingOption(Item::pointJumpTrigger, "Trigger",
+                   "A+B together: press both within about 50 ms. Hold B, then A: hold B and press A; B let "
+                   "go of alone, or held a quarter second, is still the dodge, and a spider-sense warning "
+                   "makes B the dodge at once.",
+                   S(150), [&] { tabCombo("##pointjumptrigger", Item::pointJumpTrigger); });
+            settingOption(Item::pointJumpMinSpeed, "Tap speed",
+                   "How fast a quick tap launches you, metres per second. 9 by default.",
+                   S(150), [&] { tabCombo("##pointjumpmin", Item::pointJumpMinSpeed); });
+            settingOption(Item::pointJumpMaxSpeed, "Max speed",
+                   "How fast a full charge launches you, metres per second. 22 by default.",
+                   S(150), [&] { tabCombo("##pointjumpmax", Item::pointJumpMaxSpeed); });
+            settingOption(Item::pointJumpFull, "Charge time",
+                   "How long to hold both buttons for the full charge. 1 second by default.",
+                   S(150), [&] { tabCombo("##pointjumpfull", Item::pointJumpFull); });
+            settingOption(Item::pointJumpPush, "Surface push",
+                   "How much of the surface's own direction (up from the ground, out from a wall) is mixed "
+                   "into your look, so a flat look still leaves the surface. 25% by default; the jump never "
+                   "goes into the surface either way.",
+                   S(150), [&] { tabCombo("##pointjumppush", Item::pointJumpPush); });
+        });
+        group(pointJumpPage, 1, "Point jump: more in spidy_vr.ini", [&] {
+            ImGui::PushTextWrapPos(0);
+            ImGui::TextDisabled("point_jump_chord_ms (50), point_jump_tap_ms (150), point_jump_curve (0 ease-out, "
+                                "1 linear), point_jump_min_out_degrees (10), point_jump_keep (25 percent of your "
+                                "speed kept across the jump), point_jump_coyote_ms (120), point_jump_buffer_ms "
+                                "(150), point_jump_cooldown_ms (250), point_jump_zip_guard_ms (400, after a game "
+                                "zip), point_jump_dodge_hold_ms (250) and point_jump_in_combat (1).");
+            ImGui::PopTextWrapPos();
         });
     }
     group(static_cast<int>(spidy::vr_settings::categoryCount) + 1, 0, "Troubleshooting", [&] {

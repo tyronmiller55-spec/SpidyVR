@@ -435,6 +435,10 @@ void change(Item item, int index) {
                   Item::animatedTorso, Item::animatedModelYaw, Item::animatedAir, Item::animatedOnly,
                   Item::animatedSteering, Item::animatedAirSpin, Item::nativeRun, Item::spidyRun})
                 pending.set(static_cast<size_t>(companion));
+        } else if (item == vr_settings::Item::pointJumpMinSpeed || item == vr_settings::Item::pointJumpMaxSpeed) {
+            // POINT JUMP: TAP SPEED never above MAX SPEED (vr_settings::choose).
+            for (const auto companion : {Item::pointJumpMinSpeed, Item::pointJumpMaxSpeed})
+                pending.set(static_cast<size_t>(companion));
         } else if (item == vr_settings::Item::legControl) {
             // LEG CONTROL ON also sets the flips it needs (vr_settings::choose).
             for (const auto companion : {Item::legControl, Item::controlledFlips, Item::realisticFlips})

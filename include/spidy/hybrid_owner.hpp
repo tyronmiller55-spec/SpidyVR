@@ -28,9 +28,17 @@
 //   FULL ARMS: a punch's web strike  VR      punch (its lunge / teleport), held
 //     (ground or air)                        until the strike ends; then the
 //                                            table (landing -> ANIM)
+//   POINT JUMP fired (point_jump.hpp) VR     point-jump (the approved ground
+//     (ground, perch, Spidy wall)            exception, November 11): on the
+//                                            fire, the feet locked (the
+//                                            position lock); held through the
+//                                            takeoff (pointJumpHold); the air
+//                                            is VR's; landing -> ANIM
 //
 // No ownership switch happens on the ground except a FULL ARMS punch's strike
-// (the user, November 9 22:27: "punching can pull you out of the animation"). "The animation ended" is
+// (the user, November 9 22:27: "punching can pull you out of the animation")
+// and a POINT JUMP's launch (November 11: "point jump may take over from the
+// ground animation"; lock the feet at the switch). "The animation ended" is
 // not a signal the game gives the mod: it is taken as the move having
 // stopped rising (vertical velocity at or below zero for fallHoldNs, after at
 // least airAnimMinNs off the ground), no zip, fight or dodge still going on,
@@ -69,6 +77,7 @@ enum class EnterVr : uint8_t {
     animEnd, // a midair native animation ended with him still in the air
     punch,   // FULL ARMS: a SpidyVR punch opened a web strike (its lunge / teleport)
     flip,    // a flip's pitch or tilt input from either stick in a midair animation (breakForFlip)
+    pointJump, // POINT JUMP fired off a surface (Frame::pointJump; the ground exception)
 };
 
 inline const char* enterVrName(EnterVr e) {
@@ -95,6 +104,8 @@ inline const char* enterVrName(EnterVr e) {
         return "punch";
     case EnterVr::flip:
         return "flip-break";
+    case EnterVr::pointJump:
+        return "point-jump";
     default:
         return "none";
     }
@@ -232,6 +243,10 @@ struct Frame {
     // and that grip still held.
     bool cancelGrip{}, cancelGripHeld{};
     bool groundAction{}; // actual dispatched takeoff, not a queue/phase cooldown
+    // POINT JUMP (point_jump.hpp): fired this frame (VR at once, ground
+    // included), and its takeoff still under way (VR stays on the ground
+    // until he is off it, as groundAction).
+    bool pointJump{}, pointJumpHold{};
     // FULL ARMS (the user, Nov 9 22:27): a SpidyVR web strike is under way (its
     // flight or hang). It pulls him out of the animation, ground included,
     // and holds SpidyVR until it ends; then the table as usual.
@@ -440,6 +455,16 @@ struct HybridOwner {
             return domain;
         }
 
+        // POINT JUMP: the launch takes the body wherever he is (the ground
+        // exception); the feet lock with the switch (game_xr's position lock).
+        if (f.pointJump) {
+            clearZip();
+            airAnimNs = fallNs = -1;
+            if (domain == Domain::anim)
+                goVr(EnterVr::pointJump, nowNs);
+            return domain;
+        }
+
         // While the cancelling grip is still held in the air, nothing else
         // (a stale zip ask) takes the body back; landing still does, below.
         if (f.cancelGripHeld && domain == Domain::vr && !supported(f.state))
@@ -451,7 +476,7 @@ struct HybridOwner {
         // takeoff the swing actually dispatched leaves VR there to leave.
         if (supported(f.state)) {
             airAnimNs = fallNs = -1;
-            if (domain == Domain::vr && !f.groundAction)
+            if (domain == Domain::vr && !f.groundAction && !f.pointJumpHold)
                 goAnim(nowNs, f.state.grounded ? EnterAnim::land : EnterAnim::mount);
             if (f.zipPress || f.state.zipping) {
                 zipNs = nowNs;

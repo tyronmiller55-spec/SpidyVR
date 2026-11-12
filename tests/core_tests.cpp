@@ -9660,6 +9660,29 @@ int main() {
         k=edge.update(dt,true,false);
         check(k.jump&&k.leap==0,"a press lost at an edge");
     });
+    test("POINT JUMP: the swing launches at the given velocity from the ground only, never as a point launch", [] {
+        TestWorld w;w.enabled=false;
+        const Body standing{{0,0,0},{},true};
+        Swing s(inert());Input in;
+        s.pointJump({0,8,-12});
+        const auto out=s.predictNativeStep(1.f/60,in,w,standing);
+        int jumps{},launches{};
+        for(const auto& e:s.events()){jumps+=e.kind==EventKind::PointJump;launches+=e.kind==EventKind::PointLaunch;}
+        check(jumps==1&&!launches&&s.pointJumps()==1,"no point jump event, or a point launch");
+        near(out.velocity.z,-12,.05f);check(out.velocity.y>7,"not launched up and along");
+        // In the air: nothing (the queue is dropped).
+        Swing air(inert());air.pointJump({0,8,-12});
+        air.predictNativeStep(1.f/60,in,w,{{0,5,0},{},false});
+        bool any{};for(const auto& e:air.events())any|=e.kind==EventKind::PointJump;
+        check(!any&&!air.pointJumps(),"a point jump in the air");
+        air.predictNativeStep(1.f/60,in,w,standing);
+        for(const auto& e:air.events())any|=e.kind==EventKind::PointJump;
+        check(!any,"a dropped point jump fired later");
+        // A zero or NaN velocity is no launch.
+        Swing z(inert());z.pointJump({0,0,0});z.pointJump({NAN,1,0});
+        z.predictNativeStep(1.f/60,in,w,standing);
+        check(!z.pointJumps(),"an empty launch");
+    });
     test("a charged leap takes the body off the ground: up by its charge, and along the stick", [] {
         TestWorld w;w.enabled=false;
         const Body standing{{0,0,0},{},true};
@@ -23815,7 +23838,8 @@ int main() {
         // The realistic flips' rows come last, after the EXPERIMENTAL rows before them.
         // RUN SPEED, SLOW-MO LENGTH, SOFT LOCK, the ten camera rows, the four leg rows, AIR FISTS, then (November 11)
         // SHOOTERS, LOCK STRENGTH, CAMERA MOTION, PITCH, ROLL, BOB UP/DOWN, BOB SIDE and HEAD ANGLE.
-        constexpr size_t firstRealistic = 124;
+        // November 11 (POINT JUMP): its six rows after HEAD ANGLE, before them too.
+        constexpr size_t firstRealistic = 130;
         check(all.size() == firstRealistic + std::size(realistic), "the realistic flips' rows are not the last");
         for (size_t i = 0; i < std::size(realistic); ++i)
             check(all[firstRealistic + i].item == realistic[i], "the realistic flips' rows out of order");
@@ -24043,7 +24067,7 @@ int main() {
                   "a row in the wrong place");
         }
         check(std::count_if(all.begin(), all.end(), [](const Row& r) { return r.place == Place::tab; }) ==
-                  125, // November 11: +8 (SHOOTERS, LOCK STRENGTH, CAMERA MOTION, PITCH, ROLL, BOB x2, HEAD ANGLE), -5 old wrist rows
+                  131, // November 11: +8 (SHOOTERS, LOCK STRENGTH, CAMERA MOTION, PITCH, ROLL, BOB x2, HEAD ANGLE), -5 old wrist rows; +6 POINT JUMP
               "the tab's own rows");
         check(all[1].item == Item::webStyle && std::strcmp(all[1].title, "WEB STYLE") == 0 &&
                   all[1].choices.size() == 2 && std::strcmp(all[1].choices[0], "REALISTIC") == 0 &&
@@ -24334,7 +24358,12 @@ int main() {
                   "camera_heavy_vertical_ms=200\ncamera_heavy_horizontal_ms=150\ncamera_heavy_angle_ms=200\n"
                   "spherical_aim=1\nleg_control=0\nleg_stiffness_pct=100\nleg_damping_pct=100\nleg_coupling_pct=50\nleg_double_tap_ms=300\nair_fists=1\n"
                   "camera_pitch_pct=100\ncamera_roll_pct=100\ncamera_bob_vertical_pct=100\ncamera_bob_side_pct=100\n"
-                  "camera_head_angle_deg=0\n",
+                  "camera_head_angle_deg=0\n"
+                  "point_jump=0\npoint_jump_trigger=0\npoint_jump_chord_ms=50\npoint_jump_tap_ms=150\n"
+                  "point_jump_full_ms=1000\npoint_jump_min_speed=9\npoint_jump_max_speed=22\npoint_jump_curve=0\n"
+                  "point_jump_normal_bias=25\npoint_jump_min_out_degrees=10\npoint_jump_keep=25\n"
+                  "point_jump_coyote_ms=120\npoint_jump_buffer_ms=150\npoint_jump_cooldown_ms=250\n"
+                  "point_jump_zip_guard_ms=400\npoint_jump_dodge_hold_ms=250\npoint_jump_in_combat=1\n",
               "the defaults' text");
         Values changed = defaults;
         changed.recordingFov = 140;
@@ -27946,7 +27975,7 @@ int main() {
                   all[89].choices.size() == 9 && std::strcmp(all[89].choices[0], "OFF") == 0 &&
                   std::strcmp(all[89].choices[8], "500 MS") == 0 && all[89].place == Place::tab,
               "ANIMATED HYBRID SPEED row");
-        check(lastItem == Item::cameraHeadAngle && Item::airFists < lastItem && Item::legCoupling < lastItem && Item::animatedHeadsetSmooth < lastItem &&
+        check(lastItem == Item::pointJumpPush && Item::cameraHeadAngle < lastItem && Item::airFists < lastItem && Item::legCoupling < lastItem && Item::animatedHeadsetSmooth < lastItem &&
                   Item::softLock < Item::cameraStabilization,
               "SMOOTHING not included in the last Item bound");
     });
@@ -31117,7 +31146,7 @@ int main() {
     test("Native Animation: combined menu inventory and upstream-compatible v39 settings packet", [] {
         using namespace vr_settings;
         const auto& all = rows();
-        check(all.size() == 135 && static_cast<unsigned>(lastItem) < 256, "row/Item bounds");
+        check(all.size() == 141 && static_cast<unsigned>(lastItem) < 256, "row/Item bounds");
         std::array<unsigned, 256> seen{};
         size_t start = all.size();
         for (size_t i = 0; i < all.size(); ++i) {

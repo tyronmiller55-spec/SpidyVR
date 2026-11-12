@@ -701,7 +701,9 @@ int main() {
                                  // SHOOTERS and LOCK STRENGTH: views over WRIST SHOOTERS, WEB AIM,
                                  // FOREARM BLEND and PALM SHOOTERS, which a profile already holds; CAMERA
                                  // MOTION and its amounts and HEAD ANGLE: comfort, the player's own.
-                                 (row.item >= Item::shooterMode && row.item <= Item::cameraHeadAngle);
+                                 (row.item >= Item::shooterMode && row.item <= Item::cameraHeadAngle) ||
+                                 // POINT JUMP (November 11): the player's own controls and feel.
+                                 (row.item >= Item::pointJump && row.item <= Item::pointJumpPush);
             check(std::count_if(begin, end, [&](const ProfileSetting& s) { return s.item == row.item; }) ==
                       (leftOut ? 0 : 1),
                   row.title);
@@ -716,7 +718,9 @@ int main() {
             if (key == "recording_fov" || key == "recording_smoothing" || key == "height_cm" ||
                 key == "eye_aim" || key == "flip_reprojection" || key == "steady_hud" ||
                 key == "animated_full_arms" || key == "spherical_aim" ||
-                key.rfind("camera_", 0) == 0 || key.rfind("leg_", 0) == 0)
+                key.rfind("camera_", 0) == 0 || key.rfind("leg_", 0) == 0 ||
+                // POINT JUMP (November 11): the player's own, not in shared profiles.
+                key.rfind("point_jump", 0) == 0)
                 continue;
             ++lines;
             check(at(key) < std::size(profileSettings) &&
