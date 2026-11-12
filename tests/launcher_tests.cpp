@@ -703,7 +703,9 @@ int main() {
                                  // MOTION and its amounts and HEAD ANGLE: comfort, the player's own.
                                  (row.item >= Item::shooterMode && row.item <= Item::cameraHeadAngle) ||
                                  // POINT JUMP (November 11): the player's own controls and feel.
-                                 (row.item >= Item::pointJump && row.item <= Item::pointJumpPush);
+                                 (row.item >= Item::pointJump && row.item <= Item::pointJumpPush) ||
+                                 // LEG TOGGLE (November 12): the player's own control.
+                                 row.item == Item::legToggleInput;
             check(std::count_if(begin, end, [&](const ProfileSetting& s) { return s.item == row.item; }) ==
                       (leftOut ? 0 : 1),
                   row.title);

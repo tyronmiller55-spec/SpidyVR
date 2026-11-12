@@ -384,6 +384,8 @@ XrAction XrRuntime::actionFor(ControllerInput input) const {
         return buttonX_;
     case ControllerInput::y:
         return reset_;
+    case ControllerInput::thumbrest:
+        return thumbrest_;
     case ControllerInput::menu:
         return menu_;
     case ControllerInput::view:
@@ -410,25 +412,49 @@ bool XrRuntime::offered(const ControllerLayout& layout) const {
 void XrRuntime::suggest(const ControllerLayout& layout) {
     XrResult result = XR_ERROR_PATH_UNSUPPORTED;
     XrPath profile = XR_NULL_PATH;
-    try {
-        std::vector<XrActionSuggestedBinding> bindings;
-        for (const auto& binding : layout.bindings)
-            bindings.push_back({actionFor(binding.input), path(binding.path)});
-        profile = path(layout.profile);
-        XrInteractionProfileSuggestedBinding suggested{XR_TYPE_INTERACTION_PROFILE_SUGGESTED_BINDING};
-        suggested.interactionProfile = profile;
-        suggested.countSuggestedBindings = static_cast<uint32_t>(bindings.size());
-        suggested.suggestedBindings = bindings.data();
-        result = xrSuggestInteractionProfileBindings(instance_, &suggested);
-    } catch (const std::runtime_error&) {
-        if (!layout.extension)
-            throw;
+    bool extras = false;
+    // With its extras first, then (refused) without them: suggesting a
+    // profile again replaces what it was suggested before.
+    for (const bool withExtras : {true, false}) {
+        if (withExtras && layout.extras.empty())
+            continue;
+        try {
+            std::vector<XrActionSuggestedBinding> bindings;
+            for (const auto& binding : layout.bindings)
+                bindings.push_back({actionFor(binding.input), path(binding.path)});
+            if (withExtras)
+                for (const auto& binding : layout.extras)
+                    if (actionFor(binding.input))
+                        bindings.push_back({actionFor(binding.input), path(binding.path)});
+            profile = path(layout.profile);
+            XrInteractionProfileSuggestedBinding suggested{XR_TYPE_INTERACTION_PROFILE_SUGGESTED_BINDING};
+            suggested.interactionProfile = profile;
+            suggested.countSuggestedBindings = static_cast<uint32_t>(bindings.size());
+            suggested.suggestedBindings = bindings.data();
+            result = xrSuggestInteractionProfileBindings(instance_, &suggested);
+        } catch (const std::runtime_error&) {
+            if (!layout.extension && !withExtras)
+                throw;
+            result = XR_ERROR_PATH_UNSUPPORTED;
+        }
+        if (withExtras) {
+            extras = XR_SUCCEEDED(result);
+            std::cout << "Controller layout " << controllerName(layout.kind)
+                      << (extras ? ": extras taken (left thumb rest touch)\n"
+                                 : ": extras not taken by this runtime\n");
+            if (extras)
+                break;
+        }
     }
     if (result != XR_ERROR_PATH_UNSUPPORTED && !layout.extension)
         xr(result, "Suggest controller bindings");
     if (XR_SUCCEEDED(result)) {
         profiles_.push_back({profile, layout.kind});
         layouts_ |= 1u << static_cast<uint32_t>(layout.kind);
+        if (extras)
+            for (const auto& binding : layout.extras)
+                if (binding.input == ControllerInput::thumbrest)
+                    thumbrestBound_ = true;
     }
     std::cout << "Controller layout " << controllerName(layout.kind)
               << (XR_SUCCEEDED(result) ? ": taken\n" : ": not taken by this runtime\n");
@@ -518,6 +544,7 @@ void XrRuntime::createActions() {
     buttonB_ = action("button_b", "Back (menus)", XR_ACTION_TYPE_BOOLEAN_INPUT, false);
     buttonX_ = action("button_x", "X (menus)", XR_ACTION_TYPE_BOOLEAN_INPUT, false);
     menu_ = action("menu", "Pause menu", XR_ACTION_TYPE_BOOLEAN_INPUT, false);
+    thumbrest_ = action("thumbrest", "Leg control toggle (thumb rest)", XR_ACTION_TYPE_BOOLEAN_INPUT, false);
     haptic_ = action("haptic", "Web feedback", XR_ACTION_TYPE_VIBRATION_OUTPUT);
     // The Steam Frame's own buttons only where its layout is offered: every
     // other runtime gets the actions it got before.
@@ -721,6 +748,7 @@ XrFrame XrRuntime::input(XrTime time) {
     frame.buttons = (frame.jump ? buttonA : 0u) | (boolean(buttonB_) ? buttonB : 0u) |
                     (boolean(buttonX_) ? buttonX : 0u) | (frame.reset ? buttonY : 0u) |
                     (boolean(menu_) ? buttonMenu : 0u);
+    frame.thumbrest = thumbrestBound_ && boolean(thumbrest_);
     if (view_) {
         // Extras: a button the runtime will not read is not held, and the
         // frame is as good without it.

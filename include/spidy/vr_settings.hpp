@@ -370,7 +370,12 @@ struct Values {
     // LEG STIFFNESS, LEG DAMPING: percent of the springs' defaults (1.6 Hz,
     // 0.35); LEG COUPLING: percent of the legs' full turn on the body.
     // leg_double_tap_ms (spidy_vr.ini only): the double tap's window.
+    // LEG TOGGLE (leg_toggle_input; leg_toggle.hpp, November 12): how the
+    // legs are toggled in play, 0 THUMB REST TAP (default), 1 HOLD X+Y, 2
+    // ALWAYS ON (as before). Toggled off (each session starts so), the right
+    // stick turns, zips and heals as without LEG CONTROL.
     bool legControl = false;
+    int legToggleInput = 0;
     int legStiffnessPct = 100, legDampingPct = 100, legCouplingPct = 50;
     int legDoubleTapMs = 300;
     // RUN SPEED, percent (the tab's RUN SPEED; Swing::setRunSpeedPercent):
@@ -653,8 +658,10 @@ enum class Item : uint8_t {
     pointJumpMaxSpeed,
     pointJumpFull,
     pointJumpPush,
+    // November 12: LEG TOGGLE (leg_toggle.hpp).
+    legToggleInput,
 };
-inline constexpr Item lastItem = Item::pointJumpPush;
+inline constexpr Item lastItem = Item::legToggleInput;
 // SLOW-MO LENGTH's last step: no time limit (until L3 toggles it off).
 inline constexpr int slowMotionEndless = 91;
 // Real seconds a full meter lasts for a SLOW-MO LENGTH value; 0 = endless.
@@ -684,7 +691,7 @@ struct Row {
     Place place{};
 };
 // Stable row/setting numbers; categories below determine presentation order.
-const std::array<Row, 141>& rows();
+const std::array<Row, 142>& rows();
 const Row* rowFor(Item);
 // camera, shooters and legs (November 11, the user: "I can't find legs or
 // camera settings in any of the menus. Make sure it's clearly labeled"): tabs

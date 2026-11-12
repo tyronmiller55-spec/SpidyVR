@@ -23839,7 +23839,8 @@ int main() {
         // RUN SPEED, SLOW-MO LENGTH, SOFT LOCK, the ten camera rows, the four leg rows, AIR FISTS, then (November 11)
         // SHOOTERS, LOCK STRENGTH, CAMERA MOTION, PITCH, ROLL, BOB UP/DOWN, BOB SIDE and HEAD ANGLE.
         // November 11 (POINT JUMP): its six rows after HEAD ANGLE, before them too.
-        constexpr size_t firstRealistic = 130;
+        // November 12: LEG TOGGLE after POINT JUMP's.
+        constexpr size_t firstRealistic = 131;
         check(all.size() == firstRealistic + std::size(realistic), "the realistic flips' rows are not the last");
         for (size_t i = 0; i < std::size(realistic); ++i)
             check(all[firstRealistic + i].item == realistic[i], "the realistic flips' rows out of order");
@@ -24067,7 +24068,7 @@ int main() {
                   "a row in the wrong place");
         }
         check(std::count_if(all.begin(), all.end(), [](const Row& r) { return r.place == Place::tab; }) ==
-                  131, // November 11: +8 (SHOOTERS, LOCK STRENGTH, CAMERA MOTION, PITCH, ROLL, BOB x2, HEAD ANGLE), -5 old wrist rows; +6 POINT JUMP
+                  132, // November 11: +8 (SHOOTERS, LOCK STRENGTH, CAMERA MOTION, PITCH, ROLL, BOB x2, HEAD ANGLE), -5 old wrist rows; +6 POINT JUMP; November 12: +1 LEG TOGGLE
               "the tab's own rows");
         check(all[1].item == Item::webStyle && std::strcmp(all[1].title, "WEB STYLE") == 0 &&
                   all[1].choices.size() == 2 && std::strcmp(all[1].choices[0], "REALISTIC") == 0 &&
@@ -24356,7 +24357,7 @@ int main() {
                   "camera_stabilization=0\ncamera_vertical_ms=0\ncamera_horizontal_ms=0\ncamera_angle_ms=0\n"
                   "camera_light_vertical_ms=75\ncamera_light_horizontal_ms=50\ncamera_light_angle_ms=75\n"
                   "camera_heavy_vertical_ms=200\ncamera_heavy_horizontal_ms=150\ncamera_heavy_angle_ms=200\n"
-                  "spherical_aim=1\nleg_control=0\nleg_stiffness_pct=100\nleg_damping_pct=100\nleg_coupling_pct=50\nleg_double_tap_ms=300\nair_fists=1\n"
+                  "spherical_aim=1\nleg_control=0\nleg_stiffness_pct=100\nleg_damping_pct=100\nleg_coupling_pct=50\nleg_double_tap_ms=300\nleg_toggle_input=0\nair_fists=1\n"
                   "camera_pitch_pct=100\ncamera_roll_pct=100\ncamera_bob_vertical_pct=100\ncamera_bob_side_pct=100\n"
                   "camera_head_angle_deg=0\n"
                   "point_jump=0\npoint_jump_trigger=0\npoint_jump_chord_ms=50\npoint_jump_tap_ms=150\n"
@@ -27975,7 +27976,7 @@ int main() {
                   all[89].choices.size() == 9 && std::strcmp(all[89].choices[0], "OFF") == 0 &&
                   std::strcmp(all[89].choices[8], "500 MS") == 0 && all[89].place == Place::tab,
               "ANIMATED HYBRID SPEED row");
-        check(lastItem == Item::pointJumpPush && Item::cameraHeadAngle < lastItem && Item::airFists < lastItem && Item::legCoupling < lastItem && Item::animatedHeadsetSmooth < lastItem &&
+        check(lastItem == Item::legToggleInput && Item::pointJumpPush < lastItem && Item::cameraHeadAngle < lastItem && Item::airFists < lastItem && Item::legCoupling < lastItem && Item::animatedHeadsetSmooth < lastItem &&
                   Item::softLock < Item::cameraStabilization,
               "SMOOTHING not included in the last Item bound");
     });
@@ -31146,7 +31147,7 @@ int main() {
     test("Native Animation: combined menu inventory and upstream-compatible v39 settings packet", [] {
         using namespace vr_settings;
         const auto& all = rows();
-        check(all.size() == 141 && static_cast<unsigned>(lastItem) < 256, "row/Item bounds");
+        check(all.size() == 142 && static_cast<unsigned>(lastItem) < 256, "row/Item bounds");
         std::array<unsigned, 256> seen{};
         size_t start = all.size();
         for (size_t i = 0; i < all.size(); ++i) {

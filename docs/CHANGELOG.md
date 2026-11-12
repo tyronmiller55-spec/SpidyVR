@@ -3,6 +3,18 @@
 Every build, newest first, with what changed, why, and what was measured.
 Per-check results are in [VALIDATION.md](VALIDATION.md).
 
+## Native Animation: LEG TOGGLE (thumb rest tap, HOLD X+Y)
+
+The user, Nov 12 00:44-00:46 PST: with LEG CONTROL "I lose all of my other functionality, including the ability to rotate left and right"; toggle the legs in real time with the left thumb rest (a deliberate tap), never the left stick click (slow-mo), fallback HOLD X+Y. Built on c128662. Not headset-tested. Details: [LEG_TOGGLE.md](LEG_TOGGLE.md).
+
+- **Toggle:** LEG CONTROL stays the master. New LEG TOGGLE (`leg_toggle_input`): THUMB REST TAP (default), HOLD X+Y, ALWAYS ON (as before). Legs start OFF each session; OFF the right stick turns, zips and heals as without LEG CONTROL everywhere, midair included; ON midair it poses the legs as before. Same-frame effect; haptic tick and `leg toggle:` log line.
+- **Thumb rest:** `/user/hand/left/input/thumbrest/touch` added to the Touch profile as an extra (retried without it if refused, so the Touch layout is never lost); a tap is 30-350 ms after 0.2 s untouched, left stick still and unclicked. No binding: THUMB REST TAP reads X+Y.
+- **HOLD X+Y:** 0.2 s; X and Y kept from the game and the gadget wheel while both are down; single X / Y untouched.
+- **Easing:** turned off midair the legs spring to straight (critically damped, 0.6 s) before the leg layer blends out.
+- **Flip break:** turns never break; right-stick pitch breaks only while legs are ON (OFF it is zip/heal), as 07447b8.
+- **Punch view jump:** not changed in this build (no option is clearly low risk and covers most of the jump).
+- **Tests:** `spidy_leg_toggle_tests` (108 checks); core 918/918; launcher 43/43; point jump 547.
+
 ## Native Animation: POINT JUMP (milestone 1, experimental, off by default)
 
 The user, Nov 11: touching any surface, charge a jump that launches the way you look; a tap is a quick jump, up to a second a bigger leap; reuse the charged leap's timing and rumble and the takeoff path; never the game's point launch smoke. EngineBot's plan. Built on 07447b8 (feat/stabilization-wrist-lock). Not headset-tested. Details: [POINT_JUMP.md](POINT_JUMP.md).

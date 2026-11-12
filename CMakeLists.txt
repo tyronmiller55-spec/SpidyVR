@@ -69,6 +69,10 @@ add_executable(spidy_point_jump_tests tests/point_jump_tests.cpp)
 target_link_libraries(spidy_point_jump_tests PRIVATE spidy_core)
 target_compile_definitions(spidy_point_jump_tests PRIVATE SPIDY_SOURCE_DIR="${CMAKE_SOURCE_DIR}")
 add_test(NAME point_jump COMMAND spidy_point_jump_tests)
+# LEG TOGGLE (leg_toggle.hpp): thumb rest tap, X+Y hold, toggle, easing, setting, layout (portable).
+add_executable(spidy_leg_toggle_tests tests/leg_toggle_tests.cpp)
+target_link_libraries(spidy_leg_toggle_tests PRIVATE spidy_core)
+add_test(NAME leg_toggle COMMAND spidy_leg_toggle_tests)
 
 find_package(Threads REQUIRED)
 add_executable(spidy_action_protocol_tests tests/action_protocol_tests.cpp)

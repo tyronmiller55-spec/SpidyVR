@@ -82,6 +82,11 @@ class XrRuntime {
     // The layout the runtime uses for each hand's controller now (left,
     // right): one of Spidy's (controller_layout.hpp) or one of its own. And
     // the layouts it took Spidy's controls for, a bit each (1 << ControllerKind).
+    // Whether a layout with the left thumb rest's touch was taken (the leg
+    // toggle's THUMB REST TAP can be read).
+    bool thumbrestBound() const {
+        return thumbrestBound_;
+    }
     std::array<ControllerKind, 2> controllers() const {
         return controllers_;
     }
@@ -160,6 +165,9 @@ class XrRuntime {
     XrAction aim_{}, grip_{}, trigger_{}, squeeze_{}, stick_{}, stickClick_{}, jump_{}, reset_{}, haptic_{};
     // The other face buttons and the menu button, for the game's menus.
     XrAction buttonB_{}, buttonX_{}, menu_{};
+    // The left thumb rest's touch (Touch's extra): bound where thumbrestBound_.
+    XrAction thumbrest_{};
+    bool thumbrestBound_{};
     // The Steam Frame's own: its View button and its D-pad (up, down, left,
     // right). None where the runtime does not know that controller.
     XrAction view_{};

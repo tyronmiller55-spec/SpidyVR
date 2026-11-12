@@ -49,6 +49,7 @@
 #include "spidy/shooter_lock.hpp"
 #include "spidy/spherical_aim.hpp"
 #include "spidy/leg_control.hpp"
+#include "spidy/leg_toggle.hpp"
 #include "spidy/aim_filter.hpp"
 #include "spidy/arm_frame.hpp"
 #include "spidy/kinematics.hpp"
@@ -924,6 +925,13 @@ DWORD WINAPI run(void*) {
         game_pad::StickDoubleTap legTap;
         leg_control::Simulation legSim;
         bool legStickOwns{}, legStickActive{}, legModeLogged{};
+        // LEG TOGGLE (leg_toggle.hpp; the user, November 12): the legs on and
+        // off in play, a thumb rest tap or X+Y held. Off each session.
+        leg_toggle::ThumbrestTap legThumbTap;
+        leg_toggle::XYHold legXY;
+        leg_toggle::Toggle legToggle;
+        int legToggleInputLogged = -1;
+        bool legBaseLast{};
         float legStickX{}, legStickY{};
         Vec3 legPrevVelocity{}, legAccel{};
         bool legPrevVelocitySet{};
@@ -2247,6 +2255,56 @@ DWORD WINAPI run(void*) {
                             }
                         }
                     }
+                    // LEG TOGGLE (leg_toggle.hpp; the user, November 12 00:44, t64u,
+                    // t65u): LEG CONTROL's legs on and off in play, on the frame the
+                    // tap or hold is read, before anything reads X or Y or the right
+                    // stick. A thumb rest tap (Touch's left thumb rest), or X+Y held
+                    // 0.2 s (also where no thumb rest binding was taken). Never the
+                    // left stick's click: that is slow motion.
+                    {
+                        const bool master = values.legControl && (values.controlledFlips || values.realisticFlips) &&
+                                            values.body && !flatScreen;
+                        const auto chosen = leg_toggle::fromSetting(values.legToggleInput);
+                        const auto input = leg_toggle::effective(chosen, runtime.thumbrestBound());
+                        const bool togglePlay =
+                            master && viewing && gameplay && motion.active && spiderMan && !calibrationInput &&
+                            !phone.open() && !gadgetWheel.open() && !padLayer.latched();
+                        bool tapped = false;
+                        {
+                            const auto& left = frame.hands[0];
+                            const float tilt = left.valid ? std::hypot(left.stickX, left.stickY) : 0.f;
+                            const bool tap = legThumbTap.update(frame.seconds, left.valid && frame.thumbrest, tilt,
+                                                                left.valid && left.stickClick);
+                            tapped = tap && togglePlay && input == leg_toggle::Input::thumbrest;
+                        }
+                        {
+                            const bool x = (frame.buttons & buttonX) != 0, y = (frame.buttons & buttonY) != 0;
+                            const bool xyFree = togglePlay && input == leg_toggle::Input::xyHold &&
+                                                !(namedPress.claimed() &
+                                                  (game_pad::NamedPress::controlX | game_pad::NamedPress::controlY));
+                            const auto hold = legXY.update(frame.seconds, xyFree && x, xyFree && y);
+                            if (hold.mask) {
+                                frame.buttons &= ~static_cast<uint32_t>(buttonX | buttonY);
+                                frame.reset = false;
+                            }
+                            tapped = tapped || hold.tap;
+                        }
+                        legToggle.update(frame.seconds, input, master, tapped);
+                        if (legToggle.changed()) {
+                            runtime.haptic(0, .25f);
+                            diag_log::writef("leg toggle: %s (%s%s)", legToggle.on() ? "ON" : "OFF",
+                                             leg_toggle::inputName(input),
+                                             input != chosen ? ", no thumb rest binding" : "");
+                        }
+                        if (master && values.legToggleInput != legToggleInputLogged) {
+                            legToggleInputLogged = values.legToggleInput;
+                            diag_log::writef("leg toggle: input %s%s (thumb rest %s); legs start %s",
+                                             leg_toggle::inputName(input),
+                                             input != chosen ? " (thumb rest tap chosen)" : "",
+                                             runtime.thumbrestBound() ? "bound" : "not bound",
+                                             legToggle.on() ? "ON" : "OFF");
+                        }
+                    }
                     if (!frame.jump)
                         jumpFromScreen = false;
                     else if (wasScreen)
@@ -2661,16 +2719,21 @@ DWORD WINAPI run(void*) {
                         in.rightX = controller.hands[1].stickX;
                         in.rightY = controller.hands[1].stickY;
                         in.basicFlips = values.flips && !values.controlledFlips && !values.realisticFlips;
-                        in.legs = flipBreakLegs;
+                        // Toggled off, the right stick is no leg's: its up/down zips
+                        // and heals (no pitch, no break), as without LEG CONTROL.
+                        in.legs = flipBreakLegs && legToggle.on();
                         in.zipPriority = zipPriority;
                         // With LEG CONTROL the push that broke is the legs' from this
                         // frame (a double tap's first push counts toward the zip/heal).
-                        if (tryFlipBreak(in) && flipBreakLegs)
+                        if (tryFlipBreak(in) && in.legs)
                             legStickOwns = true;
                     }
                     // LEG CONTROL owns the right stick (last frame's finding, in
                     // play): it turns nothing and goes to the game as rest.
-                    legStickActive = legStickOwns && gesturesPlay;
+                    // LEG TOGGLE on this frame: off, the stick is the turn's at once;
+                    // on where the legs could move last frame, the legs' at once.
+                    legStickActive = gesturesPlay && legToggle.on() &&
+                                     (legStickOwns || (legToggle.changed() && legBaseLast));
                     legStickOwns = false;
                     rig.legStick(legStickActive);
                     if (legStickActive)
@@ -7128,11 +7191,18 @@ DWORD WINAPI run(void*) {
                         {
                             // November 11 23:35: with REALISTIC FLIPS too (the rig feeds the
                             // legs' turn and inertia into RealisticFlip's momentum model).
-                            const bool legMode = values.legControl &&
+                            // LEG TOGGLE: toggled on, the legs own the right stick here;
+                            // just toggled off they spring back to straight (critically
+                            // damped, stick centred, Toggle::easeSeconds) before body_ik
+                            // blends them out, and the stick is already the turn's.
+                            const bool legBase = values.legControl &&
                                                  (values.controlledFlips || values.realisticFlips) &&
                                                  values.body && !flatScreen &&
                                                  legsAirOnly && !calibrationInput;
-                            legStickOwns = legMode;
+                            const bool legEasing = legBase && !legToggle.on() && legToggle.easing();
+                            const bool legMode = legBase && (legToggle.on() || legEasing);
+                            legStickOwns = legBase && legToggle.on();
+                            legBaseLast = legBase;
                             const float legDt = std::isfinite(frame.seconds) ? std::clamp(frame.seconds, 0.f, .1f) : 0.f;
                             const Vec3 vel = swingState.velocity;
                             if (legMode && finite(vel) && legPrevVelocitySet && legDt > 1e-4f) {
@@ -7163,9 +7233,15 @@ DWORD WINAPI run(void*) {
                             }
                             legPrevBody = body;
                             legPrevBodySet = legMode;
-                            const auto params = leg_control::fromPercent(values.legStiffnessPct, values.legDampingPct,
-                                                                         values.legCouplingPct);
-                            const auto legOut = legSim.update(legDt, legMode, legStickX, legStickY, legMotion, params);
+                            auto params = leg_control::fromPercent(values.legStiffnessPct, values.legDampingPct,
+                                                                   values.legCouplingPct);
+                            if (legEasing) {
+                                params.frequencyHz = std::max(params.frequencyHz, 2.5f);
+                                params.dampingRatio = 1.f;
+                                params.looseness = 0.f;
+                            }
+                            const auto legOut = legSim.update(legDt, legMode, legEasing ? 0.f : legStickX,
+                                                              legEasing ? 0.f : legStickY, legMotion, params);
                             std::array<body::Targets::LegAngles, 2> angles{};
                             for (int i = 0; i < 2; ++i)
                                 angles[i] = {legOut.legs[i].pitch, legOut.legs[i].side, legOut.legs[i].knee};
@@ -7174,7 +7250,7 @@ DWORD WINAPI run(void*) {
                                 rig.legCoupling(legOut.reactionPitch, legOut.reactionRoll, legOut.spinScale);
                             if (legMode != legModeLogged) {
                                 legModeLogged = legMode;
-                                diag_log::writef("leg control: %s", legMode ? "on (air)" : "off");
+                                diag_log::writef("leg control: %s", legMode ? (legEasing ? "easing to straight" : "on (air)") : "off");
                             }
                         }
                         // Slice T: hold B (dodge) to tuck. Triggers and grips stay

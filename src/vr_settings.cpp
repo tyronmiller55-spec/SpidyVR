@@ -215,6 +215,10 @@ static_assert(std::size(pointJumpFullChoices) == std::size(pointJumpFulls));
 constexpr int pointJumpPushes[] = {0, 10, 25, 40, 60};
 constexpr const char* pointJumpPushChoices[] = {"0%", "10%", "25%", "40%", "60%"};
 static_assert(std::size(pointJumpPushChoices) == std::size(pointJumpPushes));
+// LEG TOGGLE (leg_toggle.hpp): leg_toggle_input.
+constexpr int legToggleInputs[] = {0, 1, 2};
+constexpr const char* legToggleInputChoices[] = {"THUMB REST TAP", "HOLD X+Y", "ALWAYS ON"};
+static_assert(std::size(legToggleInputChoices) == std::size(legToggleInputs));
 } // namespace
 
 std::span<const int> steps(Item item) {
@@ -291,6 +295,8 @@ std::span<const int> steps(Item item) {
         return cameraHeadAngles;
     case Item::pointJumpTrigger:
         return pointJumpTriggers;
+    case Item::legToggleInput:
+        return legToggleInputs;
     case Item::pointJumpMinSpeed:
         return pointJumpMinSpeeds;
     case Item::pointJumpMaxSpeed:
@@ -440,6 +446,8 @@ float numberOf(Item item, const Values& v) {
         return static_cast<float>(v.cameraHeadAngleDeg);
     case Item::pointJumpTrigger:
         return static_cast<float>(v.pointJumpTrigger);
+    case Item::legToggleInput:
+        return static_cast<float>(v.legToggleInput);
     case Item::pointJumpMinSpeed:
         return static_cast<float>(v.pointJumpMinSpeed);
     case Item::pointJumpMaxSpeed:
@@ -667,6 +675,7 @@ Values sanitized(Values v) {
     v.cameraHeadAngleDeg = std::clamp(v.cameraHeadAngleDeg, -camera_motion::maxHeadAngle, camera_motion::maxHeadAngle);
     v.legDoubleTapMs = std::clamp(v.legDoubleTapMs, 150, 600);
     v.pointJumpTrigger = std::clamp(v.pointJumpTrigger, 0, 1);
+    v.legToggleInput = std::clamp(v.legToggleInput, 0, 2);
     v.pointJumpChordMs = std::clamp(v.pointJumpChordMs, 20, 150);
     v.pointJumpTapMs = std::clamp(v.pointJumpTapMs, 50, 400);
     v.pointJumpFullMs = std::clamp(v.pointJumpFullMs, 300, 2000);
@@ -708,9 +717,9 @@ Values sanitized(Values v) {
     v.automaticHandThreshold = std::clamp(v.automaticHandThreshold, 50, 300);
     return v;
 }
-const std::array<Row, 141>& rows() {
+const std::array<Row, 142>& rows() {
     // The help fits the game's description column beside the rows.
-    static const std::array<Row, 141> all{{
+    static const std::array<Row, 142> all{{
         {Item::none, "WEBS", nullptr, {}},
         {Item::webStyle, "WEB STYLE",
          "Arcade: webs pass lamp posts, signs and cars, and swings stay above the street.", webStyleChoices},
@@ -1074,6 +1083,9 @@ const std::array<Row, 141>& rows() {
         {Item::pointJumpFull, "CHARGE TIME", "How long to hold for the full charge.", pointJumpFullChoices},
         {Item::pointJumpPush, "SURFACE PUSH",
          "How much the jump leans out of the surface you stand on. 25% default.", pointJumpPushChoices},
+        // November 12: LEG TOGGLE (leg_toggle.hpp), after POINT JUMP, before the realistic flips (last).
+        {Item::legToggleInput, "LEG TOGGLE",
+         "Turn legs on/off in play. Off: right stick turns, zips, heals as before.", legToggleInputChoices},
         {Item::realisticFlips,
          "REALISTIC FLIPS",
          "Momentum rotation from arms and webs. FLIPS also enables left-stick steering.",
@@ -1180,7 +1192,7 @@ const std::array<Screen, categoryCount>& screens() {
     // LEGS (ADVANCED) (November 11): shown even while unavailable, the help
     // saying why (shownWhenInactive).
     static constexpr Item legs[] = {
-        Item::legControl, Item::legStiffness, Item::legDamping, Item::legCoupling,
+        Item::legControl, Item::legToggleInput, Item::legStiffness, Item::legDamping, Item::legCoupling,
     };
     // POINT JUMP (November 11): its switch, trigger and feel.
     static constexpr Item pointJump[] = {
@@ -1234,6 +1246,7 @@ const char* inactiveReason(Item item, const Values& v) {
         return !v.controlledFlips && !v.realisticFlips
                    ? "Needs CONTROLLED or REALISTIC FLIPS. ON here turns CONTROLLED FLIPS on."
                    : nullptr;
+    case Item::legToggleInput:
     case Item::legStiffness:
     case Item::legDamping:
     case Item::legCoupling:
@@ -1280,6 +1293,7 @@ const char* inactiveReason(Item item, const Values& v) {
 bool shownWhenInactive(Item item) {
     switch (item) {
     case Item::legControl:
+    case Item::legToggleInput:
     case Item::legStiffness:
     case Item::legDamping:
     case Item::legCoupling:
@@ -1487,6 +1501,9 @@ bool choose(Item item, int index, Values& v) {
     case Item::pointJumpTrigger:
         v.pointJumpTrigger = s[index];
         break;
+    case Item::legToggleInput:
+        v.legToggleInput = s[index];
+        break;
     case Item::pointJumpMinSpeed:
         v.pointJumpMinSpeed = s[index];
         v.pointJumpMaxSpeed = std::max(v.pointJumpMaxSpeed, v.pointJumpMinSpeed);
@@ -1692,6 +1709,7 @@ constexpr TabOnly tabOnly[] = {
     {"leg_damping_pct", nullptr, &Values::legDampingPct},
     {"leg_coupling_pct", nullptr, &Values::legCouplingPct},
     {"leg_double_tap_ms", nullptr, &Values::legDoubleTapMs},
+    {"leg_toggle_input", nullptr, &Values::legToggleInput},
     {"air_fists", &Values::airFists, nullptr},
     {"camera_pitch_pct", nullptr, &Values::cameraPitchPct},
     {"camera_roll_pct", nullptr, &Values::cameraRollPct},
