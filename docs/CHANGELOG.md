@@ -3,6 +3,16 @@
 Every build, newest first, with what changed, why, and what was measured.
 Per-check results are in [VALIDATION.md](VALIDATION.md).
 
+## FULL HEAD LOCK ON THE STABLE HEADING, ANIM YAW SWAY, TURN-IN-PLACE (Step B of the Nov 12 plan)
+
+The user, Nov 12 05:56 PST. Built on edeba41 (feat/jump-handoff). Not headset-tested. Details: [STABLE_VIEW_YAW.md](STABLE_VIEW_YAW.md).
+
+- **Full head lock, stable yaw:** eye position, pitch and roll from the head bone; yaw from a lock heading that only the right stick turns (smooth rate or snaps). Eyes, the hand map (webs, balls, markers, shooter lock) and the arm IK anchor are turned the same way.
+- **ANIM YAW SWAY (0-100%, default 20%):** that share of the head's yaw sway (head bone vs hero facing) is added back. 100% = the old feel (lock off). `anim_yaw_sway_pct`.
+- **TURN-IN-PLACE ANGLE (OFF/20-90 deg, default 35):** standing, the hero turns to the heading via a closed loop on the walk stick (no facing write; there is no verified address). Replaces the open-loop standing R-stick turn request. `turn_in_place_deg`.
+- **Logs:** `view yaw lock:`, `view yaw:` (2 Hz), `view yaw divergence:` (10 s), `view turn:`, `turn in place:`.
+- **Tests:** `spidy_view_yaw_lock_tests` (58); core 918/918; launcher 43/43; ctest 16/16.
+
 ## JUMP TO SPIDYVR, AIR VIEW EASE (build 2 of the Nov 12 plan)
 
 The user, Nov 12 05:41 PST. Built on 1008510 (feat/haptics-stable-yaw). Not headset-tested. Details: [JUMP_HANDOFF.md](JUMP_HANDOFF.md); rule in [OWNERSHIP.md](OWNERSHIP.md).

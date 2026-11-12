@@ -93,6 +93,10 @@ add_test(NAME sound_trace COMMAND spidy_sound_trace_tests)
 add_executable(spidy_jump_handoff_tests tests/jump_handoff_tests.cpp)
 target_link_libraries(spidy_jump_handoff_tests PRIVATE spidy_core)
 add_test(NAME jump_handoff COMMAND spidy_jump_handoff_tests)
+# FULL head lock on the stable heading, ANIM YAW SWAY, TURN-IN-PLACE (view_yaw_lock.hpp; portable).
+add_executable(spidy_view_yaw_lock_tests tests/view_yaw_lock_tests.cpp)
+target_link_libraries(spidy_view_yaw_lock_tests PRIVATE spidy_core)
+add_test(NAME view_yaw_lock COMMAND spidy_view_yaw_lock_tests)
 
 find_package(Threads REQUIRED)
 add_executable(spidy_action_protocol_tests tests/action_protocol_tests.cpp)

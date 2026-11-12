@@ -78,6 +78,7 @@
 #include "spidy/move_haptics.hpp"
 #include "spidy/sound_trace.hpp"
 #include "spidy/stable_yaw.hpp"
+#include "spidy/view_yaw_lock.hpp"
 #include "spidy/animated_arms.hpp"
 #include "spidy/frame_stats.hpp"
 #include "spidy/seated.hpp"
@@ -1168,6 +1169,20 @@ DWORD WINAPI run(void*) {
         stable_yaw::Heading stableHeading{};
         stable_yaw::GapWatch yawGap{};
         stable_yaw::Runaway yawRunaway{};
+        // FULL head lock on the stable heading (view_yaw_lock.hpp, Step B): the
+        // lock's heading, TURN-IN-PLACE, the divergence metric and the R-stick
+        // turn watch. viewLockActive: published this frame (eyes, hands, arms);
+        // fullLockGate: the R stick turns it (Full on the ground, not softlock).
+        view_yaw_lock::Lock viewLock{};
+        view_yaw_lock::TurnInPlace turnInPlace{};
+        view_yaw_lock::Divergence viewDivergence{};
+        view_yaw_lock::TurnWatch viewTurnWatch{};
+        bool viewLockActive{}, fullLockGate{}, viewLockSnapped{};
+        float viewLockDelta{};
+        float viewLockHeading{}; // the lock + the headset's turn (where the player looks)
+        bool viewLockHeadingOk{};
+        int64_t viewYawDiagAt{}, viewDivergenceAt{};
+        uint32_t viewLockTurnsLogged{};
         // MOVE HAPTICS (move_haptics.hpp) and SOUND TRACE's events (sound_trace.hpp).
         move_haptics::Detector moveDetector{};
         move_haptics::Scheduler moveScheduler{};
@@ -2833,6 +2848,12 @@ DWORD WINAPI run(void*) {
                     }
                     bool hybridInputViewOk = false;
                     float hybridInputViewYaw = 0.f;
+                    // FULL head lock on the stable heading steers from the lock (Step B).
+                    const bool viewLockSteer =
+                        viewLockActive && viewLock.set &&
+                        stable_yaw::sourceOf(values.viewYawSource) == stable_yaw::Source::stable &&
+                        animated_moves::headFollow(values.animatedHead) == animated_moves::HeadFollow::full;
+                    viewLockHeadingOk = false;
                     // The player's own turn (headset since the latch + R-stick turns), for
                     // the runaway-turn detector (stable_yaw.hpp).
                     float hybridInputIntentYaw = 0.f;
@@ -2855,7 +2876,8 @@ DWORD WINAPI run(void*) {
                         Mat4 headMat{};
                         const bool levelHead = animated_moves::headFollow(values.animatedHead) ==
                                                animated_moves::HeadFollow::level;
-                        if (levelHead ? game_fp::frameLevel(headMat) : game_fp::frame(headMat)) {
+                        // The head bone as animated (never the lock's turn): heroHead.
+                        if (levelHead ? game_fp::frameLevel(headMat) : game_fp::heroHead(headMat)) {
                             const Vec3 ahead{headMat[8], headMat[9], headMat[10]};
                             if (finite(ahead) && std::hypot(ahead.x, ahead.z) > .2f) {
                                 float trackedYaw = 0.f, refYaw = 0.f;
@@ -2868,7 +2890,19 @@ DWORD WINAPI run(void*) {
                                 const float headBoneYaw = hybrid_handoff::lookYaw(ahead);
                                 const float headTurnNow = animHeadRefSet ? animHeadTurn : 0.f;
                                 hybridInputIntentYaw = stable_yaw::wrap(trackedYaw - refYaw + headTurnNow);
-                                if (stable_yaw::sourceOf(values.viewYawSource) == stable_yaw::Source::stable) {
+                                if (viewLockSteer && !levelHead) {
+                                    // FULL head lock (view_yaw_lock.hpp): where the player looks
+                                    // is the lock's heading + the headset's turn; the R stick
+                                    // turned the lock at the top of the frame. No relatch to the
+                                    // head bone, no steering own turn: the hero never turns it.
+                                    const float target = stable_yaw::wrap(viewLock.yaw + trackedYaw - refYaw);
+                                    stableHeading.reset();
+                                    hybridInputIntentYaw = target;
+                                    viewLockHeading = target;
+                                    viewLockHeadingOk = true;
+                                    hybridInputViewYaw =
+                                        hybridViewYaw.update(target, frame.seconds, stable_yaw::stableTau);
+                                } else if (stable_yaw::sourceOf(values.viewYawSource) == stable_yaw::Source::stable) {
                                     // VIEW YAW SOURCE: STABLE - a heading of its own, never
                                     // turned by the head bone while he runs (stable_yaw.hpp).
                                     stable_yaw::Input in;
@@ -2905,10 +2939,13 @@ DWORD WINAPI run(void*) {
                                     : Vec3{};
                             // STABLE: the R stick turns the heading itself while
                             // the left stick runs (no second turn request).
+                            // FULL head lock: the R stick only ever turns the lock's
+                            // heading; the hero follows by steering or TURN-IN-PLACE.
                             hybridInputMove = animated_model_yaw::composeMove(
                                 walk,
-                                stable_yaw::composeTurn(stable_yaw::sourceOf(values.viewYawSource),
-                                                        hybridInputR, hybridInputL),
+                                viewLockSteer ? 0.f
+                                              : stable_yaw::composeTurn(stable_yaw::sourceOf(values.viewYawSource),
+                                                                        hybridInputR, hybridInputL),
                                 {body[8], body[9], body[10]});
                             // Only ground locomotion consumes the shared vector. Never
                             // renormalize or redirect web/wall/air physical velocities.
@@ -3431,6 +3468,33 @@ DWORD WINAPI run(void*) {
                         }
                     }
                     levelTurnGate = false; // the eyes, below, say again for the next frame
+                    // FULL head lock on the stable heading: the R stick turns the lock's
+                    // heading (smooth deg/s or snap) for THIS frame, before the hands are
+                    // mapped; eyes, hands and arms all take the published lock.
+                    viewLockDelta = 0;
+                    viewLockSnapped = false;
+                    if (fullLockGate && viewLockActive && viewLock.set && !legStickActive &&
+                        !motion.basicFlipControls && frame.hands[1].valid) {
+                        const uint32_t snapsBefore = viewLock.snaps;
+                        viewLockDelta = viewLock.turn(frame.seconds, frame.hands[1].stickX, values.smoothTurn,
+                                                      values.snapTurn);
+                        viewLockSnapped = viewLock.snaps != snapsBefore;
+                        if (viewLockSnapped)
+                            ++armEpoch; // a snap is a jump of the frame, not a hand's motion
+                    } else {
+                        viewLock.turn(frame.seconds, 0.f, values.smoothTurn, values.snapTurn);
+                    }
+                    {
+                        view_yaw_lock::State lock;
+                        lock.on = viewLockActive && viewLock.set;
+                        lock.yaw = viewLock.yaw;
+                        lock.sway = view_yaw_lock::swayOf(values.animYawSwayPct);
+                        lock.heroYaw = std::hypot(body[8], body[10]) > .2f
+                                           ? hybrid_handoff::actorLookYaw({body[8], body[9], body[10]})
+                                           : NAN; // no facing: no sway term
+
+                        view_yaw_lock::publish(lock);
+                    }
                     // H1: the hands' velocities, in tracking space.
                     for (unsigned i = 0; i < 2; ++i)
                         armVelocity[i].update(frame.hands[i].grip.position,
@@ -3450,6 +3514,9 @@ DWORD WINAPI run(void*) {
                         if (native_body::viewAnchorWorld(headWorld) == 1 &&
                             arm_frame::worldAnchor(armFrameWas, headWorld, level, armWorldEyesWas,
                                                    armView.anchor)) {
+                            // FULL head lock on the stable heading: turned as the eyes are.
+                            if (armFrameWas == animated_view::Frame::full)
+                                view_yaw_lock::turnHead(armView.anchor, view_yaw_lock::live());
                             // CAMERA MOTION: the hands map onto the head the eyes are on
                             // (its tilt, HEAD ANGLE, the bob's shift), so they stay where
                             // the player's hands are in the view.
@@ -5779,7 +5846,9 @@ DWORD WINAPI run(void*) {
                                 animated_model_yaw::ownsStick(values.animatedModelYaw, yieldingPose,
                                                               airSpinOwnsStick) &&
                                 !motion.basicFlipControls && !legStickActive && !hybridYawHold &&
-                                !midairAnimation;
+                                !midairAnimation &&
+                                // FULL head lock: the R stick turns the lock's heading only.
+                                !viewLockSteer;
                             // HYBRID view steering: MODEL YAW frees CameraLook only while
                             // the R-stick turns; otherwise the game camera follows the
                             // view so its parkour assists see a sensible camera.
@@ -5806,7 +5875,8 @@ DWORD WINAPI run(void*) {
                                 hybridBlend.recheckMove = false;
                             }
                             if (modelYawClears || airSpinOwnsStick || hybridYawHold ||
-                                hybridBlend.clearLook || hybridBlend.recheckMove) {
+                                hybridBlend.clearLook || hybridBlend.recheckMove ||
+                                (viewLockSteer && !(hybridViewSteer && hybridViewOk))) {
                                 // Free the right stick from CameraLook so it does not
                                 // also yaw the follow camera (HMD free look stays XR;
                                 // tracking yaw / AIR SPIN keep the stick). After a
@@ -5868,6 +5938,50 @@ DWORD WINAPI run(void*) {
                                 diag_log::writef(
                                     "model yaw: idle (air spin owns R-stick, state %s)",
                                     animated_moves::yieldName(steerState));
+                            }
+                            // TURN-IN-PLACE (view_yaw_lock.hpp): standing with the left stick
+                            // idle, the walk stick points at the lock's heading until the hero
+                            // faces it (closed loop on his facing; no facing write).
+                            {
+                                constexpr float toDeg = 180.f / 3.14159265f;
+                                const bool heroOk =
+                                    finite(actorAhead) && std::hypot(actorAhead.x, actorAhead.z) > .2f;
+                                const float heroYaw = heroOk ? hybrid_handoff::actorLookYaw(actorAhead) : NAN;
+                                view_yaw_lock::TurnInPlace::In tin;
+                                tin.dt = frame.seconds;
+                                tin.allowed = viewLockSteer && viewLockHeadingOk && yieldingPose && hybridViewOk &&
+                                              heroOk && swingFresh && swingState.grounded &&
+                                              hybridInputL < stable_yaw::steerZone && !midairAnimation &&
+                                              !fightLately && !dodging && !zipping && !legStickActive &&
+                                              !motion.onSurface && !motion.basicFlipControls;
+                                tin.heading = viewLockHeading;
+                                tin.heroYaw = heroYaw;
+                                tin.angle = view_yaw_lock::angleOf(values.turnInPlaceDeg);
+                                tin.rTurning = frame.hands[1].valid &&
+                                               viewLock.turning(frame.hands[1].stickX, values.smoothTurn);
+                                const auto turned = turnInPlace.update(tin);
+                                if (turned.push) {
+                                    const auto stick = animated_model_yaw::worldToStick(
+                                        hybrid_steer::viewForward(turned.pushYaw), motion.walkForwardAxis,
+                                        motion.walkRightAxis, turned.tilt);
+                                    walk.right = stick.right;
+                                    walk.forward = stick.forward;
+                                }
+                                if (turned.started)
+                                    diag_log::writef(
+                                        "turn in place: start (#%u, %s) gap %+.0f deg, angle %d, hero %.0f heading %.0f",
+                                        turnInPlace.starts, turned.byStick ? "R stick" : "look", turned.startGap * toDeg,
+                                        values.turnInPlaceDeg, heroYaw * toDeg, viewLockHeading * toDeg);
+                                if (turned.ended != view_yaw_lock::TurnInPlace::End::none)
+                                    diag_log::writef(
+                                        "turn in place: %s after %d ms, hero turned %+.0f of %+.0f deg (%.0f deg/s), "
+                                        "left %+.0f%s; %u done, %u gave up, %u interrupted, %u wrong way",
+                                        view_yaw_lock::endName(turned.ended),
+                                        static_cast<int>(turned.seconds * 1000 + .5f), turned.swept * toDeg,
+                                        turned.startGap * toDeg,
+                                        turned.seconds > 0 ? std::abs(turned.swept) * toDeg / turned.seconds : 0.f,
+                                        turned.gap * toDeg, turned.wrongWay ? " WRONG WAY" : "", turnInPlace.done,
+                                        turnInPlace.gaveUp, turnInPlace.interrupted, turnInPlace.wrongWays);
                             }
                         }
                         // A dodge on a web line is the line's dash (game_swing's LineZip::dash):
@@ -7787,11 +7901,13 @@ DWORD WINAPI run(void*) {
                     // Slice C: during a blend into the head lock, the head-locked eyes
                     // are built (reference latched at its first frame) as the blend's
                     // destination, so the blend ends on exactly the view that follows.
+                    bool viewLockRelatch = false;
                     if (headFollowEyes) {
                         // An owner switch or a recenter: the lock starts afresh, on the neck.
                         if (seatWhy == head_seat::Why::owner || seatWhy == head_seat::Why::recenter)
                             animHeadRefSet = false;
                         if (!animHeadRefSet) {
+                            viewLockRelatch = true; // the yaw lock starts afresh with it
                             animHeadRef = {frame.head.position, screenAhead(frame.head, 0).orientation};
                             animHeadRefSet = validTrackedPose(frame.head);
                             animHeadTurn = 0;
@@ -7838,6 +7954,103 @@ DWORD WINAPI run(void*) {
                         // tracking yaw). The turn itself runs at the top of the next
                         // frame, before the hands are mapped (review M1).
                         levelTurnGate = !followFull && !followSoftlock;
+                        // FULL head lock on the stable heading (view_yaw_lock.hpp, Step B):
+                        // latched from the head bone with the head lock, kept through the
+                        // midair softlock, published for the render thread's eyes, the hands'
+                        // map and the arms' IK.
+                        {
+                            constexpr float toDeg = 180.f / 3.14159265f;
+                            const bool lockWanted =
+                                view_yaw_lock::lockOn(animated_moves::headFollow(values.animatedHead) ==
+                                                          animated_moves::HeadFollow::full,
+                                                      stable_yaw::sourceOf(values.viewYawSource) ==
+                                                          stable_yaw::Source::stable,
+                                                      values.animYawSwayPct) &&
+                                (followFull || followSoftlock) && animHeadRefSet;
+                            const float sway = view_yaw_lock::swayOf(values.animYawSwayPct);
+                            const float heroYawNow = std::hypot(body[8], body[10]) > .2f
+                                                         ? hybrid_handoff::actorLookYaw({body[8], body[9], body[10]})
+                                                         : NAN;
+                            Mat4 rawHead{};
+                            float boneYaw = 0;
+                            const bool boneOk = lockWanted && game_fp::heroHead(rawHead) &&
+                                                view_yaw_lock::nativeYaw(rawHead, boneYaw);
+                            if (lockWanted) {
+                                if ((!viewLock.set || viewLockRelatch) && boneOk) {
+                                    viewLock.latch(boneYaw, heroYawNow, sway);
+                                    turnInPlace.reset();
+                                    diag_log::writef("view yaw lock: latched at %.0f deg (head bone %.0f, hero %.0f), "
+                                                     "sway %d%%, turn-in-place %d deg, #%u",
+                                                     viewLock.yaw * toDeg, boneYaw * toDeg,
+                                                     std::isfinite(heroYawNow) ? heroYawNow * toDeg : -999.f,
+                                                     values.animYawSwayPct, values.turnInPlaceDeg, viewLock.latches);
+                                }
+                            } else if (viewLock.set) {
+                                diag_log::writef("view yaw lock: off (%s)",
+                                                 values.animYawSwayPct >= 100 ? "sway 100%, old feel"
+                                                 : stable_yaw::sourceOf(values.viewYawSource) !=
+                                                         stable_yaw::Source::stable
+                                                     ? "view yaw source body"
+                                                     : "head lock not Full");
+                                viewLock.reset();
+                                turnInPlace.reset();
+                            }
+                            viewLockActive = lockWanted && viewLock.set;
+                            fullLockGate = viewLockActive && followFull;
+                            view_yaw_lock::State lock;
+                            lock.on = viewLockActive;
+                            lock.yaw = viewLock.yaw;
+                            lock.sway = sway;
+                            lock.heroYaw = heroYawNow;
+                            view_yaw_lock::publish(lock);
+                            if (viewLockActive && boneOk) {
+                                // Divergence: the view (lock + sway + headset) against the
+                                // hero's facing and against the old view (head bone + headset).
+                                float hmd = 0;
+                                if (validTrackedPose(frame.head))
+                                    hmd = stable_yaw::wrap(
+                                        hybrid_handoff::lookYaw(screenAhead(frame.head, 0).orientation.rotate({0, 0, -1})) -
+                                        hybrid_handoff::lookYaw(animHeadRef.orientation.rotate({0, 0, -1})));
+                                const float shown = view_yaw_lock::shownYaw(lock, boneYaw);
+                                const float viewYaw = stable_yaw::wrap(shown + hmd);
+                                viewDivergence.add(frame.seconds, viewYaw - heroYawNow, shown - boneYaw);
+                                const float rX = frame.hands[1].valid ? frame.hands[1].stickX : 0.f;
+                                const auto watched =
+                                    viewTurnWatch.update(frame.seconds, fullLockGate && viewLock.turning(rX, values.smoothTurn),
+                                                         viewLockDelta, heroYawNow, viewLockSnapped);
+                                if (watched.ended)
+                                    diag_log::writef(
+                                        "view turn: %s, %d ms, view %+.0f deg (%.0f deg/s, %u snaps), hero %+.0f deg, "
+                                        "#%u",
+                                        values.smoothTurn > 0 ? "smooth" : "snap",
+                                        static_cast<int>(watched.seconds * 1000 + .5f), watched.viewDeg,
+                                        watched.viewRate, watched.snaps, watched.heroDeg, ++viewLockTurnsLogged);
+                                if (eyeBlendNow - viewYawDiagAt > 500'000'000) {
+                                    viewYawDiagAt = eyeBlendNow;
+                                    diag_log::writef(
+                                        "view yaw: lock %.0f bone %.0f hero %.0f shown %.0f hmd %+.0f view %.0f "
+                                        "view-hero %+.0f shown-bone %+.0f sway %d%% %s",
+                                        viewLock.yaw * toDeg, boneYaw * toDeg, heroYawNow * toDeg, shown * toDeg,
+                                        hmd * toDeg, viewYaw * toDeg, stable_yaw::wrap(viewYaw - heroYawNow) * toDeg,
+                                        stable_yaw::wrap(shown - boneYaw) * toDeg, values.animYawSwayPct,
+                                        followFull ? "full" : "softlock");
+                                }
+                                if (!viewDivergenceAt)
+                                    viewDivergenceAt = eyeBlendNow;
+                                if (eyeBlendNow - viewDivergenceAt > 10'000'000'000ll) {
+                                    viewDivergenceAt = eyeBlendNow;
+                                    const auto d = viewDivergence.summary();
+                                    diag_log::writef(
+                                        "view yaw divergence: %u samples, view-hero mean %.1f p95 %.0f max %.0f deg, "
+                                        "over 45 %.1f%%; view-headbone mean %.1f p95 %.0f max %.0f deg; sway %d%%; "
+                                        "turn in place %u (%u done, %u gave up, %u wrong way)",
+                                        d.samples, d.meanHero, d.p95Hero, d.maxHero, d.over45 * 100.f, d.meanBone,
+                                        d.p95Bone, d.maxBone, values.animYawSwayPct, turnInPlace.starts,
+                                        turnInPlace.done, turnInPlace.gaveUp, turnInPlace.wrongWays);
+                                    viewDivergence.reset();
+                                }
+                            }
+                        }
                         const Mat4 axes = {1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1};
                         for (unsigned i = 0; i < 2; ++i) {
                             Pose raw = frame.eyes[i].pose;
@@ -7851,6 +8064,12 @@ DWORD WINAPI run(void*) {
                         }
                     } else {
                         animHeadRefSet = false;
+                        if (viewLock.set)
+                            diag_log::writef("view yaw lock: off (head lock off)");
+                        viewLock.reset();
+                        turnInPlace.reset();
+                        viewLockActive = fullLockGate = false;
+                        view_yaw_lock::publish({});
                         eyes.anchored = 1;
                         for (unsigned i = 0; i < 2; ++i) {
                             eyes.eyes[i].world = motion.eyes[i];
@@ -7997,6 +8216,15 @@ DWORD WINAPI run(void*) {
                             frameOk = true;
                         }
                         if (frameOk) {
+                            // FULL head lock on the stable heading: the arms' anchor is
+                            // turned in the pose job as the eyes are (view_yaw_lock.hpp).
+                            if (handView.frame == animated_view::Frame::full) {
+                                const auto lock = view_yaw_lock::live();
+                                handView.yawLock = lock.on;
+                                handView.lockYaw = lock.yaw;
+                                handView.lockSway = lock.sway;
+                                handView.lockHero = lock.heroYaw;
+                            }
                             handView.head = animated_view::relative(frame.head, reference, turn);
                             for (unsigned i = 0; i < 2; ++i) {
                                 if (frame.hands[i].valid && validTrackedPose(frame.hands[i].grip) &&

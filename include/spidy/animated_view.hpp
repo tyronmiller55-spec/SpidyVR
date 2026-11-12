@@ -17,6 +17,10 @@ struct Targets {
     // ticks; 0 none). The pose job moves the glove on by its wait.
     Vec3 gripVelocity[2]{};
     int64_t sampledTicks{}; float leadSeconds{};
+    // FULL head lock on the stable heading (view_yaw_lock.hpp, Step B): the
+    // pose job turns its Full anchor as the eyes are turned.
+    bool yawLock{};
+    float lockYaw{}, lockSway{}, lockHero{};
 };
 inline Pose relative(Pose raw, Pose reference, float turn) {
     return compose({{}, Quat::yaw(turn)}, compose(inverse(reference), raw));

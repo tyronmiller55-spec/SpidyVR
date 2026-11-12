@@ -7,6 +7,7 @@
 #include "spidy/game_fp.hpp"
 #include "spidy/hybrid_handoff.hpp"
 #include "spidy/arm_frame.hpp"
+#include "spidy/view_yaw_lock.hpp"
 #include "spidy/native_appearance.hpp"
 #include <MinHook.h>
 #include <algorithm>
@@ -633,6 +634,16 @@ void solveHero(float* out, uintptr_t job, uintptr_t instance) {
                     game.direction(cache.ik.head, cache.ik.headUp), cache.ik.eyesFromHead, anchor);
                 valid = valid && animated_view::modelAnchor(view, toWorld, anchor, anchor,
                     {transform[12], transform[13], transform[14]});
+                // FULL head lock on the stable heading: the arms' anchor turned
+                // as the eyes are (view_yaw_lock.hpp), so the hands stay in view.
+                if (valid && view.frame == animated_view::Frame::full && view.yawLock) {
+                    view_yaw_lock::State lock;
+                    lock.on = true;
+                    lock.yaw = view.lockYaw;
+                    lock.sway = view.lockSway;
+                    lock.heroYaw = view.lockHero;
+                    view_yaw_lock::turnModel(anchor, toWorld, lock);
+                }
                 if (valid) {
                     const auto head = animated_view::resolve(anchor, view.head);
                     t.eyes = head.position;

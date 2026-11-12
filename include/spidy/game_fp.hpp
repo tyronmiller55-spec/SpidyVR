@@ -88,7 +88,13 @@ void camera(const Mat4& pose, float tangentHalfWidth = 0, float tangentHalfHeigh
 // head's pose in the world as rows right, down, forward and the position,
 // orthonormal (the same layout as a native view's pose). False when no head
 // can be placed this frame.
+// Gameplay (followHero, no first-person scene) with the FULL head lock on the
+// stable heading (view_yaw_lock::live, rotation desync Step B): the head's yaw
+// turned onto the lock's (its position, pitch and roll the head bone's).
 bool frame(Mat4& head);
+// As frame(), never turned by the view yaw lock: the head bone as the game
+// animates it (the stable heading's own input, diagnostics).
+bool heroHead(Mat4& head);
 // As frame(), for a scene whose head tracking is off: the head's place, but its axes are a level frame facing
 // where the character faced when the scene (or the cut to its next shot) began, so only where he is follows
 // him, not where he looks, and the viewer looks about freely from there.

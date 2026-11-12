@@ -491,6 +491,15 @@ struct Values {
     // animation showed it and ease it onto the feet over this; 0 OFF (SNAP),
     // the old snap. 250 by default. air_view_ease_ms.
     int airViewEaseMs = 250;
+    // ANIM YAW SWAY (view_yaw_lock.hpp, rotation desync Step B): with HEAD
+    // LOCK FULL and VIEW YAW SOURCE STABLE the eyes' yaw is the stable heading
+    // plus this share of the head bone's yaw sway; 100 is the old feel (the eyes
+    // on the head bone). 20 by default. anim_yaw_sway_pct.
+    int animYawSwayPct = 20;
+    // TURN-IN-PLACE ANGLE (view_yaw_lock.hpp): standing, the hero turns to the
+    // heading once it is this far from his facing (degrees); 0 OFF. 35 by
+    // default. turn_in_place_deg.
+    int turnInPlaceDeg = 35;
     // POINT JUMP (point_jump.hpp; the user, November 11; EngineBot's plan):
     // touching a surface, A+B (or hold B, then A) charges a jump the way you
     // look. A tap is a quick jump at the tap speed; held up to CHARGE TIME a
@@ -704,8 +713,11 @@ enum class Item : uint8_t {
     // VIEW EASE (view_ease.hpp), VR CAMERA & STABILIZATION.
     jumpHandoff,
     airViewEase,
+    // November 12 (Step B): ANIM YAW SWAY, TURN-IN-PLACE ANGLE (view_yaw_lock.hpp), VR CAMERA & STABILIZATION.
+    animYawSway,
+    turnInPlace,
 };
-inline constexpr Item lastItem = Item::airViewEase;
+inline constexpr Item lastItem = Item::turnInPlace;
 // SLOW-MO LENGTH's last step: no time limit (until L3 toggles it off).
 inline constexpr int slowMotionEndless = 91;
 // Real seconds a full meter lasts for a SLOW-MO LENGTH value; 0 = endless.
@@ -735,7 +747,7 @@ struct Row {
     Place place{};
 };
 // Stable row/setting numbers; categories below determine presentation order.
-const std::array<Row, 147>& rows();
+const std::array<Row, 149>& rows();
 const Row* rowFor(Item);
 // camera, shooters and legs (November 11, the user: "I can't find legs or
 // camera settings in any of the menus. Make sure it's clearly labeled"): tabs

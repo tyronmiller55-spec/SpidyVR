@@ -2533,6 +2533,16 @@ void App::options(ImVec2 origin, ImVec2 size) {
                    "view stays where the animation showed it and eases onto your feet; hands and webs move with "
                    "it. Off: the old instant snap. 250 ms by default.",
                    S(150), [&] { tabCombo("##airviewease", Item::airViewEase); });
+            settingOption(Item::animYawSway, "Anim yaw sway",
+                   "With Head lock Full and View yaw source Stable: the view's left-right turn comes from your "
+                   "steady heading, not the hero's head; this much of the animation's head sway is added back. "
+                   "100% is the old feel (the view on the head). 20% by default.",
+                   S(150), [&] { tabCombo("##animyawsway", Item::animYawSway); });
+            settingOption(Item::turnInPlace, "Turn-in-place angle",
+                   "Standing still with the steady heading: once you look (or turn with the right stick) this far "
+                   "from where the hero faces, he turns to face it. Off: he never turns by himself. 35 degrees "
+                   "by default.",
+                   S(150), [&] { tabCombo("##turninplace", Item::turnInPlace); });
             settingOption(Item::cameraVertical, "Camera vertical", "Up/down smoothing with Stabilization Off.",
                    S(150), [&] { tabCombo("##cameravertical", Item::cameraVertical); });
             settingOption(Item::cameraHorizontal, "Camera horizontal", "Side/forward smoothing with Stabilization Off.",

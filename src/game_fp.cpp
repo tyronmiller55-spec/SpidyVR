@@ -9,6 +9,7 @@
 #include "spidy/animated_view.hpp"
 #include "spidy/game_fp.hpp"
 #include "spidy/native_body.hpp"
+#include "spidy/view_yaw_lock.hpp"
 #include <atomic>
 #include <cmath>
 #include <cstdio>
@@ -1816,7 +1817,7 @@ bool cameraFrame(Mat4& head) {
     std::memcpy(head.data(), level, sizeof(level));
     return true;
 }
-bool frame(Mat4& head) {
+bool heroHead(Mat4& head) {
     const bool cutscene = wanted.load();
     const bool gameplay = followHeroOn.load(std::memory_order_relaxed);
     if (!cutscene && !gameplay) {
@@ -1957,6 +1958,15 @@ bool frame(Mat4& head) {
         }
     }
     std::memcpy(head.data(), world, sizeof(world));
+    return true;
+}
+bool frame(Mat4& head) {
+    if (!heroHead(head))
+        return false;
+    // FULL head lock on the stable heading: gameplay only (a first-person
+    // scene, or the scene's own camera, is never turned).
+    if (!wanted.load() && followHeroOn.load(std::memory_order_relaxed))
+        view_yaw_lock::turnHead(head, view_yaw_lock::live());
     return true;
 }
 bool sceneYaw(bool level, float& yaw) {

@@ -235,6 +235,16 @@ static_assert(std::size(jumpHandoffChoices) == std::size(jumpHandoffs));
 constexpr int airViewEases[] = {0, 150, 200, 250, 300, 400};
 constexpr const char* airViewEaseChoices[] = {"OFF (SNAP)", "150 MS", "200 MS", "250 MS", "300 MS", "400 MS"};
 static_assert(std::size(airViewEaseChoices) == std::size(airViewEases));
+// ANIM YAW SWAY (view_yaw_lock.hpp): anim_yaw_sway_pct; 100 is the old feel.
+constexpr int animYawSways[] = {0, 10, 20, 30, 40, 50, 60, 80, 100};
+constexpr const char* animYawSwayChoices[] = {"0% (STEADY)", "10%", "20%", "30%", "40%",
+                                              "50%", "60%", "80%", "100% (OLD FEEL)"};
+static_assert(std::size(animYawSwayChoices) == std::size(animYawSways));
+// TURN-IN-PLACE ANGLE (view_yaw_lock.hpp): turn_in_place_deg; 0 OFF.
+constexpr int turnInPlaces[] = {0, 20, 25, 30, 35, 45, 60, 90};
+constexpr const char* turnInPlaceChoices[] = {"OFF", "20 DEG", "25 DEG", "30 DEG",
+                                              "35 DEG", "45 DEG", "60 DEG", "90 DEG"};
+static_assert(std::size(turnInPlaceChoices) == std::size(turnInPlaces));
 } // namespace
 
 std::span<const int> steps(Item item) {
@@ -321,6 +331,10 @@ std::span<const int> steps(Item item) {
         return jumpHandoffs;
     case Item::airViewEase:
         return airViewEases;
+    case Item::animYawSway:
+        return animYawSways;
+    case Item::turnInPlace:
+        return turnInPlaces;
     case Item::pointJumpMinSpeed:
         return pointJumpMinSpeeds;
     case Item::pointJumpMaxSpeed:
@@ -480,6 +494,10 @@ float numberOf(Item item, const Values& v) {
         return static_cast<float>(v.jumpHandoffMs);
     case Item::airViewEase:
         return static_cast<float>(v.airViewEaseMs);
+    case Item::animYawSway:
+        return static_cast<float>(v.animYawSwayPct);
+    case Item::turnInPlace:
+        return static_cast<float>(v.turnInPlaceDeg);
     case Item::pointJumpMinSpeed:
         return static_cast<float>(v.pointJumpMinSpeed);
     case Item::pointJumpMaxSpeed:
@@ -714,6 +732,8 @@ Values sanitized(Values v) {
     v.viewYawSource = std::clamp(v.viewYawSource, 0, 1);
     v.jumpHandoffMs = std::clamp(v.jumpHandoffMs, 0, 2000);
     v.airViewEaseMs = std::clamp(v.airViewEaseMs, 0, 1000);
+    v.animYawSwayPct = std::clamp(v.animYawSwayPct, 0, 100);
+    v.turnInPlaceDeg = std::clamp(v.turnInPlaceDeg, 0, 180);
     v.pointJumpChordMs = std::clamp(v.pointJumpChordMs, 20, 150);
     v.pointJumpTapMs = std::clamp(v.pointJumpTapMs, 50, 400);
     v.pointJumpFullMs = std::clamp(v.pointJumpFullMs, 300, 2000);
@@ -755,9 +775,9 @@ Values sanitized(Values v) {
     v.automaticHandThreshold = std::clamp(v.automaticHandThreshold, 50, 300);
     return v;
 }
-const std::array<Row, 147>& rows() {
+const std::array<Row, 149>& rows() {
     // The help fits the game's description column beside the rows.
-    static const std::array<Row, 147> all{{
+    static const std::array<Row, 149> all{{
         {Item::none, "WEBS", nullptr, {}},
         {Item::webStyle, "WEB STYLE",
          "Arcade: webs pass lamp posts, signs and cars, and swings stay above the street.", webStyleChoices},
@@ -1139,6 +1159,11 @@ const std::array<Row, 147>& rows() {
          jumpHandoffChoices},
         {Item::airViewEase, "AIR VIEW EASE",
          "Jump timer, flip and grip breaks: view held, then eased. OFF: the old snap.", airViewEaseChoices},
+        // November 12 (Step B): FULL head lock on the stable heading (view_yaw_lock.hpp).
+        {Item::animYawSway, "ANIM YAW SWAY",
+         "Full lock, stable yaw: share of the head's yaw sway shown. 100%: the old feel.", animYawSwayChoices},
+        {Item::turnInPlace, "TURN-IN-PLACE ANGLE",
+         "Standing: he turns to where you look past this angle. OFF: he never does.", turnInPlaceChoices},
         {Item::realisticFlips,
          "REALISTIC FLIPS",
          "Momentum rotation from arms and webs. FLIPS also enables left-stick steering.",
@@ -1232,7 +1257,7 @@ const std::array<Screen, categoryCount>& screens() {
     static constexpr Item camera[] = {
         Item::cameraMotion, Item::cameraPitch, Item::cameraRoll, Item::cameraBobVertical,
         Item::cameraBobSide, Item::cameraHeadAngle,
-        Item::cameraStabilization, Item::punchViewEase, Item::airViewEase, Item::cameraVertical, Item::cameraHorizontal, Item::cameraAngle,
+        Item::cameraStabilization, Item::punchViewEase, Item::airViewEase, Item::animYawSway, Item::turnInPlace, Item::cameraVertical, Item::cameraHorizontal, Item::cameraAngle,
         Item::lightVertical, Item::lightHorizontal, Item::lightAngle,
         Item::heavyVertical, Item::heavyHorizontal, Item::heavyAngle,
     };
@@ -1568,6 +1593,12 @@ bool choose(Item item, int index, Values& v) {
     case Item::airViewEase:
         v.airViewEaseMs = s[index];
         break;
+    case Item::animYawSway:
+        v.animYawSwayPct = s[index];
+        break;
+    case Item::turnInPlace:
+        v.turnInPlaceDeg = s[index];
+        break;
     case Item::pointJumpMinSpeed:
         v.pointJumpMinSpeed = s[index];
         v.pointJumpMaxSpeed = std::max(v.pointJumpMaxSpeed, v.pointJumpMinSpeed);
@@ -1779,6 +1810,8 @@ constexpr TabOnly tabOnly[] = {
     {"sound_trace", &Values::soundTrace, nullptr},
     {"jump_handoff_ms", nullptr, &Values::jumpHandoffMs},
     {"air_view_ease_ms", nullptr, &Values::airViewEaseMs},
+    {"anim_yaw_sway_pct", nullptr, &Values::animYawSwayPct},
+    {"turn_in_place_deg", nullptr, &Values::turnInPlaceDeg},
     {"air_fists", &Values::airFists, nullptr},
     {"camera_pitch_pct", nullptr, &Values::cameraPitchPct},
     {"camera_roll_pct", nullptr, &Values::cameraRollPct},
