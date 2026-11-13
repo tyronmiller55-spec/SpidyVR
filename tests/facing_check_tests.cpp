@@ -245,6 +245,45 @@ int main() {
         look.heading = 20 * deg;
         check(!l.update(look).started, "the look's turn: under its angle, none");
     }
+    // --- 8. LANDING FACING SNAP: a forced turn that starts past 135 deg pushes hard.
+    {
+        using TIP = view_yaw_lock::TurnInPlace;
+        auto start = [&](float gapDeg, TIP& t) {
+            TIP::In in;
+            in.dt = dt;
+            in.heroYaw = 0;
+            in.force = true;
+            in.forceYaw = gapDeg * deg;
+            in.forceAllowed = true;
+            return t.update(in);
+        };
+        TIP back;
+        const auto o = start(170, back);
+        check(o.started && o.forced && o.hard && o.push, "a landing 170 deg off: the snap (hard push)");
+        check(near(o.tilt, view_yaw_lock::hardTilt, 1e-4f), "the snap pushes at the hard tilt");
+        TIP::In go;
+        go.dt = dt;
+        go.heroYaw = 40 * deg; // under way, 130 deg left: still the snap's push
+        go.forceYaw = 170 * deg;
+        go.forceAllowed = true;
+        check(near(back.update(go).tilt, view_yaw_lock::hardTilt, 1e-4f), "stays hard until it arrives");
+        go.heroYaw = 165 * deg;
+        const auto done = back.update(go);
+        check(done.ended == TIP::End::done && done.hard, "arrives: done, and said it was the snap's");
+        TIP side;
+        const auto o2 = start(100, side);
+        check(o2.started && !o2.hard && near(o2.tilt, view_yaw_lock::pushTilt, 1e-4f),
+              "100 deg off: the ordinary walk turn");
+        TIP edge;
+        check(!start(134, edge).hard, "134 deg: not the snap");
+        TIP edge2;
+        check(start(-140, edge2).hard, "-140 deg: the snap, either way");
+        TIP again;
+        start(170, again);
+        again.reset();
+        const auto o3 = start(90, again);
+        check(o3.started && !o3.hard, "reset: the next turn is judged afresh");
+    }
     std::printf("facing check tests: %d passed\n", passed);
     return 0;
 }

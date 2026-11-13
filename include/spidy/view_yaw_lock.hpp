@@ -232,6 +232,11 @@ inline constexpr float stopAngle = 12.f * degrees;
 inline constexpr float giveUpSeconds = 2.5f, cooldownSeconds = 1.f;
 inline constexpr float pushTilt = .35f, pushTiltHard = .5f; // harder after 0.3 s without 5 degrees
 inline constexpr float forceWaitSeconds = .4f, forcePauseSeconds = .25f; // facing check turns
+// LANDING FACING SNAP (the 5061b4a playtest, Nov 12: of 30 forced turns that started more than 135
+// degrees off, 9 finished, in 0.78 s at the median; 20 were cut off): a forced turn that starts past
+// hardAngle pushes the walk stick at hardTilt (a run-turn pivot) instead of pushTilt's walk, so he
+// comes round in a fraction of the time. The game has no facing write; this is the fastest way in.
+inline constexpr float hardAngle = 135.f * degrees, hardTilt = .8f;
 inline float angleOf(int setting) {
     return setting > 0 ? static_cast<float>(std::clamp(setting, 1, 180)) * degrees : 0.f;
 }
@@ -264,12 +269,13 @@ struct TurnInPlace {
         bool wrongWay = false; // on ended: he went more than 20 degrees the other way at some point
         bool byStick = false;  // started by the right stick (not the headset / drift)
         bool forced = false;   // on started / ended: a facing check's turn
+        bool hard = false;     // on started / ended: the turn is the snap's (past hardAngle at its start)
         bool dropped = false;  // a facing check's turn that never got to start (0.4 s)
     };
     bool turning = false;
     float elapsed = 0, swept = 0, startGap = 0, lastHero = 0, cooldown = 0, worst = 0;
     bool byStick = false;
-    bool forced = false, forcePending = false;
+    bool forced = false, forcePending = false, hard = false;
     float forcedYaw = 0, forceWait = 0, paused = 0;
     uint32_t starts = 0, done = 0, gaveUp = 0, interrupted = 0, wrongWays = 0, forcedStarts = 0;
 
@@ -319,6 +325,7 @@ struct TurnInPlace {
             } else if (force || (past && cooldown <= 0) || follow) {
                 turning = true;
                 forced = force;
+                hard = force && std::abs(out.gap) > hardAngle;
                 forcePending = false;
                 elapsed = swept = worst = 0;
                 startGap = out.gap;
@@ -330,6 +337,7 @@ struct TurnInPlace {
                 out.startGap = startGap;
                 out.byStick = byStick;
                 out.forced = force;
+                out.hard = hard;
             }
         } else {
             elapsed += dt;
@@ -350,12 +358,14 @@ struct TurnInPlace {
         if (turning) {
             out.push = true;
             out.pushYaw = heading;
-            out.tilt = elapsed > .3f && std::abs(swept) < 5.f * degrees ? pushTiltHard : pushTilt;
+            out.tilt = hard                                               ? hardTilt
+                       : elapsed > .3f && std::abs(swept) < 5.f * degrees ? pushTiltHard
+                                                                          : pushTilt;
         }
         return out;
     }
     void reset() {
-        turning = forced = forcePending = false;
+        turning = forced = forcePending = hard = false;
         cooldown = paused = forceWait = 0;
     }
     // A relatch of the lock resets the look's turn, never a facing check's.
@@ -368,7 +378,8 @@ private:
     void finish(Out& out, End why) {
         out.ended = why;
         out.forced = forced;
-        forced = false;
+        out.hard = hard;
+        forced = hard = false;
         paused = 0;
         out.startGap = startGap;
         out.swept = swept;

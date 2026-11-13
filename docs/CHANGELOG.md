@@ -8,6 +8,8 @@ Per-check results are in [VALIDATION.md](VALIDATION.md).
 Built on 5061b4a (feat/hybrid-movement), branch `feat/playtest-fixes`. One commit per fix. Not headset-tested.
 
 - **Left-stick flip break needs a fresh push:** 111 jumps broke to SpidyVR about 0.02 s after takeoff because the run stick was still tilted, so JUMP TO SPIDYVR's timer almost never ran. A left stick already tilted at takeoff now breaks only after it has come back inside the dead zone, or has moved more than 60 deg from its takeoff direction. The right stick is unchanged. Tests: `flip_break` (FreshPush).
+- **Landing facing snap:** a forced turn that starts more than 135 deg off the view (a landing, a point launch, an anim re-entry) pushes the walk stick at 0.8 instead of the 0.35 walk, so he pivots round fast. Of 30 such turns in the session 9 finished (0.78 s at the median) and 20 were cut off. The game has no facing write, so this is the quickest turn the mod can ask for. Log: `hero turn start (snap: hard push, past 135 deg)`. Tests: `facing_check` section 8.
+- **Air facing sync stick retired:** in 170 syncs the game's facing did not move (median 0 deg; landings came down a median 57 deg off the view, 37 deg at the sync's start). The stick no longer goes out; the gate still logs, and its "off" line now prints the last real gap (it printed 0 once the gate was gone, which read as a sync that had worked). `hybrid_movement::airSyncStick`.
 
 ## MOVEMENT MODE: HYBRID (default), STABLE, OLD; REAR SNAP TURN
 

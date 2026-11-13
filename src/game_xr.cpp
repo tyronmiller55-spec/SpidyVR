@@ -1213,6 +1213,7 @@ DWORD WINAPI run(void*) {
         hybrid_movement::Heading hybridHeading{};
         hybrid_movement::Gate::Out hybridStick{};
         bool hybridHeroTurn = false, hybridSteerable = false, hybridAirSyncOn = false;
+        float hybridAirSyncGap = 0.f; // the last gap the air facing gate measured
         float hybridAirSyncSec = 0, hybridHoldLoggedAge = 0;
         uint32_t hybridAirSyncStarts = 0;
         view_yaw_lock::Divergence viewDivergence{};
@@ -5220,6 +5221,8 @@ DWORD WINAPI run(void*) {
                                               swingState.wall == static_cast<uint32_t>(game_swing::Surface::none) &&
                                               std::isfinite(actorNow) && std::isfinite(lookNow);
                             const float gap = base ? std::abs(stable_yaw::wrap(lookNow - actorNow)) : 0.f;
+                            if (base)
+                                hybridAirSyncGap = gap;
                             const bool was = hybridAirSyncOn;
                             hybridAirSyncOn =
                                 !playing && base &&
@@ -5235,7 +5238,10 @@ DWORD WINAPI run(void*) {
                                                      hybridAirSyncStarts);
                                 }
                             } else if (was) {
-                                diag_log::writef("hybrid air facing sync: off, gap %.0f deg", gap * toDeg);
+                                // The last real gap: `gap` is 0 once the stint's gate is gone (landing,
+                                // a web, the animation), which read as a sync that had worked.
+                                diag_log::writef("hybrid air facing sync: off, last gap %.0f deg",
+                                                 hybridAirSyncGap * toDeg);
                             }
                         }
                         if (playing) {
@@ -5276,8 +5282,10 @@ DWORD WINAPI run(void*) {
                             // while a web carries the player, nor while B skips the
                             // calibration.
                             walk.dodge = (origins.play() & buttonB) && !calibrationInput;
-                        } else if (hybridAirSyncOn && !layerOn && !calibrationInput) {
-                            // HYBRID AIR FACING SYNC: in SpidyVR's air the game gets a light
+                        } else if (hybrid_movement::airSyncStick && hybridAirSyncOn && !layerOn &&
+                                   !calibrationInput) {
+                            // HYBRID AIR FACING SYNC (retired, airSyncStick false: it never turned him
+                            // in the 5061b4a playtest): in SpidyVR's air the game gets a light
                             // walk stick toward where the player looks (as SOFT LANDING hands
                             // it the stick: the swing still moves the body), so the game's
                             // facing - the one a landing plays on - stays with the view.
@@ -6204,9 +6212,12 @@ DWORD WINAPI run(void*) {
                                     walk.forward = stick.forward;
                                 }
                                 if (turned.started && turned.forced)
-                                    diag_log::writef("facing check: %s hero turn start, gap %+.0f deg, hero %.0f to %.0f",
-                                                     facing_check::eventName(facingTurnEvent), turned.startGap * toDeg,
-                                                     heroYaw * toDeg, facingHeroYaw * toDeg);
+                                    diag_log::writef("facing check: %s hero turn start%s, gap %+.0f deg, "
+                                                     "hero %.0f to %.0f",
+                                                     facing_check::eventName(facingTurnEvent),
+                                                     turned.hard ? " (snap: hard push, past 135 deg)" : "",
+                                                     turned.startGap * toDeg, heroYaw * toDeg,
+                                                     facingHeroYaw * toDeg);
                                 else if (turned.started)
                                     diag_log::writef(
                                         "turn in place: start (#%u, %s) gap %+.0f deg, angle %d, hero %.0f heading %.0f",
@@ -7493,11 +7504,12 @@ DWORD WINAPI run(void*) {
                                         hybridHeading.begin(hybrid_movement::Heading::Hold::facing, before);
                                         viewLock.set = true;
                                         viewLock.yaw = hybridHeading.yaw;
-                                        diag_log::writef("hybrid landing: view %.0f, game facing %.0f (gap %+.0f), air "
-                                                         "facing sync %d ms this stint",
-                                                         before * toDeg, actorNow * toDeg,
-                                                         stable_yaw::wrap(before - actorNow) * toDeg,
-                                                         static_cast<int>(hybridAirSyncSec * 1000 + .5f));
+                                        diag_log::writef(
+                                            "hybrid landing: view %.0f, game facing %.0f (gap %+.0f), air "
+                                            "facing gap past 20 deg for %d ms this stint (no sync stick)",
+                                            before * toDeg, actorNow * toDeg,
+                                            stable_yaw::wrap(before - actorNow) * toDeg,
+                                            static_cast<int>(hybridAirSyncSec * 1000 + .5f));
                                     }
                                     hybridAirSyncSec = 0;
                                 }
