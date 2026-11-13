@@ -2497,8 +2497,13 @@ DWORD WINAPI run(void*) {
                             blockedBy = "vent";
                         else if (values.webLines && lineState.phase == 2 && lineState.onLine)
                             blockedBy = "line";
+                        else if (ssFresh && swingState.wall == static_cast<uint32_t>(game_swing::Surface::floor))
+                            // Nov 13 session: all 8 such denials were in fights, the game's
+                            // ground cleared the same frame (a dodge's or a move's pose
+                            // reporting the floor-crawl flag; CrawlCameraGate) - the swing
+                            // would refuse the burst off the ground anyway. Named apart.
+                            blockedBy = "the game's floor-crawl flag (a vent, or a fight move's pose; off the game's ground)";
                         else if (ssFresh && (swingState.wall == static_cast<uint32_t>(game_swing::Surface::game) ||
-                                             swingState.wall == static_cast<uint32_t>(game_swing::Surface::floor) ||
                                              swingState.wall == static_cast<uint32_t>(game_swing::Surface::wall)))
                             blockedBy = "on a wall or the game's crawl";
                         else if (ssFresh && (swingState.takeoff || swingState.takeoffPhase))
