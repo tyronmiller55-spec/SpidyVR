@@ -74,6 +74,7 @@
 #include "spidy/animated_model_yaw.hpp"
 #include "spidy/animated_air_spin.hpp"
 #include "spidy/hybrid_owner.hpp"
+#include "spidy/handstand.hpp"
 #include "spidy/hybrid_handoff.hpp"
 #include "spidy/hybrid_steer.hpp"
 #include "spidy/move_haptics.hpp"
@@ -1192,6 +1193,9 @@ DWORD WINAPI run(void*) {
         float hybridSpeedH{};
         // Parkour steering under HYBRID: the head-locked view's yaw, low-passed.
         hybrid_steer::YawFilter hybridViewYaw{};
+        // HANDSTAND (H1): the state last logged.
+        handstand::State handstandStateLogged{};
+        float handstandLogAge{};
         int64_t hybridSteerDiagAt{};
         // VIEW YAW SOURCE: STABLE's heading (stable_yaw.hpp), the hero-vs-steer
         // watch and the runaway-turn detector.
@@ -1929,6 +1933,7 @@ DWORD WINAPI run(void*) {
                 vr_settings::fixedMomentumForwardLean * .0174532925f);
             rig.wallDistance(static_cast<float>(vr_settings::fixedWallDistance) / 100.f);
             rig.automaticFlips(realisticFlips(values));
+            rig.handstandSettings(handstand::paramsOf(values)); // HANDSTAND (H1), REALISTIC FLIPS only
             native_hud::setSize(values.hud);
             native_gpu::wantHudLayer(values.steadyHud && values.hud > 0);
             near_clip::set(values.nearClipMm);
@@ -3042,10 +3047,62 @@ DWORD WINAPI run(void*) {
                         swingState.wall == static_cast<uint32_t>(game_swing::Surface::wall);
                     rig.animatedYawOwner(
                         hybrid_steer::ownsYaw(hybridInputLocked, values.animatedModelYaw, hybridInputCrawl));
+                    // HANDSTAND (H1): a catch only in SpidyVR's air (hybrid: VR owns him).
+                    rig.handstandVrAir(flipAir && (!(values.animatedHybrid && values.animatedMoves) ||
+                                                   hybridOwner.domain == hybrid_owner::Domain::vr));
                     motion = rig.update(seated::raised(controller, seatRaise), feet,
                                         {camera[8], camera[9], camera[10]}, gameplay,
                                         swingState.owned ? Vec3{0, 1, 0} : heroUp, flipAir, hold,
                                         {camera[4], camera[5], camera[6]});
+                    // HANDSTAND (H1): its log lines, and the push-off: a launch off the
+                    // hands through the swing's point-jump path (SpidySwingPointJump: its
+                    // own event, no smoke), held for the owner as a point jump's takeoff.
+                    // TODO(handstand sound): the push-off's sound and Spidey's grunt; no
+                    // sound IDs yet (the SOUND TRACE session, 1008510).
+                    {
+                        const auto& hs = motion.handstand;
+                        if (hs.caughtNow)
+                            diag_log::writef("handstand: catch (inverted %.0f deg, eyes down %.2f m)",
+                                             handstand::invertedDegrees(motion.flipTilt.rotate({0, 1, 0})),
+                                             motion.handstandDrop);
+                        handstandLogAge += std::isfinite(frame.seconds) ? std::clamp(frame.seconds, 0.f, .1f) : 0.f;
+                        if (hs.state != handstandStateLogged ||
+                            (hs.state == handstand::State::balance && handstandLogAge >= .5f)) {
+                            if (hs.state == handstand::State::balance)
+                                diag_log::writef("handstand: balance lean %.1f deg, com speed %.2f m/s, "
+                                                 "cop (%.2f, %.2f)",
+                                                 hs.balance.leanDegrees, length(hs.balance.v), hs.balance.u.x,
+                                                 hs.balance.u.z);
+                            handstandStateLogged = hs.state;
+                            handstandLogAge = 0;
+                        }
+                        if (hs.holdVr && hybridOwner.domain == hybrid_owner::Domain::vr && swingState.grounded &&
+                            hs.caughtNow)
+                            diag_log::write("owner: kept vr (handSupport)");
+                        if (hs.exitNow != handstand::Exit::none) {
+                            diag_log::writef("handstand: exit %s (lean %.1f deg)", handstand::exitName(hs.exitNow),
+                                             hs.balance.leanDegrees);
+                            if (hs.exitNow == handstand::Exit::push) {
+                                game_swing::PointJumpAsk ask;
+                                ask.serial = ++pointJumpSerial;
+                                ask.velocity = hs.launch;
+                                ask.normal = Vec3{0, 1, 0};
+                                const DWORD result = swingPointJump && game_swing::validPointJump(ask)
+                                                         ? swingPointJump(&ask)
+                                                         : static_cast<DWORD>(2001);
+                                if (result == 0) {
+                                    pointJumpHold = true;
+                                    pointJumpHoldAge = 0;
+                                    pointJumpOffLogged = false;
+                                    diag_log::writef("handstand: push-off (%.1f, %.1f, %.1f) m/s", hs.launch.x,
+                                                     hs.launch.y, hs.launch.z);
+                                } else {
+                                    diag_log::writef("handstand: push-off refused (%lu)",
+                                                     static_cast<unsigned long>(result));
+                                }
+                            }
+                        }
+                    }
                     // PUNCH / AIR VIEW EASE: how each ease ended, once.
                     if (rig.viewEase().ends() != punchEaseEndsLogged) {
                         punchEaseEndsLogged = rig.viewEase().ends();
@@ -7320,6 +7377,8 @@ DWORD WINAPI run(void*) {
                                                : NAN;
                         // JUMP TO SPIDYVR: the midair animation's timer (0 stays to the landing).
                         hybridFrame.jumpHandoffNs = static_cast<int64_t>(values.jumpHandoffMs) * 1'000'000ll;
+                        // HANDSTAND (H1): the hands hold him on the ground; SpidyVR keeps him.
+                        hybridFrame.handSupport = motion.handstand.holdVr;
                         hybridFrame.moveStick = frame.hands[0].valid && std::isfinite(frame.hands[0].stickX) &&
                                                         std::isfinite(frame.hands[0].stickY)
                                                     ? std::hypot(frame.hands[0].stickX, frame.hands[0].stickY)

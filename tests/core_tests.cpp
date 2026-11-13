@@ -24457,6 +24457,8 @@ int main() {
                   "controlled_flips=0\nnear_clip_mm=20\nhand_climb=0\n"
                   "joystick_wall_run_camera=1\nwall_run_camera_tilt=1\nhalf_punch_damage=0\n"
                   "realistic_flips=0\n"
+                  "handstand=1\nhandstand_assist=1\nhandstand_push_gain=220\nhandstand_push_max=7\n"
+                  "handstand_fall_degrees=35\nhandstand_height_cm=95\nhandstand_gain_pct=300\nhandstand_eye_drop_cm=90\n"
                   "rotation_strength=50\nrotation_speed=240\nflight_speed_min=3\n"
                   "swing_momentum=1\nrotation_response_ms=500\nhand_momentum=100\n"
                   "angular_drag_ms=3000\nhand_speed_min_cm=100\nair_rotation_brake=1\n"

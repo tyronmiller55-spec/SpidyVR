@@ -127,6 +127,19 @@ struct Values {
     int automaticResponse = 500, automaticHandStrength = 100, automaticFalloff = 3000;
     int automaticHandThreshold = 100;
     bool automaticAirBrake = true, automaticCombat = true;
+    // HANDSTAND, phase H1 (handstand.hpp; experimental; ON by default from the
+    // hybrid-v2 playtest build, the user Nov 13 t86u "Let's move on handstands";
+    // handstand=0 turns it off; REALISTIC FLIPS only): come down inverted with both palms on a floor
+    // and the hands catch and balance him; a push off them launches, lifting
+    // them drops him to his feet. spidy_vr.ini only (handstand* keys, the
+    // page's H1 checklist step 9): the balance's assist (DCM steering), the
+    // push's gain (percent of the palms' speed) and its cap (m/s), the lean
+    // that is a fall (degrees); and the centre of mass's height over the
+    // palms (cm), the assist's gain (percent) and how far the inverted eyes
+    // come down (cm).
+    bool handstand = true, handstandAssist = true;
+    int handstandPushGain = 220, handstandPushMax = 7, handstandFallDegrees = 35;
+    int handstandHeightCm = 95, handstandGainPct = 300, handstandEyeDropCm = 90;
     // How strongly a bHaptics vest, sleeves and visor play (the tab's BODY
     // HAPTICS; body_haptics.hpp), percent; 0 off. And which of its groups
     // play (the tab's WEB, WIND, COMBAT and MOVEMENT HAPTICS switches;

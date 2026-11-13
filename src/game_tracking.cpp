@@ -310,11 +310,13 @@ void GameTrackingRig::reset() {
     const bool joystickCamera = joystickRunCamera_;
     const FlipMotion flip = flip_;
     const auto autoSettings = autoSettings_;
+    const auto handstandParams = handstandParams_; // HANDSTAND: a setting, kept
     auto ease = viewEase_;
     ease.cancel(view_ease::End::reset);
     *this = {};
     viewEase_ = ease;
     autoSettings_ = autoSettings;
+    handstandParams_ = handstandParams;
     snap_ = snap;
     smooth_ = smooth;
     flips_ = flips;
@@ -359,6 +361,9 @@ GameMotionFrame GameTrackingRig::update(const XrFrame& f, Vec3 feet, Vec3 gameFo
     if (out.inactive) {
         wallRoll_.suspend();
         handCollision_.reset();
+        handstand_.reset();
+        handstandOut_ = {};
+        handstandSampled_ = false;
         wasActive_ = false;
         // A scene (play does not run, the game's time does, or a first-person scene was shown): when play
         // comes back the view faces where the scene left it (below). Whether the last frame without play had
@@ -597,6 +602,14 @@ GameMotionFrame GameTrackingRig::update(const XrFrame& f, Vec3 feet, Vec3 gameFo
         flight.legInertia = std::isfinite(flip.spinScale) && flip.spinScale > .05f
                                 ? 1 / std::clamp(flip.spinScale, .5f, 2.f)
                                 : 1.f;
+        // HANDSTAND (H1): the hands hold him; the balance's lean (last
+        // frame's, as it was placed) is the tilt.
+        if (handstandOut_.supporting) {
+            flight.handSupport = true;
+            const Vec3 leanLocal = Quat::yaw(-rig_.yaw).rotate(handstandOut_.lean);
+            flight.supportTilt = handstand::supportTilt(handstandCatchTilt_, leanLocal, handstandParams_.comHeight);
+            flight.supportAngular = {};
+        }
         rig_.tilt = automatic_.update(flight, flip.airborne, flip.surface, rig_.yaw, f.seconds, autoSettings_,
                                       controls);
         // Where the spin leaves the player facing is the heading: the yaw
@@ -865,6 +878,21 @@ GameMotionFrame GameTrackingRig::update(const XrFrame& f, Vec3 feet, Vec3 gameFo
     if (pendingRecenter_)
         viewEase_.cancel(view_ease::End::recenter);
     placed.origin += viewEase_.step(f.seconds, feet, rig_.yaw);
+    // HANDSTAND (H1): inverted, the eyes come down toward the floor (the
+    // body's head is near it, not 1.6 m over the feet): from 100 degrees,
+    // all of the drop from 160, eased at 2 m/s at most; back as he rights.
+    {
+        const float dt = std::isfinite(f.seconds) ? std::clamp(f.seconds, 0.f, .1f) : 0.f;
+        const float inverted = handstand::invertedDegrees(placed.orientation().rotate({0, 1, 0}));
+        const bool on = handstandParams_.enabled && autoSettings_.enabled &&
+                        (handstandVrAir_ || handstandOut_.holdVr);
+        const float want = on ? handstand::eyeDropFor(inverted, handstandParams_.eyeDrop) : 0.f;
+        handstandDrop_ += std::clamp(want - handstandDrop_, -2.f * dt, 2.f * dt);
+        if (handstandDrop_ < 1e-4f)
+            handstandDrop_ = 0;
+        placed.origin.y -= handstandDrop_;
+        out.handstandDrop = handstandDrop_;
+    }
     // A cosmetic bank around the tracked eyes, only during momentum runs.
     // Keep it out of the stored climb heading and the joystick body-view turn.
     const Pose unbankedHead = placed.toWorld(f.head);
@@ -910,7 +938,15 @@ GameMotionFrame GameTrackingRig::update(const XrFrame& f, Vec3 feet, Vec3 gameFo
         rawGrips[i] = placed.toWorld(f.hands[i].grip);
         tracked[i] = handValid(f.hands[i]);
     }
-    out.handPush = handCollision_.update(f.seconds, pressing, placed.toWorld(f.head), rawGrips, tracked);
+    // HANDSTAND (H1): the palms probe for a floor while he is over past a
+    // quarter turn in SpidyVR's air, and while the hands hold him.
+    const bool handstandProbe =
+        handstandParams_.enabled && autoSettings_.enabled &&
+        (handstandOut_.holdVr ||
+         (handstandVrAir_ && handstand::invertedDegrees(placed.orientation().rotate({0, 1, 0})) > 90));
+    handCollision_.keepFloors(handstandProbe);
+    out.handPush = handCollision_.update(f.seconds, pressing || handstandProbe, placed.toWorld(f.head), rawGrips,
+                                         tracked);
     placed.origin += out.handPush;
     // The eyes out of what the world is built of (HeadClearance), and the
     // hands, the webs and the body with them: they stay where the eyes see
@@ -960,7 +996,8 @@ GameMotionFrame GameTrackingRig::update(const XrFrame& f, Vec3 feet, Vec3 gameFo
     }
     // Controlled mode reserves the left stick even while its angle is held.
     // Airborne A belongs to its toggle rather than the game's jump.
-    if (automaticSteering || out.controlledFlipControls)
+    // HANDSTAND: the hands hold him; the left stick aims the balance only.
+    if (automaticSteering || out.controlledFlipControls || handstandOut_.holdVr)
         out.swing.move = {};
     if (controlledFlipAir)
         out.swing.jump = false;
@@ -1006,6 +1043,60 @@ GameMotionFrame GameTrackingRig::update(const XrFrame& f, Vec3 feet, Vec3 gameFo
         }
     }
     out.wallTouches = handCollision_.contacts(out.grips);
+    // HANDSTAND (H1): the catch, the balance on the palms and its exits.
+    {
+        const float dt = std::isfinite(f.seconds) ? std::clamp(f.seconds, 0.f, .1f) : 0.f;
+        handstand::Handstand::Input in;
+        in.seconds = dt;
+        // FLIPS IN COMBAT off and a fight on: no catch (Realistic Flips turns nothing then).
+        in.vrAir = handstandVrAir_ && autoSettings_.enabled && !(flight_.fighting && !autoSettings_.inCombat);
+        in.tracked = validTrackedPose(f.head) && handValid(f.hands[0]) && handValid(f.hands[1]);
+        in.grip = (handValid(f.hands[0]) && f.hands[0].squeeze > .6f) ||
+                  (handValid(f.hands[1]) && f.hands[1].squeeze > .6f);
+        in.floorPalms = handCollision_.floorContacts(out.grips);
+        Vec3 normal{};
+        for (unsigned i = 0; i < 2; ++i) {
+            in.palms[i] = out.grips[i].position;
+            normal += handCollision_.floorNormal(i);
+        }
+        in.floorNormal = length(normal) > .5f ? normalized(normal) : Vec3{0, 1, 0};
+        const Quat world = placed.orientation();
+        in.bodyUp = world.rotate({0, 1, 0});
+        in.angular = Quat::yaw(rig_.yaw).rotate(automatic_.angularVelocity());
+        in.velocity = flight_.valid ? flight_.velocity : Vec3{};
+        // The palms' tracked speed into the floor: the arms extending (the
+        // hands from the head), in the world, along -normal.
+        float into = 0;
+        int counted = 0;
+        for (unsigned i = 0; i < 2; ++i) {
+            if (!handValid(f.hands[i]) || !validTrackedPose(f.head))
+                continue;
+            const Vec3 rel = f.hands[i].grip.position - f.head.position;
+            if (handstandSampled_ && dt > 0) {
+                into += dot(world.rotate((rel - handstandRel_[i]) / dt), -in.floorNormal);
+                ++counted;
+            }
+            handstandRel_[i] = rel;
+        }
+        // The push's history starts again after a recenter or a tracking gap.
+        handstandSampled_ = in.tracked && !f.recentered;
+        in.pushInto = counted ? into / counted : 0.f;
+        if (handValid(f.hands[0])) {
+            const Quat yaw = Quat::yaw(rig_.yaw);
+            in.aim = (yaw.rotate({1, 0, 0}) * f.hands[0].stickX + yaw.rotate({0, 0, -1}) * f.hands[0].stickY) *
+                     handstandParams_.stickLean;
+        }
+        const bool wasSupporting = handstandOut_.supporting;
+        handstandOut_ = handstand_.update(in, handstandParams_);
+        if (handstandOut_.caughtNow)
+            handstandCatchTilt_ = automatic_.orientation();
+        if (wasSupporting && !handstandOut_.supporting) {
+            automatic_.release(Quat::yaw(-rig_.yaw).rotate(handstandOut_.releaseSpin));
+            // The push was the arms: none of it becomes spin (their momentum starts again).
+            automaticHands_.reset();
+        }
+        out.handstand = handstandOut_;
+    }
     // Existing native input bridge uses these bits for W/A/S/D/Space, the
     // virtual Xbox controller the stick itself. Rotate head-relative movement
     // into the stock camera's horizontal axes.

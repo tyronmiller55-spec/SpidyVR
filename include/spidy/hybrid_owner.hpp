@@ -295,6 +295,10 @@ struct Frame {
     // zip's point launch from its rise) hands to VR this long into the air;
     // 0 stays to the landing (the November 11 23:39 rule).
     int64_t jumpHandoffNs = 0;
+    // HANDSTAND (handstand.hpp, H1): the hands hold him on a floor (caught,
+    // balancing, or just let go of): SpidyVR keeps the body, ground included;
+    // the landing waits until this ends.
+    bool handSupport{};
 };
 
 // The view ease (view_ease.hpp) a switch to VR takes, in ms (0: the snap):
@@ -558,6 +562,13 @@ struct HybridOwner {
         if (f.cancelGripHeld && domain == Domain::vr && !supported(f.state))
             clearZip();
         const bool cancelHeldAir = f.cancelGripHeld && domain == Domain::vr && !supported(f.state);
+
+        // HANDSTAND: the hands hold him on the ground; the landing waits.
+        if (f.handSupport && domain == Domain::vr && supported(f.state)) {
+            airAnimNs = fallNs = -1;
+            clearZip();
+            return domain;
+        }
 
         // GROUND: the animation's, always. Landing comes back at once; nothing
         // on the ground (grip, trigger, a web, a jump press) switches. Only a

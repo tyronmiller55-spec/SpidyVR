@@ -1,6 +1,7 @@
 #pragma once
 #include "head_clearance.hpp"
 #include "hand_collision.hpp"
+#include "handstand.hpp"
 #include "native_rays.hpp"
 #include "native_view.hpp"
 #include "realistic_flip.hpp"
@@ -85,6 +86,10 @@ struct GameMotionFrame {
     bool climbTracking{};
     std::array<Vec3, 2> climbGrips{}; // tracking metres relative to the head at hold entry
     std::array<float, 2> climbHold{};
+    // HANDSTAND (handstand.hpp, H1): this frame's catch, balance and exit,
+    // and how far the inverted eyes came down toward the floor (m).
+    handstand::Handstand::Out handstand{};
+    float handstandDrop{};
     Quat bodyTilt(bool runningPose = false) const {
         // The travel-driven wall-run gait stays in the wall frame. The camera
         // may stand on that wall, but it must not select a different body pose.
@@ -454,6 +459,15 @@ class GameTrackingRig {
     void flight(RealisticFlight sample) {
         flight_ = sample;
     }
+    // HANDSTAND (handstand.hpp, H1; REALISTIC FLIPS only): its settings, and
+    // whether SpidyVR has the body in its air for the next update (a catch
+    // starts only there).
+    void handstandSettings(handstand::Params p) {
+        handstandParams_ = p;
+    }
+    void handstandVrAir(bool vrAir) {
+        handstandVrAir_ = vrAir;
+    }
     void momentumWallRun(float distance, float tilt, float bank, float lean) {
         momentumView_.distance = std::isfinite(distance) ? std::clamp(distance, .4f, 1.6f) : .95f;
         momentumView_.tilt = std::isfinite(tilt) ? std::clamp(tilt, -.523599f, .523599f) : .17453293f;
@@ -571,6 +585,15 @@ class GameTrackingRig {
     Vec3 headDrop_{};
     HeadClearance clearance_{};
     HandCollision handCollision_{};
+    // HANDSTAND: the state machine, its last output, the tilt at the catch,
+    // the eyes' drop and the palms' last tracked offsets from the head.
+    handstand::Params handstandParams_{};
+    handstand::Handstand handstand_{};
+    handstand::Handstand::Out handstandOut_{};
+    Quat handstandCatchTilt_{};
+    float handstandDrop_{};
+    bool handstandVrAir_{}, handstandSampled_{};
+    std::array<Vec3, 2> handstandRel_{};
     Vec3 bodyCentre_{std::numeric_limits<float>::quiet_NaN(), 0, 0};
 };
 } // namespace spidy

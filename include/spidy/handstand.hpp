@@ -1,0 +1,380 @@
+// HANDSTAND, phase H1 (EngineBot's "SpidyVR - Handstand & Point Jump" page,
+// its 12-step H1 checklist). REALISTIC FLIPS only; experimental, off by
+// default (spidy_vr.ini `handstand=1`).
+//
+// Come down inverted (100 degrees or more from upright) in SpidyVR's air with
+// both palms on a floor (HandCollision's ray-confirmed floor planes) and
+// little spin: the hands CATCH. The body then BALANCES on them - a linear
+// inverted pendulum about the palms, steered by its divergent component of
+// motion (DCM) so that a small lean settles - and the view holds that lean
+// (RealisticFlip's support override). It ends by:
+//  - push: the tracked palms driven into the floor (arms extended fast):
+//    a launch off the hands (the point jump's swing path, no smoke);
+//  - step-down: the palms lifted without a push - he drops to his feet;
+//  - fall: the DCM out of the support for fallSeconds, or a lean over
+//    fallLeanDegrees - he tips over;
+//  - grip, tracking lost, disabled.
+// While it catches, balances and for leavingSeconds after, SpidyVR keeps the
+// body on the ground (holdVr: hybrid_owner::Frame::handSupport), so the
+// landing rule does not hand him to the animation mid-handstand.
+//
+// Leg control (Y+X) stays usable: the legs move the drawn body; the balance
+// reads only the hands and the head.
+//
+// Pure; no Windows.
+#pragma once
+#include "math.hpp"
+#include <algorithm>
+#include <cmath>
+#include <cstdint>
+
+namespace spidy::handstand {
+
+struct Params {
+    bool enabled = false;
+    float comHeight = .95f; // the centre of mass above the palms, m (h)
+    float gain = 3.f;       // kxi: how hard the DCM is steered back
+    bool assist = true;     // off: the centre of pressure stays mid-palms (no steering)
+    float palmRadius = .06f, margin = .06f;
+    float catchDegrees = 100; // inverted at least this far to catch
+    float catchSpin = 3.f;    // rad/s; faster is a handspring (H2): no catch
+    float fallSeconds = .12f, fallLeanDegrees = 35;
+    float pushSpeed = .6f, pushGain = 2.2f, pushWindow = .05f; // m/s into the floor
+    float pushMaxNormal = 7.f, pushMaxAcross = 4.f;
+    float catchGrace = .15f, leavingSeconds = .3f;
+    float eyeDrop = .9f;    // the inverted eyes' drop toward the floor, m
+    float stickLean = .08f; // m the left stick moves the balance's aim
+};
+
+template <class V> Params paramsOf(const V& v) {
+    Params p;
+    p.enabled = v.handstand && v.realisticFlips;
+    p.assist = v.handstandAssist;
+    p.comHeight = std::clamp(v.handstandHeightCm, 60, 140) / 100.f;
+    p.gain = std::clamp(v.handstandGainPct, 50, 600) / 100.f;
+    p.pushGain = std::clamp(v.handstandPushGain, 100, 400) / 100.f;
+    p.pushMaxNormal = static_cast<float>(std::clamp(v.handstandPushMax, 2, 12));
+    p.fallLeanDegrees = static_cast<float>(std::clamp(v.handstandFallDegrees, 15, 60));
+    p.eyeDrop = std::clamp(v.handstandEyeDropCm, 0, 120) / 100.f;
+    return p;
+}
+
+enum class State : uint8_t { off, catching, balance, leaving };
+enum class Exit : uint8_t { none, push, stepDown, fall, grip, tracking, disabled, missed };
+inline const char* stateName(State s) {
+    switch (s) {
+    case State::catching:
+        return "catching";
+    case State::balance:
+        return "balance";
+    case State::leaving:
+        return "leaving";
+    default:
+        return "off";
+    }
+}
+inline const char* exitName(Exit e) {
+    switch (e) {
+    case Exit::push:
+        return "push";
+    case Exit::stepDown:
+        return "step-down";
+    case Exit::fall:
+        return "fall";
+    case Exit::grip:
+        return "grip";
+    case Exit::tracking:
+        return "tracking lost";
+    case Exit::disabled:
+        return "disabled";
+    case Exit::missed:
+        return "missed (palms off before the catch held)";
+    default:
+        return "none";
+    }
+}
+
+// How far the body is inverted, degrees (0 upright, 180 straight down),
+// from its up in the world.
+inline float invertedDegrees(Vec3 bodyUp) {
+    if (!finite(bodyUp) || length(bodyUp) < .5f)
+        return 0;
+    const float c = std::clamp(normalized(bodyUp).y, -1.f, 1.f);
+    return std::acos(c) * 180.f / 3.14159265f;
+}
+
+// The eyes' drop toward the floor for an inversion: none to 100 degrees, the
+// whole of `drop` from 160 (smoothstep between).
+inline float eyeDropFor(float degrees, float drop) {
+    const float t = std::clamp((degrees - 100.f) / 60.f, 0.f, 1.f);
+    return drop * t * t * (3 - 2 * t);
+}
+
+// The support region: the segment between the palms, widened by a radius.
+struct Support {
+    Vec3 a{}, b{}; // palms, level (y ignored)
+    float radius = .08f;
+    Vec3 centre() const {
+        return Vec3{(a.x + b.x) * .5f, 0, (a.z + b.z) * .5f};
+    }
+    // The nearest point of the region to p (level), and whether p was in it.
+    Vec3 clamp(Vec3 p, bool* inside = nullptr) const {
+        const Vec3 pa{p.x - a.x, 0, p.z - a.z}, ba{b.x - a.x, 0, b.z - a.z};
+        const float len2 = ba.x * ba.x + ba.z * ba.z;
+        const float t = len2 > 1e-8f ? std::clamp((pa.x * ba.x + pa.z * ba.z) / len2, 0.f, 1.f) : 0.f;
+        const Vec3 nearest{a.x + ba.x * t, 0, a.z + ba.z * t};
+        const Vec3 off{p.x - nearest.x, 0, p.z - nearest.z};
+        const float d = std::hypot(off.x, off.z);
+        if (inside)
+            *inside = d <= radius;
+        if (d <= radius)
+            return Vec3{p.x, 0, p.z};
+        return nearest + off * (radius / d);
+    }
+};
+
+// The linear inverted pendulum on the palms, level: x the centre of mass's
+// offset, v its velocity. u (the centre of pressure) steered by the DCM:
+//   w0 = sqrt(g / h); xi = x + v / w0; u = xi + (k / w0) (xi - xiRef),
+// held inside the support; x'' = w0^2 (x - u). Substeps of 1/120 s at most.
+class Balance {
+  public:
+    void start(Vec3 x, Vec3 v) {
+        x_ = Vec3{x.x, 0, x.z};
+        v_ = Vec3{v.x, 0, v.z};
+        outside_ = 0;
+    }
+    struct Out {
+        Vec3 x{}, v{}, xi{}, u{};
+        float leanDegrees{};
+        bool fell{};
+    };
+    Out step(float seconds, const Support& s, Vec3 aim, const Params& p) {
+        Out out;
+        const float dt = std::isfinite(seconds) ? std::clamp(seconds, 0.f, .1f) : 0.f;
+        const float h = std::max(p.comHeight, .3f);
+        const float w0 = std::sqrt(9.81f / h);
+        const Vec3 ref = s.clamp(finite(aim) ? aim : s.centre());
+        bool in = true;
+        int n = std::max(1, static_cast<int>(std::ceil(dt * 120.f)));
+        const float sub = dt / n;
+        for (int i = 0; i < n; ++i) {
+            const Vec3 xi = x_ + v_ / w0;
+            const Vec3 wanted = p.assist ? xi + (xi - ref) * (p.gain / w0) : s.centre();
+            bool inside = true;
+            const Vec3 u = s.clamp(wanted, &inside);
+            in = in && inside;
+            const Vec3 acc = (x_ - u) * (w0 * w0);
+            v_ += acc * sub;
+            x_ += v_ * sub;
+            out.u = u;
+        }
+        out.x = x_;
+        out.v = v_;
+        out.xi = x_ + v_ / w0;
+        bool xiInside = true;
+        s.clamp(out.xi, &xiInside);
+        outside_ = xiInside ? 0.f : outside_ + dt;
+        const Vec3 lean{x_.x - s.centre().x, 0, x_.z - s.centre().z};
+        out.leanDegrees = std::atan2(std::hypot(lean.x, lean.z), h) * 180.f / 3.14159265f;
+        out.fell = outside_ >= p.fallSeconds || out.leanDegrees > p.fallLeanDegrees;
+        return out;
+    }
+    Vec3 x() const {
+        return x_;
+    }
+    Vec3 v() const {
+        return v_;
+    }
+
+  private:
+    Vec3 x_{}, v_{};
+    float outside_{};
+};
+
+// The push: the palms' tracked speed into the floor (m/s, + into it),
+// averaged over `window`; over pushSpeed, the launch.
+class Push {
+  public:
+    float update(float seconds, float into, float window) {
+        const float dt = std::isfinite(seconds) ? std::clamp(seconds, 0.f, .1f) : 0.f;
+        if (!std::isfinite(into))
+            into = 0;
+        const float a = window > 1e-4f ? 1 - std::exp(-dt / window) : 1.f;
+        avg_ += (into - avg_) * a;
+        return avg_;
+    }
+    void reset() {
+        avg_ = 0;
+    }
+
+  private:
+    float avg_{};
+};
+// The launch off the hands: the push's speed scaled, along the floor's
+// normal, with the body's own across, each capped.
+inline Vec3 launch(float pushSpeed, Vec3 normal, Vec3 across, const Params& p) {
+    if (!finite(normal) || length(normal) < .5f)
+        normal = {0, 1, 0};
+    normal = normalized(normal);
+    const float up = std::clamp(pushSpeed * p.pushGain, 0.f, p.pushMaxNormal);
+    Vec3 side = finite(across) ? across - normal * dot(across, normal) : Vec3{};
+    side = limited(side, p.pushMaxAcross);
+    return normal * up + side;
+}
+
+// The state machine. One update a frame, after the hands are placed.
+class Handstand {
+  public:
+    struct Input {
+        float seconds{};
+        bool vrAir{};          // SpidyVR has the body and he is in its air (or already supported)
+        bool tracked{};        // head and both hands tracked
+        bool grip{};           // either grip squeezed
+        unsigned floorPalms{}; // bits: palms on a floor (HandCollision::floorContacts)
+        Vec3 palms[2]{};       // placed palms, world
+        Vec3 floorNormal{0, 1, 0};
+        Vec3 bodyUp{0, 1, 0}; // the body's up in the world (the flip's tilt)
+        Vec3 angular{};       // the flip's spin, rad/s
+        Vec3 velocity{};      // the body's, world m/s
+        float pushInto{};     // palms' tracked speed into the floor, m/s (+ into)
+        Vec3 aim{};           // the left stick's aim for the balance (level, m, from the support's centre)
+    };
+    struct Out {
+        State state{};
+        bool holdVr{};     // SpidyVR keeps the body (Frame::handSupport)
+        bool supporting{}; // the view holds the balance's lean (RealisticFlight::handSupport)
+        bool caughtNow{};
+        Exit exitNow{};     // this frame's exit (none: none)
+        Vec3 launch{};      // with Exit::push: the launch velocity
+        Vec3 releaseSpin{}; // the spin the flip goes on with
+        Balance::Out balance{};
+        Vec3 lean{}; // the CoM's level offset from the support's centre
+    };
+    Out update(const Input& in, const Params& p) {
+        Out out;
+        const float dt = std::isfinite(in.seconds) ? std::clamp(in.seconds, 0.f, .1f) : 0.f;
+        exit_ = Exit::none;
+        support_.a = in.palms[0];
+        support_.b = in.palms[1];
+        support_.radius = p.palmRadius + p.margin;
+        const float pushed = push_.update(dt, in.pushInto, p.pushWindow);
+        const bool both = (in.floorPalms & 3u) == 3u;
+        // After an exit a new catch waits for the palms to come off the floor.
+        if (!in.floorPalms)
+            armed_ = true;
+        switch (state_) {
+        case State::off: {
+            if (!p.enabled || !in.vrAir || !in.tracked || in.grip || !both || !armed_)
+                break;
+            const float spin = finite(in.angular) ? length(in.angular) : 0.f;
+            if (invertedDegrees(in.bodyUp) < p.catchDegrees || spin > p.catchSpin)
+                break;
+            // The CoM along the body's feet from the palms' centre.
+            const Vec3 feetWay = finite(in.bodyUp) ? -normalized(in.bodyUp) : Vec3{0, 1, 0};
+            const Vec3 c = support_.centre();
+            const Vec3 x0 = c + Vec3{feetWay.x, 0, feetWay.z} * p.comHeight;
+            const Vec3 v0 = finite(in.velocity) ? Vec3{in.velocity.x, 0, in.velocity.z} : Vec3{};
+            balance_.start(
+                x0, v0 + horizontal(cross(finite(in.angular) ? in.angular : Vec3{}, feetWay * p.comHeight)));
+            state_ = State::catching;
+            age_ = 0;
+            push_.reset();
+            out.caughtNow = true;
+            break;
+        }
+        case State::catching:
+        case State::balance: {
+            age_ += dt;
+            Exit why = Exit::none;
+            if (!p.enabled)
+                why = Exit::disabled;
+            else if (!in.tracked)
+                why = Exit::tracking;
+            else if (in.grip)
+                why = Exit::grip;
+            else if (pushed > p.pushSpeed && in.floorPalms)
+                why = Exit::push;
+            else if (!in.floorPalms && state_ == State::catching && age_ > p.catchGrace)
+                why = Exit::missed;
+            else if (!in.floorPalms && state_ == State::balance)
+                why = Exit::stepDown;
+            if (why == Exit::none) {
+                if (state_ == State::catching && age_ >= p.catchGrace && both)
+                    state_ = State::balance;
+                const Vec3 aim =
+                    support_.centre() + (finite(in.aim) ? limited(horizontal(in.aim), p.stickLean) : Vec3{});
+                last_ = balance_.step(dt, support_, aim, p);
+                if (last_.fell)
+                    why = Exit::fall;
+            }
+            if (why != Exit::none) {
+                exit_ = why;
+                out.exitNow = why;
+                if (why == Exit::push)
+                    out.launch = launch(std::max(pushed, std::isfinite(in.pushInto) ? in.pushInto : 0.f),
+                                        in.floorNormal, balance_.v(), p);
+                // The tip's spin about the palms (world), for the flip to go on with.
+                out.releaseSpin = why == Exit::fall
+                                      ? cross(Vec3{0, 1, 0}, balance_.v()) / std::max(p.comHeight, .3f)
+                                      : Vec3{};
+                state_ = State::leaving;
+                age_ = 0;
+                armed_ = false;
+            }
+            break;
+        }
+        case State::leaving:
+            age_ += dt;
+            if (age_ >= p.leavingSeconds)
+                state_ = State::off;
+            break;
+        }
+        out.state = state_;
+        out.supporting = state_ == State::catching || state_ == State::balance;
+        out.holdVr = state_ != State::off;
+        out.balance = last_;
+        out.lean = balance_.x() - support_.centre();
+        out.lean.y = 0;
+        return out;
+    }
+    State state() const {
+        return state_;
+    }
+    Exit lastExit() const {
+        return exit_;
+    }
+    void reset() {
+        *this = {};
+    }
+
+  private:
+    static Vec3 horizontal(Vec3 v) {
+        return Vec3{v.x, 0, v.z};
+    }
+    State state_{};
+    Exit exit_{};
+    bool armed_ = true;
+    float age_{};
+    Balance balance_{};
+    Balance::Out last_{};
+    Push push_{};
+    Support support_{};
+};
+
+// The view's lean on the hands: the body's up straight down, turned toward
+// the CoM's offset (feet over it). `inverted` is the tilt at the catch (the
+// tracking space's axes), `leanLocal` the offset in the same axes, h the
+// CoM's height.
+inline Quat supportTilt(Quat inverted, Vec3 leanLocal, float h) {
+    const Vec3 up = inverted.rotate({0, 1, 0});
+    if (!finite(up) || length(up) < .5f)
+        return inverted;
+    // Straight down first (the shortest turn), then the lean.
+    const Quat straight = arc(up, {0, -1, 0}) * inverted;
+    const Vec3 feet = normalized(
+        Vec3{finite(leanLocal) ? leanLocal.x : 0.f, std::max(h, .3f), finite(leanLocal) ? leanLocal.z : 0.f});
+    return arc({0, 1, 0}, feet) * straight;
+}
+
+} // namespace spidy::handstand

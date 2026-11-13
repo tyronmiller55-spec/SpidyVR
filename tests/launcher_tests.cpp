@@ -746,6 +746,9 @@ int main() {
                 key == "turn_in_place_deg" || key.rfind("passive_", 0) == 0 || key == "movement_mode" ||
                 key == "rear_snap_turn_ms")
                 continue;
+            // HANDSTAND (H1, November 12): experimental, the player's own.
+            if (key.rfind("handstand", 0) == 0)
+                continue;
             ++lines;
             check(at(key) < std::size(profileSettings) &&
                       (profileSettings[at(key)].flag || profileSettings[at(key)].number),

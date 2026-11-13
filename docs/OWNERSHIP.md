@@ -102,3 +102,7 @@ While the animation owns, the arms are the player's own SpidyVR arms (`include/s
 - the animated head's eye anchor, as the actor stands now.
 
 Webs, web balls, markers and punches aim from that pose, and the glove is solved onto it. When the player torso's anchor is missing, the old pose-job mapping is used.
+
+## HANDSTAND (H1, Nov 12; experimental, off by default)
+
+With `handstand=1` and REALISTIC FLIPS on: SpidyVR already owns him in its air when the palms catch a floor. While the hands hold him (`Frame::handSupport`: catching, balancing, and 0.3 s after letting go), the landing waits: no switch to ANIM on the ground. No new `EnterVr` value (he is already VR). When it ends, the feet landing returns to ANIM (`land`) with the position lock as always. A push-off goes through the point jump's swing path and its takeoff hold. `handSupport` never takes the body from ANIM. See [HANDSTAND.md](HANDSTAND.md).

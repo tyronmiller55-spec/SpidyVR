@@ -3,6 +3,12 @@
 Every build, newest first, with what changed, why, and what was measured.
 Per-check results are in [VALIDATION.md](VALIDATION.md).
 
+## EngineBot's 01-03 on HYBRID v2 (feat/hybrid-v2-handstand)
+
+- **01 movement cleanup** (EngineBot, rebased): RUN CURVE on, NATIVE RUN AT through the curve (sprint at 70% physical tilt), EARLY JUMP QUICK TAP, StickPush aside .35 / hold .20 s, one-time `movement_defaults` migration. Cleanup items 3 (hybrid view tau) and 4 (ANIMATED HEAD Level on the ground) stay dropped: HYBRID's view yaw is the heading (no tau) and its head lock needs FULL.
+- **02 quick sidestep** (EngineBot, rebased; on, `sidestep=0` off): left-stick flick from neutral then A within 120 ms, 2 m in 0.18 s. HYBRID v2 rule: sideways flicks only, 55-100 degrees off ahead either side (`Deny::notSideways`); diagonals are the free run starting and the rear is the rear snap's. EngineBot proposed 55-125; the top is held at the snap line (100) so a flick never both snaps the view and sidesteps off the turned heading.
+- **03 handstand H1** (EngineBot, rebased): REALISTIC FLIPS only. ON by default for this playtest build (`handstand=1`; `handstand=0` off; ini only, no menu row). Inverted eye drop up to 0.9 m while it is on.
+
 ## HYBRID v2, wrist marker smoothing v2, parkour ahead (feat/hybrid-v2, from 5061b4a)
 
 - **HYBRID v2 movement (t79u/t86u):** the left stick's front half is free movement - he turns and runs where it points (to 90 degrees either side, 90-100 runs at 90), full speed, while the view keeps the heading (eye position, pitch and roll from the head bone). Within 15 degrees of forward the headset steers inside a fixed 30-degree window (heading +-15, gaze low-passed 0.1 s); 15-25 degrees blends gaze into the stick. The heading never follows the steered run (no feedback loop). Letting go leaves Spidey where he is and the view where it is (no turn-in-place back); a hold that times out on his feet keeps the heading (5061b4a rejoined the head bone: 17 swings of up to 158 degrees). The game's own turns (wall, air, parkour; not steerable for 0.25 s) are followed again. Logs: `hybrid stick: <zone>`, `hybrid heading: ... timed out on his feet`, `... it follows him again`.

@@ -44,6 +44,12 @@ struct RealisticFlight {
     // angular momentum is kept (tucked spins faster, extended slower).
     Vec3 legTurn{};
     float legInertia = 1;
+    // HANDSTAND (handstand.hpp, H1): the hands hold him. The tilt is
+    // supportTilt (the balance's lean on the palms) and the spin
+    // supportAngular, as given: no web, arm or landing turns it meanwhile.
+    bool handSupport{};
+    Quat supportTilt{};
+    Vec3 supportAngular{};
 };
 // The legs' reaction (radians about the head's level right, + nose up, and
 // its level forward) as a rotation vector in the tracking space; the same
@@ -159,6 +165,11 @@ class RealisticFlip {
     Vec3 angularVelocity() const {
         return angular_;
     }
+    // HANDSTAND: let go of the hands with this spin (tracking-space axes,
+    // rad/s); the flip goes on from the tilt the hands held.
+    void release(Vec3 spin) {
+        angular_ = momentum_ = finite(spin) ? limited(spin, 12.f) : Vec3{};
+    }
     // Takes the tilt's turn about the vertical out of it, radians (more than
     // 0 to the left, as Quat::yaw), for the tracking space's yaw to keep:
     // where a spin leaves the player facing is the heading from then on, and
@@ -190,6 +201,17 @@ class RealisticFlip {
         }
         if (!std::isfinite(dt) || dt <= 0 || dt > .1f)
             return tilt_;
+        // HANDSTAND: the hands hold the body; the balance sets the tilt.
+        if (flight.handSupport) {
+            const Quat q = unit(flight.supportTilt);
+            if (std::abs(q.x) + std::abs(q.y) + std::abs(q.z) + std::abs(q.w) > .5f && std::isfinite(q.w))
+                tilt_ = q;
+            angular_ = finite(flight.supportAngular) ? limited(flight.supportAngular, 12.f) : Vec3{};
+            momentum_ = angular_;
+            leveling_ = brakeHeld_ = attached_ = airborne_ = false;
+            missingTime_ = 0;
+            return tilt_;
+        }
         const float autoRate = std::clamp(settings.speed, 90, 360) * 3.14159265f / 180;
         const bool manual = controls.manualActive && finite(controls.manualAngular);
         const float rate = manual ? std::max(autoRate, length(controls.manualAngular)) : autoRate;

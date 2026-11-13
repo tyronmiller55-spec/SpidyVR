@@ -819,6 +819,13 @@ Values sanitized(Values v) {
     v.automaticSpeed = std::clamp(v.automaticSpeed, 90, 360);
     v.automaticMinimumSpeed = std::clamp(v.automaticMinimumSpeed, 3, 16);
     v.automaticResponse = std::clamp(v.automaticResponse, 100, 750);
+    // HANDSTAND (handstand.hpp).
+    v.handstandPushGain = std::clamp(v.handstandPushGain, 100, 400);
+    v.handstandPushMax = std::clamp(v.handstandPushMax, 2, 12);
+    v.handstandFallDegrees = std::clamp(v.handstandFallDegrees, 15, 60);
+    v.handstandHeightCm = std::clamp(v.handstandHeightCm, 60, 140);
+    v.handstandGainPct = std::clamp(v.handstandGainPct, 50, 600);
+    v.handstandEyeDropCm = std::clamp(v.handstandEyeDropCm, 0, 120);
     v.automaticHandStrength = std::clamp(v.automaticHandStrength, 0, 200);
     v.automaticFalloff = std::clamp(v.automaticFalloff, 500, 3000);
     v.automaticHandThreshold = std::clamp(v.automaticHandThreshold, 50, 300);
@@ -1796,6 +1803,15 @@ constexpr TabOnly tabOnly[] = {
     {"wall_run_camera_tilt", &Values::wallRunCameraTilt, nullptr},
     {"half_punch_damage", &Values::halfPunchDamage, nullptr},
     {"realistic_flips", &Values::realisticFlips, nullptr},
+    // HANDSTAND (H1, handstand.hpp): spidy_vr.ini only.
+    {"handstand", &Values::handstand, nullptr},
+    {"handstand_assist", &Values::handstandAssist, nullptr},
+    {"handstand_push_gain", nullptr, &Values::handstandPushGain},
+    {"handstand_push_max", nullptr, &Values::handstandPushMax},
+    {"handstand_fall_degrees", nullptr, &Values::handstandFallDegrees},
+    {"handstand_height_cm", nullptr, &Values::handstandHeightCm},
+    {"handstand_gain_pct", nullptr, &Values::handstandGainPct},
+    {"handstand_eye_drop_cm", nullptr, &Values::handstandEyeDropCm},
     {"rotation_strength", nullptr, &Values::automaticStrength},
     {"rotation_speed", nullptr, &Values::automaticSpeed},
     {"flight_speed_min", nullptr, &Values::automaticMinimumSpeed},

@@ -69,6 +69,10 @@ add_executable(spidy_point_jump_tests tests/point_jump_tests.cpp)
 target_link_libraries(spidy_point_jump_tests PRIVATE spidy_core)
 target_compile_definitions(spidy_point_jump_tests PRIVATE SPIDY_SOURCE_DIR="${CMAKE_SOURCE_DIR}")
 add_test(NAME point_jump COMMAND spidy_point_jump_tests)
+
+add_executable(spidy_handstand_tests tests/handstand_tests.cpp)
+target_link_libraries(spidy_handstand_tests PRIVATE spidy_core)
+add_test(NAME handstand COMMAND spidy_handstand_tests)
 # LEG HOLD (leg_hold.hpp): Y+X chord, suppression, stick persistence, neutral cancel, easing (portable).
 add_executable(spidy_leg_hold_tests tests/leg_hold_tests.cpp)
 target_link_libraries(spidy_leg_hold_tests PRIVATE spidy_core)
