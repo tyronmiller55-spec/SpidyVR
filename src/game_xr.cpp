@@ -1350,6 +1350,11 @@ DWORD WINAPI run(void*) {
         // The VR settings: the launch options, then the SPIDY VR tab in the
         // game's Settings during play.
         vr_settings::Values values;
+        // PUNCH LUNGE: whether a punch's web strike may take the body (off by default: punches stay
+        // contact-only blows in the animation).
+        const auto punchLunging = [&] {
+            return hybrid_owner::strikeTakesOver(values.animatedFullArms, values.punchLunge);
+        };
         values.aimMarkers = !(config.options & 128);
         values.webGrab = !(config.options & 8);
         values.body = !(config.options & 32);
@@ -3853,11 +3858,11 @@ DWORD WINAPI run(void*) {
                         const bool animationActions = animation_cancel::nativeActions(
                             values.animatedHybrid && values.animatedMoves,
                             animatedMovesHandoff.yielding, gripCancel.holdVr, nativeGroundNext);
-                        // ANIMATED FULL ARMS (default on): the arms keep every SpidyVR
-                        // control in animation - punches may open a web strike (and
-                        // its lunge) instead of contact-only blows.
-                        input.actionMode =
-                            animationActions && !strikeHold.fullArms(values.animatedFullArms) ? 1u : 0u;
+                        // ANIMATED FULL ARMS (default on) with PUNCH LUNGE (default off): the
+                        // arms keep every SpidyVR control in animation - with PUNCH LUNGE on,
+                        // punches may open a web strike (and its lunge) instead of contact-only
+                        // blows; off, they stay contact-only blows in the animation.
+                        input.actionMode = animationActions && !strikeHold.fullArms(punchLunging()) ? 1u : 0u;
                         // Release restores ground animation later in THIS loop. Do not
                         // allow a one-sample original-VR lunge/rig shot before that
                         // ownership transaction has a matching displayed hand solve.
@@ -3929,7 +3934,7 @@ DWORD WINAPI run(void*) {
                             }
                             // Review M5: contact-only arms (FULL ARMS off) need the glove to
                             // be on the hand, as before: a contact is the drawn glove's.
-                            const bool contactOnly = !strikeHold.fullArms(values.animatedFullArms);
+                            const bool contactOnly = !strikeHold.fullArms(punchLunging());
                             for (unsigned i = 0; i < 2; ++i)
                                 kin.handResidual[i] = current && overlay.valid[i] && overlay.actualValid[i]
                                                           ? overlay.residual[i]
@@ -7120,7 +7125,7 @@ DWORD WINAPI run(void*) {
                         {
                             // Review M3/M4: a fresh, capped, setting-frozen strike hold.
                             const auto held = strikeHold.update(strikeRead, strikeUnderWay, strikeSequence,
-                                                                values.animatedFullArms, handoffNs);
+                                                                punchLunging(), handoffNs);
                             hybridFrame.strike = held.hold;
                             if (held.event != hybrid_owner::StrikeHold::Event::none && diag_log::enabled()) {
                                 const char* owner = hybridOwner.domain == hybrid_owner::Domain::vr ? "vr" : "anim";

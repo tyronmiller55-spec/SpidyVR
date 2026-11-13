@@ -691,6 +691,8 @@ template <class V> auto switchOf(Item item, V& v) -> decltype(&v.aimMarkers) {
         return &v.headProbe;
     case Item::soundTrace:
         return &v.soundTrace;
+    case Item::punchLunge:
+        return &v.punchLunge;
     case Item::legAirCrouch:
         return &v.legAirCrouch;
     case Item::legReachSpread:
@@ -822,9 +824,9 @@ Values sanitized(Values v) {
     v.automaticHandThreshold = std::clamp(v.automaticHandThreshold, 50, 300);
     return v;
 }
-const std::array<Row, 156>& rows() {
+const std::array<Row, 157>& rows() {
     // The help fits the game's description column beside the rows.
-    static const std::array<Row, 156> all{{
+    static const std::array<Row, 157> all{{
         {Item::none, "WEBS", nullptr, {}},
         {Item::webStyle, "WEB STYLE",
          "Arcade: webs pass lamp posts, signs and cars, and swings stay above the street.", webStyleChoices},
@@ -1215,6 +1217,9 @@ const std::array<Row, 156>& rows() {
         {Item::landingHold, "LANDING VIEW HOLD",
          "HYBRID: how long the view holds where you looked after a landing.",
          landingHoldChoices, Place::launcher}, // the NATIVE ANIMATION tab holds 20
+        {Item::punchLunge, "PUNCH LUNGE",
+         "ON: a punch at a far enemy lunges and SpidyVR takes over. OFF: punches stay animated.", {},
+         Place::launcher}, // the NATIVE ANIMATION tab holds 20
         {Item::animYawSway, "ANIM YAW SWAY",
          "Full lock, stable yaw: share of the head's yaw sway shown. 100%: the old feel.", animYawSwayChoices},
         {Item::turnInPlace, "TURN-IN-PLACE ANGLE",
@@ -1314,7 +1319,7 @@ const std::array<Screen, categoryCount>& screens() {
         Item::nativeAnimation, Item::animatedHead, Item::animatedHeadsetSmooth,
         Item::animatedArms, Item::animatedTorso, Item::animatedModelYaw, Item::animatedHybridSpeed,
         Item::animatedMoves, Item::animatedHybrid, Item::animatedAir, Item::animatedOnly,
-        Item::animatedSteering, Item::viewYawSource, Item::movementMode, Item::jumpHandoff, Item::landingHold, Item::animatedAirSpin, Item::headProbe, Item::soundTrace,
+        Item::animatedSteering, Item::viewYawSource, Item::movementMode, Item::jumpHandoff, Item::landingHold, Item::punchLunge, Item::animatedAirSpin, Item::headProbe, Item::soundTrace,
         Item::runSpeed,
         Item::slowMotionLength, Item::softLock,
     };
@@ -1911,6 +1916,7 @@ constexpr TabOnly tabOnly[] = {
     {"movement_mode", nullptr, &Values::movementMode},
     {"rear_snap_ms", nullptr, &Values::rearSnapMs},
     {"landing_hold_ms", nullptr, &Values::landingHoldMs},
+    {"punch_lunge", &Values::punchLunge, nullptr},
     {"leg_air_crouch", &Values::legAirCrouch, nullptr},
     {"leg_reach_spread", &Values::legReachSpread, nullptr},
     {"air_fists", &Values::airFists, nullptr},

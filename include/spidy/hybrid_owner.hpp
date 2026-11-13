@@ -375,6 +375,13 @@ inline bool cancelArmed(bool animOwns, bool supportedNow) {
 // cannot keep SpidyVR forever), a hold lasts capNs at most (then the strike
 // must go idle before another may hold), and animated_full_arms is frozen
 // for the length of a hold (a menu or ini change lands after it).
+// PUNCH LUNGE: whether a punch's web strike may take the body from the animation. FULL ARMS
+// (animated_full_arms) lets punches open strikes; PUNCH LUNGE (punch_lunge, off by default since the
+// 5061b4a playtest) is what lets that reach the owner. Off, punches are contact-only blows in the
+// animation and no strike ever opens (game_xr: actionMode contact-only, StrikeHold never holds).
+inline bool strikeTakesOver(bool fullArms, bool punchLunge) {
+    return fullArms && punchLunge;
+}
 class StrikeHold {
   public:
     static constexpr int64_t freshNs = 100'000'000, capNs = 4'000'000'000;

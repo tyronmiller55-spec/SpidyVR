@@ -1813,6 +1813,11 @@ void App::nativeAnimation(ImVec2 origin, ImVec2 size) {
                "How long it waits before it eases onto him (the Air view ease time); a fight or a held left "
                "stick cuts it to 150 ms. Default: 600 ms. 2500 ms is the old hold.",
                S(150), [&] { tabCombo("##nativelandinghold", Item::landingHold); });
+        option("Punch lunge",
+               "Off (default): punches stay in the animation as ordinary blows, with no pull into SpidyVR "
+               "for a moment. On: a punch at a far enemy lunges to him with SpidyVR's web strike (the old "
+               "Full arms), which takes the body from the animation until the strike ends.",
+               S(42), [&] { tabToggle("##nativepunchlunge", Item::punchLunge); });
         option("Hybrid speed",
                "How long 15 m/s in the air takes to switch to SpidyVR. Off disables speed takeover; "
                "webs, mid-air turns and wall runs still take over. Default: 200 ms.",

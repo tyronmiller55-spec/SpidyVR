@@ -25,7 +25,7 @@ Source: the user, Nov 9 09:34 PST. Code: `include/spidy/hybrid_owner.hpp`, the `
 | Y zip pressed from VR in the air | ANIM | `zip`, once the game begins the zip. A zip the game refuses never leaves VR. |
 | Spidy wall run / wall jump | VR | none |
 | Wall run that came out of a Native Run, stick let go on the wall | ANIM | `run-release`. It stays ANIM on that wall. |
-| FULL ARMS (`animated_full_arms`, on): a punch opens a web strike in an animation | VR | `punch`, for the strike's flight and hang, even on the ground. The hold needs a fresh strike sample (within 100 ms), lasts 4 s at most, and freezes the setting while it lasts (`full arms strike:` diag). It lands back in ANIM. |
+| FULL ARMS (`animated_full_arms`, on) **and PUNCH LUNGE (`punch_lunge`, off by default since Nov 12: punches stay animated)**: a punch opens a web strike in an animation | VR | `punch`, for the strike's flight and hang, even on the ground. The hold needs a fresh strike sample (within 100 ms), lasts 4 s at most, and freezes the setting while it lasts (`full arms strike:` diag). It lands back in ANIM. |
 | POINT JUMP (`point_jump`, off by default) fired from the ground, a perch or Spidy's wall | VR | `point-jump`, **the approved ground exception** (the user, Nov 11: point jump may take over from the ground animation; lock the feet at the switch). On the frame the launch is sent (`Frame::pointJump`); the position lock puts the origin on the actor's feet; VR is held on the ground until he is off it (`Frame::pointJumpHold`, at most 400 ms). The air is VR's; landing on the feet returns to ANIM (`land`). See [POINT_JUMP.md](POINT_JUMP.md). |
 | Cutscene / stale sample | frozen | none |
 

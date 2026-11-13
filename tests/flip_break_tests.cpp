@@ -4,9 +4,11 @@
 // never does; a jump stays the animation's to the landing; landing always
 // returns to the animation. Portable.
 #include "spidy/hybrid_owner.hpp"
+#include "spidy/vr_settings.hpp"
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
+#include <string>
 
 using namespace spidy;
 using namespace spidy::hybrid_owner;
@@ -120,6 +122,85 @@ Frame air() {
     return f;
 }
 
+// KEEP PUNCHES IN ANIMATION (PUNCH LUNGE off): no strike reaches the owner, while the webs, the
+// grip cancel, a point jump and Spidy's wall still take the body as before.
+void punchesStayAnimated() {
+    check(!strikeTakesOver(true, false) && strikeTakesOver(true, true) && !strikeTakesOver(false, true) &&
+              !strikeTakesOver(false, false),
+          "a strike takes over only with FULL ARMS and PUNCH LUNGE both on");
+    // The hold never starts with the setting off, strike after strike.
+    StrikeHold hold;
+    int64_t t = 1'000'000'000;
+    bool held = false;
+    for (int i = 0; i < 67; ++i) {
+        t += frame;
+        held |= hold.update(true, true, i, strikeTakesOver(true, false), t).hold;
+        t += frame;
+        held |= hold.update(true, false, i, strikeTakesOver(true, false), t).hold;
+    }
+    check(!held, "67 punches' strikes: none holds SpidyVR with PUNCH LUNGE off");
+    StrikeHold old;
+    check(old.update(true, true, 1, strikeTakesOver(true, true), t += frame).hold,
+          "PUNCH LUNGE on: the old FULL ARMS hold");
+    // The owner stays with the animation through a punch on the ground and in the air.
+    HybridOwner o;
+    Frame f = air();
+    f.state.grounded = true;
+    int64_t now = 2'000'000'000;
+    o.update(f, now);
+    for (int i = 0; i < 30; ++i) {
+        f.strike = StrikeHold{}.update(true, true, i, strikeTakesOver(true, false), now).hold; // always false
+        o.update(f, now += frame);
+        check(o.domain == Domain::anim && !o.enterVr, "a ground punch stays in the animation");
+    }
+    // The other takeovers are untouched.
+    HybridOwner grip;
+    Frame g = air();
+    grip.update(g, now += frame);
+    g.state.grounded = false;
+    for (int i = 0; i < 10; ++i)
+        grip.update(g, now += frame);
+    g.cancelGrip = true;
+    check(grip.update(g, now += frame) == Domain::vr && grip.lastEnterVr == EnterVr::cancel,
+          "the grip cancel still takes the air");
+    HybridOwner web;
+    Frame w = air();
+    web.update(w, now += frame);
+    w.state.grounded = false;
+    for (int i = 0; i < 10; ++i)
+        web.update(w, now += frame);
+    w.webRising = true;
+    check(web.update(w, now += frame) == Domain::vr && web.lastEnterVr == EnterVr::web,
+          "a SpidyVR web still takes the air");
+    HybridOwner point;
+    Frame p = air();
+    p.state.grounded = true;
+    point.update(p, now += frame);
+    p.pointJump = true;
+    check(point.update(p, now += frame) == Domain::vr && point.lastEnterVr == EnterVr::pointJump,
+          "a point jump still takes the body");
+    HybridOwner wall;
+    Frame k = air();
+    wall.update(k, now += frame);
+    k.state.grounded = false;
+    for (int i = 0; i < 10; ++i)
+        wall.update(k, now += frame);
+    k.state.wall = surfaceWall;
+    check(wall.update(k, now += frame) == Domain::vr && wall.lastEnterVr == EnterVr::wallRun,
+          "Spidy's wall still takes the body");
+    // The setting: off by default, kept as punch_lunge, launcher-only.
+    vr_settings::Values v;
+    check(!v.punchLunge && v.animatedFullArms, "PUNCH LUNGE off by default, FULL ARMS as before");
+    check(vr_settings::tabOnlyText(v).find("punch_lunge=0\n") != std::string::npos &&
+              vr_settings::withTabOnly({}, "punch_lunge=1\n").punchLunge &&
+              !vr_settings::withTabOnly({}, "").punchLunge,
+          "punch_lunge saved and read");
+    const auto* row = vr_settings::rowFor(vr_settings::Item::punchLunge);
+    check(row && std::string(row->title) == "PUNCH LUNGE" && row->choices.empty() &&
+              row->place == vr_settings::Place::launcher,
+          "a launcher toggle");
+}
+
 void sameFrame() {
     HybridOwner o;
     Frame f = air();
@@ -196,6 +277,7 @@ void jumpStays() {
 int main() {
     inputs();
     freshPush();
+    punchesStayAnimated();
     sameFrame();
     gripCancel();
     jumpStays();

@@ -409,6 +409,12 @@ struct Values {
     // teleport) - instead of the contact-only policy. On by default; 0 brings
     // back contact-only arms. Not on the menu.
     bool animatedFullArms = true;
+    // PUNCH LUNGE (hybrid_owner.hpp; the 5061b4a playtest, Nov 12: 94 strikes, 67 of them took
+    // the body from the animation for about 0.2 s and back): off (default), punches stay in the
+    // animation as contact-only blows - no web strike's lunge, so no takeover. On: FULL ARMS as
+    // before (a punch at a far enemy opens a strike and SpidyVR takes the body). Needs
+    // animated_full_arms. punch_lunge.
+    bool punchLunge = false;
     // ANIMATED TORSO: with ANIMATED ARMS, bound waist→chest toward controller
     // reaches (animated_torso.hpp). On by default; bounded limits.
     bool animatedTorso = true;
@@ -750,8 +756,9 @@ enum class Item : uint8_t {
     rearSnap,
     // November 12 (playtest fixes): LANDING VIEW HOLD (hybrid_movement.hpp), NATIVE ANIMATION.
     landingHold,
+    punchLunge,
 };
-inline constexpr Item lastItem = Item::landingHold;
+inline constexpr Item lastItem = Item::punchLunge;
 // SLOW-MO LENGTH's last step: no time limit (until L3 toggles it off).
 inline constexpr int slowMotionEndless = 91;
 // Real seconds a full meter lasts for a SLOW-MO LENGTH value; 0 = endless.
@@ -781,7 +788,7 @@ struct Row {
     Place place{};
 };
 // Stable row/setting numbers; categories below determine presentation order.
-const std::array<Row, 156>& rows();
+const std::array<Row, 157>& rows();
 const Row* rowFor(Item);
 // camera, shooters and legs (November 11, the user: "I can't find legs or
 // camera settings in any of the menus. Make sure it's clearly labeled"): tabs
