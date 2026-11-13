@@ -79,6 +79,7 @@ enum class EnterVr : uint8_t {
     flip,    // a flip's pitch or tilt input from either stick in a midair animation (breakForFlip)
     pointJump, // POINT JUMP fired off a surface (Frame::pointJump; the ground exception)
     timed,     // JUMP TO SPIDYVR (November 12): a midair animation's timer ran out (Frame::jumpHandoffNs)
+    sidestep,  // QUICK SIDESTEP (November 12, sidestep.hpp): a ground burst (Frame::sidestep; a ground exception)
 };
 
 // JUMP TO SPIDYVR (the user, November 12 04:56 / 05:07 / 05:41: "All jumps
@@ -134,6 +135,8 @@ inline const char* enterVrName(EnterVr e) {
         return "point-jump";
     case EnterVr::timed:
         return "jump-timer";
+    case EnterVr::sidestep:
+        return "sidestep";
     default:
         return "none";
     }
@@ -275,6 +278,11 @@ struct Frame {
     // included), and its takeoff still under way (VR stays on the ground
     // until he is off it, as groundAction).
     bool pointJump{}, pointJumpHold{};
+    // QUICK SIDESTEP (sidestep.hpp; approved November 12): a burst began this
+    // frame (VR at once, on the ground: the feet lock with the switch), and
+    // the burst still under way (VR stays on the ground until it ends; then
+    // the ground hands back as any landing, with the position lock).
+    bool sidestep{}, sidestepHold{};
     // FULL ARMS (the user, Nov 9 22:27): a SpidyVR web strike is under way (its
     // flight or hang). It pulls him out of the animation, ground included,
     // and holds SpidyVR until it ends; then the table as usual.
@@ -531,6 +539,17 @@ struct HybridOwner {
             airAnimNs = fallNs = -1;
             if (domain == Domain::anim)
                 goVr(EnterVr::pointJump, nowNs);
+            return domain;
+        }
+
+        // QUICK SIDESTEP: the burst takes the body on the ground (the
+        // approved ground exception, November 12) and holds it while the
+        // burst lasts there; off the ground the air's rules take over.
+        if (f.sidestep || (f.sidestepHold && domain == Domain::vr && supported(f.state))) {
+            clearZip();
+            airAnimNs = fallNs = -1;
+            if (f.sidestep && domain == Domain::anim)
+                goVr(EnterVr::sidestep, nowNs);
             return domain;
         }
 

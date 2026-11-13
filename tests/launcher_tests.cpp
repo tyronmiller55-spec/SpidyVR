@@ -735,6 +735,8 @@ int main() {
                 key.rfind("camera_", 0) == 0 || key.rfind("leg_", 0) == 0 ||
                 // POINT JUMP (November 11): the player's own, not in shared profiles.
                 key.rfind("point_jump", 0) == 0 ||
+                // QUICK SIDESTEP (November 12): the player's own controls.
+                key.rfind("sidestep", 0) == 0 ||
                 // PUNCH VIEW EASE (November 12): comfort, the player's own.
                 key == "punch_view_ease_ms" ||
                 // MOVE HAPTICS, VIEW YAW SOURCE, SOUND TRACE (November 12): the player's own.

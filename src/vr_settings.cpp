@@ -781,6 +781,16 @@ Values sanitized(Values v) {
     v.pointJumpNormalBias = std::clamp(v.pointJumpNormalBias, 0, 100);
     v.pointJumpMinOutDegrees = std::clamp(v.pointJumpMinOutDegrees, 0, 45);
     v.pointJumpKeep = std::clamp(v.pointJumpKeep, 0, 100);
+    // QUICK SIDESTEP (sidestep.hpp).
+    v.sidestepDistanceCm = std::clamp(v.sidestepDistanceCm, 100, 300);
+    v.sidestepMs = std::clamp(v.sidestepMs, 120, 300);
+    v.sidestepCooldownMs = std::clamp(v.sidestepCooldownMs, 0, 2000);
+    v.sidestepChain = std::clamp(v.sidestepChain, 1, 10);
+    v.sidestepLockoutMs = std::clamp(v.sidestepLockoutMs, 0, 3000);
+    v.sidestepFlickFrom = std::clamp(v.sidestepFlickFrom, 20, 60);
+    v.sidestepFlickTo = std::clamp(v.sidestepFlickTo, std::max(50, v.sidestepFlickFrom + 20), 95);
+    v.sidestepFlickMs = std::clamp(v.sidestepFlickMs, 30, 200);
+    v.sidestepAMs = std::clamp(v.sidestepAMs, 40, 250);
     v.pointJumpCoyoteMs = std::clamp(v.pointJumpCoyoteMs, 0, 500);
     v.pointJumpBufferMs = std::clamp(v.pointJumpBufferMs, 0, 500);
     v.pointJumpCooldownMs = std::clamp(v.pointJumpCooldownMs, 0, 2000);
@@ -1902,6 +1912,19 @@ constexpr TabOnly tabOnly[] = {
     {"camera_bob_vertical_pct", nullptr, &Values::cameraBobVerticalPct},
     {"camera_bob_side_pct", nullptr, &Values::cameraBobSidePct},
     {"camera_head_angle_deg", nullptr, &Values::cameraHeadAngleDeg},
+    // QUICK SIDESTEP (November 12, sidestep.hpp): spidy_vr.ini only.
+    {"sidestep", &Values::sidestep, nullptr},
+    {"sidestep_distance_cm", nullptr, &Values::sidestepDistanceCm},
+    {"sidestep_ms", nullptr, &Values::sidestepMs},
+    {"sidestep_cooldown_ms", nullptr, &Values::sidestepCooldownMs},
+    {"sidestep_chain", nullptr, &Values::sidestepChain},
+    {"sidestep_lockout_ms", nullptr, &Values::sidestepLockoutMs},
+    {"sidestep_iframes", &Values::sidestepIframes, nullptr},
+    {"sidestep_flick_from", nullptr, &Values::sidestepFlickFrom},
+    {"sidestep_flick_to", nullptr, &Values::sidestepFlickTo},
+    {"sidestep_flick_ms", nullptr, &Values::sidestepFlickMs},
+    {"sidestep_a_ms", nullptr, &Values::sidestepAMs},
+    {"sidestep_forward", &Values::sidestepForward, nullptr},
     {"point_jump", &Values::pointJump, nullptr},
     {"point_jump_trigger", nullptr, &Values::pointJumpTrigger},
     {"point_jump_chord_ms", nullptr, &Values::pointJumpChordMs},

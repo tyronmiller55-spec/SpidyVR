@@ -597,6 +597,37 @@ inline bool validPointJump(const PointJumpAsk& a) {
     return a.magic == 0x5357504a && a.version == 1 && a.bytes == sizeof(PointJumpAsk) && finite(a.velocity) &&
            length(a.velocity) > .1f && length(a.velocity) <= 80.f && finite(a.normal);
 }
+// Side channel from XR (QUICK SIDESTEP, sidestep.hpp): a burst across the
+// ground at `velocity` (level, real m/s) for moveSeconds, then a hard stop
+// (zero speed across) for stopSeconds; the swing drives it while he stays
+// on the ground and stops it at an edge or a wall. `serial` rises with each
+// burst; the same serial again is ignored. flags bit 0: the game's dodge
+// (game_dodge, as a web's carry) answers the blows it warns of during the
+// burst. Not a Command or Settings field and not versioned with them (an
+// older swing module has no SpidySwingSidestep export; XR then never fires).
+struct SidestepAsk {
+    uint32_t magic = 0x53575353, version = 1, bytes = sizeof(SidestepAsk), serial{};
+    Vec3 velocity{};
+    float moveSeconds{}, stopSeconds{};
+    uint32_t flags{};
+};
+static_assert(sizeof(SidestepAsk) == 40);
+inline bool validSidestep(const SidestepAsk& a) {
+    return a.magic == 0x53575353 && a.version == 1 && a.bytes == sizeof(SidestepAsk) && finite(a.velocity) &&
+           std::abs(a.velocity.y) < 1e-3f && length(a.velocity) > 1.f && length(a.velocity) <= 25.f &&
+           std::isfinite(a.moveSeconds) && a.moveSeconds > .02f && a.moveSeconds <= .5f &&
+           std::isfinite(a.stopSeconds) && a.stopSeconds >= 0 && a.stopSeconds <= .2f;
+}
+// SpidySidestepLive: the swing's bursts, for XR's log (the swing has none).
+// `started` / `ended` count up (ended after the rest is written); for the
+// last one: its serial, why it ended (sidestep::Stop), how far it went
+// across (m) and for how long (ms), and whether the dodge was on.
+struct SidestepLive {
+    uint32_t magic = 0x5353544c, version = 1, bytes = sizeof(SidestepLive), serial{};
+    uint32_t started{}, ended{}, stop{}, iframes{};
+    float metres{}, ms{};
+};
+static_assert(sizeof(SidestepLive) == 40);
 // A web's edges as Bends hands them on: its anchor is the edge nearest the
 // hand, and each edge records the one before it, back to where it sticks.
 inline Bends::Hand edgesOf(const Web& w) {

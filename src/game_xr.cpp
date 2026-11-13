@@ -17,6 +17,7 @@
 #include "spidy/dodge_tumble.hpp"
 #include "spidy/game_dodge.hpp"
 #include "spidy/point_jump.hpp"
+#include "spidy/sidestep.hpp"
 #include "spidy/game_fp.hpp"
 #include "spidy/web_aim.hpp"
 #include "spidy/game_grab.hpp"
@@ -583,6 +584,10 @@ BridgeCall startSwing{}, submitSwing{}, sampleSwing{}, stopSwing{}, retargetSwin
 BridgeCall setSwingPoseCoupling{};
 // POINT JUMP's launch for the swing's next step (SpidySwingPointJump; none in an older module).
 BridgeCall swingPointJump{};
+// QUICK SIDESTEP's burst for the swing's next step (SpidySwingSidestep) and the
+// swing's account of its bursts (SpidySidestepLive); none in an older module.
+BridgeCall swingSidestep{};
+const game_swing::SidestepLive* sidestepLive{};
 // Optional: the web tie's telemetry (game_grab::TieData; an older ray module has none).
 BridgeCall sampleTie{};
 // Optional: web lines (game_lines::LineData; an older ray module has none).
@@ -1319,6 +1324,13 @@ DWORD WINAPI run(void*) {
         bool pointJumpFired{}, pointJumpHold{}, pointJumpCharged{}, pointJumpBothWas{}, pointJumpOffLogged{};
         float pointJumpHoldAge{};
         const char* pointJumpSurface = "ground";
+        // QUICK SIDESTEP (sidestep.hpp): the flick-then-A trigger, the bursts
+        // sent, refused and denied, the swing's account read so far, B as it
+        // came from the controller this frame (before the point jump's chord),
+        // and this frame's fire and the hold for the owner (Frame::sidestep*).
+        sidestep::Trigger sidestepTrigger;
+        uint32_t sidestepSerial{}, sidesteps{}, sidestepRefused{}, sidestepDenied{}, sidestepEndsRead{};
+        bool sidestepFired{}, sidestepHold{}, sidestepRawB{};
         // The game's camera follows the head's pitch too: it offers a thing
         // at the player's feet or overhead only with that camera on it.
         game_pad::CameraPitch cameraPitch;
@@ -2200,6 +2212,7 @@ DWORD WINAPI run(void*) {
                             diag_log::write("legs: flail B let go of");
                     }
                     pointJumpFired = false;
+                    sidestepRawB = (frame.buttons & buttonB) != 0; // QUICK SIDESTEP: B before the chord
                     {
                         const auto pj = point_jump::paramsOf(values);
                         const bool pjFresh = swingState.status && swingState.qpc &&
@@ -2437,6 +2450,128 @@ DWORD WINAPI run(void*) {
                         }
                         if (legHoldOut.disengagedNow)
                             diag_log::writef("legs: disengaged (%s)", leg_hold::whyName(legHoldOut.why));
+                    }
+                    // QUICK SIDESTEP (sidestep.hpp; approved November 12, on by default):
+                    // on the ground under the animation, a left-stick flick then A within
+                    // 120 ms is a short upright burst the way it was flicked (the swing
+                    // drives it: SpidySwingSidestep), then a hard stop. Here, after the
+                    // point jump's chord and the leg hold have had A, B, X and Y: A alone
+                    // (no flick in the last 120 ms) goes on at once, as before; B is the
+                    // game's dodge as before. The A that fires is held back until let go
+                    // of, a new A during the burst reaches the game as it ends, and the
+                    // left stick is still meanwhile (the game turns him nowhere).
+                    // TODO(sidestep sound): the hook for the burst's sound effect and
+                    // Spidey's grunt (no smoke). No sound IDs are known yet: they wait
+                    // for the SOUND TRACE headset session (1008510). Play them where
+                    // `sidestepFired` is set below, once known.
+                    sidestepFired = false;
+                    {
+                        const auto ss = sidestep::paramsOf(values);
+                        const bool ssFresh = swingState.status && swingState.qpc &&
+                                             static_cast<int64_t>(swingState.qpc) > now.QuadPart - frequency.QuadPart / 10;
+                        const bool ssHybrid = values.animatedHybrid && values.animatedMoves;
+                        const char* blockedBy = nullptr;
+                        if (!swingSidestep)
+                            blockedBy = "no swing export";
+                        else if (!(viewing && gameplay && motion.active && !flatScreen && spiderMan &&
+                                   recentPresentation(lastNewImageMs, GetTickCount64())))
+                            blockedBy = "not in play";
+                        else if (phone.open() || gadgetWheel.open())
+                            blockedBy = "phone or wheel";
+                        else if (padLayer.latched())
+                            blockedBy = "pad layer";
+                        else if (calibrationInput)
+                            blockedBy = "calibration";
+                        else if (namedPress.claimed() & game_pad::NamedPress::controlA)
+                            blockedBy = "prompt";
+                        else if (motion.ventCrawl)
+                            blockedBy = "vent";
+                        else if (values.webLines && lineState.phase == 2 && lineState.onLine)
+                            blockedBy = "line";
+                        else if (ssFresh && (swingState.wall == static_cast<uint32_t>(game_swing::Surface::game) ||
+                                             swingState.wall == static_cast<uint32_t>(game_swing::Surface::floor) ||
+                                             swingState.wall == static_cast<uint32_t>(game_swing::Surface::wall)))
+                            blockedBy = "on a wall or the game's crawl";
+                        else if (ssFresh && (swingState.takeoff || swingState.takeoffPhase))
+                            blockedBy = "takeoff";
+                        else if (pointJumpHold)
+                            blockedBy = "point jump takeoff";
+                        else if (ssFresh && (swingState.webs[0].attached || swingState.webs[1].attached))
+                            blockedBy = "a web held";
+                        sidestep::Trigger::Input in;
+                        in.seconds = frame.seconds;
+                        in.stickValid = frame.hands[0].valid;
+                        in.stickX = frame.hands[0].stickX;
+                        in.stickY = frame.hands[0].stickY;
+                        in.a = frame.jump;
+                        in.b = sidestepRawB || (frame.buttons & buttonB) != 0;
+                        in.groundAnim = ssHybrid && ssFresh && swingState.grounded && !swingState.owned &&
+                                        hybridOwner.domain == hybrid_owner::Domain::anim;
+                        in.blocked = blockedBy != nullptr;
+                        in.pointJump = pointChord.charging();
+                        in.legs = legHoldOut.engaged;
+                        const bool wasActive = sidestepTrigger.active();
+                        const auto out = sidestepTrigger.update(in, ss);
+                        frame.jump = out.a;
+                        if (out.denied != sidestep::Deny::none) {
+                            ++sidestepDenied;
+                            diag_log::writef("sidestep: denied %s (A went on to the game)",
+                                             out.denied == sidestep::Deny::blocked && blockedBy
+                                                 ? blockedBy
+                                                 : sidestep::denyName(out.denied));
+                        }
+                        if (out.fire) {
+                            float yaw = hybridViewYaw.set ? hybridViewYaw.yaw : NAN;
+                            if (!std::isfinite(yaw) && validTrackedPose(motion.headPose))
+                                yaw = hybrid_handoff::lookYaw(motion.headPose.orientation.rotate({0, 0, -1}));
+                            const Vec3 way = sidestep::worldWay(out.x, out.y, yaw);
+                            const auto burst = sidestep::plan(way, ss);
+                            game_swing::SidestepAsk ask;
+                            ask.serial = ++sidestepSerial;
+                            ask.velocity = burst.velocity;
+                            ask.moveSeconds = burst.moveSeconds;
+                            ask.stopSeconds = burst.stopSeconds;
+                            ask.flags = ss.iframes ? 1u : 0u;
+                            const DWORD result =
+                                length(burst.velocity) > 1.f ? swingSidestep(&ask) : static_cast<DWORD>(2001);
+                            if (result == 0) {
+                                ++sidesteps;
+                                sidestepFired = true;
+                                diag_log::writef("sidestep: fire stick (%.2f, %.2f) way (%.2f, %.2f) %.1f m/s for "
+                                                 "%d ms + stop %d ms, chain %d, i-frames %s",
+                                                 out.x, out.y, way.x, way.z, length(burst.velocity),
+                                                 static_cast<int>(burst.moveSeconds * 1000 + .5f),
+                                                 static_cast<int>(burst.stopSeconds * 1000 + .5f),
+                                                 sidestepTrigger.chain(), ss.iframes ? "on" : "off");
+                                // TODO(sidestep sound): play the burst's sound and Spidey's grunt here.
+                            } else {
+                                ++sidestepRefused;
+                                sidestepTrigger.stop();
+                                diag_log::writef("sidestep: the swing refused the burst (%lu)",
+                                                 static_cast<unsigned long>(result));
+                            }
+                        }
+                        // The swing's account: a burst it refused or ended early ends here too.
+                        if (const volatile game_swing::SidestepLive* live = sidestepLive) {
+                            const uint32_t ended = live->ended;
+                            if (ended != sidestepEndsRead) {
+                                sidestepEndsRead = ended;
+                                MemoryBarrier();
+                                const auto why = static_cast<sidestep::Stop>(live->stop);
+                                diag_log::writef("sidestep: end %s after %.0f ms, %.2f m across (serial %u)",
+                                                 sidestep::stopName(why), live->ms, live->metres,
+                                                 static_cast<unsigned>(live->serial));
+                                if (live->serial == sidestepSerial && why != sidestep::Stop::time)
+                                    sidestepTrigger.stop();
+                            }
+                        }
+                        if (wasActive && !sidestepTrigger.active())
+                            diag_log::write("sidestep: hold over, ground back to the animation");
+                        sidestepHold = sidestepTrigger.active();
+                        if (sidestepHold) {
+                            // The left stick still while the burst lasts.
+                            frame.hands[0].stickX = frame.hands[0].stickY = 0;
+                        }
                     }
                     if (!frame.jump)
                         jumpFromScreen = false;
@@ -7148,6 +7283,10 @@ DWORD WINAPI run(void*) {
                         // and holds it through the takeoff.
                         hybridFrame.pointJump = pointJumpFired;
                         hybridFrame.pointJumpHold = pointJumpHold;
+                        // QUICK SIDESTEP: the burst takes the body on the ground (approved)
+                        // and holds it while it lasts; then the ground's ANIM again.
+                        hybridFrame.sidestep = sidestepFired;
+                        hybridFrame.sidestepHold = sidestepHold;
                         hybridFrame.speedH = hybridSpeedH;
                         hybridFrame.speedHoldNs =
                             static_cast<int64_t>(values.animatedHybridSpeedMs) * 1'000'000ll;
@@ -9827,6 +9966,12 @@ extern "C" __declspec(dllexport) DWORD WINAPI SpidyXrStart(void* input) {
     swingSettings = reinterpret_cast<BridgeCall>(GetProcAddress(rays, "SpidySwingSettings"));
     setSwingPoseCoupling = reinterpret_cast<BridgeCall>(GetProcAddress(rays, "SpidySwingPoseCoupling"));
     swingPointJump = reinterpret_cast<BridgeCall>(GetProcAddress(rays, "SpidySwingPointJump"));
+    swingSidestep = reinterpret_cast<BridgeCall>(GetProcAddress(rays, "SpidySwingSidestep"));
+    sidestepLive = reinterpret_cast<const game_swing::SidestepLive*>(GetProcAddress(rays, "SpidySidestepLive"));
+    if (const game_swing::SidestepLive expected;
+        sidestepLive && (sidestepLive->magic != expected.magic || sidestepLive->version != expected.version ||
+                         sidestepLive->bytes != expected.bytes))
+        sidestepLive = nullptr;
     swingWebTurns = reinterpret_cast<BridgeCall>(GetProcAddress(rays, "SpidySwingWebTurns"));
     // Optional: an older ray module has no web shooter.
     startShooter = reinterpret_cast<BridgeCall>(GetProcAddress(rays, "SpidyShooterStart"));

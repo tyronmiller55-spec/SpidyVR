@@ -73,6 +73,10 @@ add_test(NAME point_jump COMMAND spidy_point_jump_tests)
 add_executable(spidy_leg_hold_tests tests/leg_hold_tests.cpp)
 target_link_libraries(spidy_leg_hold_tests PRIVATE spidy_core)
 add_test(NAME leg_hold COMMAND spidy_leg_hold_tests)
+
+add_executable(spidy_sidestep_tests tests/sidestep_tests.cpp)
+target_link_libraries(spidy_sidestep_tests PRIVATE spidy_core)
+add_test(NAME sidestep COMMAND spidy_sidestep_tests)
 # PUNCH VIEW EASE (view_ease.hpp): hold and ease at a punch's switch, cancels, rig offset, setting (portable).
 add_executable(spidy_view_ease_tests tests/view_ease_tests.cpp)
 target_link_libraries(spidy_view_ease_tests PRIVATE spidy_core)

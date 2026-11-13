@@ -19,6 +19,7 @@
 #include "spidy/native_query_context.hpp"
 #include "spidy/native_rays.hpp"
 #include "spidy/web_aim.hpp"
+#include "spidy/sidestep.hpp"
 #include <atomic>
 #include <cstring>
 #include <windows.h>
@@ -31,6 +32,8 @@ __declspec(dllexport) AimData SpidyAimData;
 // Physical webs' telemetry (Ropes); odd `sequence` while it changes.
 __declspec(dllexport) Ropes SpidyRopeData;
 __declspec(dllexport) ClimbData SpidyClimbData;
+// QUICK SIDESTEP's bursts (SidestepLive), for XR's log.
+__declspec(dllexport) SidestepLive SpidySidestepLive;
 }
 namespace {
 // Each hand's web's edges (Bends, SpidySwingBends), written with Data.
@@ -216,6 +219,42 @@ uint64_t pointJumpAt{};
 uint32_t pointJumpSerial{};
 bool pointJumpWaiting{};
 constexpr uint64_t pointJumpMaxAgeMs = 250;
+// QUICK SIDESTEP (SpidySwingSidestep, sidestep.hpp): a burst waiting for the
+// next step, as the point jump's; and the burst under way (the swing's
+// thread alone): its velocity, its move and stop, its start (QPC), where it
+// began, and whether the game's dodge answers blows meanwhile (sidestepCarry,
+// read by the dodge's carry the next step).
+SRWLOCK sidestepLock = SRWLOCK_INIT;
+SidestepAsk sidestepAsk{};
+uint64_t sidestepAt{};
+uint32_t sidestepSerial{};
+bool sidestepWaiting{};
+constexpr uint64_t sidestepMaxAgeMs = 150;
+struct SidestepRun {
+    bool on{}, iframes{};
+    Vec3 velocity{}, from{};
+    double moveSeconds{}, stopSeconds{};
+    int64_t startQpc{};
+    uint32_t serial{};
+} sidestepRun;
+std::atomic<bool> sidestepCarry{};
+// A burst's end, for XR's log (SpidySidestepLive).
+void endSidestep(sidestep::Stop why, Vec3 at, double seconds) {
+    if (!sidestepRun.on)
+        return;
+    volatile SidestepLive& live = SpidySidestepLive;
+    live.serial = sidestepRun.serial;
+    live.stop = static_cast<uint32_t>(why);
+    live.iframes = sidestepRun.iframes ? 1u : 0u;
+    live.metres = finite(at) && finite(sidestepRun.from)
+                      ? std::hypot(at.x - sidestepRun.from.x, at.z - sidestepRun.from.z)
+                      : -1.f;
+    live.ms = static_cast<float>(seconds * 1000);
+    MemoryBarrier();
+    live.ended = live.ended + 1;
+    sidestepRun = {};
+    sidestepCarry = false;
+}
 // WEB LINES (Settings version 31): web lines run only with it on; off, the
 // lines there are go, and so does a player on one.
 std::atomic<bool> webLinesOn{};
@@ -269,6 +308,7 @@ void cancelSwing(bool keepWall = false) {
     relinquishMotion();
     game_punch::cancelStrike();
     strikeQpc = 0;
+    endSidestep(sidestep::Stop::cancelled, Vec3{NAN, NAN, NAN}, 0);
     coasting = false;
     takeoffTransition.reset();
     mountTakeoff.reset();
@@ -880,6 +920,10 @@ void visit(const native_rays::QueryContext& world) {
             // On a web line, the line carries him: the game's dodge answers
             // the blows it warns of there too.
             webbed |= lineZip.phase() != LineZip::Phase::Idle;
+            // QUICK SIDESTEP (sidestep_iframes): the burst counts as a web's
+            // carry, so the game's own dodge answers the blows it warns of
+            // during it (no address of its own: game_dodge's hook as is).
+            webbed |= sidestepCarry.load(std::memory_order_relaxed);
             game_dodge::carry(config.record, webbed, motion.grounded == 0,
                               player.velocity * game_punch::worldScale());
         }
@@ -1122,6 +1166,37 @@ void visit(const native_rays::QueryContext& world) {
         ReleaseSRWLockExclusive(&pointJumpLock);
         if (waiting && focused && GetTickCount64() - at <= pointJumpMaxAgeMs)
             solver.pointJump(ask.velocity);
+    }
+    // QUICK SIDESTEP: a burst XR sent since the last step (SpidySwingSidestep).
+    // Taken on the ground only, the swing not driving him already.
+    {
+        AcquireSRWLockExclusive(&sidestepLock);
+        const bool waiting = sidestepWaiting;
+        const SidestepAsk ask = sidestepAsk;
+        const uint64_t askedAt = sidestepAt;
+        sidestepWaiting = false;
+        ReleaseSRWLockExclusive(&sidestepLock);
+        if (waiting) {
+            volatile SidestepLive& live = SpidySidestepLive;
+            if (focused && GetTickCount64() - askedAt <= sidestepMaxAgeMs && motion.grounded && !owned &&
+                !sidestepRun.on) {
+                sidestepRun.on = true;
+                sidestepRun.iframes = (ask.flags & 1u) != 0;
+                sidestepRun.velocity = ask.velocity;
+                sidestepRun.from = at;
+                sidestepRun.moveSeconds = ask.moveSeconds;
+                sidestepRun.stopSeconds = ask.stopSeconds;
+                sidestepRun.startQpc = now.QuadPart;
+                sidestepRun.serial = ask.serial;
+                live.serial = ask.serial;
+                live.started = live.started + 1;
+            } else {
+                sidestepRun.on = true; // to end it at once, named
+                sidestepRun.serial = ask.serial;
+                sidestepRun.from = at;
+                endSidestep(sidestep::Stop::refused, at, 0);
+            }
+        }
     }
     // A press aimed at something a web can catch belongs to the grab: the
     // swing gets the input without that hand's grip.
@@ -1413,8 +1488,50 @@ void visit(const native_rays::QueryContext& world) {
         lineZip.stop();
         lineLeaving = 0;
     }
+    // QUICK SIDESTEP: the burst, driven on the ground as a web strike's
+    // flight is, in real time: across at its speed, then the hard stop.
+    // Ends early at an edge (no floor sidestep::edgeProbe ahead within
+    // edgeMaxDrop), at a wall (a body ray across the way at chest height),
+    // off the ground, or when anything else has him.
+    bool sidestepping{};
+    Vec3 sidestepVelocity{};
+    if (sidestepRun.on) {
+        const double t = static_cast<double>(now.QuadPart - sidestepRun.startQpc) / frequency.QuadPart;
+        auto stop = sidestep::Stop::none;
+        if (!focused || yielding || grasped || handing || gameRun || handCrawl || striking || lineDriving ||
+            !collidable || attached)
+            stop = sidestep::Stop::cancelled;
+        else if (!motion.grounded && t > .03)
+            stop = sidestep::Stop::air;
+        else if (t >= sidestepRun.moveSeconds + sidestepRun.stopSeconds)
+            stop = sidestep::Stop::time;
+        else if (t < sidestepRun.moveSeconds) {
+            const Vec3 way = normalized(Vec3{sidestepRun.velocity.x, 0, sidestepRun.velocity.z});
+            const Vec3 up{0, 1, 0};
+            const auto floor = world.bodyRaycast(at + way * sidestep::edgeProbe + up * .5f, -up,
+                                                 .5f + sidestep::edgeMaxDrop);
+            const auto wallHit = world.bodyRaycast(at + up * 1.f, way, sidestep::wallReach);
+            if (!floor || floor->normal.y < .6f)
+                stop = sidestep::Stop::edge;
+            else if (wallHit)
+                stop = sidestep::Stop::wall;
+        }
+        if (stop != sidestep::Stop::none) {
+            endSidestep(stop, at, t);
+        } else {
+            sidestepping = true;
+            // Across, then nothing across; down as the mover had him (held to the ground).
+            const float down = finite(body.velocity) ? std::min(body.velocity.y, 0.f) : 0.f;
+            sidestepVelocity = t < sidestepRun.moveSeconds ? sidestepRun.velocity + Vec3{0, down, 0}
+                                                           : Vec3{0, down, 0};
+            requested = limited(sidestepVelocity / timeScale,
+                                std::min(motionSpeedLimit * (1.f - 1e-6f),
+                                         .875f * native_movement::farthestStep / motion.dt));
+            sidestepCarry = sidestepRun.iframes && t < sidestepRun.moveSeconds;
+        }
+    }
     const bool drive = !handCrawl && !grasped && !handing && !gameRun && !yielding &&
-                       (striking || groundRun || (lineDriving && !lineWalking) ||
+                       (striking || sidestepping || groundRun || (lineDriving && !lineWalking) ||
                         (collidable && !body.grounded && !transition.waiting &&
                          (attached || owned || transition.resumed || wall.on)));
     if (solver.groundRunning() || solver.landCarrying()) {
@@ -1471,8 +1588,9 @@ void visit(const native_rays::QueryContext& world) {
         // speed cap and takeoff launch applied to it as to the request; a
         // strike's own in real time, at rest once it has arrived.
         inFlight.issued(request.serial, requested,
-                        striking      ? limited(flight.velocity, config.maxSpeed)
-                        : lineDriving ? limited(lineStep.velocity, solver.speedLimit())
+                        striking       ? limited(flight.velocity, config.maxSpeed)
+                        : sidestepping ? limited(sidestepVelocity, config.maxSpeed)
+                        : lineDriving  ? limited(lineStep.velocity, solver.speedLimit())
                                  : limited(predicted.velocity + requested - average, solver.speedLimit()),
                         native_movement::commandDistance(request));
         owned = true;
@@ -1647,6 +1765,13 @@ extern "C" __declspec(dllexport) DWORD WINAPI SpidySwingStart(void* input) {
         pointJumpAt = 0;
         pointJumpWaiting = false;
         ReleaseSRWLockExclusive(&pointJumpLock);
+        AcquireSRWLockExclusive(&sidestepLock);
+        sidestepAsk = {};
+        sidestepAt = 0;
+        sidestepWaiting = false;
+        ReleaseSRWLockExclusive(&sidestepLock);
+        sidestepRun = {};
+        sidestepCarry = false;
         webLinesOn = false;
         started = true;
         solver = Swing(physicsConfig(config));
@@ -1773,6 +1898,28 @@ extern "C" __declspec(dllexport) DWORD WINAPI SpidySwingPointJump(void* input) {
         pointJumpWaiting = true;
     }
     ReleaseSRWLockExclusive(&pointJumpLock);
+    return 0;
+}
+// QUICK SIDESTEP (sidestep.hpp): the VR worker's burst for the next step.
+// 2001: not a SidestepAsk; 1004: the swing has not started; 0 taken (or the
+// same serial again, ignored). Whether it ran: SpidySidestepLive.
+extern "C" __declspec(dllexport) DWORD WINAPI SpidySwingSidestep(void* input) {
+    SidestepAsk a;
+    if (!input || !copy(&a, input, sizeof(a)) || !validSidestep(a))
+        return 2001;
+    AcquireSRWLockShared(&lifecycle);
+    const bool running = started;
+    ReleaseSRWLockShared(&lifecycle);
+    if (!running)
+        return 1004;
+    AcquireSRWLockExclusive(&sidestepLock);
+    if (a.serial != sidestepSerial) {
+        sidestepSerial = a.serial;
+        sidestepAsk = a;
+        sidestepAt = GetTickCount64();
+        sidestepWaiting = true;
+    }
+    ReleaseSRWLockExclusive(&sidestepLock);
     return 0;
 }
 extern "C" __declspec(dllexport) DWORD WINAPI SpidySwingPoseCoupling(void* input) {

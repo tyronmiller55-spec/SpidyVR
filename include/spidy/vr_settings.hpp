@@ -548,6 +548,15 @@ struct Values {
     int pointJumpMinSpeed = 9, pointJumpMaxSpeed = 22, pointJumpCurve = 0, pointJumpNormalBias = 25;
     int pointJumpMinOutDegrees = 10, pointJumpKeep = 25, pointJumpCoyoteMs = 120, pointJumpBufferMs = 150;
     int pointJumpCooldownMs = 250, pointJumpZipGuardMs = 400, pointJumpDodgeHoldMs = 250;
+    // QUICK SIDESTEP (November 12, sidestep.hpp; approved by the user, on by
+    // default): on the ground, a left-stick flick then A within sidestepAMs is
+    // a short upright burst (sidestepDistanceCm in sidestepMs, then a hard
+    // stop). spidy_vr.ini only (sidestep_* keys), no menu row yet: the
+    // player's own, not in shared profiles. sidestep=0 turns it off.
+    bool sidestep = true, sidestepIframes = true, sidestepForward = false;
+    int sidestepDistanceCm = 200, sidestepMs = 180, sidestepCooldownMs = 300, sidestepChain = 3;
+    int sidestepLockoutMs = 800, sidestepFlickFrom = 30, sidestepFlickTo = 80, sidestepFlickMs = 80;
+    int sidestepAMs = 120;
     bool operator==(const Values&) const = default;
 };
 inline constexpr int eyeAimShots = 1, eyeAimZips = 2;
