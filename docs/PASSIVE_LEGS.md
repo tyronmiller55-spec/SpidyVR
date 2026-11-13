@@ -22,7 +22,8 @@ The spring's state never resets between layers, only its target changes (eased o
 - Hang time: **0.45 s** airborne. A rise to a ~1 m apex takes about that long, so hops and kerb step-offs stay straight. Or **near the apex**: vertical speed within **2 m/s** (about +-0.2 s around it), after 0.15 s.
 - Low rotation: under **1.5 rad/s** (86 deg/s); exits past 2.5. Flips spin at 4-8 rad/s.
 - Not on a web: the bottom of a swing is upright and slow-turning too, and the legs should trail there.
-- Falling faster than **7 m/s** (about 2.5 m of fall): the legs come down for the landing.
+- Falling faster than **7 m/s** (about 2.5 m of fall): the legs come down for the landing. A crouch starts only above **-5 m/s** (hysteresis).
+- **Minimum on-time 0.35 s**, and an exit has to last **0.12 s** (Nov 12, 5061b4a playtest: 41% of 523 crouches ended inside 0.35 s). Touching the ground ends it at once.
 - Eased in over 0.25 s, out over 0.2 s.
 
 ## REACH SPREAD detection

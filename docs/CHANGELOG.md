@@ -8,6 +8,7 @@ Per-check results are in [VALIDATION.md](VALIDATION.md).
 The user, Nov 13 (t54u): last night's fixes, re-checked against the camera-modes build (c6a8279) and ported one at a time, branch `feat/c6a8279-ports`. Left out: PUNCH LUNGE (punches stay as they are) and LANDING VIEW HOLD (HYBRID v2's kept heading and ANIM HEAD RIDE already removed the 56 degree snap). The landing hard turn is not ported: ANIM HEAD RIDE brings the view to his head instead of turning him to the view. Not headset-tested.
 
 - **Left-stick flip break needs a fresh push:** 111 jumps broke to SpidyVR about 0.02 s after takeoff because the run stick was still tilted, so JUMP TO SPIDYVR's timer almost never ran. A left stick already tilted at takeoff now breaks only after it has come back inside the dead zone, or has moved more than 60 deg from its takeoff direction. The right stick is unchanged. Tests: `flip_break` (FreshPush).
+- **Air crouch flicker:** 41% of the session's 523 air crouches ended inside 0.35 s (a third inside 0.3 s): falls past -7 m/s (191), spins past 2.5 rad/s (135), webs (111), landings (67). A crouch now stays at least 0.35 s, leaves only when its reason has lasted 0.12 s, and a fall starts it only above -5 m/s (it still goes at -7). Touching the ground ends it at once. Constants in `leg_layers.hpp`, no setting. Tests: `passive_legs`.
 
 ## Camera modes: the animation's head ride, the shoulder limit, the 360 snap/realign (from 5c681de)
 
