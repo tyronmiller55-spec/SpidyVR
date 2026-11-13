@@ -1162,6 +1162,7 @@ DWORD WINAPI run(void*) {
         bool airSpinWas{};
         // ANIMATED HYBRID (off by default): animation-default / intent-VR owner FSM.
         hybrid_owner::HybridOwner hybridOwner{};
+        hybrid_owner::FreshPush flipFreshPush{}; // left-stick flip break: fresh pushes only
         bool hybridWebWas{};
         // ANIMATED HYBRID web zips (hybrid_owner::Frame::zipPress): pressed this
         // frame, for the owner's update further down the same frame.
@@ -2912,10 +2913,18 @@ DWORD WINAPI run(void*) {
                     {
                         // FLIP BREAK, the left stick: the axes CONTROLLED FLIPS (toggled
                         // on in the air) or REALISTIC FLIPS' steering read.
+                        // FRESH PUSH (5061b4a playtest): a left stick already tilted at takeoff is
+                        // the run's. It breaks only after it came back to rest, or moved clearly
+                        // (> 60 deg) from its takeoff direction.
                         hybrid_owner::FlipInput in;
-                        in.leftValid = frame.hands[0].valid;
                         in.leftX = frame.hands[0].stickX;
                         in.leftY = frame.hands[0].stickY;
+                        if (flipBreakHybrid && flipAir && hybridOwner.domain == hybrid_owner::Domain::anim) {
+                            in.leftValid = flipFreshPush.allows(frame.hands[0].valid, in.leftX, in.leftY);
+                        } else {
+                            flipFreshPush.ground(frame.hands[0].valid, in.leftX, in.leftY);
+                            in.leftValid = frame.hands[0].valid;
+                        }
                         in.controlledActive = motion.controlledFlipControls;
                         in.realisticSteering = values.realisticFlips && values.flips;
                         tryFlipBreak(in);

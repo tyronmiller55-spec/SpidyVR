@@ -3,6 +3,12 @@
 Every build, newest first, with what changed, why, and what was measured.
 Per-check results are in [VALIDATION.md](VALIDATION.md).
 
+## PLAYTEST FIXES from the 5061b4a headset session (Nov 12, 36 min, Quest 3S over Link)
+
+Built on 5061b4a (feat/hybrid-movement), branch `feat/playtest-fixes`. One commit per fix. Not headset-tested.
+
+- **Left-stick flip break needs a fresh push:** 111 jumps broke to SpidyVR about 0.02 s after takeoff because the run stick was still tilted, so JUMP TO SPIDYVR's timer almost never ran. A left stick already tilted at takeoff now breaks only after it has come back inside the dead zone, or has moved more than 60 deg from its takeoff direction. The right stick is unchanged. Tests: `flip_break` (FreshPush).
+
 ## MOVEMENT MODE: HYBRID (default), STABLE, OLD; REAR SNAP TURN
 
 The user, Nov 12 (t75u, re-asked 07:34). Built on 2f867a8. Not headset-tested. Details: [HYBRID_MOVEMENT.md](HYBRID_MOVEMENT.md).

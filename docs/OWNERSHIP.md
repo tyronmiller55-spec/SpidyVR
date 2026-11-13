@@ -47,7 +47,7 @@ What counts (`hybrid_owner::flipBreak`; dead zone 0.2, noise only):
 |---|---|
 | Right stick left / right | **Never** (the snap or smooth turn). |
 | Right stick up / down (pitch), diagonals by their up/down part | Basic FLIPS (the right stick flips), or LEG CONTROL in force (with CONTROLLED or REALISTIC FLIPS; the legs' swing pitches him). Not FLIPS' zip flick (`zipPriority`). With no flips on the right stick, up / down stays the zip / heal push and breaks nothing. |
-| Left stick, any way (pitch and tilt) | CONTROLLED FLIPS toggled on in the air (A), or REALISTIC FLIPS with FLIPS on (its left-stick steering). Otherwise the left stick steers the game's jump and breaks nothing. |
+| Left stick, any way (pitch and tilt) | CONTROLLED FLIPS toggled on in the air (A), or REALISTIC FLIPS with FLIPS on (its left-stick steering). Otherwise the left stick steers the game's jump and breaks nothing. **Fresh push only (Nov 12):** a stick already tilted at takeoff is the run's; it breaks after it has rested inside the dead zone, or moved more than 60 deg from its takeoff direction (`hybrid_owner::FreshPush`). |
 | Grip cancel | Always, in a midair animation (consumed, no shot). |
 
 How (game_xr, `flip break:` and `grip cancel: anim->vr this frame` diag lines with the display time):

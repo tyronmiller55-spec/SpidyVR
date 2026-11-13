@@ -69,6 +69,51 @@ void inputs() {
     check(flipBreak(realistic) == FlipBreak::leftStick, "REALISTIC FLIPS steering: left stick pitch breaks");
 }
 
+// FRESH PUSH: a left stick held through takeoff is the run's, not a flip's.
+void freshPush() {
+    // Held at takeoff: nothing until it rests or moves clearly.
+    FreshPush held;
+    held.ground(true, 0.f, .9f);
+    check(!held.allows(true, 0.f, .9f), "held through takeoff: no break (the run's)");
+    check(!held.allows(true, .1f, .95f), "a wobble of the held stick still no break");
+    check(!held.allows(true, .6f, .7f), "40 deg from the takeoff direction: still the run's");
+    check(!held.allows(false, 0.f, 0.f) && !held.armed(), "no sample: nothing changes");
+    check(held.allows(true, .9f, .2f), "moved clearly (> 60 deg): a flip's");
+    check(held.allows(true, .9f, .2f) && held.allows(true, 0.f, .9f),
+          "once armed it stays armed in this air");
+    // Let go, then push: fresh.
+    FreshPush rest;
+    rest.ground(true, .8f, 0.f);
+    check(!rest.allows(true, .8f, 0.f), "still held");
+    check(!rest.allows(true, .15f, .1f) || rest.armed(), "rest sample arms it");
+    check(rest.armed() && rest.allows(true, .0f, .7f), "after rest, the next push breaks");
+    // Not held at takeoff: breaks at once (as before).
+    FreshPush clear;
+    clear.ground(true, .05f, .1f);
+    check(clear.armed() && clear.allows(true, 0.f, -.8f), "a stick at rest at takeoff breaks on a push");
+    FreshPush noSample;
+    noSample.ground(false, 0.f, 0.f);
+    check(noSample.armed() && !noSample.allows(false, 0.f, 0.f), "no hand: never a break");
+    // The next jump starts fresh again.
+    held.ground(true, 0.f, .9f);
+    check(!held.armed() && !held.allows(true, 0.f, .9f), "a new takeoff re-reads the stick");
+    // With flipBreak: the stick held through takeoff under REALISTIC steering.
+    FlipInput in;
+    in.realisticSteering = true;
+    FreshPush gate;
+    gate.ground(true, 0.f, .9f);
+    in.leftX = 0.f;
+    in.leftY = .9f;
+    in.leftValid = gate.allows(true, in.leftX, in.leftY);
+    check(flipBreak(in) == FlipBreak::none, "held run stick: no left-stick break");
+    in.leftY = 0.f;
+    in.leftValid = gate.allows(true, in.leftX, in.leftY);
+    check(flipBreak(in) == FlipBreak::none, "at rest: nothing");
+    in.leftY = -.6f;
+    in.leftValid = gate.allows(true, in.leftX, in.leftY);
+    check(flipBreak(in) == FlipBreak::leftStick, "a fresh push after rest breaks");
+}
+
 Frame air() {
     Frame f{};
     f.state.playing = f.state.fresh = true;
@@ -150,6 +195,7 @@ void jumpStays() {
 
 int main() {
     inputs();
+    freshPush();
     sameFrame();
     gripCancel();
     jumpStays();

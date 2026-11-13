@@ -253,6 +253,49 @@ inline FlipBreak flipBreak(const FlipInput& in, float deadZone = flipBreakDeadZo
     return FlipBreak::none;
 }
 
+// FRESH PUSH (the 5061b4a playtest, November 12: 111 of the jumps broke to
+// SpidyVR about 0.02 s after takeoff because the run stick was still held):
+// the left stick's pitch/tilt break reads a stick that was already tilted at
+// takeoff as the run's, not a flip's. It breaks only after the stick has come
+// back inside the dead zone since takeoff, or has moved clearly (past
+// clearAngleDeg) away from the direction it had at takeoff. The right stick
+// is not gated. Fed from the frames outside a midair animation (ground()) and
+// then the frames inside it (allows()). Pure.
+class FreshPush {
+  public:
+    static constexpr float clearAngleDeg = 60.f;
+    // Not in a midair animation: this is the stick he takes off with.
+    void ground(bool valid, float x, float y, float deadZone = flipBreakDeadZone) {
+        const float mag = valid && std::isfinite(x) && std::isfinite(y) ? std::hypot(x, y) : 0.f;
+        armed_ = mag <= deadZone;
+        x_ = armed_ ? 0.f : x;
+        y_ = armed_ ? 0.f : y;
+    }
+    // In a midair animation: whether the left stick may break now.
+    bool allows(bool valid, float x, float y, float deadZone = flipBreakDeadZone) {
+        if (!valid || !std::isfinite(x) || !std::isfinite(y))
+            return armed_ && valid;
+        if (!armed_) {
+            const float mag = std::hypot(x, y);
+            if (mag <= deadZone) {
+                armed_ = true; // let go since takeoff: the next push is a flip's
+            } else {
+                const float dot = (x * x_ + y * y_) / (mag * std::hypot(x_, y_));
+                if (dot < std::cos(clearAngleDeg * 3.14159265f / 180.f))
+                    armed_ = true; // moved clearly from the takeoff direction
+            }
+        }
+        return armed_;
+    }
+    bool armed() const {
+        return armed_;
+    }
+
+  private:
+    bool armed_{true};
+    float x_{}, y_{};
+};
+
 struct Frame {
     head_probe::StateInputs state{};
     bool webRising{};   // a SpidyVR web attached this frame
