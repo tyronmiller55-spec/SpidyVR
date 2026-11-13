@@ -1218,7 +1218,7 @@ const std::array<Row, 157>& rows() {
          "HYBRID: how long the view holds where you looked after a landing.",
          landingHoldChoices, Place::launcher}, // the NATIVE ANIMATION tab holds 20
         {Item::punchLunge, "PUNCH LUNGE",
-         "ON: a punch at a far enemy lunges and SpidyVR takes over. OFF: punches stay animated.", {},
+         "ON: a far punch lunges (SpidyVR takes over). OFF: punches stay animated.", {},
          Place::launcher}, // the NATIVE ANIMATION tab holds 20
         {Item::animYawSway, "ANIM YAW SWAY",
          "Full lock, stable yaw: share of the head's yaw sway shown. 100%: the old feel.", animYawSwayChoices},

@@ -23839,8 +23839,8 @@ int main() {
         // RUN SPEED, SLOW-MO LENGTH, SOFT LOCK, the ten camera rows, the four leg rows, AIR FISTS, then (November 11)
         // SHOOTERS, LOCK STRENGTH, CAMERA MOTION, PITCH, ROLL, BOB UP/DOWN, BOB SIDE and HEAD ANGLE.
         // November 11 (POINT JUMP): its six rows after HEAD ANGLE, before them too.
-        // November 12: PUNCH VIEW EASE after POINT JUMP's.
-        constexpr size_t firstRealistic = 144;
+        // November 12: PUNCH VIEW EASE after POINT JUMP's; the playtest fixes' LANDING VIEW HOLD and PUNCH LUNGE.
+        constexpr size_t firstRealistic = 146;
         check(all.size() == firstRealistic + std::size(realistic), "the realistic flips' rows are not the last");
         for (size_t i = 0; i < std::size(realistic); ++i)
             check(all[firstRealistic + i].item == realistic[i], "the realistic flips' rows out of order");
