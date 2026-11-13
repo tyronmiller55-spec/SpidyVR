@@ -675,7 +675,10 @@ class StickPush {
         spent_ = true;
         held_ = lapse_ = 0;
     }
-    static constexpr float pushed = .75f, aside = .45f, released = .5f, holdSeconds = .15f,
+    // November 12 movement cleanup: aside .45 -> .35 and holdSeconds .15 ->
+    // .2, so a turn's flick (snap or smooth, up to 70 degrees off the side)
+    // is spent instead of becoming a zip or a heal while standing turns.
+    static constexpr float pushed = .75f, aside = .35f, released = .5f, holdSeconds = .2f,
                            graceSeconds = .25f;
     enum class Way { none, down, up };
     // seconds: since the previous update. play: the controllers play VR.

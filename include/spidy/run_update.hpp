@@ -38,6 +38,26 @@ inline Thresholds nativeRunThresholds(int percent) {
     const float on = std::clamp(percent, 50, 90) / 100.f;
     return {on, on - .2f};
 }
+// A physical tilt as RUN CURVE sends it (curveStick's magnitude; the tilt
+// itself with the curve off or within its dead zone).
+inline float curvedTilt(float tilt, bool on, float snap = curveSnap, float gamma = curveGamma) {
+    if (!std::isfinite(tilt))
+        return 0.f;
+    float right = std::clamp(tilt, 0.f, 1.f), forward = 0.f;
+    curveStick(right, forward, on, snap, gamma);
+    return std::hypot(right, forward);
+}
+// NATIVE RUN AT with RUN CURVE (the November 12 movement cleanup): NATIVE
+// RUN reads the curved stick, so its thresholds go through the same curve
+// and the sprint starts and stops at the same PHYSICAL tilt as with the curve
+// off (70% and 50% by default). Without this the curve moved the sprint down
+// to about half the stick's tilt and the jog range was lost.
+inline Thresholds nativeRunThresholds(int percent, bool curve) {
+    const Thresholds raw = nativeRunThresholds(percent);
+    if (!curve)
+        return raw;
+    return {curvedTilt(raw.onAbove, true), curvedTilt(raw.offBelow, true)};
+}
 // RUN LOGS (vr_settings::Values::runLogs, off by default): lines in the
 // session's timeline (game_prompts::note) about running, for the questions the
 // run update could not answer without the game: how fast the game's own run

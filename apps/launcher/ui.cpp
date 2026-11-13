@@ -2195,7 +2195,8 @@ void App::options(ImVec2 origin, ImVec2 size) {
                S(150), [&] { tabCombo("##nativerunatpercent", Item::nativeRunAt); });
         settingOption(Item::runCurve, "Run curve (experimental)",
                "On the ground the left stick reaches the game's full run at 80% of its tilt, with more of "
-               "its speed early. Off: the stick as it is, as before.",
+               "its speed early; Native run still sprints at the same stick tilt. On by default. Off: the "
+               "stick as it is.",
                S(42), [&] { tabToggle("##runcurve", Item::runCurve); });
         settingOption(Item::steadyStates, "Steady states (experimental)",
                "Native run's RT comes back only once nothing has stopped it for 0.15 s, so a kerb, a prompt "
@@ -2229,7 +2230,7 @@ void App::options(ImVec2 origin, ImVec2 size) {
         settingOption(Item::earlyJump, "Early jump (experimental)",
                "QUICK TAP: a tap of A jumps if let go within 0.1 s instead of 0.18 s. RUNNING: that, and "
                "while NATIVE RUN sprints A jumps the moment it is pressed (no charged leap while sprinting). "
-               "OFF: as before.",
+               "QUICK TAP by default. OFF: the old 0.18 s tap.",
                S(150), [&] { tabCombo("##earlyjump", Item::earlyJump); });
         settingOption(Item::softLanding, "Soft landing (experimental)",
                "Falling with no web, your fall eases to 9 m/s over the last 3 m (or 0.35 s) before the "

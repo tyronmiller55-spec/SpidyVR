@@ -247,11 +247,14 @@ struct Values {
     int dodgeTumble = 0;
     // RUN CURVE (the tab's RUN CURVE; run_update::curveStick): on the ground
     // the stick reaches the game's full run at 80% of its tilt, more of it
-    // early. Off by default: the stick as it is, as before.
-    bool runCurve = false;
+    // early. On by default since the November 12 movement cleanup (the user:
+    // "movement fixes will be defaults"); off: the stick as it is.
+    bool runCurve = true;
     // NATIVE RUN AT, percent of the stick's tilt (the tab's NATIVE RUN AT;
     // run_update::nativeRunThresholds): past it NATIVE RUN holds the game's
     // RT, and lets go 20 points under it. 70 by default (70 and 50, as before).
+    // Always the physical stick's tilt: with RUN CURVE on the thresholds are
+    // carried through the curve, so the sprint starts where it always did.
     int nativeRunPercent = 70;
     // RUN LOGS (the tab's RUN LOGS; run_update::RunLog): lines in the
     // session's timeline about running, landing and the mod's ground run, to
@@ -266,7 +269,14 @@ struct Values {
     // OFF, a tap of A jumps as it is let go within 0.18 s, as before; 1 QUICK
     // TAP, within 0.1 s; 2 RUNNING, as QUICK TAP, and while NATIVE RUN holds
     // RT the game's A goes out as it is pressed (no charge while running).
-    int earlyJump = 0;
+    // QUICK TAP by default since the November 12 movement cleanup.
+    int earlyJump = 1;
+    // MOVEMENT DEFAULTS (November 12 movement cleanup; withMovementDefaults):
+    // the revision of the movement defaults a settings file has seen. A file
+    // from before it gets RUN CURVE on and EARLY JUMP QUICK TAP once (the
+    // user: "movement fixes will be defaults"); after that the player's own
+    // choice stands. Not a row. movement_defaults.
+    int movementDefaults = 1;
     // SOFT LANDING (the tab's SOFT LANDING; Swing::allowSoftLanding,
     // run_update::softLandVertical): a fall the swing flies, with no web
     // holding, eases to 9 m/s down over its last 3 m (or 0.35 s), its speed
@@ -825,4 +835,11 @@ std::string tabOnlyText(const Values&);
 // The values with what such text holds, sanitized. A line with an unknown
 // key, or whose value is no whole number, is passed over.
 Values withTabOnly(Values, std::string_view text);
+// The movement defaults' revision (Values::movementDefaults) this build has.
+inline constexpr int movementDefaultsRevision = 1;
+// November 12 movement cleanup: a settings file (that text) older than
+// movementDefaultsRevision gets the new movement defaults once - RUN CURVE
+// on, EARLY JUMP at least QUICK TAP - and is marked as having seen them; a
+// newer one is left as it is. Call after withTabOnly on the same text.
+Values withMovementDefaults(Values, std::string_view text);
 } // namespace spidy::vr_settings

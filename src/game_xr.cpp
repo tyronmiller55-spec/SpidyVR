@@ -1373,7 +1373,12 @@ DWORD WINAPI run(void*) {
         values.screenDepth = static_cast<int>(config.screenDepth);
         values.bodyHaptics = static_cast<int>(config.bodyHaptics);
         // And those only the tab offers, as it left them (tabOnlyPath); all sanitized.
-        values = vr_settings::withTabOnly(values, readTabOnly());
+        {
+            // The movement cleanup's defaults reach a settings file older than
+            // them once (vr_settings::withMovementDefaults).
+            const std::string tabOnlyRead = readTabOnly();
+            values = vr_settings::withMovementDefaults(vr_settings::withTabOnly(values, tabOnlyRead), tabOnlyRead);
+        }
         std::string tabOnlySaved = vr_settings::tabOnlyText(values);
         game_menu::publish(values);
         {
@@ -5728,7 +5733,10 @@ DWORD WINAPI run(void*) {
                                 !runGate.mounting && !runGate.ventCrawl && !runGate.onSurface &&
                                 !runGate.onCrawl && runGate.gameOwnsGround)
                                 run_update::curveStick(walk.right, walk.forward, values.runCurve);
-                            const auto runAt = run_update::nativeRunThresholds(values.nativeRunPercent);
+                            // NATIVE RUN AT is the physical stick's tilt: through the curve
+                            // when RUN CURVE bends what NATIVE RUN reads (movement cleanup).
+                            const auto runAt = run_update::nativeRunThresholds(values.nativeRunPercent,
+                                                                               values.runCurve);
                             nativeRun.thresholds(runAt.onAbove, runAt.offBelow);
                             bool runAllowed = game_pad::nativeRunAllowed(runGate, walk);
                             // PARKOUR RT diagnostic (t86u): on the ground with the stick at

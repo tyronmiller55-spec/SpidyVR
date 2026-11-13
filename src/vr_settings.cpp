@@ -792,6 +792,7 @@ Values sanitized(Values v) {
     v.animatedAirSpin = std::clamp(v.animatedAirSpin, 0, 2);
     v.animatedHybridSpeedMs = v.animatedHybridSpeedMs <= 0 ? 0 : std::clamp(v.animatedHybridSpeedMs, 5, 500);
     v.earlyJump = std::clamp(v.earlyJump, 0, 2);
+    v.movementDefaults = std::clamp(v.movementDefaults, 0, movementDefaultsRevision);
     v.webAimSource = std::clamp(v.webAimSource, 0, 1);
     v.forearmBlend = std::clamp(v.forearmBlend, 0, 100);
     v.forearmAimLimit = std::clamp(v.forearmAimLimit, 35, 180);
@@ -994,7 +995,7 @@ const std::array<Row, 155>& rows() {
          "The view leans or rolls with the game's dodge, so you see it was one.", dodgeTumbleChoices},
         {Item::runCurve,
          "RUN CURVE",
-         "Ground only: full run at 80% of the stick, faster sooner. Off as before.",
+         "Ground only: full run at 80% of the stick, faster sooner. On by default.",
          {}},
         {Item::nativeRunAt, "NATIVE RUN AT", "The stick's tilt past which NATIVE RUN sprints. 70% as before.",
          nativeRunPercentChoices},
@@ -1007,7 +1008,7 @@ const std::array<Row, 155>& rows() {
          "Charged leaps keep run speed. EARLY JUMP: RUNNING skips charging in a sprint.",
          {}},
         {Item::earlyJump, "EARLY JUMP",
-         "A jumps sooner: a quicker tap, or at once while running. OFF as before.", earlyJumpChoices},
+         "A jumps sooner: a quicker tap, or at once while running. QUICK TAP by default.", earlyJumpChoices},
         {Item::softLanding,
          "SOFT LANDING",
          "A fall with no web eases to 9 m/s down just before the ground. Off as before.",
@@ -1918,6 +1919,7 @@ constexpr TabOnly tabOnly[] = {
     {"point_jump_zip_guard_ms", nullptr, &Values::pointJumpZipGuardMs},
     {"point_jump_dodge_hold_ms", nullptr, &Values::pointJumpDodgeHoldMs},
     {"point_jump_in_combat", &Values::pointJumpInCombat, nullptr},
+    {"movement_defaults", nullptr, &Values::movementDefaults},
 };
 } // namespace
 std::string tabOnlyText(const Values& v) {
@@ -1951,6 +1953,33 @@ Values withTabOnly(Values v, std::string_view text) {
                     v.*s.number = number;
             }
     }
+    return sanitized(v);
+}
+Values withMovementDefaults(Values v, std::string_view text) {
+    // The revision the text has seen: 0 when it names none (older than the
+    // November 12 cleanup, or no file at all).
+    int seen = 0;
+    while (!text.empty()) {
+        const size_t end = text.find('\n');
+        std::string_view line = text.substr(0, end);
+        text.remove_prefix(end == std::string_view::npos ? text.size() : end + 1);
+        if (!line.empty() && line.back() == '\r')
+            line.remove_suffix(1);
+        constexpr std::string_view key = "movement_defaults=";
+        if (line.substr(0, key.size()) != key)
+            continue;
+        const std::string_view value = line.substr(key.size());
+        int number{};
+        const auto [rest, error] = std::from_chars(value.data(), value.data() + value.size(), number);
+        if (error == std::errc{} && rest == value.data() + value.size())
+            seen = number;
+    }
+    if (seen < 1) {
+        // Revision 1 (November 12): RUN CURVE on, EARLY JUMP QUICK TAP (RUNNING kept).
+        v.runCurve = true;
+        v.earlyJump = std::max(v.earlyJump, 1);
+    }
+    v.movementDefaults = movementDefaultsRevision;
     return sanitized(v);
 }
 } // namespace spidy::vr_settings

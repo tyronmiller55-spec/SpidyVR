@@ -13800,11 +13800,19 @@ int main() {
         StickPush blip;
         hold(blip, 0, -1, 8);
         check(hold(blip, 0, -1, 10, false) == Way::none, "a heal went out out of play");
-        check(hold(blip, 0, -1, 10) == Way::down, "a moment out of play spent the heal");
+        check(hold(blip, 0, -1, 20) == Way::down, "a moment out of play spent the heal");
         hold(blip, 0, 0, 1);
         hold(blip, 0, -1, 8);
         check(hold(blip, 0, -1, 40, false) == Way::none && hold(blip, 0, -1) == Way::none,
               "a push held through a long time out of play healed");
+        // Movement cleanup (November 12): a push a third off the line is a turn, and a
+        // brush through the line shorter than holdSeconds (.2 s) is nothing.
+        StickPush strict;
+        check(hold(strict, .4f, -.9f) == Way::none, "a push 0.4 aside healed");
+        hold(strict, 0, 0, 1);
+        check(hold(strict, 0, -1, 17) == Way::none, "a 0.19 s brush healed");
+        hold(strict, 0, 0, 1);
+        check(hold(strict, .3f, -.95f) == Way::down, "a push 0.3 aside no longer heals");
         // Bad readings and bad timing push nothing.
         StickPush broken;
         const float bad = std::numeric_limits<float>::quiet_NaN();
@@ -24041,19 +24049,21 @@ int main() {
         }
         {
             Values v;
-            check(!v.momentumLeap && v.earlyJump == 0 && defaultChoice(Item::momentumLeap) == 0 &&
-                      defaultChoice(Item::earlyJump) == 0,
-                  "momentum leap or early jump on by default");
+            // Movement cleanup (November 12): EARLY JUMP is QUICK TAP by default.
+            check(!v.momentumLeap && v.earlyJump == 1 && defaultChoice(Item::momentumLeap) == 0 &&
+                      defaultChoice(Item::earlyJump) == 1,
+                  "momentum leap on, or early jump not QUICK TAP, by default");
             check(withTabOnly({}, "running_leap=1\nearly_jump=7\n").momentumLeap &&
                       withTabOnly({}, "running_leap=1\nearly_jump=7\n").earlyJump == 2,
                   "spidy_vr.ini keeps running_leap and early_jump, within range");
         }
         {
             Values v;
-            check(!v.runCurve && !v.runLogs && v.nativeRunPercent == 70 &&
-                      defaultChoice(Item::runCurve) == 0 && defaultChoice(Item::nativeRunAt) == 2 &&
+            // Movement cleanup (November 12): RUN CURVE on by default.
+            check(v.runCurve && !v.runLogs && v.nativeRunPercent == 70 &&
+                      defaultChoice(Item::runCurve) == 1 && defaultChoice(Item::nativeRunAt) == 2 &&
                       defaultChoice(Item::runLogs) == 0,
-                  "the run update's rows not as before by default");
+                  "the run update's rows not the movement cleanup's defaults");
             check(choose(Item::nativeRunAt, 4, v) && v.nativeRunPercent == 90 &&
                       !choose(Item::nativeRunAt, 5, v),
                   "NATIVE RUN AT: 90% last");
@@ -24061,6 +24071,46 @@ int main() {
                       withTabOnly({}, "run_curve=1\nrun_logs=1\n").runCurve &&
                       withTabOnly({}, "run_curve=1\nrun_logs=1\n").runLogs,
                   "spidy_vr.ini keeps run_curve, native_run_at_percent and run_logs, within range");
+            // MOVEMENT DEFAULTS: a file from before the cleanup gets them once;
+            // a file that has seen them keeps the player's own choice.
+            const std::string old = "run_curve=0\nearly_jump=0\n";
+            const Values migrated = withMovementDefaults(withTabOnly({}, old), old);
+            check(migrated.runCurve && migrated.earlyJump == 1 && migrated.movementDefaults == 1,
+                  "an old file did not get the movement defaults");
+            const std::string running = "run_curve=0\nearly_jump=2\n";
+            check(withMovementDefaults(withTabOnly({}, running), running).earlyJump == 2,
+                  "the migration lowered EARLY JUMP RUNNING");
+            const std::string chosen = "run_curve=0\nearly_jump=0\nmovement_defaults=1\n";
+            const Values kept = withMovementDefaults(withTabOnly({}, chosen), chosen);
+            check(!kept.runCurve && kept.earlyJump == 0 && kept.movementDefaults == 1,
+                  "the movement defaults overrode a choice made after them");
+            check(withMovementDefaults(withTabOnly({}, ""), "").runCurve,
+                  "no file: not the movement defaults");
+            check(tabOnlyText(migrated).find("movement_defaults=1\n") != std::string::npos,
+                  "the migration is not remembered");
+        }
+        {
+            // NATIVE RUN AT through RUN CURVE (movement cleanup): the sprint
+            // starts and stops at the same physical tilt with the curve on.
+            using namespace spidy::run_update;
+            const auto plain = nativeRunThresholds(70, false);
+            check(std::abs(plain.onAbove - .7f) < 1e-6f && std::abs(plain.offBelow - .5f) < 1e-6f,
+                  "NATIVE RUN AT without the curve changed");
+            const auto curved = nativeRunThresholds(70, true);
+            check(std::abs(curvedTilt(.7f, true) - curved.onAbove) < 1e-6f &&
+                      std::abs(curvedTilt(.5f, true) - curved.offBelow) < 1e-6f &&
+                      curved.onAbove > .85f && curved.onAbove < .95f && curved.offBelow > curved.onAbove - .3f &&
+                      curved.offBelow < curved.onAbove,
+                  "NATIVE RUN AT not carried through RUN CURVE");
+            for (float tilt = .12f; tilt < 1.f; tilt += .01f) {
+                float right = tilt, forward = 0;
+                curveStick(right, forward, true);
+                const float sent = std::hypot(right, forward);
+                check((sent > curved.onAbove) == (tilt > .7f + 1e-4f) || std::abs(tilt - .7f) < .011f,
+                      "the sprint does not start at 70% of the physical stick");
+            }
+            check(curvedTilt(.05f, true) == .05f && curvedTilt(.5f, false) == .5f && curvedTilt(NAN, true) == 0.f,
+                  "curvedTilt outside the curve");
         }
         {
             Values v;
@@ -24419,7 +24469,7 @@ int main() {
                   "flip_reprojection=0\nsteady_hud=0\nreel_haptics=0\nswing_haptics=0\n"
                   "pc_media=0\nsingle_hand_yank_percent=100\nweb_tie=0\nnative_run=1\nair_slingshot=0\nweb_angle_"
                   "degrees=0\nwrist_shooters=0\n"
-                  "dodge_tumble=0\nrun_curve=0\nnative_run_at_percent=70\nrun_logs=0\nrunning_leap=0\nearly_jump=0\nsoft_landing=0\nspidy_run=1\nspidy_run_from_standing=0\nweb_aim_source=0\nforearm_blend=100\nweb_landing_smooth=0\nweb_landing_impact_speed=24\nsteady_states=0\ncombat_responsive=0\nspidy_run_jump=1\nforearm_aim_limit=180\npalm_shooters=0\nhead_probe=0\nanimated_moves=1\nanimated_head=2\nanimated_headset_smooth=0\nrun_speed_percent=100\nslow_motion_seconds=12\nsoft_lock_metres=15\nanimated_air=0\nanimated_steering=0\nanimated_arms=1\nanimated_torso=1\nanimated_model_yaw=1\nanimated_only=0\nanimated_air_spin=0\nanimated_hybrid=1\nanimated_hybrid_speed_ms=200\nweb_lines=0\nanimated_full_arms=1\n"
+                  "dodge_tumble=0\nrun_curve=1\nnative_run_at_percent=70\nrun_logs=0\nrunning_leap=0\nearly_jump=1\nsoft_landing=0\nspidy_run=1\nspidy_run_from_standing=0\nweb_aim_source=0\nforearm_blend=100\nweb_landing_smooth=0\nweb_landing_impact_speed=24\nsteady_states=0\ncombat_responsive=0\nspidy_run_jump=1\nforearm_aim_limit=180\npalm_shooters=0\nhead_probe=0\nanimated_moves=1\nanimated_head=2\nanimated_headset_smooth=0\nrun_speed_percent=100\nslow_motion_seconds=12\nsoft_lock_metres=15\nanimated_air=0\nanimated_steering=0\nanimated_arms=1\nanimated_torso=1\nanimated_model_yaw=1\nanimated_only=0\nanimated_air_spin=0\nanimated_hybrid=1\nanimated_hybrid_speed_ms=200\nweb_lines=0\nanimated_full_arms=1\n"
                   "camera_stabilization=0\ncamera_vertical_ms=0\ncamera_horizontal_ms=0\ncamera_angle_ms=0\n"
                   "camera_light_vertical_ms=75\ncamera_light_horizontal_ms=50\ncamera_light_angle_ms=75\n"
                   "camera_heavy_vertical_ms=200\ncamera_heavy_horizontal_ms=150\ncamera_heavy_angle_ms=200\n"
@@ -24430,7 +24480,8 @@ int main() {
                   "point_jump_full_ms=1000\npoint_jump_min_speed=9\npoint_jump_max_speed=22\npoint_jump_curve=0\n"
                   "point_jump_normal_bias=25\npoint_jump_min_out_degrees=10\npoint_jump_keep=25\n"
                   "point_jump_coyote_ms=120\npoint_jump_buffer_ms=150\npoint_jump_cooldown_ms=250\n"
-                  "point_jump_zip_guard_ms=400\npoint_jump_dodge_hold_ms=250\npoint_jump_in_combat=1\n",
+                  "point_jump_zip_guard_ms=400\npoint_jump_dodge_hold_ms=250\npoint_jump_in_combat=1\n"
+                  "movement_defaults=1\n",
               "the defaults' text");
         Values changed = defaults;
         changed.recordingFov = 140;

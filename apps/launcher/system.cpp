@@ -704,7 +704,9 @@ bool deleteProfile(const std::string& name) {
 
 spidy::vr_settings::Values loadTabOnly() {
     const fs::path path = tabOnlyPath();
-    return spidy::vr_settings::withTabOnly({}, path.empty() ? std::string() : readText(path, 1 << 16));
+    const std::string text = path.empty() ? std::string() : readText(path, 1 << 16);
+    // The movement cleanup's defaults reach a file older than them once.
+    return spidy::vr_settings::withMovementDefaults(spidy::vr_settings::withTabOnly({}, text), text);
 }
 
 bool saveTabOnly(const spidy::vr_settings::Values& values) {
