@@ -24063,8 +24063,10 @@ int main() {
                 row.item == Item::forearmBlend || row.item == Item::forearmAimLimit ||
                 row.item == Item::palmShooters ||
                 // November 12 (hybrid movement): MOVEMENT MODE supersedes VIEW YAW SOURCE; TURN-IN-PLACE
-                // ANGLE is STABLE's only (the in-game camera tab holds 20).
-                row.item == Item::viewYawSource || row.item == Item::turnInPlace;
+                // ANGLE is STABLE's only (the in-game camera tab holds 20); LANDING VIEW HOLD (Nov 12,
+                // playtest fixes): the NATIVE ANIMATION tab holds 20 too.
+                row.item == Item::viewYawSource || row.item == Item::turnInPlace ||
+                row.item == Item::landingHold;
             check(row.place == (row.item == Item::view ? Place::page
                                 : launcherOnly           ? Place::launcher
                                                          : Place::tab),
@@ -24360,7 +24362,7 @@ int main() {
                   "camera_stabilization=0\ncamera_vertical_ms=0\ncamera_horizontal_ms=0\ncamera_angle_ms=0\n"
                   "camera_light_vertical_ms=75\ncamera_light_horizontal_ms=50\ncamera_light_angle_ms=75\n"
                   "camera_heavy_vertical_ms=200\ncamera_heavy_horizontal_ms=150\ncamera_heavy_angle_ms=200\n"
-                  "spherical_aim=1\nleg_control=0\nleg_stiffness_pct=100\nleg_damping_pct=100\nleg_coupling_pct=50\nleg_double_tap_ms=300\npunch_view_ease_ms=250\nmove_haptics_pct=100\nview_yaw_source=1\nsound_trace=1\njump_handoff_ms=500\nair_view_ease_ms=250\nanim_yaw_sway_pct=20\nturn_in_place_deg=35\npassive_legs_pct=60\npassive_coupling_pct=15\nmovement_mode=0\nrear_snap_ms=0\nleg_air_crouch=1\nleg_reach_spread=1\nair_fists=1\n"
+                  "spherical_aim=1\nleg_control=0\nleg_stiffness_pct=100\nleg_damping_pct=100\nleg_coupling_pct=50\nleg_double_tap_ms=300\npunch_view_ease_ms=250\nmove_haptics_pct=100\nview_yaw_source=1\nsound_trace=1\njump_handoff_ms=500\nair_view_ease_ms=250\nanim_yaw_sway_pct=20\nturn_in_place_deg=35\npassive_legs_pct=60\npassive_coupling_pct=15\nmovement_mode=0\nrear_snap_ms=0\nlanding_hold_ms=600\nleg_air_crouch=1\nleg_reach_spread=1\nair_fists=1\n"
                   "camera_pitch_pct=100\ncamera_roll_pct=100\ncamera_bob_vertical_pct=100\ncamera_bob_side_pct=100\n"
                   "camera_head_angle_deg=0\n"
                   "point_jump=0\npoint_jump_trigger=0\npoint_jump_chord_ms=50\npoint_jump_tap_ms=150\n"
@@ -27979,7 +27981,7 @@ int main() {
                   all[89].choices.size() == 9 && std::strcmp(all[89].choices[0], "OFF") == 0 &&
                   std::strcmp(all[89].choices[8], "500 MS") == 0 && all[89].place == Place::tab,
               "ANIMATED HYBRID SPEED row");
-        check(lastItem == Item::rearSnap && Item::legReachSpread < lastItem && Item::turnInPlace < lastItem && Item::airViewEase < lastItem && Item::soundTrace < lastItem && Item::punchViewEase < lastItem && Item::pointJumpPush < lastItem && Item::cameraHeadAngle < lastItem && Item::airFists < lastItem && Item::legCoupling < lastItem && Item::animatedHeadsetSmooth < lastItem &&
+        check(lastItem == Item::landingHold && Item::rearSnap < lastItem && Item::legReachSpread < lastItem && Item::turnInPlace < lastItem && Item::airViewEase < lastItem && Item::soundTrace < lastItem && Item::punchViewEase < lastItem && Item::pointJumpPush < lastItem && Item::cameraHeadAngle < lastItem && Item::airFists < lastItem && Item::legCoupling < lastItem && Item::animatedHeadsetSmooth < lastItem &&
                   Item::softLock < Item::cameraStabilization,
               "SMOOTHING not included in the last Item bound");
     });
@@ -31150,7 +31152,7 @@ int main() {
     test("Native Animation: combined menu inventory and upstream-compatible v39 settings packet", [] {
         using namespace vr_settings;
         const auto& all = rows();
-        check(all.size() == 155 && static_cast<unsigned>(lastItem) < 256, "row/Item bounds");
+        check(all.size() == 156 && static_cast<unsigned>(lastItem) < 256, "row/Item bounds");
         std::array<unsigned, 256> seen{};
         size_t start = all.size();
         for (size_t i = 0; i < all.size(); ++i) {

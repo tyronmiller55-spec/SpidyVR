@@ -144,10 +144,19 @@ struct Heading {
     float drivingOff = 0; // seconds the hero has run more than 100 degrees off it
     float rest = 0;       // the heading's fading offset from him once nothing holds it
     bool following = false;
+    bool easing = false;
+    float easeT = 0, easeFrom = 0, easeSeconds = 0;
     uint32_t arrived = 0, gaveUp = 0;
 
     static constexpr float arriveAngle = 12.f * degrees, giveUpSeconds = 2.5f, followTau = .12f,
                            swayInSeconds = .3f;
+    // LANDING VIEW HOLD (the 5061b4a playtest, Nov 12: the view stayed turned away from his body for
+    // about a second after a landing, and at the 2.5 s give-up it snapped by a median of 56 degrees):
+    // a facing hold (a landing, a takeover, an anim re-entry) lasts In::facingHoldSeconds (600 ms by
+    // default), not 2.5 s, and only quickHoldSeconds in a fight or with the left stick held (the run brings
+    // him round); the release then eases the heading onto him over easeSeconds (smoothstep) instead of
+    // snapping.
+    static constexpr float quickHoldSeconds = .15f;
 
     struct In {
         float dt = 0;
@@ -155,11 +164,18 @@ struct Heading {
         float hero = 0;
         bool driving = false; // the left stick runs him along it
         bool steerable = false; // the walk stick can turn him (grounded, the animation's)
+        // LANDING VIEW HOLD: a facing hold's length (seconds; 2.5 is the old give-up), whether it is
+        // cut to quickHoldSeconds (a fight, a dodge, the left stick held), and the release's ease
+        // (seconds; 0 snaps onto him).
+        float facingHoldSeconds = giveUpSeconds;
+        bool quick = false;
+        float easeSeconds = 0.f;
     };
     struct Out {
         bool heroTurn = false; // TURN-IN-PLACE forced to `yaw` (standing)
         Hold released = Hold::none;
         bool gaveUp = false;
+        bool eased = false; // the hold timed out and the heading is easing onto him
     };
     void latch(float y) {
         yaw = wrap(y);
@@ -168,6 +184,7 @@ struct Heading {
         swayWeight = 1;
         snapT = 1;
         following = false;
+        easing = false;
     }
     void begin(Hold h, float to, float seconds = 0) {
         if (!std::isfinite(to))
@@ -186,6 +203,7 @@ struct Heading {
         age = 0;
         set = true;
         following = false;
+        easing = false;
     }
     // The right stick's turn of the heading (radians, this frame).
     void turn(float by) {
@@ -198,6 +216,7 @@ struct Heading {
             hold = Hold::turn;
         age = 0;
         following = false;
+        easing = false;
     }
     Out update(const In& in) {
         Out out;
@@ -218,9 +237,22 @@ struct Heading {
                 out.released = hold;
                 hold = Hold::none;
                 ++arrived;
-            } else if (age > giveUpSeconds) {
+            } else if (age > holdLimit(in)) {
                 out.released = hold;
                 out.gaveUp = true;
+                // The view comes onto him over easeSeconds (smoothstep), not at once. Driving, the
+                // heading stays where the player looks and the run brings him: nothing to ease.
+                const bool drive = in.driving && in.steerable;
+                easing = !drive && in.easeSeconds > 0.f;
+                easeT = 0;
+                easeFrom = gap;
+                easeSeconds = in.easeSeconds;
+                out.eased = easing;
+                if (!drive) {
+                    // following starts here with no offset left over when the ease is off (the snap).
+                    following = true;
+                    rest = easing ? gap : 0.f;
+                }
                 hold = Hold::none;
                 ++gaveUp;
             }
@@ -237,6 +269,7 @@ struct Heading {
                     ++gaveUp;
                 }
                 following = false;
+                easing = false;
             } else {
                 drivingOff = 0;
                 // Nothing to bring him onto: the heading is his facing (the view the head).
@@ -246,7 +279,16 @@ struct Heading {
                     rest = gap;
                     following = true;
                 }
-                rest *= std::exp(-dt / followTau);
+                if (easing) {
+                    easeT = std::min(1.f, easeT + dt / std::max(easeSeconds, .001f));
+                    rest = easeFrom * (1.f - easeT * easeT * (3.f - 2.f * easeT));
+                    if (easeT >= 1.f) {
+                        easing = false;
+                        rest = 0;
+                    }
+                } else {
+                    rest *= std::exp(-dt / followTau);
+                }
                 if (std::abs(rest) < .05f * degrees)
                     rest = 0;
                 yaw = wrap(in.hero + rest);
@@ -261,6 +303,14 @@ struct Heading {
     }
     void reset() {
         *this = Heading{};
+    }
+
+  private:
+    // How long the hold in force may last for this frame's inputs.
+    float holdLimit(const In& in) const {
+        if (hold != Hold::facing)
+            return giveUpSeconds;
+        return in.quick ? std::min(quickHoldSeconds, in.facingHoldSeconds) : in.facingHoldSeconds;
     }
 };
 inline const char* holdName(Heading::Hold h) {

@@ -293,6 +293,124 @@ int main() {
         const auto o = c.update(dt, s);
         check(o.view.verdict == facing_check::Verdict::ok && o.heroTurn, "facing check in HYBRID: view ok, hero corrected");
     }
+    // --- LANDING VIEW HOLD: a facing hold lasts its setting, quick in a fight or driving; the
+    // release eases onto him over the AIR VIEW EASE time instead of snapping.
+    {
+        auto hold = [&](float holdS, bool quick, bool driving, float easeS, float heroYaw, int& timedOutAt,
+                        float& worstStep, float& endYaw, bool& easedFlag) {
+            Heading h;
+            h.latch(heroYaw);
+            h.begin(Heading::Hold::facing, heroYaw + 150 * deg); // the view shown: he stands 150 deg off
+            timedOutAt = -1;
+            worstStep = 0;
+            easedFlag = false;
+            float last = h.yaw;
+            for (int i = 0; i < 360; ++i) {
+                Heading::In in;
+                in.dt = dt;
+                in.heroOk = true;
+                in.hero = heroYaw; // he does not come round (the landing's turn failed)
+                in.steerable = true;
+                in.driving = driving;
+                in.facingHoldSeconds = holdS;
+                in.quick = quick;
+                in.easeSeconds = easeS;
+                const auto o = h.update(in);
+                if (o.gaveUp && timedOutAt < 0) {
+                    timedOutAt = i;
+                    easedFlag = o.eased;
+                }
+                worstStep = std::max(worstStep, std::abs(wrap(h.yaw - last)));
+                last = h.yaw;
+            }
+            endYaw = h.yaw;
+        };
+        int at;
+        float worst, end;
+        bool eased;
+        hold(.6f, false, false, .25f, 0.f, at, worst, end, eased);
+        check(at >= 52 && at <= 56, "the landing hold lets go at 0.6 s, not 2.5 s");
+        check(eased && near(end, 0.f, .1f * deg), "and the heading ends on him");
+        check(worst < 10 * deg, "the release eases: no step over 10 deg a frame (a snap was 150)");
+        hold(.6f, false, false, 0.f, 0.f, at, worst, end, eased);
+        check(at >= 52 && at <= 56 && !eased && worst > 100 * deg, "ease OFF: the old snap, at 0.6 s");
+        hold(.6f, true, false, .25f, 0.f, at, worst, end, eased);
+        check(at >= 12 && at <= 16, "in a fight (quick): 0.15 s");
+        hold(.6f, false, true, .25f, 0.f, at, worst, end, eased);
+        check(at >= 52 && at <= 56, "driving alone is cut by game_xr's `quick`, not here");
+        hold(.6f, true, true, .25f, 0.f, at, worst, end, eased);
+        check(at >= 12 && at <= 16 && !eased,
+              "left stick held: 0.15 s, no ease (the heading stays on the view, he runs round)");
+        hold(2.5f, false, false, .25f, 0.f, at, worst, end, eased);
+        check(at >= 222 && at <= 228, "2500 MS is the old hold");
+        hold(0.f, false, false, .25f, 0.f, at, worst, end, eased);
+        check(at >= 0 && at <= 2, "NONE lets go at once");
+        // A shorter setting never lengthens the quick hold; the longer old one keeps 0.15.
+        hold(.1f, true, false, .25f, 0.f, at, worst, end, eased);
+        check(at >= 8 && at <= 10, "quick never outlasts the setting");
+        // Arriving is unchanged: he gets round, the hold ends on arrival, no ease.
+        Heading h;
+        h.latch(0);
+        h.begin(Heading::Hold::facing, 90 * deg);
+        bool arrived = false;
+        float hero = 0;
+        for (int i = 0; i < 90 && !arrived; ++i) {
+            hero = std::min(90 * deg, hero + 250 * deg * dt);
+            Heading::In in;
+            in.dt = dt;
+            in.heroOk = true;
+            in.hero = hero;
+            in.steerable = true;
+            in.facingHoldSeconds = .6f;
+            in.easeSeconds = .25f;
+            const auto o = h.update(in);
+            arrived = o.released == Heading::Hold::facing && !o.gaveUp;
+        }
+        check(arrived, "he comes round inside the hold: arrived, as before");
+        // A right-stick or rear-snap hold keeps the 2.5 s give-up (only facing holds are shortened).
+        Heading t;
+        t.latch(0);
+        t.turn(45 * deg);
+        int gaveAt = -1;
+        for (int i = 0; i < 300 && gaveAt < 0; ++i) {
+            Heading::In in;
+            in.dt = dt;
+            in.heroOk = true;
+            in.hero = 0;
+            in.steerable = true;
+            in.facingHoldSeconds = .6f;
+            in.easeSeconds = .25f;
+            if (t.update(in).gaveUp)
+                gaveAt = i;
+        }
+        check(gaveAt >= 222 && gaveAt <= 228, "an R-stick turn keeps its 2.5 s");
+        // The setting.
+        vr_settings::Values v;
+        check(v.landingHoldMs == 600, "LANDING VIEW HOLD: 600 ms by default");
+        const auto& rows = vr_settings::rows();
+        bool row = false;
+        for (const auto& r : rows)
+            if (r.item == Item::landingHold)
+                row = std::string(r.title) == "LANDING VIEW HOLD" && r.choices.size() == 5 &&
+                      std::string(r.choices[0]) == "NONE" && std::string(r.choices[2]) == "600 MS" &&
+                      std::string(r.choices[4]) == "2500 MS (OLD)";
+        check(row, "row labelled: NONE / 300 / 600 / 1000 / 2500 (OLD)");
+        check(vr_settings::choose(Item::landingHold, 4, v) && v.landingHoldMs == 2500, "choose OLD");
+        check(vr_settings::tabOnlyText(v).find("landing_hold_ms=2500") != std::string::npos,
+              "saved as landing_hold_ms");
+        check(vr_settings::withTabOnly(vr_settings::Values{}, "landing_hold_ms=1000\n").landingHoldMs == 1000,
+              "read back");
+        check(vr_settings::withTabOnly(vr_settings::Values{}, "landing_hold_ms=99999\n").landingHoldMs ==
+                  2500,
+              "sanitized");
+        bool listed = false;
+        for (Item item :
+             vr_settings::screens()[static_cast<size_t>(vr_settings::Category::nativeAnimation)].items)
+            listed = listed || item == Item::landingHold;
+        check(listed, "on NATIVE ANIMATION");
+        v.movementMode = 1;
+        check(vr_settings::inactiveReason(Item::landingHold, v) != nullptr, "greyed outside HYBRID");
+    }
     // --- The air facing sync's gate.
     {
         check(airSyncWanted(true, true, true, false, false, 0, 90 * deg), "air, 90 off: sync");

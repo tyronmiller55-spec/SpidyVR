@@ -714,7 +714,9 @@ int main() {
                                  row.item == Item::animYawSway || row.item == Item::turnInPlace ||
                                  (row.item >= Item::passiveLegs && row.item <= Item::legReachSpread) ||
                                  // MOVEMENT MODE, REAR SNAP TURN (November 12): the player's own.
-                                 row.item == Item::movementMode || row.item == Item::rearSnap;
+                                 row.item == Item::movementMode || row.item == Item::rearSnap ||
+                                 // LANDING VIEW HOLD (November 12): the player's own.
+                                 row.item == Item::landingHold;
             check(std::count_if(begin, end, [&](const ProfileSetting& s) { return s.item == row.item; }) ==
                       (leftOut ? 0 : 1),
                   row.title);
@@ -739,7 +741,7 @@ int main() {
                 // JUMP TO SPIDYVR, AIR VIEW EASE (November 12): the player's own.
                 key == "jump_handoff_ms" || key == "air_view_ease_ms" || key == "anim_yaw_sway_pct" ||
                 key == "turn_in_place_deg" || key.rfind("passive_", 0) == 0 || key == "movement_mode" ||
-                key == "rear_snap_ms")
+                key == "rear_snap_ms" || key == "landing_hold_ms")
                 continue;
             ++lines;
             check(at(key) < std::size(profileSettings) &&

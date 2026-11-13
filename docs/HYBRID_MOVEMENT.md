@@ -22,3 +22,7 @@ MOVEMENT MODE (NATIVE ANIMATION tab, launcher "Movement mode", `movement_mode`):
 - No facing write: the hero turns at the game's pace (about 250 deg/s standing, a run start for snaps); only the view is instant.
 - No strafe: a sideways push does not move him sideways.
 - A landing straight into a held run keeps the game's facing until the run's stick turns him (the held view covers it).
+
+## Landing view hold (Nov 12, playtest fixes)
+
+A facing hold (the landing's, a takeover's, an anim re-entry's) lasts `landing_hold_ms` (default 600; 2500 is the old give-up), 150 ms in a fight, a dodge or with the left stick held. When it times out the heading eases onto the hero over `air_view_ease_ms` (smoothstep; 0 snaps) and the forced walk-stick turn stops. Hold arrived: unchanged. R-stick and rear-snap holds keep 2.5 s. Log: `hybrid heading: facing check hold timed out (view eases onto the head) after N ms`.

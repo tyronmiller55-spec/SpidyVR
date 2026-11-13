@@ -1808,6 +1808,11 @@ void App::nativeAnimation(ImVec2 origin, ImVec2 size) {
                "this long into the air. Stay to landing: the old way (animation until you land). Flips, grip "
                "cancel, webs and walls still break at once; landing returns to the animation. Default: 500 ms.",
                S(150), [&] { tabCombo("##nativejumphandoff", Item::jumpHandoff); });
+        option("Landing view hold",
+               "HYBRID: after a landing the view stays where you were looking while Spider-Man turns to it. "
+               "How long it waits before it eases onto him (the Air view ease time); a fight or a held left "
+               "stick cuts it to 150 ms. Default: 600 ms. 2500 ms is the old hold.",
+               S(150), [&] { tabCombo("##nativelandinghold", Item::landingHold); });
         option("Hybrid speed",
                "How long 15 m/s in the air takes to switch to SpidyVR. Off disables speed takeover; "
                "webs, mid-air turns and wall runs still take over. Default: 200 ms.",

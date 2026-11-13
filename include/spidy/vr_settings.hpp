@@ -509,6 +509,11 @@ struct Values {
     // REAR SNAP TURN (HYBRID): how long the view takes for the rear snap, ms; 0
     // INSTANT (default). rear_snap_ms.
     int rearSnapMs = 0;
+    // LANDING VIEW HOLD (hybrid_movement.hpp; the 5061b4a playtest, Nov 12): how long
+    // HYBRID holds the view on what you saw while he is turned onto it after a
+    // landing, ms (cut to 150 in a fight or with the left stick held); the release
+    // eases over AIR VIEW EASE. 2500 is the old hold. 600 by default. landing_hold_ms.
+    int landingHoldMs = 600;
     // PASSIVE LEGS (leg_layers.hpp; November 12 06:18): in SpidyVR's air with
     // LEG CONTROL not engaged, the legs' spring runs with no stick, so momentum
     // moves them; this share of it shown (0 OFF). 60 by default. passive_legs_pct.
@@ -743,8 +748,10 @@ enum class Item : uint8_t {
     // November 12 (hybrid movement): MOVEMENT MODE, REAR SNAP TURN (hybrid_movement.hpp), VR CAMERA & STABILIZATION.
     movementMode,
     rearSnap,
+    // November 12 (playtest fixes): LANDING VIEW HOLD (hybrid_movement.hpp), NATIVE ANIMATION.
+    landingHold,
 };
-inline constexpr Item lastItem = Item::rearSnap;
+inline constexpr Item lastItem = Item::landingHold;
 // SLOW-MO LENGTH's last step: no time limit (until L3 toggles it off).
 inline constexpr int slowMotionEndless = 91;
 // Real seconds a full meter lasts for a SLOW-MO LENGTH value; 0 = endless.
@@ -774,7 +781,7 @@ struct Row {
     Place place{};
 };
 // Stable row/setting numbers; categories below determine presentation order.
-const std::array<Row, 155>& rows();
+const std::array<Row, 156>& rows();
 const Row* rowFor(Item);
 // camera, shooters and legs (November 11, the user: "I can't find legs or
 // camera settings in any of the menus. Make sure it's clearly labeled"): tabs

@@ -3626,13 +3626,24 @@ DWORD WINAPI run(void*) {
                         hin.driving = hybridStick.drives;
                         hin.steerable = hybridOwner.domain != hybrid_owner::Domain::vr && swingFresh &&
                                         swingState.grounded && !motion.onSurface;
+                        // LANDING VIEW HOLD: LANDING VIEW HOLD's length, cut short in a fight or with
+                        // the left stick held; the release eases over AIR VIEW EASE.
+                        hin.facingHoldSeconds = values.landingHoldMs * .001f;
+                        hin.quick = hybridStick.drives || fightLately || dodging;
+                        hin.easeSeconds = values.airViewEaseMs * .001f;
                         hybridSteerable = hin.steerable;
                         const auto ho = hybridHeading.update(hin);
                         hybridHeroTurn = ho.heroTurn;
+                        // The hold timed out: the view eases onto him, so the forced walk-stick turn
+                        // toward the old heading stops with it (it would drag the view round again).
+                        if (ho.gaveUp && ho.released == hybrid_movement::Heading::Hold::facing)
+                            turnInPlace.reset();
                         if (ho.released != hybrid_movement::Heading::Hold::none)
                             diag_log::writef("hybrid heading: %s hold %s after %d ms, heading %.0f hero %.0f",
                                              hybrid_movement::holdName(ho.released),
-                                             ho.gaveUp ? "GAVE UP (view rejoins the head)" : "arrived",
+                                             ho.gaveUp ? (ho.eased ? "timed out (view eases onto the head)"
+                                                                   : "GAVE UP (view rejoins the head)")
+                                                       : "arrived",
                                              static_cast<int>(hybridHeading.age * 1000 + .5f),
                                              hybridHeading.yaw * toDeg, hin.hero * toDeg);
                         else if (ho.gaveUp)
