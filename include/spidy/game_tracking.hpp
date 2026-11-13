@@ -465,6 +465,13 @@ class GameTrackingRig {
     void handstandSettings(handstand::Params p) {
         handstandParams_ = p;
     }
+    // THE TOUCHDOWN CATCH (handstand.hpp): SpidyVR owns him and the game
+    // reports ground this frame; the floor's height (the actor's feet).
+    void handstandTouchdown(bool ground, bool aloft, float floorY) {
+        handstandGround_ = ground;
+        handstandAloft_ = aloft;
+        handstandFloorY_ = floorY;
+    }
     void handstandVrAir(bool vrAir) {
         handstandVrAir_ = vrAir;
     }
@@ -592,7 +599,8 @@ class GameTrackingRig {
     handstand::Handstand::Out handstandOut_{};
     Quat handstandCatchTilt_{};
     float handstandDrop_{};
-    bool handstandVrAir_{}, handstandSampled_{};
+    bool handstandVrAir_{}, handstandSampled_{}, handstandGround_{}, handstandAloft_{};
+    float handstandFloorY_ = NAN;
     std::array<Vec3, 2> handstandRel_{};
     Vec3 bodyCentre_{std::numeric_limits<float>::quiet_NaN(), 0, 0};
 };

@@ -75,6 +75,7 @@
 #include "spidy/animated_air_spin.hpp"
 #include "spidy/hybrid_owner.hpp"
 #include "spidy/handstand.hpp"
+#include "spidy/aim_steady.hpp"
 #include "spidy/hybrid_handoff.hpp"
 #include "spidy/hybrid_steer.hpp"
 #include "spidy/move_haptics.hpp"
@@ -1228,6 +1229,9 @@ DWORD WINAPI run(void*) {
         float hybridAirSyncSec = 0, hybridHoldLoggedAge = 0;
         uint32_t hybridAirSyncStarts = 0;
         view_yaw_lock::Divergence viewDivergence{};
+        view_yaw_lock::ViewLimit viewLimit{}; // THE 90-DEGREE RULE
+        aim_steady::AnchorSteady aimAnchorSteady{}; // AIM STEADY (Nov 13)
+        float viewLimitCorrection = 0;
         view_yaw_lock::TurnWatch viewTurnWatch{};
         bool viewLockActive{}, fullLockGate{}, viewLockSnapped{};
         float viewLockDelta{};
@@ -3048,8 +3052,14 @@ DWORD WINAPI run(void*) {
                     rig.animatedYawOwner(
                         hybrid_steer::ownsYaw(hybridInputLocked, values.animatedModelYaw, hybridInputCrawl));
                     // HANDSTAND (H1): a catch only in SpidyVR's air (hybrid: VR owns him).
-                    rig.handstandVrAir(flipAir && (!(values.animatedHybrid && values.animatedMoves) ||
-                                                   hybridOwner.domain == hybrid_owner::Domain::vr));
+                    const bool handstandVrOwns = !(values.animatedHybrid && values.animatedMoves) ||
+                                                 hybridOwner.domain == hybrid_owner::Domain::vr;
+                    rig.handstandVrAir(flipAir && handstandVrOwns);
+                    // THE TOUCHDOWN CATCH (Nov 13): the game's ground under SpidyVR's
+                    // body this frame (before the landing hands him to the animation).
+                    rig.handstandTouchdown(handstandVrOwns && !flipAir && swingState.grounded != 0 && !onLine,
+                                           handstandVrOwns && swingState.grounded == 0 && !onLine,
+                                           std::isfinite(feet.y) ? feet.y : NAN);
                     motion = rig.update(seated::raised(controller, seatRaise), feet,
                                         {camera[8], camera[9], camera[10]}, gameplay,
                                         swingState.owned ? Vec3{0, 1, 0} : heroUp, flipAir, hold,
@@ -3062,9 +3072,14 @@ DWORD WINAPI run(void*) {
                     {
                         const auto& hs = motion.handstand;
                         if (hs.caughtNow)
-                            diag_log::writef("handstand: catch (inverted %.0f deg, eyes down %.2f m)",
+                            diag_log::writef("handstand: catch%s (inverted %.0f deg, eyes down %.2f m)",
+                                             hs.touchdownCatch ? " at the touchdown" : "",
                                              handstand::invertedDegrees(motion.flipTilt.rotate({0, 1, 0})),
                                              motion.handstandDrop);
+                        else if (hs.touchdownNow && hs.refused != handstand::Refusal::none)
+                            diag_log::writef("handstand: no catch at the touchdown: %s (inverted %.0f deg, "
+                                             "spin %.1f rad/s, palms %.2f m over the floor)",
+                                             handstand::refusalName(hs.refused), hs.inverted, hs.spin, hs.palmGap);
                         handstandLogAge += std::isfinite(frame.seconds) ? std::clamp(frame.seconds, 0.f, .1f) : 0.f;
                         if (hs.state != handstandStateLogged ||
                             (hs.state == handstand::State::balance && handstandLogAge >= .5f)) {
@@ -3867,7 +3882,9 @@ DWORD WINAPI run(void*) {
                         lock.heroYaw = std::hypot(body[8], body[10]) > .2f
                                            ? hybrid_handoff::actorLookYaw({body[8], body[9], body[10]})
                                            : NAN; // no facing: no sway term
-
+                        // THE 90-DEGREE RULE: last frame's hold until this frame's (below).
+                        if (lock.on && std::isfinite(viewLimitCorrection))
+                            lock.yaw = stable_yaw::wrap(lock.yaw + viewLimitCorrection);
                         view_yaw_lock::publish(lock);
                     }
                     // H1: the hands' velocities, in tracking space.
@@ -3925,6 +3942,15 @@ DWORD WINAPI run(void*) {
                         kin.headValid = finite(kin.head.position);
                         kin.viewYaw = motion.swing.trackingYaw;
                     }
+                    // AIM STEADY (aim_steady.hpp, Nov 13): the webs' line (and the
+                    // marker on it) off the camera's quick motion - the anchor the
+                    // hands are mapped onto, its bob, nod, roll and sway.
+                    Quat aimSteadyTurn{};
+                    if (armView.valid)
+                        aimSteadyTurn = aimAnchorSteady.update(arm_frame::toGame(armView, armView.reference).orientation,
+                                                               std::isfinite(frame.seconds) ? frame.seconds : 0.f);
+                    else
+                        aimAnchorSteady.reset();
                     for (unsigned i = 0; i < 2; ++i) {
                         if (armView.valid && frame.hands[i].valid && validTrackedPose(frame.hands[i].grip)) {
                             // M2: led by the SAME lead and velocity the glove gets in the
@@ -3933,6 +3959,8 @@ DWORD WINAPI run(void*) {
                             led.position = led.position + arm_frame::clampSpeed(armVelocity[i].value()) * armLead;
                             kin.grip[i] = arm_frame::toGame(armView, led);
                             kin.aim[i] = webShooter(kin.grip[i], i);
+                            kin.aim[i].orientation = web_aim::unitOr(aimSteadyTurn * kin.aim[i].orientation,
+                                                                     kin.aim[i].orientation);
                             kin.handValid[i] = true;
                         } else if (motion.active && motion.swing.hands[i].tracked) {
                             kin.grip[i] = motion.grips[i];
@@ -8717,15 +8745,27 @@ DWORD WINAPI run(void*) {
                             lock.yaw = viewLock.yaw;
                             lock.sway = sway;
                             lock.heroYaw = heroYawNow;
+                            // THE 90-DEGREE RULE (view_yaw_lock::ViewLimit): the view
+                            // (shown + headset) held within 90 degrees of the hero, this
+                            // frame only, on the published yaw every anchor reads.
+                            float hmdNow = 0;
+                            if (validTrackedPose(frame.head))
+                                hmdNow = stable_yaw::wrap(
+                                    hybrid_handoff::lookYaw(screenAhead(frame.head, 0).orientation.rotate({0, 0, -1})) -
+                                    hybrid_handoff::lookYaw(animHeadRef.orientation.rotate({0, 0, -1})));
+                            viewLimitCorrection = 0;
+                            if (viewLockActive && boneOk && std::isfinite(heroYawNow)) {
+                                viewLimitCorrection = viewLimit.correction(
+                                    stable_yaw::wrap(view_yaw_lock::shownYaw(lock, boneYaw) + hmdNow), heroYawNow);
+                                lock.yaw = stable_yaw::wrap(lock.yaw + viewLimitCorrection);
+                            } else {
+                                viewLimit.reset();
+                            }
                             view_yaw_lock::publish(lock);
                             if (viewLockActive && boneOk) {
                                 // Divergence: the view (lock + sway + headset) against the
                                 // hero's facing and against the old view (head bone + headset).
-                                float hmd = 0;
-                                if (validTrackedPose(frame.head))
-                                    hmd = stable_yaw::wrap(
-                                        hybrid_handoff::lookYaw(screenAhead(frame.head, 0).orientation.rotate({0, 0, -1})) -
-                                        hybrid_handoff::lookYaw(animHeadRef.orientation.rotate({0, 0, -1})));
+                                const float hmd = hmdNow;
                                 const float shown = view_yaw_lock::shownYaw(lock, boneYaw);
                                 const float viewYaw = stable_yaw::wrap(shown + hmd);
                                 viewDivergence.add(frame.seconds, viewYaw - heroYawNow, shown - boneYaw);
@@ -8765,6 +8805,12 @@ DWORD WINAPI run(void*) {
                                         turnInPlace.done, turnInPlace.gaveUp, turnInPlace.wrongWays,
                                         hybrid_movement::modeName(moveMode), hybridGate.snaps, hybridHeading.arrived,
                                         hybridHeading.gaveUp);
+                                    if (viewLimit.held)
+                                        diag_log::writef("view limit: held the view at 90 deg off the hero %u frames "
+                                                         "(largest excess %.0f deg)",
+                                                         viewLimit.held, viewLimit.worst * toDeg);
+                                    viewLimit.held = 0;
+                                    viewLimit.worst = 0;
                                     viewDivergence.reset();
                                 }
                             }

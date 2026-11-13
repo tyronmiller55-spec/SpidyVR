@@ -34,6 +34,7 @@ Mat4 head(float yaw, float pitch, float roll, Vec3 at = {1, 2, 3}) {
 }
 } // namespace
 
+static float wrapf(float a) { return spidy::stable_yaw::wrap(a); }
 int main() {
     // The shown yaw.
     {
@@ -336,6 +337,45 @@ int main() {
             b = b || item == Item::turnInPlace;
         }
         check(a && b, "both on VR CAMERA & STABILIZATION");
+    }
+    // THE 90-DEGREE RULE (Nov 13): the view never more than 90 off the hero.
+    {
+        const float d = 3.14159265f / 180;
+        ViewLimit v;
+        check(v.correction(30 * d, 0) == 0.f && v.held == 0, "inside 90: untouched");
+        check(std::abs(v.correction(-89 * d, 0)) < 1e-6f, "89 the other way: untouched");
+        v.reset();
+        const float c = v.correction(130 * d, 0);
+        check(std::abs(c + 40 * d) < 1e-4f && v.held == 1, "130 off: held at 90 (40 off the yaw)");
+        // The gap growing through 180 keeps its side (no flip across).
+        ViewLimit g;
+        float worstJump = 0, before = 0;
+        for (int a = 0; a <= 260; a += 5) {
+            const float view = wrapf(a * d);
+            const float shown = wrapf(view + g.correction(view, 0));
+            if (a)
+                worstJump = std::max(worstJump, std::abs(wrapf(shown - before)));
+            before = shown;
+            check(std::abs(wrapf(shown)) <= 90 * d + 1e-4f, "never past 90");
+        }
+        check(worstJump < 5.1f * d && std::abs(before - 90 * d) < 1e-3f,
+              "a gap swept through 180 stays held on its own side");
+        // Headset turned back: released at once (no memory of the hold).
+        ViewLimit r;
+        r.correction(150 * d, 0);
+        check(r.correction(60 * d, 0) == 0.f, "back under 90: no correction");
+        // The hero turning away (a fight): the view follows him at 90.
+        ViewLimit h;
+        float shown = 0;
+        for (int a = 0; a <= 170; a += 10) {
+            const float hero = wrapf(-a * d);
+            shown = wrapf(0 + h.correction(0, hero));
+            check(std::abs(wrapf(shown - hero)) <= 90 * d + 1e-4f, "the hero turning away: the view kept within 90");
+        }
+        check(std::abs(wrapf(shown + 80 * d)) < 1e-3f, "and follows him");
+        // Unknown yaw: nothing, and the history starts again.
+        ViewLimit n;
+        check(n.correction(NAN, 0) == 0.f && n.correction(0, NAN) == 0.f && !n.primed, "unknown: none");
     }
     std::printf("view yaw lock: %d checks passed\n", passed);
     return 0;

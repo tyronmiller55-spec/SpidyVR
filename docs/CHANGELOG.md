@@ -3,6 +3,15 @@
 Every build, newest first, with what changed, why, and what was measured.
 Per-check results are in [VALIDATION.md](VALIDATION.md).
 
+## Nov 13 playtest fixes: the 90-degree rule, aim steady, the touchdown catch (from 99b8154)
+
+Session game-vr-20261113-014127 (99b8154, 54 min): 0 handstand lines in 358 landings out of SpidyVR's air; the view 90+ degrees off the hero in 473 of 2,273 view samples (21%; 152 + 55 in fights, 129 on the ground; 72 mostly the headset itself, up to 137 degrees); markers riding the camera and every hand tremor.
+
+- **THE 90-DEGREE RULE (t90u):** the view (shown yaw + headset) is never more than 90 degrees off the hero's facing. The excess comes off the published anchor yaw for the frame only (`view_yaw_lock::ViewLimit`), so eyes, hand map and arm anchor keep it alike and nothing feeds back into the heading, the stick or the rear snap. Unwrapped against the frame before, so a gap through 180 keeps its side. Log: `view limit: held ... frames`.
+- **AIM STEADY (t90u):** in the animation the hands are mapped onto the head bone's anchor (its nod, roll, bob and sway), so the webs' line and its marker swung with the camera. The line is now turned onto a slow copy of the anchor (0.2 s, at most 5 degrees behind, a jump over 25 degrees taken at once; `aim_steady.hpp`): the camera's quick motion no longer moves it, a wall's tilt or a turn still does. Webs and markers share the line.
+- **Marker filter v3 (t90u):** the 1-euro filter's cutoff rises only past 0.35 rad/s (was 0.06) at 25 Hz per rad/s (60), and a still hand's last 0.2 degrees is held: a 0.5-degree 8 Hz tremor goes from 0.68 to 0.05 degrees on the marker.
+- **HANDSTAND touchdown catch (t90u):** the game's upright capsule touches the floor first, and that frame the swing is no longer airborne, so the catch (which needed SpidyVR's air) never ran and the landing handed him to the crouched landing. A catch is now also taken at the game's touchdown within 0.25 s of SpidyVR's air (palms within 1 m of the floor; 0.6 s to bring them down, 12 cm counts as on it). Catch spin limit 5 rad/s (was 3). Every touchdown that does not catch logs why: `handstand: no catch at the touchdown: <reason> (inverted, spin, palms)`.
+
 ## EngineBot's 01-03 on HYBRID v2 (feat/hybrid-v2-handstand)
 
 - **01 movement cleanup** (EngineBot, rebased): RUN CURVE on, NATIVE RUN AT through the curve (sprint at 70% physical tilt), EARLY JUMP QUICK TAP, StickPush aside .35 / hold .20 s, one-time `movement_defaults` migration. Cleanup items 3 (hybrid view tau) and 4 (ANIMATED HEAD Level on the ground) stay dropped: HYBRID's view yaw is the heading (no tau) and its head lock needs FULL.

@@ -1157,7 +1157,11 @@ Vec3 AimMarkerMotion::aim(Vec3 direction, Quat turn) {
         const float cutoff = minCutoffHz + speedCutoff * std::max(length(speed_) - speedDeadband, 0.f);
         // Along the great circle (spherical_aim::toward), so a marker swung
         // behind or over the head eases round, never through a near-zero mean.
-        steady_ = spherical_aim::toward(steady_, raw, share(cutoff));
+        // v3: the last holdDegrees of the way is held (a still hand's tremor).
+        const float off = spherical_aim::angleBetween(steady_, raw);
+        const float hold = holdDegrees * pi / 180;
+        if (off > hold)
+            steady_ = spherical_aim::toward(steady_, raw, share(cutoff) * (off - hold) / off);
     }
     return turn.rotate(steady_);
 }

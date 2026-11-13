@@ -1,3 +1,4 @@
+#include "spidy/aim_steady.hpp"
 #include "spidy/lab_world.hpp"
 #include "spidy/native_view.hpp"
 #include "spidy/game_tracking.hpp"
@@ -8838,6 +8839,65 @@ int main() {
         // Bad input passes through, untouched.
         const Vec3 bad{0,std::numeric_limits<float>::quiet_NaN(),0};
         check(!finite(motion.aim(bad,0)),"a bad direction was steadied");
+    });
+    test("aim marker motion v3: a 0.5-degree 8 Hz hand vibration hardly moves the marker", [] {
+        constexpr float dt=1.f/72,degree=3.1415927f/180;
+        auto ray=[](float yaw){return Quat::yaw(yaw).rotate({0,0,-1});};
+        AimMarkerMotion motion;
+        float lowest=1e9f,highest=-1e9f;
+        for(int i=0;i<300;++i){
+            motion.begin(1'000'000'000+static_cast<int64_t>(i*dt*1e9));
+            const Vec3 d=motion.aim(ray(.5f*degree*std::sin(2*3.1415927f*8*i*dt)),0);
+            if(i>=100){const float yaw=std::atan2(-d.x,-d.z);lowest=std::min(lowest,yaw);highest=std::max(highest,yaw);}
+        }
+        check(highest-lowest<.1f*degree,"a hand vibration moved the marker");
+        // A slow, deliberate aim (17 degrees a second) is followed within half a degree.
+        motion.reset();
+        Vec3 last{};float yaw=0;
+        for(int i=0;i<60;++i){
+            motion.begin(3'000'000'000+static_cast<int64_t>(i*dt*1e9));
+            yaw=.3f*i*dt;
+            last=motion.aim(ray(yaw),0);
+        }
+        check(std::acos(std::clamp(dot(last,ray(yaw)),-1.f,1.f))<.6f*degree,"a slow aim lagged");
+    });
+    test("aim steady: the camera's bob and nod no longer swing the webs' line; a lasting tilt comes through", [] {
+        using aim_steady::AnchorSteady;
+        constexpr float dt=1.f/72,degree=3.1415927f/180;
+        const auto angle=[](Vec3 a,Vec3 b){return std::atan2(length(cross(a,b)),dot(a,b));};
+        const Vec3 held=normalized(Vec3{.1f,-.05f,-1}); // the hand still, relative to the anchor's reference
+        AnchorSteady s;
+        float worst=0,raw=0;
+        for(int i=0;i<300;++i){
+            // The head bone's nod (3 degrees at 2 Hz) and roll (2 degrees at 1 Hz) on a heading of 0.4.
+            const float t=i*dt;
+            const Quat anchor=Quat::yaw(.4f)*Quat::around({1,0,0},3*degree*std::sin(2*3.1415927f*2*t))*
+                              Quat::around({0,0,1},2*degree*std::sin(2*3.1415927f*t));
+            const Vec3 world=anchor.rotate(held);
+            const Vec3 steadied=s.update(anchor,dt).rotate(world);
+            if(i>=72){worst=std::max(worst,angle(steadied,Quat::yaw(.4f).rotate(held)));
+                      raw=std::max(raw,angle(world,Quat::yaw(.4f).rotate(held)));}
+        }
+        check(raw>2.5f*degree&&worst<1.6f*degree,"the camera's motion still swung the line");
+        // A lasting tilt (onto a wall, 90 degrees over a second): followed, at most 5 degrees behind, there soon.
+        AnchorSteady w;
+        float lag=0;Quat anchor{};
+        for(int i=0;i<144;++i){
+            const float k=std::min(i/72.f,1.f);
+            anchor=Quat::around({1,0,0},k*90*degree);
+            const Vec3 steadied=w.update(anchor,dt).rotate(anchor.rotate(held));
+            lag=std::max(lag,angle(steadied,anchor.rotate(held)));
+        }
+        check(lag<5.01f*degree,"a lasting tilt lagged more than 5 degrees");
+        check(angle(w.update(anchor,dt).rotate(anchor.rotate(held)),anchor.rotate(held))<.1f*degree,"the tilt never arrived");
+        // A snap turn (30 degrees in one frame): taken at once.
+        const Quat snapped=Quat::yaw(30*degree)*anchor;
+        check(angle(w.update(snapped,dt).rotate(snapped.rotate(held)),snapped.rotate(held))<1e-4f,"a snap turn lagged");
+        // Bad input and the first frame: the identity.
+        AnchorSteady f;
+        const Quat first=f.update(Quat::yaw(1.f),dt);
+        check(first.w==1&&first.x==0&&first.y==0&&first.z==0,"the first frame turned the line");
+        check(f.update(Quat{0,0,0,0},dt).w==1&&!f.primed(),"a bad anchor turned the line");
     });
     test("aim marker motion fades markers in and out and eases them to new places", [] {
         constexpr float dt=1.f/72;

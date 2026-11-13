@@ -80,8 +80,12 @@ int main() {
         check(!upright.update(u, on()).caughtNow, "under 100 degrees: no catch");
         Handstand spin;
         auto sp = inverted();
-        sp.angular = {4, 0, 0};
+        sp.angular = {6, 0, 0};
         check(!spin.update(sp, on()).caughtNow, "a fast spin is a handspring (H2): no catch");
+        Handstand slower;
+        auto sl = inverted();
+        sl.angular = {4, 0, 0};
+        check(slower.update(sl, on()).caughtNow, "4 rad/s catches (the limit is 5 since Nov 13)");
         Handstand one;
         auto op = inverted();
         op.floorPalms = 1;
@@ -299,6 +303,91 @@ int main() {
               "spidy_vr.ini keys");
         const Values read = withTabOnly(Values{}, "handstand=1\nhandstand_height_cm=500\n");
         check(read.handstand && read.handstandHeightCm == 140, "read, clamped");
+    }
+    // THE TOUCHDOWN CATCH (Nov 13 playtest: 358 landings, no handstand line):
+    // the game's upright capsule touches first and the frame it does vrAir is
+    // false - the catch is taken there, the palms near the floor counted.
+    {
+        const auto touchdown = [] {
+            auto in = inverted();
+            in.vrAir = false;
+            in.touchdown = true;
+            in.floorPalms = 0;
+            in.floorKnown = true;
+            in.floorY = 0;
+            in.palms[0] = {-.2f, .5f, 0};
+            in.palms[1] = {.2f, .5f, 0};
+            return in;
+        };
+        const auto fly = [](Handstand& h) {
+            auto a = inverted();
+            a.floorPalms = 0; // no ray-confirmed floor in the air
+            a.floorKnown = true;
+            a.floorY = 0;
+            a.palms[0] = {-.2f, -.5f, 0}; // under the actor's feet: no floor in the air
+            a.palms[1] = {.2f, -.5f, 0};
+            return h.update(a, on());
+        };
+        Handstand h;
+        check(!fly(h).caughtNow, "in the air, palms under the actor's feet are no floor");
+        const auto o = h.update(touchdown(), on());
+        check(o.caughtNow && o.touchdownCatch && o.touchdownNow && o.holdVr && o.refused == Refusal::none,
+              "inverted at the touchdown: the catch, held for SpidyVR");
+        // Palms within floorReach while catching: balance.
+        auto down = touchdown();
+        down.palms[0].y = down.palms[1].y = .08f;
+        Handstand::Out b{};
+        for (int i = 0; i < 30; ++i)
+            b = h.update(down, on());
+        check(b.state == State::balance, "the palms brought down onto the floor: balance");
+
+        Handstand high;
+        fly(high);
+        high.update(touchdown(), on());
+        auto stay = touchdown();
+        Handstand::Out m{};
+        int frames = 0;
+        for (; frames < 200 && m.exitNow == Exit::none; ++frames)
+            m = high.update(stay, on());
+        check(m.exitNow == Exit::missed && frames * dt > .55f && frames * dt < .7f,
+              "palms left high after a touchdown catch: missed after the settle (0.6 s)");
+
+        Handstand late;
+        fly(late);
+        auto idle = touchdown();
+        idle.touchdown = false;
+        for (int i = 0; i < 30; ++i) // 0.33 s of neither air nor ground
+            late.update(idle, on());
+        const auto l = late.update(touchdown(), on());
+        check(!l.caughtNow && !l.touchdownNow, "a touchdown long after SpidyVR's air: no catch");
+
+        Handstand up;
+        fly(up);
+        auto u = touchdown();
+        u.bodyUp = normalized(Vec3{1, .3f, 0});
+        const auto ur = up.update(u, on());
+        check(!ur.caughtNow && ur.touchdownNow && ur.refused == Refusal::upright && ur.inverted < 80,
+              "upright at the touchdown: no catch, the reason and the angle reported");
+        Handstand fast;
+        fly(fast);
+        auto f = touchdown();
+        f.angular = {7, 0, 0};
+        const auto fr = fast.update(f, on());
+        check(!fr.caughtNow && fr.refused == Refusal::spin && fr.spin > 6.9f, "spinning at the touchdown: refused");
+        Handstand far;
+        fly(far);
+        auto fa = touchdown();
+        fa.palms[0].y = fa.palms[1].y = 1.4f;
+        const auto ar = far.update(fa, on());
+        check(!ar.caughtNow && ar.refused == Refusal::palmsHigh && ar.palmGap > 1.3f,
+              "palms over a metre up at the touchdown: refused");
+        Handstand dis;
+        fly(dis);
+        const auto dr = dis.update(touchdown(), Params{});
+        check(!dr.caughtNow && dr.refused == Refusal::disabled, "off: refused as disabled");
+        // Once per touchdown: the next ground frame reports nothing new.
+        const auto again = dis.update(touchdown(), Params{});
+        check(!again.touchdownNow, "the touchdown reports once");
     }
     std::printf("handstand: %d checks passed\n", passed);
     return 0;

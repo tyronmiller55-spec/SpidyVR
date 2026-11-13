@@ -14,6 +14,20 @@
 //  - fall: the DCM out of the support for fallSeconds, or a lean over
 //    fallLeanDegrees - he tips over;
 //  - grip, tracking lost, disabled.
+//
+// THE TOUCHDOWN CATCH (Nov 13 playtest, 99b8154: 358 landings out of
+// SpidyVR's air, no handstand line at all): the game's capsule is upright, so
+// it touches the floor with its feet while the drawn body is still inverted
+// above it, and the palms rarely reach a ray-confirmed floor first. The frame
+// it touches, `vrAir` is already false (the swing is not airborne) and the
+// landing hands him to the animation - the crouched landing. So a catch is
+// also taken on the game's touchdown (`touchdown`: SpidyVR still owns him and
+// the game reports ground) within touchdownGrace of SpidyVR's air, the palms
+// counted on the floor at `floorY` when within touchdownReach of it (the eyes'
+// drop then brings them down); while catching, palms within floorReach of
+// `floorY` count as on it, and the catch has touchdownSettle to put them there.
+// Each touchdown out of SpidyVR's air with HANDSTAND on reports why there was
+// no catch (Out::refused), for the log.
 // While it catches, balances and for leavingSeconds after, SpidyVR keeps the
 // body on the ground (holdVr: hybrid_owner::Frame::handSupport), so the
 // landing rule does not hand him to the animation mid-handstand.
@@ -37,11 +51,16 @@ struct Params {
     bool assist = true;     // off: the centre of pressure stays mid-palms (no steering)
     float palmRadius = .06f, margin = .06f;
     float catchDegrees = 100; // inverted at least this far to catch
-    float catchSpin = 3.f;    // rad/s; faster is a handspring (H2): no catch
+    float catchSpin = 5.f;    // rad/s; faster is a handspring (H2): no catch (3 before Nov 13)
     float fallSeconds = .12f, fallLeanDegrees = 35;
     float pushSpeed = .6f, pushGain = 2.2f, pushWindow = .05f; // m/s into the floor
     float pushMaxNormal = 7.f, pushMaxAcross = 4.f;
     float catchGrace = .15f, leavingSeconds = .3f;
+    // THE TOUCHDOWN CATCH (above).
+    float touchdownGrace = .25f;  // s after SpidyVR's air a touchdown can still catch
+    float touchdownReach = 1.f;   // m: palms this far over the floor at the touchdown count
+    float floorReach = .12f;      // m: palms this close to the floor count as on it
+    float touchdownSettle = .6f;  // s a touchdown catch has to bring the palms down
     float eyeDrop = .9f;    // the inverted eyes' drop toward the floor, m
     float stickLean = .08f; // m the left stick moves the balance's aim
 };
@@ -61,6 +80,28 @@ template <class V> Params paramsOf(const V& v) {
 
 enum class State : uint8_t { off, catching, balance, leaving };
 enum class Exit : uint8_t { none, push, stepDown, fall, grip, tracking, disabled, missed };
+// Why a touchdown out of SpidyVR's air did not catch (the log's reason).
+enum class Refusal : uint8_t { none, disabled, untracked, grip, notArmed, upright, spin, palmsHigh };
+inline const char* refusalName(Refusal r) {
+    switch (r) {
+    case Refusal::disabled:
+        return "handstand off or REALISTIC FLIPS off";
+    case Refusal::untracked:
+        return "head or a hand untracked";
+    case Refusal::grip:
+        return "a grip held";
+    case Refusal::notArmed:
+        return "palms not lifted since the last exit";
+    case Refusal::upright:
+        return "not inverted enough";
+    case Refusal::spin:
+        return "spinning too fast";
+    case Refusal::palmsHigh:
+        return "palms too far over the floor";
+    default:
+        return "none";
+    }
+}
 inline const char* stateName(State s) {
     switch (s) {
     case State::catching:
@@ -239,6 +280,12 @@ class Handstand {
         Vec3 velocity{};      // the body's, world m/s
         float pushInto{};     // palms' tracked speed into the floor, m/s (+ into)
         Vec3 aim{};           // the left stick's aim for the balance (level, m, from the support's centre)
+        // THE TOUCHDOWN CATCH: SpidyVR owns him and the game reports ground
+        // this frame; the floor's height under him (the actor's feet).
+        bool touchdown{};
+        bool aloft{}; // SpidyVR owns him off the ground (vrAir or not): the grace's start
+        bool floorKnown{};
+        float floorY{};
     };
     struct Out {
         State state{};
@@ -250,6 +297,12 @@ class Handstand {
         Vec3 releaseSpin{}; // the spin the flip goes on with
         Balance::Out balance{};
         Vec3 lean{}; // the CoM's level offset from the support's centre
+        // A touchdown out of SpidyVR's air this frame (first ground frame),
+        // and why it did not catch (none: it caught, or no touchdown).
+        bool touchdownNow{};
+        bool touchdownCatch{}; // this frame's catch was the touchdown's
+        Refusal refused{};
+        float inverted{}, spin{}, palmGap{}; // at the touchdown: degrees, rad/s, m (the higher palm)
     };
     Out update(const Input& in, const Params& p) {
         Out out;
@@ -259,17 +312,54 @@ class Handstand {
         support_.b = in.palms[1];
         support_.radius = p.palmRadius + p.margin;
         const float pushed = push_.update(dt, in.pushInto, p.pushWindow);
-        const bool both = (in.floorPalms & 3u) == 3u;
+        // THE TOUCHDOWN CATCH: how long since SpidyVR's air, the touchdown's
+        // first frame, and the palms' heights over the floor.
+        airAge_ = in.vrAir || in.aloft ? 0.f : std::min(airAge_ + dt, 10.f);
+        const bool touchdown = in.touchdown && !in.vrAir && airAge_ <= p.touchdownGrace;
+        const bool touchdownNow = touchdown && !touchdownBefore_;
+        touchdownBefore_ = in.touchdown && !in.vrAir;
+        unsigned palmsDown = in.floorPalms & 3u;
+        float palmGap = -10.f;
+        // Only at a touchdown, or in a touchdown's catch: in the air the actor's
+        // feet are no floor.
+        const bool nearFloor = state_ == State::off ? touchdown : touchdownCaught_;
+        if (in.floorKnown && std::isfinite(in.floorY)) {
+            for (unsigned i = 0; i < 2; ++i) {
+                const float gap = finite(in.palms[i]) ? in.palms[i].y - in.floorY : 1e9f;
+                palmGap = std::max(palmGap, gap);
+                const float reach = state_ == State::off ? p.touchdownReach : p.floorReach;
+                if (nearFloor && gap <= reach)
+                    palmsDown |= 1u << i;
+            }
+        }
+        const bool both = (palmsDown & 3u) == 3u;
         // After an exit a new catch waits for the palms to come off the floor.
-        if (!in.floorPalms)
+        if (!palmsDown)
             armed_ = true;
+        const float spinNow = finite(in.angular) ? length(in.angular) : 0.f;
+        out.touchdownNow = touchdownNow && state_ == State::off;
+        if (out.touchdownNow) {
+            out.inverted = invertedDegrees(in.bodyUp);
+            out.spin = spinNow;
+            out.palmGap = palmGap;
+            out.refused = !p.enabled                        ? Refusal::disabled
+                          : !in.tracked                     ? Refusal::untracked
+                          : in.grip                         ? Refusal::grip
+                          : !armed_                         ? Refusal::notArmed
+                          : out.inverted < p.catchDegrees   ? Refusal::upright
+                          : spinNow > p.catchSpin           ? Refusal::spin
+                          : !both                           ? Refusal::palmsHigh
+                                                            : Refusal::none;
+        }
         switch (state_) {
         case State::off: {
-            if (!p.enabled || !in.vrAir || !in.tracked || in.grip || !both || !armed_)
+            if (!p.enabled || !(in.vrAir || touchdown) || !in.tracked || in.grip || !both || !armed_)
                 break;
-            const float spin = finite(in.angular) ? length(in.angular) : 0.f;
+            const float spin = spinNow;
             if (invertedDegrees(in.bodyUp) < p.catchDegrees || spin > p.catchSpin)
                 break;
+            touchdownCaught_ = !in.vrAir;
+            out.touchdownCatch = touchdownCaught_;
             // The CoM along the body's feet from the palms' centre.
             const Vec3 feetWay = finite(in.bodyUp) ? -normalized(in.bodyUp) : Vec3{0, 1, 0};
             const Vec3 c = support_.centre();
@@ -293,11 +383,12 @@ class Handstand {
                 why = Exit::tracking;
             else if (in.grip)
                 why = Exit::grip;
-            else if (pushed > p.pushSpeed && in.floorPalms)
+            else if (pushed > p.pushSpeed && palmsDown)
                 why = Exit::push;
-            else if (!in.floorPalms && state_ == State::catching && age_ > p.catchGrace)
+            else if (!palmsDown && state_ == State::catching &&
+                     age_ > (touchdownCaught_ ? p.touchdownSettle : p.catchGrace))
                 why = Exit::missed;
-            else if (!in.floorPalms && state_ == State::balance)
+            else if (!palmsDown && state_ == State::balance)
                 why = Exit::stepDown;
             if (why == Exit::none) {
                 if (state_ == State::catching && age_ >= p.catchGrace && both)
@@ -321,6 +412,7 @@ class Handstand {
                 state_ = State::leaving;
                 age_ = 0;
                 armed_ = false;
+                touchdownCaught_ = false;
             }
             break;
         }
@@ -355,7 +447,9 @@ class Handstand {
     State state_{};
     Exit exit_{};
     bool armed_ = true;
+    bool touchdownBefore_{}, touchdownCaught_{};
     float age_{};
+    float airAge_ = 10.f;
     Balance balance_{};
     Balance::Out last_{};
     Push push_{};

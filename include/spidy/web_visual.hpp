@@ -269,7 +269,14 @@ void appendAimMarker(std::vector<Vertex>& out, const AimMarker& marker, Vec3 vie
 // switching at once.
 class AimMarkerMotion {
   public:
-    static constexpr float minCutoffHz = 1, speedCutoff = 60, speedDeadband = .06f, speedCutoffHz = 4;
+    // v3 (Nov 13, "too sensitive, picking up every little hand vibration"):
+    // the cutoff rises only past 0.35 rad/s (20 deg/s; a tremor's 0.5 degrees at
+    // 8 Hz stays under it, was 0.06) and more gently (25 Hz per rad/s, was 60),
+    // and a still hand's last 0.2 degrees is no motion at all (holdDegrees).
+    // A 0.5-degree 8 Hz tremor: 0.68 -> 0.05 degrees on the marker; a 2 rad/s
+    // sweep still under 0.6 degrees behind.
+    static constexpr float minCutoffHz = 1, speedCutoff = 25, speedDeadband = .35f, speedCutoffHz = 4;
+    static constexpr float holdDegrees = .2f;
     static constexpr float fadeInSeconds = .04f, lockSeconds = .12f, fadeOutSeconds = .08f;
     // v2 (t86u): a depth change or a target switch glides (was .03 / .035 s, near a cut).
     static constexpr float distanceSeconds = .08f, targetSeconds = .07f, gapSeconds = .25f;

@@ -490,4 +490,53 @@ struct TurnWatch {
     }
 };
 
+// THE 90-DEGREE RULE (the user, Nov 13: "a hard, global restriction about the
+// head turning past 90 in either way. It should never happen"). The view the
+// player sees (the shown yaw + the headset's own yaw) never points more than
+// limitDegrees off the hero's facing. Whatever made the gap - the headset
+// turned, the heading held while the game turned him (a fight, a landing, a
+// free run, a rear snap's turn) - the excess comes off the anchors' yaw for
+// this frame only:
+//   d = unwrap(shown + hmd - hero), c = clamp(d, -L, L) - d, published yaw += c
+// Nothing reads the correction back (the heading, the stick, the turn, the
+// hybrid gaze keep theirs), so it cannot feed a loop: the moment the gap is
+// back under L, c is 0 again. d is unwrapped against the frame before, so a
+// gap crossing 180 keeps its side and never flips the view across. The eyes,
+// the hand map and the arms' anchor read the published yaw, so all three keep
+// the same rule. SpidyVR's own air (the rig's body under the headset) needs
+// none: the lock is off there.
+struct ViewLimit {
+    static constexpr float limitDegrees = 90.f;
+    float last = 0;   // the gap before it was held, radians (unwrapped)
+    bool primed = false;
+    unsigned held = 0; // frames held at the limit (for the log)
+    float worst = 0;   // the largest excess held, radians (for the log)
+    // The correction (radians) for this frame's view and hero yaw; 0 when
+    // either is unknown (and the history starts again).
+    float correction(float viewYaw, float heroYaw) {
+        if (!std::isfinite(viewYaw) || !std::isfinite(heroYaw)) {
+            primed = false;
+            return 0.f;
+        }
+        const float raw = wrap(viewYaw - heroYaw);
+        float d = primed ? last + wrap(raw - last) : raw;
+        // Two turns away is the same gap: keep it within one turn of zero.
+        if (std::abs(d) > 2 * 3.14159265f)
+            d = raw;
+        last = d;
+        primed = true;
+        const float limit = limitDegrees * degrees;
+        const float c = std::clamp(d, -limit, limit) - d;
+        if (c != 0.f) {
+            ++held;
+            worst = std::max(worst, std::abs(c));
+        }
+        return c;
+    }
+    void reset() {
+        primed = false;
+        last = 0;
+    }
+};
+
 } // namespace spidy::view_yaw_lock

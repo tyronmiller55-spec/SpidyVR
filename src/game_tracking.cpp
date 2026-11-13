@@ -1050,6 +1050,10 @@ GameMotionFrame GameTrackingRig::update(const XrFrame& f, Vec3 feet, Vec3 gameFo
         in.seconds = dt;
         // FLIPS IN COMBAT off and a fight on: no catch (Realistic Flips turns nothing then).
         in.vrAir = handstandVrAir_ && autoSettings_.enabled && !(flight_.fighting && !autoSettings_.inCombat);
+        in.touchdown = handstandGround_ && autoSettings_.enabled && !(flight_.fighting && !autoSettings_.inCombat);
+        in.aloft = handstandAloft_;
+        in.floorKnown = std::isfinite(handstandFloorY_);
+        in.floorY = in.floorKnown ? handstandFloorY_ : 0.f;
         in.tracked = validTrackedPose(f.head) && handValid(f.hands[0]) && handValid(f.hands[1]);
         in.grip = (handValid(f.hands[0]) && f.hands[0].squeeze > .6f) ||
                   (handValid(f.hands[1]) && f.hands[1].squeeze > .6f);
