@@ -139,6 +139,99 @@ int main() {
             o = m2.update(in, noCrouch);
         check(o.layer == Layer::passive && o.crouchWeight == 0, "AIR CROUCH off: never");
     }
+    // AIR CROUCH FLICKER (the 5061b4a playtest: 41% of 523 crouches ended inside 0.35 s): a
+    // minimum on-time, exits that have to last, and a fall start above -5.
+    {
+        auto calm = [&] {
+            Input in = air();
+            in.crouch.upDot = 1;
+            in.crouch.vy = 0;
+            in.crouch.spin = 0;
+            return in;
+        };
+        // The fall's start is higher than its stop: -6 m/s neither starts nor, once on, stops one.
+        CrouchInput f;
+        f.upDot = 1;
+        f.airSeconds = .5f;
+        f.vy = -6;
+        check(!crouchWanted(f, false) && crouchWanted(f, true),
+              "-6 m/s: not in (above -5 only), stays (out at -7)");
+        f.vy = -4.5f;
+        check(crouchWanted(f, false), "-4.5 m/s: in");
+        // Crouch on, then a spin spike of a few frames: it stays.
+        Mixer m;
+        Output o;
+        for (int i = 0; i < 60; ++i)
+            o = m.update(calm(), set);
+        check(o.crouchOn, "the crouch is on");
+        Input spike = calm();
+        spike.crouch.spin = 4;
+        int offs = 0;
+        for (int i = 0; i < 6; ++i) // 67 ms of spin
+            offs += !m.update(spike, set).crouchOn;
+        check(offs == 0, "a spin spike of 67 ms (under the exit's 0.12 s) does not drop it");
+        o = m.update(calm(), set);
+        check(o.crouchOn, "and the spike is forgotten when it ends");
+        for (int i = 0; i < 6; ++i)
+            m.update(spike, set);
+        o = m.update(calm(), set);
+        check(o.crouchOn, "a second spike after a calm frame starts the exit's clock again");
+        // A lasting reason: gone after the exit time, once the minimum has passed.
+        Mixer held;
+        for (int i = 0; i < 60; ++i)
+            held.update(calm(), set);
+        Input flip = calm();
+        flip.crouch.spin = 6;
+        bool gone = false;
+        int frames = 0;
+        while (!gone && frames < 90) {
+            gone = !held.update(flip, set).crouchOn;
+            ++frames;
+        }
+        check(gone && frames * dt >= crouchExitSeconds - dt && frames * dt <= crouchExitSeconds + 3 * dt,
+              "a lasting spin lets it go after 0.12 s");
+        // The minimum: it starts, and an immediate reason to leave waits for 0.35 s.
+        Mixer fresh;
+        int on = 0;
+        for (int i = 0; i < 30 && !on; ++i)
+            on = fresh.update(calm(), set).crouchOn ? i + 1 : 0;
+        check(on > 0, "a fresh crouch starts");
+        Input fall = calm();
+        fall.crouch.vy = -9;
+        int stayed = 0;
+        while (fresh.update(fall, set).crouchOn && stayed < 200)
+            ++stayed;
+        check((stayed + 1) * dt >= crouchMinOnSeconds - 2 * dt &&
+                  (stayed + 1) * dt <= crouchMinOnSeconds + 3 * dt,
+              "a fall right after the start: on for 0.35 s in all, then off");
+        // A web's attach at once does the same.
+        Mixer webbed;
+        for (int i = 0; i < 40; ++i)
+            webbed.update(calm(), set);
+        Input web = calm();
+        web.crouch.webbed = true;
+        int w = 0;
+        for (int i = 0; i < 8; ++i)
+            w += !webbed.update(web, set).crouchOn;
+        check(w == 0, "a web attached for under 0.12 s is not an exit");
+        // Landing is at once, whatever the minimum.
+        Mixer land;
+        for (int i = 0; i < 60; ++i)
+            land.update(calm(), set);
+        Input ground = calm();
+        ground.air = false;
+        check(!land.update(ground, set).crouchOn && land.update(ground, set).crouchWeight == 0,
+              "touching the ground ends it at once");
+        // The noise at the fall's edge: vy wobbling across -7 flickers no more than once.
+        Mixer edge;
+        int changes = 0;
+        Input wob = calm();
+        for (int i = 0; i < 180; ++i) {
+            wob.crouch.vy = -6.f + (i % 2 ? 1.5f : -2.f); // -7.5 / -4.5 alternately
+            changes += edge.update(wob, set).crouchChanged;
+        }
+        check(changes <= 2, "vy flipping across -7 every frame: at most the on and the off");
+    }
     // REACH SPREAD.
     {
         check(handBetween({.1f, .05f, -.1f}, false), "a hand below the pelvis between the thighs");

@@ -60,10 +60,16 @@ inline constexpr Legs reachPose{{{.7f, .45f, .85f}, {.7f, -.45f, .85f}}};
 //  - no web attached: at a swing's low point he is upright and slow-turning
 //    too, and there the legs should trail the swing, not crouch;
 //  - not falling fast: under -7 m/s (about 2.5 m of fall) the legs come down
-//    for the landing.
+//    for the landing; one starts only above -5 (hysteresis: a fall hovering at -7 no longer
+//    flickers it on and off);
+//  - once on, it stays crouchMinOnSeconds at least (the 5061b4a playtest, Nov 12: 41% of 523
+//    crouches ended inside 0.35 s, a third inside 0.3 s - falls past -7, spins past 2.5, webs) and
+//    leaves only when the reason to leave has lasted crouchExitSeconds (a one-frame spike of spin
+//    or a web's attach does not drop it). Leaving the air always ends it at once.
 inline constexpr float uprightIn = .866f /* cos 30 */, uprightOut = .766f /* cos 40 */;
 inline constexpr float hangSeconds = .45f, apexSpeed = 2.f, apexAfter = .15f;
-inline constexpr float spinIn = 1.5f, spinOut = 2.5f, fallOut = -7.f;
+inline constexpr float spinIn = 1.5f, spinOut = 2.5f, fallIn = -5.f, fallOut = -7.f;
+inline constexpr float crouchMinOnSeconds = .35f, crouchExitSeconds = .12f;
 inline constexpr float crouchInSeconds = .25f, crouchOutSeconds = .2f;
 struct CrouchInput {
     float upDot = 0;     // dot(body up, world up)
@@ -73,7 +79,8 @@ struct CrouchInput {
     bool webbed = false;
 };
 inline bool crouchWanted(const CrouchInput& in, bool was) {
-    if (in.webbed || !std::isfinite(in.upDot) || !std::isfinite(in.vy) || !std::isfinite(in.spin) || in.vy < fallOut)
+    if (in.webbed || !std::isfinite(in.upDot) || !std::isfinite(in.vy) || !std::isfinite(in.spin) ||
+        in.vy < (was ? fallOut : fallIn))
         return false;
     const bool upright = in.upDot >= (was ? uprightOut : uprightIn);
     const bool calm = in.spin < (was ? spinOut : spinIn);
@@ -163,7 +170,15 @@ class Mixer {
         airSeconds_ = in.air ? airSeconds_ + dt : 0.f;
         CrouchInput c = in.crouch;
         c.airSeconds = airSeconds_;
-        const bool crouch = in.air && s.crouch && crouchWanted(c, crouchOn_);
+        bool crouch = in.air && s.crouch && crouchWanted(c, crouchOn_);
+        if (crouchOn_ && in.air && s.crouch) {
+            // On already: the minimum on-time, then an exit that has to last.
+            crouchOnFor_ += dt;
+            exitFor_ = crouch ? 0.f : exitFor_ + dt;
+            crouch = crouch || crouchOnFor_ < crouchMinOnSeconds || exitFor_ < crouchExitSeconds;
+        } else {
+            crouchOnFor_ = exitFor_ = 0.f;
+        }
         const bool reach = in.air && s.reach && (in.handBetween[0] || in.handBetween[1]);
         out.crouchChanged = crouch != crouchOn_;
         out.reachChanged = reach != reachOn_;
@@ -257,6 +272,7 @@ class Mixer {
     Layer layer_ = Layer::off;
     float airSeconds_ = 0, crouchW_ = 0, reachW_ = 0, amount_ = 0, flailPhase_ = 0;
     bool crouchOn_ = false, reachOn_ = false;
+    float crouchOnFor_ = 0, exitFor_ = 0;
 };
 
 // FLAIL's B: once B is held in the air with Y+X physically held, B is the
