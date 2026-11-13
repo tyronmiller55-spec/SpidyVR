@@ -75,7 +75,7 @@ enum class Source : int { controller = 0, forearm = 1 };
 // had the forearm 35-77 degrees off the controller in 267 of its 394 active
 // samples, so the webs stayed clamped near the controller ("they keep
 // tracking my palm"): v6 takes the limit from the setting, none by default.
-constexpr float forearmClampDegrees = 35, forearmLimitDefault = 180, forearmSmoothSeconds = .08f, forearmFallbackSeconds = .15f,
+constexpr float forearmClampDegrees = 35, forearmLimitDefault = 180, forearmSmoothSeconds = .2f, forearmFallbackSeconds = .3f,
                 forearmMiss = .1f,
                 forearmAlignDegrees = 45.f;
 // A sample this many VR frames without a new solve is stale (v3-v5: 2; the
@@ -244,6 +244,14 @@ inline int formatForearmAimLine(char* out, std::size_t size, const ForearmAimLin
         static_cast<double>(l.offDegrees), static_cast<double>(l.lagDegrees), static_cast<double>(l.palmX),
         static_cast<double>(l.jitterDegrees), l.tilted ? ", flip tilt" : "");
 }
+// WRIST MARKER SMOOTHING v2 (the user, November 13 t86u: "the markers are very jumpy and
+// difficult to track"). The turn is the forearm's offset from the controller's line, carried
+// on the controller's live pose, so the hand's own motion is never slowed by it; only the
+// solve's elbow (and the trust/fallback switches) move it. In the 5061b4a session (13:33)
+// that offset swung 4 -> 40 -> 50 -> 17 deg within seconds, and the spherical aim's trust
+// target flipped 0 <-> 1 about 1.2 times a second per hand (2584 times in 36 min) between
+// lines 32-106 deg apart, each eased over only 0.08-0.15 s: the markers' jumps. 0.2 s for
+// the offset and 0.3 s for a fallback fade glide those; the controller still leads.
 // One hand's forearm turn, smoothed, and how much of it is used (weight: 0
 // the controller's line, 1 the forearm's).
 struct ForearmAim {

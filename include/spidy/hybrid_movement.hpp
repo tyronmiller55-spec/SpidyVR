@@ -25,6 +25,22 @@
 //   it; a landing plays on it. HYBRID keeps it on the view in the air the way SOFT
 //   LANDING already hands the game its stick there (the swing still moves the body), and
 //   the facing check holds the heading through the landing.
+//
+// HYBRID v2 (the user, November 12 t79u / 13 t86u):
+// - The left stick's front half is free movement: he turns and runs wherever it points
+//   (up to 90 degrees either side, sent to the game's own run), while the view keeps the
+//   heading - the head can turn 90 degrees, the camera does not chase his body.
+// - Within 15 degrees of forward the headset steers: he runs where the player looks,
+//   clamped to the same 30-degree window (heading +-15), so running forward has nuance
+//   without the view ever being taken. 15-25 degrees blends gaze into the stick (no step).
+//   The heading never follows that steering, so nothing feeds back (look right -> he
+//   runs right -> the view stays -> the gaze stays: no spiral).
+// - Past 100 degrees the rear snap turns the view like a head turn (REAR SNAP TURN, 200 ms
+//   by default, eased), not a frame switch; re-arm under 80 or neutral as before.
+// - The heading is the player's while the left stick has driven him on the ground: let
+//   go and he stays where he is, the view stays where it is (no turn-in-place, no
+//   rejoin); a hold that times out on the ground keeps the heading too. Only the game's
+//   own turns (parkour, combat, walls) are followed again.
 #include "spidy/stable_yaw.hpp"
 #include <algorithm>
 #include <cmath>
@@ -61,22 +77,71 @@ inline float stickYaw(float heading, float x, float y) {
     return wrap(heading - stickAngle(x, y));
 }
 
+// The headset steers within this much of forward (the 30-degree window), blending
+// into the stick's own direction by blendAngle; free movement stops at freeAngle.
+inline constexpr float coneAngle = 15.f * degrees, blendAngle = 25.f * degrees, freeAngle = 90.f * degrees;
+inline constexpr float gazeTau = .1f; // the gaze's low-pass (head micro-motion)
+
+enum class Zone : uint8_t { none, cone, blend, free, edge, rear, held };
+inline const char* zoneName(Zone z) {
+    switch (z) {
+    case Zone::cone: return "head cone";
+    case Zone::blend: return "blend";
+    case Zone::free: return "free";
+    case Zone::edge: return "edge (90)";
+    case Zone::rear: return "rear";
+    case Zone::held: return "after snap";
+    default: return "none";
+    }
+}
+// The run direction (heading-relative, radians, + right) for a stick at `a` with the
+// gaze `gaze` (same convention, NAN: none -> straight ahead in the cone).
+inline float runDirection(float a, float gaze) {
+    const float g = std::isfinite(gaze) ? std::clamp(gaze, -coneAngle, coneAngle) : 0.f;
+    const float abs = std::abs(a);
+    if (abs <= coneAngle)
+        return g;
+    if (abs < blendAngle) {
+        const float t = (abs - coneAngle) / (blendAngle - coneAngle);
+        return g + (a - g) * t;
+    }
+    return std::clamp(a, -freeAngle, freeAngle);
+}
+
 struct Gate {
     bool armed = true, holding = false, settling = false;
     float settle = 0, lastAngle = 0;
+    float gazeSteady = 0;
+    bool gazeSet = false;
     uint32_t snaps = 0;
     struct Out {
         bool snapped = false;
         float snapAngle = 0; // the stick's angle at the snap (radians, + right)
-        // The stick to send, heading-relative (x right, y forward) and its tilt.
-        float x = 0, y = 0;
-        bool drives = false; // the left stick runs him along the heading this frame
+        // The run: its direction off the heading (radians, + right) and tilt.
+        float dir = 0, y = 0;
+        bool drives = false; // the left stick runs him this frame
         bool rear = false;   // in the rear dead band / settling (no run)
+        Zone zone = Zone::none;
     };
-    Out update(float dt, float x, float y) {
+    // `gaze`: the headset's yaw off the heading (radians, + right; NAN none).
+    Out update(float dt, float x, float y, float gaze = NAN) {
         Out out;
         if (!std::isfinite(x) || !std::isfinite(y)) {
             x = y = 0;
+        }
+        const float step = std::isfinite(dt) ? std::clamp(dt, 0.f, .1f) : 0.f;
+        float g = NAN;
+        if (std::isfinite(gaze)) {
+            const float want = std::clamp(wrap(gaze), -coneAngle, coneAngle);
+            if (!gazeSet) {
+                gazeSteady = want;
+                gazeSet = true;
+            } else {
+                gazeSteady += (want - gazeSteady) * (1 - std::exp(-step / gazeTau));
+            }
+            g = gazeSteady;
+        } else {
+            gazeSet = false;
         }
         const float tilt = std::min(std::hypot(x, y), 1.f);
         const float a = stickAngle(x, y);
@@ -89,9 +154,12 @@ struct Gate {
             holding = settling = false;
         }
         if (holding && tilt >= deadzone) {
-            // Snapped: he runs along the new heading while the stick stays back.
+            // Snapped: he runs along the new heading while the stick stays back (the
+            // headset still steers within the window).
             out.y = tilt;
+            out.dir = runDirection(0.f, g);
             out.drives = true;
+            out.zone = Zone::held;
             lastAngle = a;
             return out;
         }
@@ -100,7 +168,7 @@ struct Gate {
                 settling = true;
                 settle = 0;
             } else {
-                settle += std::isfinite(dt) ? std::clamp(dt, 0.f, .1f) : 0.f;
+                settle += step;
             }
             const bool still = std::abs(wrap(a - lastAngle)) < settleRate;
             lastAngle = a;
@@ -112,25 +180,36 @@ struct Gate {
                 out.snapped = true;
                 out.snapAngle = a;
                 out.y = tilt;
+                out.dir = runDirection(0.f, g);
                 out.drives = true;
+                out.zone = Zone::held;
                 return out;
             }
             out.rear = true;
+            out.zone = Zone::rear;
             return out;
         }
         settling = false;
         lastAngle = a;
-        if (tilt >= deadzone && abs <= 90.f * degrees) {
-            out.y = tilt * std::cos(a);
-            out.drives = out.y > .05f;
+        if (tilt >= deadzone && abs <= snapAngle) {
+            // Free movement over the front half (to the snap line; past 90 he runs at 90).
+            out.y = tilt;
+            out.dir = runDirection(a, g);
+            out.drives = true;
+            out.zone = abs <= coneAngle  ? Zone::cone
+                       : abs < blendAngle ? Zone::blend
+                       : abs <= freeAngle ? Zone::free
+                                          : Zone::edge;
         } else if (tilt >= deadzone) {
-            out.rear = true; // 90-100 degrees, or the back half not armed
+            out.rear = true; // the back half below the snap's tilt, or not armed
+            out.zone = Zone::rear;
         }
         return out;
     }
     void reset() {
         armed = true;
         holding = settling = false;
+        gazeSet = false;
     }
 };
 
@@ -144,10 +223,15 @@ struct Heading {
     float drivingOff = 0; // seconds the hero has run more than 100 degrees off it
     float rest = 0;       // the heading's fading offset from him once nothing holds it
     bool following = false;
-    uint32_t arrived = 0, gaveUp = 0;
+    // v2: the player's heading - set once the left stick has driven him on the ground (or
+    // a hold timed out there); the heading then stays where it is, never following him,
+    // until the game itself owns his turns (not steerable for anchorLossSeconds).
+    bool anchored = false;
+    float anchorLost = 0;
+    uint32_t arrived = 0, gaveUp = 0, kept = 0;
 
     static constexpr float arriveAngle = 12.f * degrees, giveUpSeconds = 2.5f, followTau = .12f,
-                           swayInSeconds = .3f;
+                           swayInSeconds = .3f, anchorLossSeconds = .25f;
 
     struct In {
         float dt = 0;
@@ -160,6 +244,8 @@ struct Heading {
         bool heroTurn = false; // TURN-IN-PLACE forced to `yaw` (standing)
         Hold released = Hold::none;
         bool gaveUp = false;
+        bool kept = false; // v2: a hold timed out on the ground; the heading stays (no swing)
+        bool unanchored = false; // the game took his turns back; the heading follows him again
     };
     void latch(float y) {
         yaw = wrap(y);
@@ -168,6 +254,8 @@ struct Heading {
         swayWeight = 1;
         snapT = 1;
         following = false;
+        anchored = false;
+        anchorLost = 0;
     }
     void begin(Hold h, float to, float seconds = 0) {
         if (!std::isfinite(to))
@@ -220,24 +308,39 @@ struct Heading {
                 ++arrived;
             } else if (age > giveUpSeconds) {
                 out.released = hold;
-                out.gaveUp = true;
                 hold = Hold::none;
-                ++gaveUp;
+                if (in.steerable) {
+                    // v2: on his feet the heading is the player's: it stays, and so does
+                    // the view (5061b4a rejoined the head here: 118-158 degree swings).
+                    out.kept = true;
+                    anchored = true;
+                    anchorLost = 0;
+                    ++kept;
+                } else {
+                    out.gaveUp = true;
+                    ++gaveUp;
+                }
             }
         }
         if (hold == Hold::none) {
             if (in.driving && in.steerable) {
-                // He runs along it: the walk stick holds his facing; a hero that cannot
-                // follow for 1.5 s (a wall, a scripted move) is followed instead.
-                drivingOff = std::abs(gap) > 100.f * degrees ? drivingOff + dt : 0.f;
-                if (drivingOff > 1.5f) {
-                    drivingOff = 0;
-                    yaw = in.hero;
-                    out.gaveUp = true;
-                    ++gaveUp;
+                // He runs where the stick says, the heading stays the player's.
+                anchored = true;
+                anchorLost = 0;
+                following = false;
+                drivingOff = 0;
+            } else if (anchored) {
+                // Let go: he stays, the view stays. The game's own turns (parkour, a
+                // fight, a wall) take the anchor away after a moment.
+                anchorLost = in.steerable ? 0.f : anchorLost + dt;
+                if (anchorLost > anchorLossSeconds) {
+                    anchored = false;
+                    anchorLost = 0;
+                    out.unanchored = true;
                 }
                 following = false;
-            } else {
+            }
+            if (!anchored && !(in.driving && in.steerable)) {
                 drivingOff = 0;
                 // Nothing to bring him onto: the heading is his facing (the view the head).
                 // What was left when that began fades (0.12 s); his own turns are followed

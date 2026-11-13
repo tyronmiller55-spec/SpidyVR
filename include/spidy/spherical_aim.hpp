@@ -46,7 +46,7 @@ constexpr float trustedMiss = .03f, untrustedMiss = .1f;
 // The solved forearm this far off the learned model: trusted, then not.
 constexpr float trustedOffDegrees = 35, untrustedOffDegrees = 70;
 // Trust eases this fast either way (a contortion fades in, never cuts).
-constexpr float trustSeconds = .1f;
+constexpr float trustSeconds = .25f; // v2: .1 let the marker jump (t86u)
 // The model: how fast it learns, and how much learning makes it usable.
 constexpr float learnSeconds = 1.5f, primeSeconds = .6f;
 // Only samples this trusted teach the model; and none further than this

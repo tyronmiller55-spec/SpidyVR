@@ -95,7 +95,7 @@ int main() {
                   viewSource(1) == stable_yaw::Source::stable,
               "OLD steers by the head bone, the rest by the stable heading");
         vr_settings::Values v;
-        check(v.movementMode == 0 && v.rearSnapMs == 0, "defaults: HYBRID, instant rear snap");
+        check(v.movementMode == 0 && v.rearSnapMs == 200, "defaults: HYBRID, rear snap a 200 ms head turn");
         const auto& rows = vr_settings::rows();
         bool mode = false, snap = false;
         for (const auto& r : rows) {
@@ -108,7 +108,7 @@ int main() {
         }
         check(mode && snap, "rows labelled");
         const std::string ini = vr_settings::tabOnlyText(v);
-        check(ini.find("movement_mode=0") != std::string::npos && ini.find("rear_snap_ms=0") != std::string::npos,
+        check(ini.find("movement_mode=0") != std::string::npos && ini.find("rear_snap_turn_ms=200") != std::string::npos,
               "saved keys");
         check(vr_settings::withTabOnly(vr_settings::Values{}, "movement_mode=7\n").movementMode <= 2, "sanitized");
         check(vr_settings::choose(Item::movementMode, 1, v) && v.movementMode == 1, "choose STABLE");
@@ -124,17 +124,101 @@ int main() {
         check(near(stickYaw(0, 1, 0), -90 * deg, .01f), "stick right: 90 deg right");
         check(near(stickYaw(30 * deg, 0, -1), wrap(210 * deg), .01f), "stick back: behind the heading");
     }
-    // --- The gate: front half runs along the heading, never turns.
+    // --- v2 gate: the front half is free movement; the headset steers in the 30-degree cone.
     {
         Gate g;
         auto o = g.update(dt, 0, 1);
-        check(o.drives && near(o.y, 1, .001f) && o.x == 0 && !o.snapped, "forward: full run along the heading");
+        check(o.drives && near(o.y, 1, .001f) && near(o.dir, 0, .001f) && o.zone == Zone::cone && !o.snapped,
+              "forward, no gaze: full run along the heading");
         o = g.update(dt, stickX(60), stickY(60));
-        check(o.drives && std::abs(o.y - .5f) < .01f && o.x == 0, "60 deg: half speed, still straight ahead");
-        o = g.update(dt, stickX(90), stickY(90));
-        check(!o.drives && !o.snapped, "pure side: no run, no turn (the game cannot strafe)");
+        check(o.drives && near(o.y, 1, .001f) && near(o.dir, 60 * deg, .01f) && o.zone == Zone::free,
+              "60 deg: full speed, he runs 60 deg off the heading");
+        o = g.update(dt, stickX(-90), stickY(-90));
+        check(o.drives && near(o.dir, -90 * deg, .01f), "pure side: he runs sideways (free movement)");
         o = g.update(dt, stickX(95), stickY(95));
-        check(!o.drives && !o.snapped, "95 deg: dead band");
+        check(o.drives && near(o.dir, 90 * deg, .01f) && o.zone == Zone::edge && !o.snapped,
+              "95 deg: still runs, at 90 (the snap waits for 100)");
+        // The headset steers inside the window, clamped to it, low-passed.
+        Gate c;
+        for (int i = 0; i < 90; ++i)
+            o = c.update(dt, 0, 1, 10 * deg);
+        check(near(o.dir, 10 * deg, .2f * deg), "cone: looking 10 deg right runs him 10 deg right");
+        for (int i = 0; i < 90; ++i)
+            o = c.update(dt, stickX(-8), stickY(-8), 60 * deg);
+        check(near(o.dir, 15 * deg, .2f * deg), "cone: looking 60 deg right is clamped to the window's 15");
+        Gate q;
+        q.update(dt, 0, 1, 0);
+        o = q.update(dt, 0, 1, 40 * deg);
+        check(o.dir < 3 * deg, "a head flick does not jerk the run (gaze low-pass)");
+        // No step anywhere across the cone and the blend, with the gaze at the far side.
+        float worst = 0, prev = runDirection(0, -15 * deg);
+        for (float aDeg = 0; aDeg <= 100; aDeg += .5f) {
+            const float d = runDirection(aDeg * deg, -15 * deg);
+            worst = std::max(worst, std::abs(d - prev));
+            prev = d;
+        }
+        check(worst < 3.f * deg, "cone -> blend -> free: continuous (no hitch at 15 or 25; under 3 deg per half degree of stick)");
+        check(near(runDirection(25 * deg, 15 * deg), 25 * deg, .01f) &&
+                  near(runDirection(15 * deg, -15 * deg), -15 * deg, .01f),
+              "the blend ends on the stick at 25 and starts on the gaze at 15");
+    }
+    // --- v2: no feedback loop - the heading never follows the steered run.
+    {
+        Heading h;
+        h.latch(0);
+        Gate g;
+        float hero = 0, headingMoved = 0;
+        for (int i = 0; i < 180; ++i) { // 2 s, stick forward, head held 10 deg right
+            const auto o = g.update(dt, 0, 1, 10 * deg);
+            Heading::In in;
+            in.dt = dt;
+            in.heroOk = true;
+            in.hero = hero;
+            in.driving = o.drives;
+            in.steerable = true;
+            h.update(in);
+            headingMoved = std::max(headingMoved, std::abs(wrap(h.yaw)));
+            heroStep(hero, o.drives, wrap(h.yaw - o.dir));
+        }
+        check(headingMoved < .01f * deg, "2 s of gaze steering: the heading (the view) never moved");
+        check(near(hero, -10 * deg, 1 * deg), "he settles 10 deg right of it and stays (no spiral)");
+        // Free run at 70 deg, then let go: he stays, the view stays, no turn-in-place.
+        for (int i = 0; i < 90; ++i) {
+            const auto o = g.update(dt, stickX(70), stickY(70), 0);
+            Heading::In in;
+            in.dt = dt;
+            in.heroOk = true;
+            in.hero = hero;
+            in.driving = o.drives;
+            in.steerable = true;
+            h.update(in);
+            heroStep(hero, o.drives, wrap(h.yaw - o.dir));
+        }
+        check(near(hero, -70 * deg, 1 * deg) && near(h.yaw, 0, .01f * deg), "free run: body 70 off, view on the heading");
+        bool turned = false;
+        for (int i = 0; i < 270; ++i) {
+            const auto o = g.update(dt, 0, 0, 0);
+            Heading::In in;
+            in.dt = dt;
+            in.heroOk = true;
+            in.hero = hero;
+            in.driving = o.drives;
+            in.steerable = true;
+            turned = turned || h.update(in).heroTurn;
+        }
+        check(!turned && near(h.yaw, 0, .01f * deg) && near(hero, -70 * deg, 1 * deg),
+              "let go: Spidey stays where he is, the view stays (no turn back, no rejoin)");
+        // The game turning him (wall, parkour: not steerable) takes the anchor away.
+        bool unanchored = false;
+        for (int i = 0; i < 40; ++i) {
+            Heading::In in;
+            in.dt = dt;
+            in.heroOk = true;
+            in.hero = hero;
+            in.steerable = false;
+            unanchored = unanchored || h.update(in).unanchored;
+        }
+        check(unanchored && !h.anchored, "the game's own turn: the heading follows him again");
     }
     // --- The rear half: one snap past 100, held, re-armed under 80 or neutral.
     {
@@ -210,8 +294,12 @@ int main() {
             h.update(in);
         }
         const view_yaw_lock::State st{true, h.yaw, h.swayWeight, hero};
-        check(near(view_yaw_lock::shownYaw(st, wrap(hero + 7 * deg)), wrap(hero + 7 * deg), .5f * deg),
-              "at rest the view is the head bone, yaw included");
+        // v2: the stick drove him, so the heading is the player's (anchored): the view is the
+        // heading plus the head's own sway, within the arrival's 12 deg of the head bone.
+        check(h.anchored &&
+                  near(view_yaw_lock::shownYaw(st, wrap(hero + 7 * deg)), wrap(h.yaw + 7 * deg), .5f * deg) &&
+                  near(view_yaw_lock::shownYaw(st, wrap(hero + 7 * deg)), wrap(hero + 7 * deg), 13 * deg),
+              "at rest: the heading plus the head's sway, near the head bone");
     }
     {
         // Eased snap (REAR SNAP TURN 200 MS).
@@ -258,12 +346,24 @@ int main() {
         // Running (driving): no forced turn, the run brings him.
         in.driving = true;
         check(!h.update(in).heroTurn, "running: the run turns him, no stand-still turn");
-        // A hero that cannot follow (2.5 s): the heading rejoins him.
+        // v2: a hero that cannot follow (2.5 s) on his feet: the heading and view stay.
         in.driving = false;
-        bool gave = false;
+        bool kept = false, gave = false;
+        for (int i = 0; i < 260 && !kept; ++i) {
+            const auto r = h.update(in);
+            kept = r.kept;
+            gave = gave || r.gaveUp;
+        }
+        check(kept && !gave && h.hold == Heading::Hold::none && near(h.yaw, 45 * deg, .01f),
+              "2.5 s without him on his feet: the heading stays (no view swing), said so");
+        // Off his feet (not steerable) it still rejoins him.
+        h.latch(0);
+        h.turn(45 * deg);
+        in.steerable = false;
+        gave = false;
         for (int i = 0; i < 260 && !gave; ++i)
             gave = h.update(in).gaveUp;
-        check(gave && h.hold == Heading::Hold::none, "2.5 s without him: give up, said so");
+        check(gave, "not steerable: give up, the view rejoins him as before");
     }
     // --- The landings replayed (06:37 session).
     {

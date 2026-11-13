@@ -271,7 +271,8 @@ class AimMarkerMotion {
   public:
     static constexpr float minCutoffHz = 1, speedCutoff = 60, speedDeadband = .06f, speedCutoffHz = 4;
     static constexpr float fadeInSeconds = .04f, lockSeconds = .12f, fadeOutSeconds = .08f;
-    static constexpr float distanceSeconds = .03f, targetSeconds = .035f, gapSeconds = .25f;
+    // v2 (t86u): a depth change or a target switch glides (was .03 / .035 s, near a cut).
+    static constexpr float distanceSeconds = .08f, targetSeconds = .07f, gapSeconds = .25f;
     // Starts the eye image shown at `timeNs` (predicted display time): the
     // same image again changes nothing, and after a gap of over gapSeconds
     // the markers start afresh.

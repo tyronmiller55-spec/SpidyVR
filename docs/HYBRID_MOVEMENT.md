@@ -22,3 +22,19 @@ MOVEMENT MODE (NATIVE ANIMATION tab, launcher "Movement mode", `movement_mode`):
 - No facing write: the hero turns at the game's pace (about 250 deg/s standing, a run start for snaps); only the view is instant.
 - No strafe: a sideways push does not move him sideways.
 - A landing straight into a held run keeps the game's facing until the run's stick turns him (the held view covers it).
+
+
+## v2 (feat/hybrid-v2; the user, November 12 t79u and 13 t86u)
+
+| Left stick (off the heading) | Run | View |
+|---|---|---|
+| 0-15 deg (the head cone) | where the headset looks, clamped to heading +-15 (gaze low-passed 0.1 s) | stays on the heading |
+| 15-25 deg | blends the gaze into the stick (continuous) | stays |
+| 25-90 deg | the stick's direction, full speed (the game turns him) | stays |
+| 90-100 deg | at 90 | stays |
+| past 100 deg (tilt 0.5+) | rear snap: then forward on the new heading (head cone again) | turns to the stick's direction over REAR SNAP TURN (200 ms, a head turn; INSTANT a cut) |
+
+- No feedback: the heading moves only by the right stick or the rear snap while the stick has driven him on the ground (anchored); the gaze is the headset's turn off the heading, independent of his body.
+- Let go: he stays where he is, the view stays (no turn-in-place). A right-stick turn still brings him round (forced turn).
+- A hold (landing / facing check / snap) timing out on his feet keeps the heading (no swing back to the head bone). Off his feet it rejoins as before.
+- The game's own turns (not steerable for 0.25 s: wall, air, VR) end the anchor; the heading follows him again.

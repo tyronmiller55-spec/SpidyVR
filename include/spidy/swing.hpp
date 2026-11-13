@@ -439,6 +439,10 @@ class Swing {
     bool groundRunning() const {
         return groundRun_;
     }
+    // PARKOUR AHEAD: runs handed to the game at an obstacle ahead (run_update.hpp).
+    unsigned parkourHandoffs() const {
+        return parkourHandoffs_;
+    }
     // Its velocity across the ground now.
     Vec3 groundRunVelocity() const {
         return groundRun_ ? groundAlong_ : Vec3{};
@@ -824,6 +828,7 @@ class Swing {
     // SPIDY RUN: on; running now, at groundAlong_ across the ground, the stick
     // idle for groundIdle_.
     bool spidyRun_{}, groundRun_{};
+    unsigned parkourHandoffs_{};
     Vec3 groundAlong_{};
     float groundIdle_{};
     // SPIDY RUN FROM STANDING: on; this run began standing; how long the

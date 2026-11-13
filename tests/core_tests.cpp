@@ -1809,17 +1809,18 @@ int main() {
         check(std::abs(tl.x - tr.x) < 1e-5f && std::abs(tl.y + tr.y) < 1e-5f &&
                   std::abs(tl.z + tr.z) < 1e-5f && std::abs(tl.w - tr.w) < 1e-5f,
               "the hands' turns not mirrored");
-        // Smoothing: the first sample at once, then about 80 ms to follow a change.
+        // Smoothing: the first sample at once, then about 200 ms to follow a change (v2).
         ForearmAim a;
         a.update(true, t15, 1.f / 90);
         check(a.primed && close(line(a.smoothed), down15) && a.weight > 0 && a.weight < .1f,
               "the first sample not taken at once, or blended in at once");
         const Vec3 up10{0, std::sin(10 * deg), -std::cos(10 * deg)};
         const Quat tUp = forearmTurn(up10, {}, {});
-        a.update(true, tUp, .08f);
+        a.update(true, tUp, .1f);
+        a.update(true, tUp, .1f);
         const float left80 = turnAngle(a.smoothed.conjugate() * tUp) / turnAngle(t15.conjugate() * tUp);
-        check(left80 > .3f && left80 < .45f, "80 ms did not take about 63% of the change");
-        for (int i = 0; i < 60; ++i)
+        check(left80 > .3f && left80 < .45f, "200 ms did not take about 63% of the change");
+        for (int i = 0; i < 300; ++i)
             a.update(true, tUp, 1.f / 90);
         check(a.weight == 1 && turnAngle(a.smoothed.conjugate() * tUp) < 1e-3f, "the turn not reached");
         // Blend: 0% the controller, 50% half, 100% all.
@@ -1827,12 +1828,12 @@ int main() {
                   std::abs(turnAngle(a.turn(100)) - 10 * deg) < 1e-3f,
               "FOREARM BLEND's share");
         // Invalid: back to the controller within 0.15 s, not at once.
-        a.update(false, {}, .05f);
+        a.update(false, {}, .1f);
         check(a.weight > .6f && a.weight < .7f && turnAngle(a.turn(100)) > 0, "the fallback not gradual");
-        for (int i = 0; i < 9; ++i)
+        for (int i = 0; i < 20; ++i)
             a.update(false, {}, 1.f / 90);
         check(a.weight == 0 && !a.primed && turnAngle(a.turn(100)) == 0,
-              "the fallback did not reach the controller's line in 0.15 s");
+              "the fallback did not reach the controller's line in 0.3 s");
         a.update(true, tUp, NAN);
         check(std::isfinite(a.weight) && a.weight == 0, "a NaN step moved the blend");
         // WEB ANGLE on top of the forearm, about its own side; WRIST SHOOTERS a quarter turn about it.
@@ -8862,7 +8863,7 @@ int main() {
         shown=step(&anchor);
         const float between=length(shown[0].point-origin);
         check(between>10.5f&&between<39,"the marker jumped to its new distance");
-        for(int i=0;i<11;++i)shown=step(&anchor);
+        for(int i=0;i<40;++i)shown=step(&anchor); // v2: an 80 ms glide (was 30)
         near(length(shown[0].point-origin),40,.4f);
         // Another kind, the hand turned: the new one fades in on the new ray
         // while the old one fades out where it was.
@@ -8887,7 +8888,7 @@ int main() {
         shown=step(&target);
         const float slid=find(shown,AimMark::target)->point.x;
         check(slid>2.05f&&slid<3.5f,"the target's ring jumped to the next target");
-        for(int i=0;i<14;++i)shown=step(&target);
+        for(int i=0;i<40;++i)shown=step(&target);
         near(find(shown,AimMark::target)->point.x,4,.02f);
         // Nothing wanted: every marker fades out.
         shown=step(nullptr);
@@ -10358,6 +10359,68 @@ int main() {
         check(all.find("ended after") != std::string::npos && all.find("asked 20.0 m/s") != std::string::npos &&
                   all.find("went 9.9 m/s") != std::string::npos,
               "no line of how far a mod-driven run went against what it asked");
+    });
+    test("PARKOUR AHEAD: SPIDY RUN hands the body to the game's sprint before an obstacle", [] {
+        using namespace run_update;
+        near(parkourLook(0, .35f), parkourLookMin + .35f, 1e-4f);
+        near(parkourLook(100, .35f), parkourLookMax + .35f, 1e-4f);
+        check(parkourLook(NAN, .35f) == 0, "the look-ahead's reach from no number");
+        struct Wall : World {
+            float at = -3; // a face across -z at z = at, facing +z
+            std::optional<RayHit> raycast(Vec3 o, Vec3 d, float distance) const override {
+                if (d.z >= -.1f || o.z <= at)
+                    return {};
+                const float t = (o.z - at) / -d.z;
+                if (t > distance)
+                    return {};
+                return RayHit{o + d * t, {0, 0, 1}, 3, true};
+            }
+            MoveResult sweep(Vec3, Vec3 to, float) const override {
+                return {to, {}, false};
+            }
+            bool exists(std::uint64_t) const override {
+                return true;
+            }
+        };
+        TestWorld open;
+        open.enabled = false;
+        Input in;
+        in.focused = true;
+        in.move = {0, 0, -1};
+        const Body stand{{0, 1, 0}, {0, 0, 0}, true};
+        const auto runUp = [&](Swing& sw) {
+            sw.allowGroundRun(true);
+            sw.allowGroundRunFromStanding(true);
+            for (int i = 0; i < 90 && !(sw.groundRunning() && length(sw.groundRunVelocity()) > 8.5f); ++i)
+                sw.predictNativeStep(1.f / 90, in, open, stand);
+            return sw.groundRunning();
+        };
+        Swing far(inert());
+        check(runUp(far), "no run from standing to test with");
+        Wall distant;
+        distant.at = -12;
+        far.predictNativeStep(1.f / 90, in, distant, stand);
+        check(far.groundRunning() && far.parkourHandoffs() == 0, "a wall 12 m away ended the run");
+        Swing near3(inert());
+        check(runUp(near3), "no run from standing to test with (2)");
+        Wall close;
+        near3.predictNativeStep(1.f / 90, in, close, stand);
+        check(!near3.groundRunning() && near3.parkourHandoffs() == 1,
+              "a wall 3 m ahead at sprint speed did not hand the run to the game");
+        // Held on, it does not start again (the stick must come back first): the game runs.
+        for (int i = 0; i < 90; ++i)
+            near3.predictNativeStep(1.f / 90, in, open, stand);
+        check(!near3.groundRunning(), "the run from standing began again into the obstacle");
+        // A face beside the way (running along it) is no obstacle.
+        Swing along(inert());
+        Input side = in;
+        side.move = {1, 0, 0};
+        along.allowGroundRun(true);
+        along.allowGroundRunFromStanding(true);
+        for (int i = 0; i < 90; ++i)
+            along.predictNativeStep(1.f / 90, side, open, stand);
+        along.predictNativeStep(1.f / 90, side, close, stand);
+        check(along.groundRunning() && along.parkourHandoffs() == 0, "a wall beside the run ended it");
     });
     test("SPIDY RUN FROM STANDING: the stick held fully starts the run from a stand; off as before", [] {
         using namespace run_update;
@@ -24360,7 +24423,7 @@ int main() {
                   "camera_stabilization=0\ncamera_vertical_ms=0\ncamera_horizontal_ms=0\ncamera_angle_ms=0\n"
                   "camera_light_vertical_ms=75\ncamera_light_horizontal_ms=50\ncamera_light_angle_ms=75\n"
                   "camera_heavy_vertical_ms=200\ncamera_heavy_horizontal_ms=150\ncamera_heavy_angle_ms=200\n"
-                  "spherical_aim=1\nleg_control=0\nleg_stiffness_pct=100\nleg_damping_pct=100\nleg_coupling_pct=50\nleg_double_tap_ms=300\npunch_view_ease_ms=250\nmove_haptics_pct=100\nview_yaw_source=1\nsound_trace=1\njump_handoff_ms=500\nair_view_ease_ms=250\nanim_yaw_sway_pct=20\nturn_in_place_deg=35\npassive_legs_pct=60\npassive_coupling_pct=15\nmovement_mode=0\nrear_snap_ms=0\nleg_air_crouch=1\nleg_reach_spread=1\nair_fists=1\n"
+                  "spherical_aim=1\nleg_control=0\nleg_stiffness_pct=100\nleg_damping_pct=100\nleg_coupling_pct=50\nleg_double_tap_ms=300\npunch_view_ease_ms=250\nmove_haptics_pct=100\nview_yaw_source=1\nsound_trace=1\njump_handoff_ms=500\nair_view_ease_ms=250\nanim_yaw_sway_pct=20\nturn_in_place_deg=35\npassive_legs_pct=60\npassive_coupling_pct=15\nmovement_mode=0\nrear_snap_turn_ms=200\nleg_air_crouch=1\nleg_reach_spread=1\nair_fists=1\n"
                   "camera_pitch_pct=100\ncamera_roll_pct=100\ncamera_bob_vertical_pct=100\ncamera_bob_side_pct=100\n"
                   "camera_head_angle_deg=0\n"
                   "point_jump=0\npoint_jump_trigger=0\npoint_jump_chord_ms=50\npoint_jump_tap_ms=150\n"
@@ -30544,7 +30607,7 @@ int main() {
         (void)blend.update(solved, modelLine, 1, 1.f / 90);
         Vec3 prev = solved;
         float worstStep = 0;
-        for (int i = 0; i < 90; ++i) {
+        for (int i = 0; i < 180; ++i) { // v2: trust eases over 0.25 s
             const Vec3 line = blend.update(solved, modelLine, 0, 1.f / 90);
             worstStep = std::max(worstStep, angleBetween(prev, line));
             prev = line;

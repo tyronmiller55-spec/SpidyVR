@@ -507,8 +507,10 @@ struct Values {
     // (head-bone steering, VIEW YAW SOURCE BODY). movement_mode.
     int movementMode = 0;
     // REAR SNAP TURN (HYBRID): how long the view takes for the rear snap, ms; 0
-    // INSTANT (default). rear_snap_ms.
-    int rearSnapMs = 0;
+    // INSTANT (a frame switch). 200 by default. rear_snap_turn_ms.
+    // v2 (t86u "do a head rotation instead of a frame switch"): eased by default; the
+    // ini key was renamed from rear_snap_ms so 5061b4a's saved INSTANT does not stick.
+    int rearSnapMs = 200;
     // PASSIVE LEGS (leg_layers.hpp; November 12 06:18): in SpidyVR's air with
     // LEG CONTROL not engaged, the legs' spring runs with no stick, so momentum
     // moves them; this share of it shown (0 OFF). 60 by default. passive_legs_pct.

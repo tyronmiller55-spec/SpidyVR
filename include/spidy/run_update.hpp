@@ -273,6 +273,24 @@ struct GroundRun {
     float standTilt = .9f, standHold = .3f, standRearm = .5f, standAcceleration = 3, standTop = 14;
 };
 constexpr GroundRun groundRun{};
+// PARKOUR AHEAD (the user, November 13 t86u: "parkour activation ... seems to be iffy and
+// inconsistent"). While SPIDY RUN drives the body the game holds no RT and owns no ground,
+// so it cannot vault or climb what he runs at: in the 5061b4a session 45 of 236 full-stick
+// ground windows (19%) were the mod's run with RT 0%, and RUN FROM STANDING keeps the run
+// for as long as the stick is held past 90%. The run used to end only once the body had
+// been stopped for 0.25 s (too late for the game's vault, which needs his speed). So the
+// run looks ahead: a steep face (a wall, a ledge, a railing) across its way within
+// parkourLookSeconds of travel (parkourLookMin..parkourLookMax metres past the body's
+// radius) at any probe height ends it there, and the game - its RT, its sprint - meets the
+// obstacle at speed and plays its own parkour on it.
+inline constexpr float parkourLookSeconds = .45f, parkourLookMin = .8f, parkourLookMax = 3.5f;
+inline constexpr float parkourSteep = .5f; // a face whose normal is this level or more (y under)
+inline constexpr float parkourProbeHeights[] = {-.25f, .2f, .7f}; // off the body's centre, metres
+inline float parkourLook(float speed, float radius) {
+    if (!std::isfinite(speed) || !std::isfinite(radius))
+        return 0;
+    return std::clamp(speed * parkourLookSeconds, parkourLookMin, parkourLookMax) + std::max(radius, 0.f);
+}
 // The run a landing at `velocity` begins with, across the ground (y 0).
 inline Vec3 groundRunEntry(Vec3 velocity, const GroundRun& k = groundRun) {
     if (!finite(velocity))

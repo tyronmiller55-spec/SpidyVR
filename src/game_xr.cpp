@@ -1212,6 +1212,10 @@ DWORD WINAPI run(void*) {
         hybrid_movement::Heading hybridHeading{};
         hybrid_movement::Gate::Out hybridStick{};
         bool hybridHeroTurn = false, hybridSteerable = false, hybridAirSyncOn = false;
+        // PARKOUR RT diagnostic (t86u): frames with the stick at the run on the ground.
+        uint32_t parkourRtFrames = 0, parkourRtHeld = 0, parkourRtRising = 0;
+        float parkourRtSeconds = 0;
+        std::array<uint32_t, static_cast<int>(game_pad::RunBlock::count)> parkourRtBlocked{};
         float hybridAirSyncSec = 0, hybridHoldLoggedAge = 0;
         uint32_t hybridAirSyncStarts = 0;
         view_yaw_lock::Divergence viewDivergence{};
@@ -3021,7 +3025,30 @@ DWORD WINAPI run(void*) {
                                                   swingState.grounded && !swingState.webs[0].attached &&
                                                   !swingState.webs[1].attached;
                         if (hybridGround && frame.hands[0].valid) {
-                            hybridStick = hybridGate.update(frame.seconds, frame.hands[0].stickX, frame.hands[0].stickY);
+                            // v2: the headset's yaw off the heading (the view is heading +
+                            // the headset's turn since the head latched), + right.
+                            float hybridGaze = NAN;
+                            if (animHeadRefSet && validTrackedPose(frame.head)) {
+                                const float tracked = hybrid_handoff::lookYaw(
+                                    screenAhead(frame.head, 0).orientation.rotate({0, 0, -1}));
+                                const float ref =
+                                    hybrid_handoff::lookYaw(animHeadRef.orientation.rotate({0, 0, -1}));
+                                if (std::isfinite(tracked) && std::isfinite(ref))
+                                    hybridGaze = -stable_yaw::wrap(tracked - ref);
+                            }
+                            const auto zoneWas = hybridStick.zone;
+                            hybridStick =
+                                hybridGate.update(frame.seconds, frame.hands[0].stickX, frame.hands[0].stickY, hybridGaze);
+                            if (hybridStick.zone != zoneWas && hybridStick.zone != hybrid_movement::Zone::none) {
+                                constexpr float toDeg = 180.f / 3.14159265f;
+                                diag_log::writef("hybrid stick: %s (stick %+.0f deg, gaze %+.0f, run %+.0f off the "
+                                                 "heading)",
+                                                 hybrid_movement::zoneName(hybridStick.zone),
+                                                 hybrid_movement::stickAngle(frame.hands[0].stickX,
+                                                                             frame.hands[0].stickY) * toDeg,
+                                                 std::isfinite(hybridGaze) ? hybridGaze * toDeg : 0.f,
+                                                 hybridStick.dir * toDeg);
+                            }
                             if (hybridStick.snapped) {
                                 constexpr float toDeg = 180.f / 3.14159265f;
                                 const float from = hybridHeading.yaw;
@@ -3047,7 +3074,8 @@ DWORD WINAPI run(void*) {
                         if (hybridInputViewOk) {
                             const Vec3 walk =
                                 hybridGround
-                                    ? hybrid_steer::viewForward(hybridHeading.yaw) * hybridStick.y
+                                    ? hybrid_steer::viewForward(stable_yaw::wrap(hybridHeading.yaw - hybridStick.dir)) *
+                                          hybridStick.y
                                 : frame.hands[0].valid
                                     ? hybrid_steer::viewMove(frame.hands[0].stickX, frame.hands[0].stickY,
                                                              hybridInputViewYaw)
@@ -3622,12 +3650,14 @@ DWORD WINAPI run(void*) {
                         if (ho.released != hybrid_movement::Heading::Hold::none)
                             diag_log::writef("hybrid heading: %s hold %s after %d ms, heading %.0f hero %.0f",
                                              hybrid_movement::holdName(ho.released),
-                                             ho.gaveUp ? "GAVE UP (view rejoins the head)" : "arrived",
+                                             ho.gaveUp ? "GAVE UP (view rejoins the head)"
+                                             : ho.kept ? "timed out on his feet (heading and view stay; he stays)"
+                                                       : "arrived",
                                              static_cast<int>(hybridHeading.age * 1000 + .5f),
                                              hybridHeading.yaw * toDeg, hin.hero * toDeg);
-                        else if (ho.gaveUp)
-                            diag_log::writef("hybrid heading: he ran 100+ deg off it for 1.5 s; it follows him "
-                                             "(heading %.0f hero %.0f)", hybridHeading.yaw * toDeg, hin.hero * toDeg);
+                        if (ho.unanchored)
+                            diag_log::writef("hybrid heading: the game turns him (parkour/wall/air); it follows him "
+                                             "again (heading %.0f hero %.0f)", hybridHeading.yaw * toDeg, hin.hero * toDeg);
                         viewLock.yaw = hybridHeading.yaw;
                     }
                     {
@@ -5701,6 +5731,42 @@ DWORD WINAPI run(void*) {
                             const auto runAt = run_update::nativeRunThresholds(values.nativeRunPercent);
                             nativeRun.thresholds(runAt.onAbove, runAt.offBelow);
                             bool runAllowed = game_pad::nativeRunAllowed(runGate, walk);
+                            // PARKOUR RT diagnostic (t86u): on the ground with the stick at
+                            // the run (NATIVE RUN AT or more), why RT - the game's sprint and
+                            // parkour - was not held; one line each 5 s of such frames.
+                            {
+                                const bool wantsRun = runGate.playing && swingFresh && swingState.grounded &&
+                                                      stickTilt >= static_cast<float>(values.nativeRunPercent) * .01f;
+                                if (wantsRun) {
+                                    const auto why = game_pad::nativeRunBlock(runGate, walk);
+                                    ++parkourRtFrames;
+                                    parkourRtSeconds += frame.seconds;
+                                    if (why == game_pad::RunBlock::none && !nativeRun.held())
+                                        ++parkourRtRising; // allowed, RT not yet back (STEADY STATES' rise, hysteresis)
+                                    else if (why != game_pad::RunBlock::none)
+                                        ++parkourRtBlocked[static_cast<int>(why)];
+                                    if (nativeRun.held())
+                                        ++parkourRtHeld;
+                                }
+                                if (parkourRtSeconds >= 5.f) {
+                                    char reasons[400]{};
+                                    int at = 0;
+                                    for (int r = 1; r < static_cast<int>(game_pad::RunBlock::count); ++r)
+                                        if (parkourRtBlocked[r] && at < static_cast<int>(sizeof reasons) - 80)
+                                            at += std::snprintf(reasons + at, sizeof reasons - at, "%s%s %u%%",
+                                                                at ? ", " : "",
+                                                                game_pad::runBlockName(static_cast<game_pad::RunBlock>(r)),
+                                                                parkourRtBlocked[r] * 100u / std::max(parkourRtFrames, 1u));
+                                    diag_log::writef("parkour RT: %u frames with the stick at the run on the ground, RT "
+                                                     "held %u%%; off: %s%s rising %u%%",
+                                                     parkourRtFrames, parkourRtHeld * 100u / std::max(parkourRtFrames, 1u),
+                                                     at ? reasons : "-", at ? ";" : "",
+                                                     parkourRtRising * 100u / std::max(parkourRtFrames, 1u));
+                                    parkourRtFrames = parkourRtHeld = parkourRtRising = 0;
+                                    parkourRtSeconds = 0;
+                                    parkourRtBlocked = {};
+                                }
+                            }
                             // STEADY STATES (off by default): RT comes back only once
                             // everything has allowed it for a moment (ground_state::
                             // RiseDelay); it still goes at once.
@@ -5948,18 +6014,19 @@ DWORD WINAPI run(void*) {
                                 const bool hybridWalk = hybridMode && viewLockActive && hybridHeading.set &&
                                                         swingFresh && swingState.grounded;
                                 if (hybridWalk && moveHand.valid && walkMag > 1e-3f && !hybridStick.drives) {
-                                    // HYBRID: the rear dead band / settling, or a side push: no run.
+                                    // HYBRID: the rear dead band / settling: no run.
                                     walk.right = walk.forward = 0;
                                 } else if (hybridViewOk && moveHand.valid && walkMag > 1e-3f) {
                                     // Direction from the raw stick, magnitude from the
-                                    // vanilla walk (its run curve / zeroing kept). HYBRID:
-                                    // straight along the heading at the stick's forward share.
+                                    // vanilla walk (its run curve / zeroing kept). HYBRID v2:
+                                    // the gate's run direction off the heading (free front
+                                    // half, the headset's 30-degree window), full magnitude.
                                     const float tiltNow = std::max(std::hypot(moveHand.stickX, moveHand.stickY), 1e-3f);
                                     const auto viewed =
                                         hybridWalk
                                             ? hybrid_steer::viewRelativeStick(
-                                                  0.f, 1.f, hybridHeading.yaw, motion.walkForwardAxis,
-                                                  motion.walkRightAxis,
+                                                  std::sin(hybridStick.dir), std::cos(hybridStick.dir),
+                                                  hybridHeading.yaw, motion.walkForwardAxis, motion.walkRightAxis,
                                                   std::min(walkMag, 1.f) * std::clamp(hybridStick.y / tiltNow, 0.f, 1.f))
                                             : hybrid_steer::viewRelativeStick(
                                                   moveHand.stickX, moveHand.stickY, hybridViewYawNow,

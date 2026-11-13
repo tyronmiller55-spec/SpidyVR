@@ -739,7 +739,7 @@ int main() {
                 // JUMP TO SPIDYVR, AIR VIEW EASE (November 12): the player's own.
                 key == "jump_handoff_ms" || key == "air_view_ease_ms" || key == "anim_yaw_sway_pct" ||
                 key == "turn_in_place_deg" || key.rfind("passive_", 0) == 0 || key == "movement_mode" ||
-                key == "rear_snap_ms")
+                key == "rear_snap_turn_ms")
                 continue;
             ++lines;
             check(at(key) < std::size(profileSettings) &&

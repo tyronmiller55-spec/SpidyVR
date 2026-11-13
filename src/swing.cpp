@@ -1949,6 +1949,25 @@ MotionIntent Swing::predictNativeStep(float seconds, const Input& input, const W
     } else if (!groundRun_) {
         standHold_ = 0;
     }
+    // PARKOUR AHEAD (run_update.hpp): an obstacle across the run's way, close at its
+    // speed, ends the run before he meets it, so the game's sprint (RT) parkours it.
+    if (groundRun_ && actual.grounded) {
+        const Vec3 across{groundAlong_.x, 0, groundAlong_.z};
+        const float speed = length(across);
+        if (speed > 1 && finite(actual.position)) {
+            const Vec3 way = across / speed;
+            const float reach = run_update::parkourLook(speed, config_.radius);
+            for (float h : run_update::parkourProbeHeights) {
+                const auto hit = world.bodyRaycast(actual.position + Vec3{0, h, 0}, way, reach);
+                if (hit && finite(hit->normal) && std::abs(hit->normal.y) < run_update::parkourSteep &&
+                    dot(hit->normal, way) < 0) {
+                    endGroundRun();
+                    ++parkourHandoffs_;
+                    break;
+                }
+            }
+        }
+    }
     // SMOOTH WEB LANDING: a landing with a web held, below the impact
     // speed and faster across than the carry's floor, keeps that speed
     // across the ground for a moment (the caller drives meanwhile). It ends

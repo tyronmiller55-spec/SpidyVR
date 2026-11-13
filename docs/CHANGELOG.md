@@ -1,5 +1,12 @@
 # Spidy changelog
 
+## HYBRID v2, wrist marker smoothing v2, parkour ahead (feat/hybrid-v2, from 5061b4a)
+
+- **HYBRID v2 movement (t79u/t86u):** the left stick's front half is free movement - he turns and runs where it points (to 90 degrees either side, 90-100 runs at 90), full speed, while the view keeps the heading (eye position, pitch and roll from the head bone). Within 15 degrees of forward the headset steers inside a fixed 30-degree window (heading +-15, gaze low-passed 0.1 s); 15-25 degrees blends gaze into the stick. The heading never follows the steered run (no feedback loop). Letting go leaves Spidey where he is and the view where it is (no turn-in-place back); a hold that times out on his feet keeps the heading (5061b4a rejoined the head bone: 17 swings of up to 158 degrees). The game's own turns (wall, air, parkour; not steerable for 0.25 s) are followed again. Logs: `hybrid stick: <zone>`, `hybrid heading: ... timed out on his feet`, `... it follows him again`.
+- **REAR SNAP TURN:** 200 ms eased head turn by default (INSTANT is the old frame switch). The ini key is now `rear_snap_turn_ms`, so a saved `rear_snap_ms=0` does not keep the cut.
+- **Wrist marker smoothing v2 (t86u):** the forearm's offset from the controller is smoothed over 0.2 s (was 0.08), its fallback fades over 0.3 s (0.15), the spherical aim's trust over 0.25 s (0.1); a marker's depth glides over 0.08 s (0.03) and a target ring over 0.07 s (0.035). The controller's own motion is not slowed (the offset rides its live pose).
+- **Parkour ahead (t86u):** SPIDY RUN (incl. RUN FROM STANDING) looks ahead 0.45 s of travel (0.8-3.5 m past the body) at three heights; a steep face across its way ends the run so the game's sprint (RT) meets it at speed and parkours it. Diagnostic `parkour RT:` every 5 s of stick-at-the-run ground frames: RT held % and why not (SPIDY RUN, grip/trigger held, buttons, fight, rising).
+
 Every build, newest first, with what changed, why, and what was measured.
 Per-check results are in [VALIDATION.md](VALIDATION.md).
 
