@@ -3,6 +3,12 @@
 Every build, newest first, with what changed, why, and what was measured.
 Per-check results are in [VALIDATION.md](VALIDATION.md).
 
+## PLAYTEST FIXES from the 5061b4a session, ported onto c6a8279 (Nov 13)
+
+The user, Nov 13 (t54u): last night's fixes, re-checked against the camera-modes build (c6a8279) and ported one at a time, branch `feat/c6a8279-ports`. Left out: PUNCH LUNGE (punches stay as they are) and LANDING VIEW HOLD (HYBRID v2's kept heading and ANIM HEAD RIDE already removed the 56 degree snap). The landing hard turn is not ported: ANIM HEAD RIDE brings the view to his head instead of turning him to the view. Not headset-tested.
+
+- **Left-stick flip break needs a fresh push:** 111 jumps broke to SpidyVR about 0.02 s after takeoff because the run stick was still tilted, so JUMP TO SPIDYVR's timer almost never ran. A left stick already tilted at takeoff now breaks only after it has come back inside the dead zone, or has moved more than 60 deg from its takeoff direction. The right stick is unchanged. Tests: `flip_break` (FreshPush).
+
 ## Camera modes: the animation's head ride, the shoulder limit, the 360 snap/realign (from 5c681de)
 
 Session game-vr-20261113-145500 (5c681de, 27 min; t97u "a very hitchy time ... landings and perches"): 174 landings, 15 zip arrivals. In the second after a landing the view's yaw sat a median 55 degrees off Spider-Man's head bone (p90 126, 193 of 340 samples over 45) while position, pitch and roll were the head's; 173 of 174 landings relatched the heading, 134 reseated the head (531 reseats in the session), 73 had a facing-check correction. The 90-degree rule held the view on 12,354 frames, 35 of its 80 windows with an excess of 180-270 degrees (it unwrapped the raw gap and ran away). Perches (a pole after a zip) are off the game's ground: they stayed SpidyVR's air, the view 95-119 degrees off the head, and the zip off them moved the eyes 1.2 m.
