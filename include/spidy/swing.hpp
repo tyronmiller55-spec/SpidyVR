@@ -1,6 +1,7 @@
 #pragma once
 #include "hitch_guard.hpp"
 #include "math.hpp"
+#include "swing_kick.hpp"
 #include "web_landing.hpp"
 #include <algorithm>
 #include <cmath>
@@ -796,6 +797,29 @@ class Swing {
     std::uint32_t pointJumps() const {
         return pointJumps_;
     }
+    // MANUAL SWING KICK (swing_kick.hpp): the assist for the steps to come, set again every native step
+    // (off by itself when not). While on, in the air, each ready web's length moves toward the aim's
+    // distance from its anchor (at most ropeMetres from its length when the assist began, ropeRate m/s)
+    // and the velocity turns toward the aim (at most steer m/s^2, |v| kept): `weight` 0..1 scales both.
+    struct KickAssist {
+        bool on{};
+        Vec3 aim{};
+        float weight{};
+    };
+    void kickAssist(const KickAssist& assist, const swing_kick::Config& config = {});
+    // What the assist has done since it began: the biggest rope change (signed, metres) and the most
+    // steering used (m/s^2).
+    struct KickReport {
+        float rope{}, steer{};
+    };
+    KickReport kickReport() const {
+        return kickReport_;
+    }
+    // The player kept `keep` of his velocity from a kick's blow, on the next step.
+    void kickRecoil(float keep) {
+        if (std::isfinite(keep) && keep >= 0 && keep <= 1)
+            kickKeep_ = keep;
+    }
     bool gestureTakeoff() const {
         return gestureTakeoff_;
     }
@@ -961,6 +985,13 @@ class Swing {
     bool pointJumpQueued_{};
     Vec3 pointJumpVelocity_{};
     std::uint32_t pointJumps_{};
+    // MANUAL SWING KICK: the assist in force, the ropes' lengths when it began, what it has done, and a
+    // blow's recoil waiting.
+    KickAssist kick_{};
+    swing_kick::Config kickConfig_{};
+    std::array<float, 2> kickStart_{};
+    KickReport kickReport_{};
+    float kickKeep_ = -1;
     WallHold wall_{};
     struct ClimbingHand {
         bool attached{}, held = true;

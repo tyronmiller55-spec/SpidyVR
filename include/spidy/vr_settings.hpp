@@ -548,6 +548,11 @@ struct Values {
     // VR STABILIZATION (November 14): 1 applies the CAMERA rows, HORIZON LEVEL and the bank's ANGLE to
     // SpidyVR's own view tilt (swing, air, combat, wall); 0 leaves it as before. camera_vr_stabilization.
     int cameraVrStabilization = 1;
+    // MANUAL SWING KICK (K1, swing_kick.hpp; November 14), EXPERIMENTAL: off until set. Swinging with the
+    // legs engaged (Y + X), a flick of the right stick up kicks at the ringed enemy within 30 degrees of
+    // the swing's velocity. swing_kick_manual. And the auto dive (WebStrike::dive, today's) as its own
+    // setting, on as before: swing_kick_auto. Both can be on; the dive holds back during a manual kick.
+    bool swingKickManual = false, swingKickAuto = true;
     // PASSIVE LEGS (leg_layers.hpp; November 12 06:18): in SpidyVR's air with
     // LEG CONTROL not engaged, the legs' spring runs with no stick, so momentum
     // moves them; this share of it shown (0 OFF). 60 by default. passive_legs_pct.
@@ -806,8 +811,10 @@ enum class Item : uint8_t {
     steadyAngle,
     cameraHorizonLevel,
     cameraVrStabilization,
+    swingKickManual,
+    swingKickAuto,
 };
-inline constexpr Item lastItem = Item::cameraVrStabilization;
+inline constexpr Item lastItem = Item::swingKickAuto;
 // SLOW-MO LENGTH's last step: no time limit (until L3 toggles it off).
 inline constexpr int slowMotionEndless = 91;
 // Real seconds a full meter lasts for a SLOW-MO LENGTH value; 0 = endless.
@@ -837,7 +844,7 @@ struct Row {
     Place place{};
 };
 // Stable row/setting numbers; categories below determine presentation order.
-const std::array<Row, 162>& rows();
+const std::array<Row, 164>& rows();
 const Row* rowFor(Item);
 // camera, shooters and legs (November 11, the user: "I can't find legs or
 // camera settings in any of the menus. Make sure it's clearly labeled"): tabs

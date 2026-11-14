@@ -756,6 +756,16 @@ void Swing::holdWall(float dt, float before, const World* collision) {
         body_.velocity -= n * out;
     wall_.distance = distance + shift;
 }
+void Swing::kickAssist(const KickAssist& assist, const swing_kick::Config& config) {
+    const bool begins = assist.on && !kick_.on;
+    kick_ = assist;
+    kick_.on = assist.on && finite(assist.aim) && std::isfinite(assist.weight) && assist.weight > 0;
+    kickConfig_ = config;
+    if (begins && kick_.on) {
+        kickStart_ = {webs_[0].length, webs_[1].length};
+        kickReport_ = {};
+    }
+}
 void Swing::reset(Body b) {
     resetGestures();
     if (!finite(b.position) || !finite(b.velocity))
@@ -776,6 +786,8 @@ void Swing::reset(Body b) {
     runJump_ = 0;
     leapQueued_ = 0;
     leapHeld_ = false;
+    kick_ = {};
+    kickKeep_ = -1;
     pointJumpQueued_ = false;
     pointJumpVelocity_ = {};
     wall_ = {};
@@ -1509,6 +1521,12 @@ void Swing::step(float dt, const Input& in, const WorldQueries& world, const Wor
         }
         leapQueued_ = 0;
     }
+    if (kickKeep_ >= 0) {
+        // A kick's blow landed: the player keeps this much of his velocity and swings on.
+        if (!body_.grounded && !wall_.on)
+            body_.velocity = body_.velocity * kickKeep_;
+        kickKeep_ = -1;
+    }
     if (pointJumpQueued_) {
         // POINT JUMP: off the ground, a perch or Spidy's wall the way he looks
         // (game_xr aimed it out of the surface). Takes the place of any leap
@@ -1582,6 +1600,13 @@ void Swing::step(float dt, const Input& in, const WorldQueries& world, const Wor
                                      Vec3{0, -run_update::groundRun.press, 0},
                                  speedLimit());
     } else {
+        if (kick_.on && !body_.grounded) {
+            // MANUAL SWING KICK: the velocity turns toward him, its length kept.
+            float used{};
+            body_.velocity = swing_kick::steered(body_.velocity, kick_.aim - body_.position, kick_.weight, dt,
+                                                 kickConfig_, &used);
+            kickReport_.steer = std::max(kickReport_.steer, used);
+        }
         Vec3 steering = finite(in.move) ? limited(Vec3{in.move.x, 0, in.move.z}, 1) : Vec3{};
         body_.velocity +=
             steering * ((body_.grounded ? config_.groundAcceleration : config_.airAcceleration * poseSteer_) * dt);
@@ -1701,6 +1726,19 @@ void Swing::step(float dt, const Input& in, const WorldQueries& world, const Wor
         hands_[i].winch = (webs_[i].length - lengths[i]) / dt;
         webs_[i].length = lengths[i];
     }
+    // MANUAL SWING KICK: each ready web's rope toward the aim's distance from its anchor.
+    if (kick_.on && !body_.grounded && !wall_.on)
+        for (int i = 0; i < 2; ++i) {
+            auto& w = webs_[i];
+            if (!w.ready() || w.catching || hands_[i].ropeClimbing)
+                continue;
+            const float longer = swing_kick::ropeLength(kickStart_[i], w.length, length(hold(i) - kick_.aim),
+                                                        kick_.weight, dt, config_.minRope, kickConfig_);
+            w.length = longer;
+            const float change = longer - kickStart_[i];
+            if (std::abs(change) > std::abs(kickReport_.rope))
+                kickReport_.rope = change;
+        }
     const bool bearing[2] = {bears(0), bears(1)};
     // Taut, in the air: no web slacker than its hand made it. After the
     // winch, and with the hand's own pull in this step, or the rope's own
@@ -1712,7 +1750,7 @@ void Swing::step(float dt, const Input& in, const WorldQueries& world, const Wor
             auto& w = webs_[i];
             const Vec3 out = body_.position - hold(i);
             const float span = length(out);
-            if (!bearing[i] || w.catching || span < 1e-5f)
+            if (!bearing[i] || w.catching || span < 1e-5f || kick_.on)
                 continue;
             const float pulled = std::max(0.f, dot(hands_[i].rate, out / span)) * dt;
             const float slackest = span + hands_[i].slack + pulled;

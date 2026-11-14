@@ -126,6 +126,8 @@ struct Player {
     // dive, remote counter or automatic hang. Original VR leaves this false.
     bool contactOnly{};
     Quat physicalToContact[2]{};
+    // The auto dive holds back: swing_kick_auto is off, or a manual swing kick is under way.
+    bool noDive{};
 };
 // What a sample opened: a web strike, at the enemy the hand's own web held.
 // The swing lets its webs go, and the grab his.
@@ -147,6 +149,20 @@ Flight fly(float seconds, Vec3 feet, bool grounded, bool waiting = false);
 // The strike in flight goes up from `feet`: a player on the ground leaves it
 // by the game's jump first (WebStrike::lifting).
 bool lifting(Vec3 feet);
+// MANUAL SWING KICK (swing_kick.hpp): the enemy the ring marks (the lock's: the one the next punch and the
+// auto dive go to), where he stands now. valid is false when nobody is marked or he is out of the fight.
+struct KickTarget {
+    bool valid{};
+    uint64_t id{};
+    Vec3 feet{};
+    float height = 1.8f, radius = .3f;
+    bool airborne{};
+};
+KickTarget kickTarget();
+// The kick's foot met him: a kinetic blow as hard as the player was fast, his flight at `enemyVelocity`
+// (world, real m/s). `feet` and `grounded`: the player's, as fly() has them. False when nothing was sent.
+bool kickBlow(uint64_t target, Vec3 point, Vec3 direction, float playerSpeed, Vec3 enemyVelocity, Vec3 feet,
+              bool grounded);
 // The strike in progress ends with no blow (play stopped, the player changed).
 void cancelStrike();
 // A thug the web pulled to a player in the air has arrived beside him: the

@@ -373,6 +373,8 @@ void knockouts(float seconds) {
         it = out || !bot || it->age > struckSeconds ? struckLately.erase(it) : it + 1;
     }
 }
+// A manual swing kick's blow in progress (kickBlow): the flight it gives the one it hits.
+std::optional<Vec3> kickFlight;
 // One blow, a fist's or a strike's, into the flow and to the game.
 void land(PunchEvent e, bool byStrike) {
     uint64_t machine{};
@@ -428,6 +430,14 @@ void land(PunchEvent e, bool byStrike) {
         d.kinetic = d.fly = false;
         d.knockback = Knockback::Knockback;
         d.velocity = {};
+    }
+    // MANUAL SWING KICK: a kinetic blow whose flight is the player's velocity's share.
+    if (kickFlight) {
+        d.kind = BlowKind::Heavy;
+        d.kinetic = d.fly = true;
+        d.knockback = Knockback::FlyBack;
+        d.velocity = *kickFlight;
+        kickFlight.reset();
     }
     // A counter's blow (spider_sense.hpp): the one after a fist thrown at him
     // while his warning stood, or one that lands while it stands and so
@@ -735,8 +745,10 @@ Opened game_punch::update(float seconds, const Input& in, const Player& player, 
         tally.swung += strikeOpened->called;
         tally.held += strikeOpened->held;
         tally.distance = strikeOpened->distance;
-    } else if (const auto dove = strike.dive(player.velocity, player.grounded, head, player.feet, enemies, world,
-                                             wish.target, punches.config())) {
+    } else if (const auto dove = player.noDive
+                                     ? std::optional<WebStrike::Opening>{}
+                                     : strike.dive(player.velocity, player.grounded, head, player.feet,
+                                                   enemies, world, wish.target, punches.config())) {
         // His own flight into the marked enemy: a swing, a zip, a jump or a
         // fall that takes him at him fast, feet first (WebStrike::dive). The
         // webs let go; the rest of the way is the strike's.
@@ -772,6 +784,45 @@ Opened game_punch::update(float seconds, const Input& in, const Player& player, 
     publishStrikes(2);
     publishSense(2, chest);
     return opened;
+}
+game_punch::KickTarget game_punch::kickTarget() {
+    KickTarget out;
+    if (!enabled.load(std::memory_order_relaxed) || !TryAcquireSRWLockShared(&updating))
+        return out;
+    if (enabled && !fighter.contactOnly && lock.target()) {
+        for (const auto& e : enemies)
+            if (e.id == lock.target()) {
+                out = {true, e.id, e.feet, e.height, e.radius, e.airborne};
+                break;
+            }
+    }
+    ReleaseSRWLockShared(&updating);
+    return out;
+}
+bool game_punch::kickBlow(uint64_t target, Vec3 point, Vec3 direction, float playerSpeed, Vec3 enemyVelocity,
+                          Vec3 feet, bool grounded) {
+    if (!enabled.load(std::memory_order_relaxed) || !TryAcquireSRWLockShared(&updating))
+        return false;
+    struct Release {
+        ~Release() {
+            ReleaseSRWLockShared(&updating);
+        }
+    } release;
+    if (!enabled || fighter.contactOnly || !target || !finite(point) || !finite(direction) ||
+        !finite(enemyVelocity))
+        return false;
+    const Vec3 way = length(direction) > .5f ? normalized(direction) : Vec3{0, 0, -1};
+    const float strength = std::max(strike.diveStrength(playerSpeed), strike.config().minStrength);
+    auto e = punches.blow(way, speedOf(punches.config(), strength));
+    e.hand = WebStrike::diveHand;
+    e.target = target;
+    e.point = point;
+    fighter.feet = feet;
+    fighter.grounded = grounded;
+    kickFlight = enemyVelocity;
+    land(e, false);
+    kickFlight.reset();
+    return true;
 }
 bool game_punch::lifting(Vec3 feet) {
     if (!enabled.load(std::memory_order_relaxed) || !TryAcquireSRWLockShared(&updating))

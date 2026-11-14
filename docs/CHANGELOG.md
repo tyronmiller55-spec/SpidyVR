@@ -3,6 +3,10 @@
 Every build, newest first, with what changed, why, and what was measured.
 Per-check results are in [VALIDATION.md](VALIDATION.md).
 
+## K1: manual swing kick (Nov 14, branch `feat/k1-swing-kick`, on ab4d60d)
+
+The plan's Pillar 4 (build order locked Nov 13; the user, Nov 14 pt59u: "Move on K1 while I test"). **Swing kick (experimental)**, off by default (`swing_kick_manual=0`): swinging at 9 m/s or faster with the legs engaged (Y + X), a flick of the right stick up (under 0.3 to over 0.8 within 80 ms; a slow push is still the jackknife pose) kicks at the ringed enemy 3 to 14 m away within 30 degrees of the swing's velocity (not the view). Each web's length moves toward his distance from its anchor (at most 1.2 m, 2 m/s) and the velocity turns toward him (at most 2.5 m/s^2); the turn keeps |v|, so nothing adds speed. The foot's swept 10 cm sphere meeting his capsule is a kinetic blow (his flight takes 70% of your velocity; you keep 60% and swing on); a miss fades the assist over 0.35 s. **Auto dive kick** (`swing_kick_auto=1`, today's `WebStrike::dive`) is its own switch and holds back while a hand kick is under way; both can be on. Logs: `swing kick: armed target= cone= speed=`, `swing kick: hit|miss assist= steer=`, `refused (<why>)`. New side channel `SpidySwingKick` / `SpidySwingKickLive` (an older swing module has neither: no hand kick, the dive as before); `game_swing::Settings` is unchanged. No game address is used. See [SWING_KICK.md](SWING_KICK.md). Tests: `swing_kick` (286 checks: arm gate, cone, flick, assist clamps, foot sweep, states, the swing's assist in a simulated web, settings).
+
 ## STABILITY, ARMS, HANDSTAND pass from the c6a8279 session (46195f7, Nov 13 22:24 PT)
 
 The user, Nov 13 (pt55u): "the game is hitching heavily every few minutes, which drops my web lines ... handstands still don't work ... the arms are deforming terribly and preventing aiming the webshooters ... stronger stabilization and leveling across the board." Session `game-vr-20261113-222447` (46195f7, 20 min; diag 1196.9 s). One commit per fix on `feat/stability-arms-handstand`; notes in `playtest-c6a8279/NOTES.md`.

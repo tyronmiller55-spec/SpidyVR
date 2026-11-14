@@ -754,6 +754,9 @@ int main() {
             // HANDSTAND (H1, November 12): experimental, the player's own.
             if (key.rfind("handstand", 0) == 0)
                 continue;
+            // SWING KICK (K1, November 14): experimental, the player's own.
+            if (key.rfind("swing_kick", 0) == 0)
+                continue;
             // CAMERA MODES (November 13): the player's own comfort, not in shared profiles.
             if (key == "anim_head_ride" || key == "shoulder_limit" || key == "snap_realign")
                 continue;

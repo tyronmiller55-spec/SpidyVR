@@ -729,6 +729,10 @@ template <class V> auto switchOf(Item item, V& v) -> decltype(&v.aimMarkers) {
         return &v.headProbe;
     case Item::soundTrace:
         return &v.soundTrace;
+    case Item::swingKickManual:
+        return &v.swingKickManual;
+    case Item::swingKickAuto:
+        return &v.swingKickAuto;
     case Item::legAirCrouch:
         return &v.legAirCrouch;
     case Item::legReachSpread:
@@ -884,9 +888,9 @@ Values sanitized(Values v) {
     v.automaticHandThreshold = std::clamp(v.automaticHandThreshold, 50, 300);
     return v;
 }
-const std::array<Row, 162>& rows() {
+const std::array<Row, 164>& rows() {
     // The help fits the game's description column beside the rows.
-    static const std::array<Row, 162> all{{
+    static const std::array<Row, 164> all{{
         {Item::none, "WEBS", nullptr, {}},
         {Item::webStyle, "WEB STYLE",
          "Arcade: webs pass lamp posts, signs and cars, and swings stay above the street.", webStyleChoices},
@@ -1339,6 +1343,16 @@ const std::array<Row, 162>& rows() {
         {Item::cameraVrStabilization, "VR STABILIZATION",
          "Applies CAMERA and STABILIZATION to SpidyVR (swing, air, combat, wall) too.",
          cameraVrStabilizationChoices, Place::launcher},
+        {Item::swingKickManual,
+         "SWING KICK (EXPERIMENTAL)",
+         "Swinging, Y+X, flick the right stick up: kick the ringed enemy within 30 deg.",
+         {},
+         Place::launcher},
+        {Item::swingKickAuto,
+         "AUTO DIVE KICK",
+         "A fast flight at the ringed enemy dives in feet first. Off: kick by hand only.",
+         {},
+         Place::launcher},
     }};
     return all;
 }
@@ -1424,8 +1438,9 @@ const std::array<Screen, categoryCount>& screens() {
     // LEGS (ADVANCED) (November 11): shown even while unavailable, the help
     // saying why (shownWhenInactive).
     static constexpr Item legs[] = {
-        Item::legControl, Item::legStiffness, Item::legDamping, Item::legCoupling,
-        Item::passiveLegs, Item::passiveCoupling, Item::legAirCrouch, Item::legReachSpread,
+        Item::legControl,      Item::legStiffness,    Item::legDamping,   Item::legCoupling,
+        Item::passiveLegs,     Item::passiveCoupling, Item::legAirCrouch, Item::legReachSpread,
+        Item::swingKickManual, Item::swingKickAuto,
     };
     // POINT JUMP (November 11): its switch, trigger and feel.
     static constexpr Item pointJump[] = {
@@ -2029,6 +2044,8 @@ constexpr TabOnly tabOnly[] = {
     {"camera_steady_angle_ms", nullptr, &Values::steadyAngleMs},
     {"camera_horizon_level_pct", nullptr, &Values::cameraHorizonLevelPct},
     {"camera_vr_stabilization", nullptr, &Values::cameraVrStabilization},
+    {"swing_kick_manual", &Values::swingKickManual, nullptr},
+    {"swing_kick_auto", &Values::swingKickAuto, nullptr},
     {"leg_air_crouch", &Values::legAirCrouch, nullptr},
     {"leg_reach_spread", &Values::legReachSpread, nullptr},
     {"air_fists", &Values::airFists, nullptr},

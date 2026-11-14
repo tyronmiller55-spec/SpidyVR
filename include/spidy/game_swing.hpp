@@ -4,6 +4,7 @@
 #include "swing.hpp"
 #include "swing_takeoff.hpp"
 #include <algorithm>
+#include <cmath>
 #include <cstddef>
 #include <cstdint>
 #include <limits>
@@ -628,6 +629,38 @@ struct SidestepLive {
     float metres{}, ms{};
 };
 static_assert(sizeof(SidestepLive) == 40);
+// Side channel from XR (MANUAL SWING KICK, swing_kick.hpp): the settings and, on a flick, the ask. `flags`
+// bit 0: swing_kick_manual is on; bit 1: swing_kick_auto is OFF (the auto dive holds back); bit 2: the
+// legs are engaged (Y + X) now. `serial` rises with each flick; the same serial again is not a new
+// flick (the flags may be sent again with it). coneDegrees and ropeMetres are the kick's own (30 and
+// 1.2 by default). Not a Command or Settings field and not versioned with them (an older swing module has
+// no SpidySwingKick export; XR then never kicks, and the auto dive is as it was).
+struct SwingKickAsk {
+    uint32_t magic = 0x5357504b, version = 1, bytes = sizeof(SwingKickAsk), serial{};
+    uint32_t flags{};
+    float coneDegrees = 30.f, ropeMetres = 1.2f;
+    uint32_t reserved{};
+};
+static_assert(sizeof(SwingKickAsk) == 32);
+inline bool validSwingKick(const SwingKickAsk& a) {
+    return a.magic == 0x5357504b && a.version == 1 && a.bytes == sizeof(SwingKickAsk) && !(a.flags & ~7u) &&
+           std::isfinite(a.coneDegrees) && a.coneDegrees >= 5.f && a.coneDegrees <= 60.f &&
+           std::isfinite(a.ropeMetres) && a.ropeMetres >= 0.f && a.ropeMetres <= 3.f;
+}
+// SpidySwingKickLive: the kick's account for XR's log. `events` counts up last; for the latest event
+// (1 armed, 2 hit, 3 miss, 4 refused): its target (an actor record), the cone (degrees off the swing's
+// velocity), speed (real m/s) and distance (m) when it came, the rope assist used (m, signed) and the
+// steering used (m/s^2), and for a refusal swing_kick::Refusal. `state` is the kick's Phase now (0 idle,
+// 1 active, 2 fading); `point` where his middle was.
+struct SwingKickLive {
+    uint32_t magic = 0x53574b4c, version = 1, bytes = sizeof(SwingKickLive), state{};
+    uint32_t asked{}, armed{}, hits{}, misses{}, refused{}, blows{}, events{}, lastEvent{}, refusal{};
+    uint64_t target{};
+    Vec3 point{};
+    float cone{}, speed{}, distance{}, assist{}, steer{};
+    uint32_t autoOff{}, reserved{};
+};
+static_assert(sizeof(SwingKickLive) == 104);
 // A web's edges as Bends hands them on: its anchor is the edge nearest the
 // hand, and each edge records the one before it, back to where it sticks.
 inline Bends::Hand edgesOf(const Web& w) {

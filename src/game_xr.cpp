@@ -18,6 +18,7 @@
 #include "spidy/game_dodge.hpp"
 #include "spidy/point_jump.hpp"
 #include "spidy/sidestep.hpp"
+#include "spidy/swing_kick.hpp"
 #include "spidy/game_fp.hpp"
 #include "spidy/web_aim.hpp"
 #include "spidy/game_grab.hpp"
@@ -592,6 +593,10 @@ BridgeCall swingPointJump{};
 // QUICK SIDESTEP's burst for the swing's next step (SpidySwingSidestep) and the
 // swing's account of its bursts (SpidySidestepLive); none in an older module.
 BridgeCall swingSidestep{};
+// MANUAL SWING KICK's settings and flicks for the swing (SpidySwingKick), and its account of them
+// (SpidySwingKickLive); none in an older module (no manual kick, the auto dive as before).
+BridgeCall swingKick{};
+const game_swing::SwingKickLive* swingKickLive{};
 const game_swing::SidestepLive* sidestepLive{};
 // Optional: the web tie's telemetry (game_grab::TieData; an older ray module has none).
 BridgeCall sampleTie{};
@@ -1400,6 +1405,14 @@ DWORD WINAPI run(void*) {
         // blows whose sound the headset played itself, for the report.
         Vec3 diveAt{};
         int64_t kickUntil{};
+        // MANUAL SWING KICK (swing_kick.hpp): the right stick's flick, the flicks sent, the flags last
+        // taken by the swing, and the swing's events logged so far.
+        swing_kick::Flick kickFlick;
+        uint32_t kickFlickSerial{}, kickFlagsSent = ~0u, kickEventsSeen{};
+        float kickSentAge{};
+        // The kick is armed or fading (last frame's): the legs keep the right stick, whose push up would
+        // otherwise be the game's zip.
+        bool kickHoldsStick{};
         uint32_t dives{}, ownSounds{};
         // The VR settings: the launch options, then the SPIDY VR tab in the
         // game's Settings during play.
@@ -2492,6 +2505,37 @@ DWORD WINAPI run(void*) {
                         if (legHoldOut.disengagedNow)
                             diag_log::writef("legs: disengaged (%s)", leg_hold::whyName(legHoldOut.why));
                     }
+                    // MANUAL SWING KICK (swing_kick.hpp; swing_kick_manual, off until set): swinging with the
+                    // legs engaged, a flick of the right stick up (under 0.3 to over 0.8 within 80 ms; a slow
+                    // push is still the jackknife pose) asks the swing to kick at the ringed enemy. The swing
+                    // arms it only within 30 degrees of the swing's velocity, 3 to 14 m, 9 m/s or faster;
+                    // here the stick is read as it came (the legs own it from the game's side) and the
+                    // settings go over whenever they change (swing_kick_auto too: it holds the dive back).
+                    {
+                        const bool kickHere = swingKick && values.swingKickManual && !flatScreen &&
+                                              !calibrationInput && legHoldOut.engaged &&
+                                              frame.hands[1].valid &&
+                                              hybridOwner.domain == hybrid_owner::Domain::vr;
+                        const bool flicked = kickFlick.update(frame.seconds, frame.hands[1].stickX,
+                                                              frame.hands[1].stickY, kickHere);
+                        if (flicked)
+                            ++kickFlickSerial;
+                        game_swing::SwingKickAsk ask;
+                        ask.serial = kickFlickSerial;
+                        ask.flags = (values.swingKickManual ? 1u : 0u) | (values.swingKickAuto ? 0u : 2u) |
+                                    (legHoldOut.engaged ? 4u : 0u);
+                        // The flags go again every second: a swing module started anew starts from none.
+                        kickSentAge += std::isfinite(frame.seconds) ? std::max(frame.seconds, 0.f) : 0.f;
+                        if (swingKick && (flicked || ask.flags != kickFlagsSent || kickSentAge > 1.f)) {
+                            if (flicked)
+                                diag_log::writef("swing kick: flick (stick %.2f, %.2f)",
+                                                 frame.hands[1].stickX, frame.hands[1].stickY);
+                            if (swingKick(&ask) == 0) {
+                                kickFlagsSent = ask.flags;
+                                kickSentAge = 0;
+                            }
+                        }
+                    }
                     // QUICK SIDESTEP (sidestep.hpp; approved November 12, on by default):
                     // on the ground under the animation, a left-stick flick then A within
                     // 120 ms is a short upright burst the way it was flicked (the swing
@@ -3049,8 +3093,9 @@ DWORD WINAPI run(void*) {
                     // play): it turns nothing and goes to the game as rest.
                     // LEG TOGGLE on this frame: off, the stick is the turn's at once;
                     // on where the legs could move last frame, the legs' at once.
-                    legStickActive = gesturesPlay && legHoldOut.engaged &&
-                                     (legStickOwns || (legHoldOut.engagedNow && legBaseLast));
+                    legStickActive =
+                        gesturesPlay && legHoldOut.engaged &&
+                        (legStickOwns || kickHoldsStick || (legHoldOut.engagedNow && legBaseLast));
                     legStickOwns = false;
                     rig.legStick(legStickActive);
                     if (legStickActive)
@@ -4947,6 +4992,43 @@ DWORD WINAPI run(void*) {
                         }
                         wallsBefore = swingState.walls;
                         wallJumpsBefore = swingState.wallJumps;
+                        // MANUAL SWING KICK: the swing's account of it (SwingKickLive): its events in the log
+                        // (armed, hit or miss, refused), and the legs kicking out at him while it is armed
+                        // and a moment after (the dive's pose, body::Targets::kick). The blow's feedback
+                        // (hands, burst, sound, hit stop) is the strikes' below: it is a landed blow like
+                        // any.
+                        if (const volatile game_swing::SwingKickLive* kl = swingKickLive) {
+                            const uint32_t events = kl->events;
+                            const uint32_t state = kl->state;
+                            const Vec3 point{kl->point.x, kl->point.y, kl->point.z};
+                            kickHoldsStick = state != 0;
+                            if (state == 1 && finite(point)) {
+                                diveAt = point;
+                                kickUntil = frame.predictedDisplayTime + 250'000'000;
+                            }
+                            if (events != kickEventsSeen) {
+                                kickEventsSeen = events;
+                                const uint32_t what = kl->lastEvent;
+                                const unsigned long long who = kl->target;
+                                if (what == 1)
+                                    diag_log::writef(
+                                        "swing kick: armed target=%llu cone=%.1f speed=%.1f distance=%.1f",
+                                        who, kl->cone, kl->speed, kl->distance);
+                                else if (what == 2 || what == 3)
+                                    diag_log::writef("swing kick: %s assist=%.2f steer=%.2f (target=%llu "
+                                                     "cone=%.1f speed=%.1f "
+                                                     "distance=%.1f; armed %u, hits %u, misses %u)",
+                                                     what == 2 ? "hit" : "miss", kl->assist, kl->steer, who,
+                                                     kl->cone, kl->speed, kl->distance, kl->armed, kl->hits,
+                                                     kl->misses);
+                                else if (what == 4)
+                                    diag_log::writef("swing kick: refused (%s) target=%llu cone=%.1f "
+                                                     "speed=%.1f distance=%.1f",
+                                                     swing_kick::refusalName(
+                                                         static_cast<swing_kick::Refusal>(kl->refusal)),
+                                                     who, kl->cone, kl->speed, kl->distance);
+                            }
+                        }
                         // Every landed blow, a fist's or a web strike's: the hand
                         // that threw it kicks, as hard and as long as the blow was
                         // (a jab 60 ms, a blow that sends him flying 180 ms and the
@@ -10460,6 +10542,14 @@ extern "C" __declspec(dllexport) DWORD WINAPI SpidyXrStart(void* input) {
     setSwingPoseCoupling = reinterpret_cast<BridgeCall>(GetProcAddress(rays, "SpidySwingPoseCoupling"));
     swingPointJump = reinterpret_cast<BridgeCall>(GetProcAddress(rays, "SpidySwingPointJump"));
     swingSidestep = reinterpret_cast<BridgeCall>(GetProcAddress(rays, "SpidySwingSidestep"));
+    swingKick = reinterpret_cast<BridgeCall>(GetProcAddress(rays, "SpidySwingKick"));
+    swingKickLive =
+        reinterpret_cast<const game_swing::SwingKickLive*>(GetProcAddress(rays, "SpidySwingKickLive"));
+    if (const game_swing::SwingKickLive expected;
+        swingKickLive &&
+        (swingKickLive->magic != expected.magic || swingKickLive->version != expected.version ||
+         swingKickLive->bytes != expected.bytes))
+        swingKickLive = nullptr;
     sidestepLive = reinterpret_cast<const game_swing::SidestepLive*>(GetProcAddress(rays, "SpidySidestepLive"));
     if (const game_swing::SidestepLive expected;
         sidestepLive && (sidestepLive->magic != expected.magic || sidestepLive->version != expected.version ||

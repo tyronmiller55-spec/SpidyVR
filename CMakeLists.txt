@@ -75,6 +75,11 @@ add_executable(spidy_vr_stabilize_tests tests/vr_stabilize_tests.cpp)
 target_link_libraries(spidy_vr_stabilize_tests PRIVATE spidy_core)
 add_test(NAME vr_stabilize COMMAND spidy_vr_stabilize_tests)
 
+# MANUAL SWING KICK (swing_kick.hpp): the arm gate, cone, flick, assist clamps, foot sweep (portable).
+add_executable(spidy_swing_kick_tests tests/swing_kick_tests.cpp)
+target_link_libraries(spidy_swing_kick_tests PRIVATE spidy_core)
+add_test(NAME swing_kick COMMAND spidy_swing_kick_tests)
+
 add_executable(spidy_handstand_tests tests/handstand_tests.cpp)
 target_link_libraries(spidy_handstand_tests PRIVATE spidy_core)
 add_test(NAME handstand COMMAND spidy_handstand_tests)

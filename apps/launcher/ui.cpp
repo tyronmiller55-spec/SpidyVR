@@ -2667,6 +2667,23 @@ void App::options(ImVec2 origin, ImVec2 size) {
                    "clear your arm. On by default.",
                    S(42), [&] { tabToggle("##legreachspread", Item::legReachSpread); });
         });
+        group(legsPage, 1, "Swing kick (experimental)", [&] {
+            settingOption(
+                Item::swingKickManual, "Swing kick",
+                "Swinging on a web with the legs engaged (Y+X), flick the right stick up (a quick, firm "
+                "push; a slow push still poses the legs) to kick the enemy the ring marks: 3 to 14 m away, "
+                "within 30 degrees of the way you are swinging, at 9 m/s or faster. The web lengthens or "
+                "shortens a little and nudges you toward him, never adding speed; a hit is a hard blow that "
+                "sends him flying, and you keep most of your speed. A miss just fades out. Off by default.",
+                S(42), [&] { tabToggle("##swingkick", Item::swingKickManual); });
+            settingOption(
+                Item::swingKickAuto, "Auto dive kick",
+                "The dive you already have: a fast swing, zip or fall straight at the marked enemy lets go "
+                "of "
+                "the webs and kicks him feet first. Turn it off to kick only by hand with Swing kick. Both "
+                "can be on; the dive waits while a hand kick is under way. On by default.",
+                S(42), [&] { tabToggle("##swingkickauto", Item::swingKickAuto); });
+        });
         group(pointJumpPage, 0, "Point jump (experimental)", [&] {
             settingOption(Item::pointJump, "Point jump",
                    "Whenever you touch a surface (the ground, a perch, a wall you run on), press A and B "
