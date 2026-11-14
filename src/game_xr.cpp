@@ -5221,10 +5221,15 @@ DWORD WINAPI run(void*) {
                                 jointNamedSeen = named;
                                 jointValidSeen = valid;
                                 char have[160]{}, lack[160]{};
+                                size_t haveAt = 0, lackAt = 0;
                                 for (int r = 0; r < enemy_joints::roleCount; ++r) {
-                                    char* into = (named & (1u << r)) ? have : lack;
-                                    std::strncat(into, enemy_joints::roleNames[r], 12);
-                                    std::strncat(into, " ", 2);
+                                    const bool named1 = (named & (1u << r)) != 0;
+                                    char* into = named1 ? have : lack;
+                                    size_t& at = named1 ? haveAt : lackAt;
+                                    const int n = std::snprintf(into + at, sizeof(have) - at, "%s ",
+                                                                enemy_joints::roleNames[r]);
+                                    if (n > 0 && at + static_cast<size_t>(n) < sizeof(have))
+                                        at += static_cast<size_t>(n);
                                 }
                                 diag_log::writef("enemy joints: a rig of %u joints names [%s] and lacks [%s]; read %#x; "
                                                  "(reads %u, no head+chest %u, last why: %s)",
