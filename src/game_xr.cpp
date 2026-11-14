@@ -3391,6 +3391,20 @@ DWORD WINAPI run(void*) {
                                 "spin %.1f rad/s, palms %.2f m over the floor; every failing gate: %s)",
                                 handstand::refusalName(hs.refused), hs.inverted, hs.spin, hs.palmGap, failed);
                         }
+                        // THE CATCH'S GEOMETRY (G1 playtest): the first frames of a catch, to tell a lean from
+                        // palms re-placed: the palm centre and how far it moved, the span, the centre of mass's
+                        // offset as the landing left it and as seeded, the divergent component outside the
+                        // support and for how long, the lean, and the rig's tilt as applied.
+                        if (hs.frame >= 0 && hs.frame < 12)
+                            diag_log::writef(
+                                "handstand: catch frame %d: palm centre (%.2f, %.2f, %.2f) span %.2f m, moved %.3f m%s; "
+                                "com %.2f m off (landing %.2f, seeded %.2f), xi %.2f m outside for %d ms, lean %.1f deg, "
+                                "rig tilt %.0f deg inverted",
+                                hs.frame, hs.centre.x, hs.centre.y, hs.centre.z, hs.span, hs.centreJump,
+                                hs.reseeded ? " (re-seeded)" : "", length(hs.lean), hs.seedRaw, hs.seedOffset,
+                                hs.xiOutside, static_cast<int>(hs.outsideSeconds * 1000 + .5f),
+                                hs.balance.leanDegrees,
+                                handstand::invertedDegrees(motion.flipTilt.rotate({0, 1, 0})));
                         handstandLogAge += std::isfinite(frame.seconds) ? std::clamp(frame.seconds, 0.f, .1f) : 0.f;
                         if (hs.state != handstandStateLogged ||
                             (hs.state == handstand::State::balance && handstandLogAge >= .5f)) {

@@ -71,6 +71,20 @@ legs shifting ξref (H2), handsprings (H2).
 - The landing's hand-off to the animation leaves the catch its first 0.25 s (`hybrid_owner::handstandLandNs`): the touchdown is judged in the animation's domain too, and a catch there takes SpidyVR back (`EnterVr::handstand`).
 - diag: every failing gate on each refusal ("every failing gate: ..."), and a line for a landing handed over with no touchdown judged, with the inputs that kept it out.
 
+## The catch's seed, re-seed and grace (G1 playtest, Nov 14)
+
+The Grip1 logs (A and C) judged 189 touchdowns; 8 caught (8 of the 11 landings 100 degrees or more inverted), and **all 8 exited "fall" within 0 to 156 ms**, 6 of them in one frame, so the state never reached `balance` and the player saw a flicker. The study (`HANDSTAND_STUDY.md` in the playtest notes) found two causes and one gap:
+
+- **The start was outside the support.** The balance started with the centre of mass `comHeight * sin(180 - inverted)` from the palms: 0.21 m at 167 degrees, 0.40 at 155, 0.52 at 147, 0.65 at 137, against a support of 0.12 m around a palm span of about 0.3 m. The divergent component was outside it from the first frame and tripped the 0.12 s rule (or the 35 degree lean cap). **Now the offset is seeded over the palms:** the landing's direction is kept, its length is brought to at most `seedShare` (0.6) of the support's radius from the palms' segment (`handstand::seedInside`; 0.072 m). The body settles over the palms through the catching phase; the view's lean (`supportTilt`) follows the balance's lean as before.
+- **A lean jump in the frame after the catch.** The tilt is replaced by `supportTilt` (straight down, then the lean), which re-places the palms, and the handoff re-origins the tracking space (`position lock: G->T origin on actor feet`) in that same frame: the support moved under a stored world centre of mass and read as 40 degrees of lean. **Now the centre of mass goes with the palms:** the first update after the catch takes the palm centre's move whatever its size, and any move over `reposeJump` (0.04 m in a frame, more than a hand moves) while catching (`Balance::shift`). After `catchGrace` the palms are the player's own and a move is a lean again.
+- **No fall test while it settles.** For the first `catchGrace` (0.15 s) of `catching` the fall test is skipped and its timer starts clean (`Balance::forgive`): the state is a landing settle, not a balance yet. Every other exit (push, grip, tracking, missed) is as before.
+
+**What the log says.** The first 12 frames of a catch each write `handstand: catch frame N: palm centre (x, y, z) span S m, moved M m [(re-seeded)]; com C m off (landing L, seeded D), xi X m outside for N ms, lean L deg, rig tilt T deg inverted` (frame 0 is the catch frame). `moved` is how far the palm centre moved since the last frame (a re-placement shows here); `landing` and `seeded` are the centre of mass's offset as the landing left it and as seeded; `xi ... outside` is the divergent component's distance beyond the support and how long it has been out; `rig tilt` is the tilt applied. The exit line, `handstand: exit fall (lean N deg)`, is unchanged.
+
+Not changed (feel, left for approval): `touchdownReach` (1.6 m) and `catchSpin` (5 rad/s), which refused 3 of the 11 inverted landings.
+
+Tests (`tests/handstand_tests.cpp`): a 137, 147, 155 and 167 degree catch survives 0.5 s with no input (and the old start falls at 137 and 147); a 0.5 m palm-centre jump after the catch does not fall; the catching state ignores the fall test for 0.15 s even from the old start; the geometry fields.
+
 ## TODO
 
 - `TODO(handstand sound)`: the push-off sound and grunt; no sound IDs yet (SOUND TRACE, 1008510).

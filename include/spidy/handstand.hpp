@@ -80,6 +80,14 @@ struct Params {
     float touchdownSettle = .6f;  // s a touchdown catch has to bring the palms down
     float eyeDrop = .9f;    // the inverted eyes' drop toward the floor, m
     float stickLean = .08f; // m the left stick moves the balance's aim
+    // THE CATCH'S SEED (G1 playtest: 8 of 8 catches fell within 160 ms): the centre of mass starts over the
+    // palms, its offset no more than seedShare of the support's radius (it was 0.2 to 0.65 m, 2 to 5 times
+    // outside a 0.12 m support, from the landing's 137 to 167 degrees of inversion). The body settles over
+    // the palms during the catching phase.
+    float seedShare = .6f;
+    // A palm centre that moves further than this in a frame while catching is the palms being re-placed (the
+    // support tilt, the origin of the handoff), not a lean: the centre of mass goes with it.
+    float reposeJump = .04f; // m
 };
 
 template <class V> Params paramsOf(const V& v) {
@@ -211,6 +219,21 @@ struct Support {
     }
 };
 
+// p brought inside `share` of the support's radius around the palms' segment, keeping its direction from the
+// nearest point of the segment (level). A point already that close is returned as it is.
+inline Vec3 seedInside(const Support& s, Vec3 p, float share) {
+    const Vec3 pa{p.x - s.a.x, 0, p.z - s.a.z}, ba{s.b.x - s.a.x, 0, s.b.z - s.a.z};
+    const float len2 = ba.x * ba.x + ba.z * ba.z;
+    const float t = len2 > 1e-8f ? std::clamp((pa.x * ba.x + pa.z * ba.z) / len2, 0.f, 1.f) : 0.f;
+    const Vec3 nearest{s.a.x + ba.x * t, 0, s.a.z + ba.z * t};
+    const Vec3 off{p.x - nearest.x, 0, p.z - nearest.z};
+    const float d = std::hypot(off.x, off.z);
+    const float reach = std::max(s.radius, 0.f) * std::max(share, 0.f);
+    if (d <= reach || d < 1e-6f)
+        return Vec3{p.x, 0, p.z};
+    return nearest + off * (reach / d);
+}
+
 // The linear inverted pendulum on the palms, level: x the centre of mass's
 // offset, v its velocity. u (the centre of pressure) steered by the DCM:
 //   w0 = sqrt(g / h); xi = x + v / w0; u = xi + (k / w0) (xi - xiRef),
@@ -263,6 +286,17 @@ class Balance {
     }
     Vec3 v() const {
         return v_;
+    }
+    // The palms were re-placed by `by` (level): the centre of mass goes with them, so it reads as no lean.
+    void shift(Vec3 by) {
+        x_ += Vec3{by.x, 0, by.z};
+    }
+    // The fall timer starts again (the catching phase is a settle, not a balance yet).
+    void forgive() {
+        outside_ = 0;
+    }
+    float outside() const {
+        return outside_;
     }
 
   private:
@@ -345,6 +379,15 @@ class Handstand {
         // The touchdown's inputs as judged (for the log of a landing that was not judged).
         bool touchdownSeen{}, aloftSeen{}, vrAirSeen{};
         float airAge{};
+        // THE CATCH'S GEOMETRY, for the log (G1 playtest): `frame` counts the updates since the catch (0: the catch
+        // frame; -1: none), with the palm centre, how far it moved since the last frame, how far the centre of
+        // mass was from it as the landing left it (`seedRaw`) and as seeded (`seedOffset`), the divergent
+        // component's distance outside the support and for how long, and whether this frame re-placed the
+        // centre of mass with the palms (`reseeded`, by `shift` metres).
+        int frame = -1;
+        Vec3 centre{};
+        float centreJump{}, seedRaw{}, seedOffset{}, xiOutside{}, outsideSeconds{}, shift{}, span{};
+        bool reseeded{};
     };
     Out update(const Input& in, const Params& p) {
         Out out;
@@ -416,13 +459,22 @@ class Handstand {
             // The CoM along the body's feet from the palms' centre.
             const Vec3 feetWay = finite(in.bodyUp) ? -normalized(in.bodyUp) : Vec3{0, 1, 0};
             const Vec3 c = support_.centre();
-            const Vec3 x0 = c + Vec3{feetWay.x, 0, feetWay.z} * p.comHeight;
+            const Vec3 raw = c + Vec3{feetWay.x, 0, feetWay.z} * p.comHeight;
+            // Seeded over the palms: the offset the landing's tilt gave it is the body's, not a balance to lose.
+            const Vec3 x0 = seedInside(support_, raw, p.seedShare);
+            out.seedRaw = length(Vec3{raw.x - c.x, 0, raw.z - c.z});
+            out.seedOffset = length(Vec3{x0.x - c.x, 0, x0.z - c.z});
+            centre_ = c;
+            frame_ = 0;
+            reseedPending_ = true;
             // Damped: the floor takes most of the landing's speed and spin.
             const Vec3 v0 =
                 finite(in.velocity) ? Vec3{in.velocity.x, 0, in.velocity.z} * p.entryKeep : Vec3{};
             const Vec3 spinSpeed = horizontal(
                 cross((finite(in.angular) ? in.angular : Vec3{}) * p.entrySpinKeep, feetWay * p.comHeight));
             balance_.start(x0, limited(v0 + spinSpeed, p.entryMaxSpeed));
+            last_ = {};
+            last_.x = last_.xi = x0;
             gripCarried_ = in.grip;
             out.gripCarried = gripCarried_;
             state_ = State::catching;
@@ -453,9 +505,28 @@ class Handstand {
             if (why == Exit::none) {
                 if (state_ == State::catching && age_ >= p.catchGrace && both)
                     state_ = State::balance;
+                // RE-SEED: the first frame after the catch (the handoff's origin, the support tilt) and any
+                // palm re-placement while catching moves the palms, not the body.
+                const Vec3 c = support_.centre();
+                if (finite(c) && finite(centre_)) {
+                    const Vec3 jump{c.x - centre_.x, 0, c.z - centre_.z};
+                    out.centreJump = length(jump);
+                    if (reseedPending_ || (state_ == State::catching && out.centreJump > p.reposeJump)) {
+                        balance_.shift(jump);
+                        out.reseeded = true;
+                        out.shift = out.centreJump;
+                    }
+                    centre_ = c;
+                }
+                reseedPending_ = false;
                 const Vec3 aim =
                     support_.centre() + (finite(in.aim) ? limited(horizontal(in.aim), p.stickLean) : Vec3{});
                 last_ = balance_.step(dt, support_, aim, p);
+                // Catching is a settle for its first catchGrace: no fall test, and its timer starts clean.
+                if (state_ == State::catching && age_ < p.catchGrace) {
+                    balance_.forgive();
+                    last_.fell = false;
+                }
                 if (last_.fell)
                     why = Exit::fall;
             }
@@ -489,6 +560,18 @@ class Handstand {
         out.balance = last_;
         out.lean = balance_.x() - support_.centre();
         out.lean.y = 0;
+        // The catch's geometry (the log's first frames): this update's, or none once the state is off.
+        if (state_ == State::catching || state_ == State::balance || out.caughtNow) {
+            out.frame = static_cast<int>(std::min<unsigned>(frame_, 1000000u));
+            ++frame_;
+            out.centre = support_.centre();
+            out.span = finite(support_.a) && finite(support_.b)
+                           ? std::hypot(support_.a.x - support_.b.x, support_.a.z - support_.b.z)
+                           : 0.f;
+            const Vec3 near = support_.clamp(last_.xi);
+            out.xiOutside = std::hypot(last_.xi.x - near.x, last_.xi.z - near.z);
+            out.outsideSeconds = balance_.outside();
+        }
         return out;
     }
     State state() const {
@@ -508,7 +591,9 @@ class Handstand {
     State state_{};
     Exit exit_{};
     bool armed_ = true;
-    bool touchdownBefore_{}, touchdownCaught_{}, gripCarried_{};
+    bool touchdownBefore_{}, touchdownCaught_{}, gripCarried_{}, reseedPending_{};
+    Vec3 centre_{};
+    unsigned frame_{};
     float age_{};
     float airAge_ = 10.f;
     Balance balance_{};

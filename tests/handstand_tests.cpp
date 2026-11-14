@@ -486,6 +486,130 @@ int main() {
         const auto again = dis.update(touchdown(), Params{});
         check(!again.touchdownNow, "the touchdown reports once");
     }
+    // THE CATCH'S SEED (G1 playtest): 8 of 8 catches fell within 160 ms because the centre of mass started 0.2 to
+    // 0.65 m off the palms (the landing's 137 to 167 degrees of inversion), 2 to 5 times outside the 0.12 m support.
+    {
+        const float deg = 3.14159265f / 180.f;
+        const auto landing = [&](float invertedDeg) {
+            auto in = inverted();
+            in.bodyUp = {0, std::cos(invertedDeg * deg), std::sin(invertedDeg * deg)};
+            in.velocity = {0, -3.f, 2.5f};
+            in.angular = {3.f, 0, 0};
+            return in;
+        };
+        // seedInside: near is left alone, far is brought to share x radius with its direction, along the segment too.
+        Support sup;
+        sup.a = {-.2f, 0, 0};
+        sup.b = {.2f, 0, 0};
+        sup.radius = .12f;
+        check(std::abs(seedInside(sup, {.1f, 0, .05f}, .6f).z - .05f) < 1e-6f, "seed: already near the palms: as it is");
+        const Vec3 sd = seedInside(sup, {.1f, 0, .65f}, .6f);
+        check(std::abs(sd.x - .1f) < 1e-5f && std::abs(sd.z - .072f) < 1e-5f, "seed: .65 m off becomes .072 m, along the segment kept");
+        const Vec3 sd2 = seedInside(sup, {.5f, 0, 0}, .6f);
+        check(std::abs(sd2.x - (.2f + .072f)) < 1e-5f && std::abs(sd2.z) < 1e-5f, "seed: past a palm: the radius from the palm");
+        for (const float tilt : {137.f, 147.f, 155.f, 167.f}) {
+            Handstand h;
+            auto in = landing(tilt);
+            const auto c = h.update(in, on());
+            check(c.caughtNow && c.frame == 0, "seed: caught, frame 0");
+            const float rawWant = .95f * std::sin(tilt * deg);
+            check(std::abs(c.seedRaw - rawWant) < .01f && c.seedOffset <= .12f * .6f + 1e-4f,
+                  "seed: the raw offset is the landing's, the seeded one inside 0.6 of the radius");
+            in.velocity = {};
+            in.angular = {};
+            bool fell = false;
+            State last = c.state;
+            for (int i = 0; i < 45 && !fell; ++i) { // 0.5 s, no input
+                const auto o = h.update(in, on());
+                fell = o.exitNow == Exit::fall;
+                last = o.state;
+                check(o.frame == i + 1, "seed: the frame counts on");
+            }
+            check(!fell && last == State::balance, "a 137 to 167 degree catch survives 0.5 s with no input");
+            // The old start (the offset as the landing left it) fell: the seed is what holds it.
+            Handstand old;
+            Params op = on();
+            op.seedShare = 10.f;
+            old.update(landing(tilt), op);
+            bool oldFell = false;
+            for (int i = 0; i < 45 && !oldFell; ++i)
+                oldFell = old.update(in, op).exitNow == Exit::fall;
+            if (tilt < 150.f)
+                check(oldFell, "seed: without it (the old start) a 137 or 147 degree catch falls");
+        }
+        // The palms re-placed 0.5 m in the frame after the catch (the handoff's origin, the support tilt) is not a lean.
+        {
+            Handstand h;
+            auto in = landing(150.f);
+            h.update(in, on());
+            in.velocity = {};
+            in.angular = {};
+            in.palms[0].z = in.palms[1].z = .5f;
+            const auto o1 = h.update(in, on());
+            check(o1.reseeded && std::abs(o1.shift - .5f) < 1e-4f && std::abs(o1.centreJump - .5f) < 1e-4f,
+                  "re-seed: the first frame after the catch took the palms' 0.5 m");
+            bool fell = false;
+            for (int i = 0; i < 45 && !fell; ++i)
+                fell = h.update(in, on()).exitNow == Exit::fall;
+            check(!fell, "a catch followed by a 0.5 m palm-centre jump does not fall");
+            // Without the re-seed (a jump later, within the grace, past the jump threshold) it falls after the grace...
+            Handstand n;
+            Params np = on();
+            np.reposeJump = 10.f;
+            auto a = landing(150.f);
+            n.update(a, np);
+            a.velocity = {};
+            a.angular = {};
+            for (int i = 0; i < 4; ++i)
+                n.update(a, np);
+            a.palms[0].z = a.palms[1].z = .6f;
+            bool early = false, later = false;
+            for (int i = 0; i < 45; ++i) {
+                const bool fe = n.update(a, np).exitNow == Exit::fall;
+                (i < 8 ? early : later) |= fe;
+            }
+            check(!early && later, "no re-seed: the jump is a fall, but not inside the 0.15 s grace");
+            // ...and with it, a jump while catching is carried.
+            Handstand r;
+            auto b = landing(150.f);
+            r.update(b, on());
+            b.velocity = {};
+            b.angular = {};
+            for (int i = 0; i < 4; ++i)
+                r.update(b, on());
+            b.palms[0].z = b.palms[1].z = .6f;
+            const auto jr = r.update(b, on());
+            check(jr.reseeded && std::abs(jr.shift - .6f) < 1e-4f, "re-seed: a jump while catching is carried");
+            bool rf = false;
+            for (int i = 0; i < 45 && !rf; ++i)
+                rf = r.update(b, on()).exitNow == Exit::fall;
+            check(!rf, "re-seed: no fall after a palm jump in the grace");
+        }
+        // The catching state ignores the fall test for 0.15 s: a start far outside does not fall inside it.
+        {
+            Handstand h;
+            Params q = on();
+            q.seedShare = 10.f; // the old, far start
+            auto in = landing(137.f);
+            h.update(in, q);
+            in.velocity = {};
+            in.angular = {};
+            bool early = false;
+            int fellAt = -1;
+            for (int i = 0; i < 45; ++i) {
+                const auto o = h.update(in, q);
+                if (o.exitNow == Exit::fall) {
+                    fellAt = i;
+                    break;
+                }
+                early |= i < 12 && o.exitNow != Exit::none;
+            }
+            check(!early && fellAt >= 12, "catching: no fall test inside catchGrace (13 frames), even from the old start");
+        }
+        // Gone: no frame.
+        Handstand g;
+        check(g.update(landing(90.f), on()).frame == -1, "no catch, no frame");
+    }
     std::printf("handstand: %d checks passed\n", passed);
     return 0;
 }
