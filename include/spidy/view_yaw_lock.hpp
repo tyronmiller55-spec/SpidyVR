@@ -165,37 +165,79 @@ inline bool turnModel(Mat4& model, Quat toWorld, const State& s, float* delta = 
     return true;
 }
 
-// The published state (the render thread reads it in game_fp::frame).
+// The published state (the render thread reads it in game_fp::frame, the XR worker's hand map, the arm IK).
+// ONE block, read whole: a seqlock (the writer makes the sequence odd while it stores, even after), so a
+// consumer never sees the yaw of one publish with the ride or the limit of another, and an ACTION serial
+// (bumpAction: a turn, realign, jump, land, dodge, handoff, web fire or punch) that every consumer can compare
+// with the one it last used - the heading is refreshed on the frame of every action (slice "everything
+// re-syncs on every action", direction_report.hpp's audit).
 inline std::atomic<bool> liveOn{false};
 inline std::atomic<float> liveYaw{0}, liveSway{0}, liveHero{0}, liveRide{0}, liveLimit{0};
+inline std::atomic<uint32_t> liveSeq{0}, liveActionSerial{0}, publishedAction{0};
+// An action edge: the new serial. The next publish carries it.
+inline uint32_t bumpAction() {
+    return liveActionSerial.fetch_add(1, std::memory_order_relaxed) + 1;
+}
+inline uint32_t actionSerial() {
+    return liveActionSerial.load(std::memory_order_relaxed);
+}
 inline void publish(const State& s) {
+    // A single writer (the XR worker): the sequence goes odd, the fields, the sequence goes even.
+    const uint32_t seq = liveSeq.load(std::memory_order_relaxed);
+    liveSeq.store(seq + 1, std::memory_order_release);
     liveRide.store(s.ride, std::memory_order_relaxed);
     liveLimit.store(s.limit, std::memory_order_relaxed);
     liveYaw.store(s.yaw, std::memory_order_relaxed);
     liveSway.store(s.sway, std::memory_order_relaxed);
     liveHero.store(s.heroYaw, std::memory_order_relaxed);
-    liveOn.store(s.on, std::memory_order_release);
+    liveOn.store(s.on, std::memory_order_relaxed);
+    publishedAction.store(liveActionSerial.load(std::memory_order_relaxed), std::memory_order_relaxed);
+    liveSeq.store(seq + 2, std::memory_order_release);
 }
-inline State live() {
-    State s;
-    s.on = liveOn.load(std::memory_order_acquire);
-    s.yaw = liveYaw.load(std::memory_order_relaxed);
-    s.sway = liveSway.load(std::memory_order_relaxed);
-    s.heroYaw = liveHero.load(std::memory_order_relaxed);
-    s.ride = liveRide.load(std::memory_order_relaxed);
-    s.limit = liveLimit.load(std::memory_order_relaxed);
-    return s;
+inline State live(uint32_t* actionOut = nullptr) {
+    // A consumer that cannot get a whole block in a few tries (the writer is always mid-store: never in
+    // practice, the block is a few stores long) takes the last whole one it had on this thread.
+    thread_local State lastWhole;
+    thread_local uint32_t lastAction = 0;
+    for (int tries = 0; tries < 64; ++tries) {
+        const uint32_t before = liveSeq.load(std::memory_order_acquire);
+        if (before & 1u)
+            continue;
+        State s;
+        s.on = liveOn.load(std::memory_order_relaxed);
+        s.yaw = liveYaw.load(std::memory_order_relaxed);
+        s.sway = liveSway.load(std::memory_order_relaxed);
+        s.heroYaw = liveHero.load(std::memory_order_relaxed);
+        s.ride = liveRide.load(std::memory_order_relaxed);
+        s.limit = liveLimit.load(std::memory_order_relaxed);
+        const uint32_t action = publishedAction.load(std::memory_order_relaxed);
+        std::atomic_thread_fence(std::memory_order_acquire);
+        if (liveSeq.load(std::memory_order_relaxed) == before) {
+            lastWhole = s;
+            lastAction = action;
+            break;
+        }
+    }
+    if (actionOut)
+        *actionOut = lastAction;
+    return lastWhole;
 }
 
 // DIRECTION REPORT: the yaw each consumer last used (0 the render thread's eyes, 1 the XR hand and marker
 // map, 2 the arm IK), so the audit can tell when one answered to an older heading than the published one.
 inline std::atomic<float> liveUsed[3]{};
-inline void noteUse(unsigned consumer, const State& used) {
-    if (consumer < 3)
+inline std::atomic<uint32_t> liveUsedAction[3]{};
+inline void noteUse(unsigned consumer, const State& used, uint32_t action = 0) {
+    if (consumer < 3) {
         liveUsed[consumer].store(used.on ? used.yaw : 0.f, std::memory_order_relaxed);
+        liveUsedAction[consumer].store(action, std::memory_order_relaxed);
+    }
 }
 inline float usedYaw(unsigned consumer) {
     return consumer < 3 ? liveUsed[consumer].load(std::memory_order_relaxed) : 0.f;
+}
+inline uint32_t usedAction(unsigned consumer) {
+    return consumer < 3 ? liveUsedAction[consumer].load(std::memory_order_relaxed) : 0u;
 }
 
 // The lock's heading. Right stick: smooth turning at the SMOOTH TURN rate, or

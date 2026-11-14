@@ -22,6 +22,7 @@ struct Targets {
     bool yawLock{};
     float lockYaw{}, lockSway{}, lockHero{};
     float lockRide{}, lockLimit{}; // ANIM HEAD RIDE / SHOULDER LIMIT (view_yaw_lock::State)
+    uint32_t lockAction{};         // the published action serial this snapshot carried (direction_report.hpp)
 };
 inline Pose relative(Pose raw, Pose reference, float turn) {
     return compose({{}, Quat::yaw(turn)}, compose(inverse(reference), raw));

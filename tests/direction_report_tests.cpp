@@ -2,6 +2,9 @@
 // view turn against the player's own, the consumers' skew, the momentum, the formats and the dedupe. Portable.
 #include "spidy/diag_log.hpp"
 #include "spidy/direction_report.hpp"
+#include "spidy/view_yaw_lock.hpp"
+#include <thread>
+#include <atomic>
 #include <cmath>
 #include <cstdio>
 #include <cstdlib>
@@ -109,6 +112,62 @@ int main() {
         check(std::strstr(text, "direction audit:") == text && std::strstr(text, "worst skew eyes 0.0 hands 5.7") != nullptr,
               "audit text");
         check(r.window().skew[1] == 0, "audit clears the window");
+    }
+    // RE-SYNC: the published block is read whole, with its action serial; a consumer on an older serial is
+    // counted as behind.
+    {
+        view_yaw_lock::State a;
+        a.on = true;
+        a.yaw = .5f;
+        a.sway = .25f;
+        a.heroYaw = -1.f;
+        a.ride = .5f;
+        a.limit = .125f;
+        const uint32_t was = view_yaw_lock::actionSerial();
+        view_yaw_lock::publish(a);
+        uint32_t serial = 99;
+        auto b = view_yaw_lock::live(&serial);
+        check(b.on && b.yaw == .5f && b.sway == .25f && b.heroYaw == -1.f && b.ride == .5f && b.limit == .125f,
+              "publish then live round trip");
+        check(serial == was, "the serial published is the one current");
+        const uint32_t next = view_yaw_lock::bumpAction();
+        check(next == was + 1 && view_yaw_lock::actionSerial() == next, "an action bumps the serial");
+        view_yaw_lock::live(&serial);
+        check(serial == was, "a bump is visible to consumers only with the next publish");
+        view_yaw_lock::publish(a);
+        view_yaw_lock::live(&serial);
+        check(serial == next, "the next publish carries it");
+        view_yaw_lock::noteUse(1, a, serial);
+        check(view_yaw_lock::usedYaw(1) == .5f && view_yaw_lock::usedAction(1) == serial && view_yaw_lock::usedYaw(7) == 0.f,
+              "a consumer's use is kept");
+        Reporter r;
+        r.behind(Consumer::eyes, serial, serial);
+        r.behind(Consumer::hands, serial - 1, serial);
+        check(r.window().behind[0] == 0 && r.window().behind[1] == 1 && r.window().behindChecked == 1, "behind counts");
+        // A reader racing the writer never sees a torn block: yaw, sway and ride always agree.
+        std::atomic<bool> stop{false};
+        std::atomic<int> torn{0}, reads{0};
+        std::thread reader([&] {
+            while (!stop.load()) {
+                const auto s = view_yaw_lock::live();
+                if (s.yaw != s.sway || s.ride != s.yaw)
+                    torn.fetch_add(1);
+                reads.fetch_add(1);
+            }
+        });
+        for (int i = 1; i <= 200000; ++i) {
+            view_yaw_lock::State t;
+            t.on = true;
+            t.yaw = static_cast<float>(i % 1000);
+            t.sway = t.yaw;
+            t.ride = t.yaw;
+            view_yaw_lock::publish(t);
+        }
+        stop = true;
+        reader.join();
+        check(reads.load() > 0, "the reader ran");
+        // the reader gives up after eight tries on a write in progress, so a rare torn read is bounded; none is expected
+        check(torn.load() == 0, "no torn reads");
     }
     // The audit comes once a second.
     {

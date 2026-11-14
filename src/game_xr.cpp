@@ -1272,7 +1272,7 @@ DWORD WINAPI run(void*) {
         float dirFeetX = 0, dirFeetZ = 0;      // the actor's feet last frame (the momentum)
         bool dirFeetSet = false, dirWasGrounded = true, dirWasDodging = false, dirTurnWas = false;
         int dirWasDomain = -1;
-        uint32_t dirActionBits = 0;            // action edges seen since the last report frame
+        uint32_t dirActionBits = 0, dirPrevSerial = 0;            // action edges seen since the last report frame
         bool hybridHeroTurn = false, hybridSteerable = false, hybridAirSyncOn = false;
         // PARKOUR RT diagnostic (t86u): frames with the stick at the run on the ground.
         uint32_t parkourRtFrames = 0, parkourRtHeld = 0, parkourRtRising = 0;
@@ -4334,8 +4334,9 @@ DWORD WINAPI run(void*) {
                             // FULL head lock on the stable heading: turned as the eyes are.
                             if (armFrameWas == animated_view::Frame::full)
                             {
-                                const auto lock = view_yaw_lock::live();
-                                view_yaw_lock::noteUse(1, lock);
+                                uint32_t action = 0;
+                                const auto lock = view_yaw_lock::live(&action);
+                                view_yaw_lock::noteUse(1, lock, action);
                                 view_yaw_lock::turnHead(armView.anchor, lock);
                             }
                             // CAMERA MOTION: the hands map onto the head the eyes are on
@@ -9755,6 +9756,7 @@ DWORD WINAPI run(void*) {
                                             dirReport.action(static_cast<Action>(a));
                                     const bool bigEdge = dirActionBits & ((1u << static_cast<unsigned>(Action::realign)) |
                                                                           (1u << static_cast<unsigned>(Action::handoff)));
+                                    const bool edges = dirActionBits != 0;
                                     dirActionBits = 0;
                                     direction_report::Frame df;
                                     df.seconds = frame.seconds;
@@ -9774,7 +9776,19 @@ DWORD WINAPI run(void*) {
                                     dirFeetX = fx;
                                     dirFeetZ = fz;
                                     dirFeetSet = true;
-                                    const auto lockLive = view_yaw_lock::live();
+                                    // RE-SYNC: an action edge bumps the serial and publishes the heading again
+                                    // on this frame, so every consumer reading from here on takes it.
+                                    if (edges) {
+                                        view_yaw_lock::bumpAction();
+                                        view_yaw_lock::publish(lock);
+                                    }
+                                    uint32_t publishedSerial = 0;
+                                    const auto lockLive = view_yaw_lock::live(&publishedSerial);
+                                    // Behind = still on a serial older than the one published a whole frame ago.
+                                    dirReport.behind(direction_report::Consumer::eyes, view_yaw_lock::usedAction(0), dirPrevSerial);
+                                    dirReport.behind(direction_report::Consumer::hands, view_yaw_lock::usedAction(1), dirPrevSerial);
+                                    dirReport.behind(direction_report::Consumer::arms, view_yaw_lock::usedAction(2), dirPrevSerial);
+                                    dirPrevSerial = publishedSerial;
                                     dirReport.skew(direction_report::Consumer::eyes, view_yaw_lock::usedYaw(0), lockLive.yaw);
                                     dirReport.skew(direction_report::Consumer::hands, view_yaw_lock::usedYaw(1), lockLive.yaw);
                                     dirReport.skew(direction_report::Consumer::arms, view_yaw_lock::usedYaw(2), lockLive.yaw);
@@ -10010,7 +10024,9 @@ DWORD WINAPI run(void*) {
                             // FULL head lock on the stable heading: the arms' anchor is
                             // turned in the pose job as the eyes are (view_yaw_lock.hpp).
                             if (handView.frame == animated_view::Frame::full) {
-                                const auto lock = view_yaw_lock::live();
+                                uint32_t action = 0;
+                                const auto lock = view_yaw_lock::live(&action);
+                                handView.lockAction = action;
                                 handView.yawLock = lock.on;
                                 handView.lockYaw = lock.yaw;
                                 handView.lockSway = lock.sway;

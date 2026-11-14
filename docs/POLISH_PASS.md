@@ -18,3 +18,9 @@ direction audit: imposed view turn 0 deg in 0 frames (worst step 0 deg, 0 of 90 
 - The `action` field and its age tell which edge last happened; a line is written on every edge.
 
 The quiet log is `diag_log::Throttle` (`include/spidy/diag_log.hpp`): lines of the noisy kinds are kept when their shape (the line with its numbers taken out) changed, or after 2 s; in slow mode (slice 6) only on a change.
+
+## Everything re-syncs on every action (slice 5)
+
+`view_yaw_lock::publish` is a seqlock block (yaw, sway, hero, ride, limit, on, and the action serial), and `view_yaw_lock::live()` returns a whole block. `bumpAction()` is called on every action edge detected in the XR frame (see `Action` in `direction_report.hpp`), and the heading is published again on that frame. Consumers record the yaw and serial they used (`noteUse`): the eyes (`game_fp::frame`), the hand and marker map (`game_xr.cpp`, the arm anchor), and the arm IK (`native_body.cpp`, from the snapshot the XR worker hands the pose job, which carries `lockAction`). The audit prints the worst skew and how often a consumer was behind.
+
+What reads the heading and where it is refreshed is unchanged from the table in the plan: the HUD markers and the web shooters take it through the hand/marker map, so they see the same block. Remaining skew sources are in the audit, and slice 4 removes the late writes (the facing check's view fix and the handoff's heading write) that cause the one that is left.

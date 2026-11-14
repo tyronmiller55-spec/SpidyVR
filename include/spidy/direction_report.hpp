@@ -73,6 +73,10 @@ struct Audit {
     uint32_t imposedFrames = 0, frames = 0, actions = 0;
     float skew[static_cast<int>(Consumer::count)]{};
     uint32_t skewFrames[static_cast<int>(Consumer::count)]{};
+    // Frames a consumer answered to an older action serial than the published one (it had not taken the
+    // heading refreshed by the last action yet), and frames checked.
+    uint32_t behind[static_cast<int>(Consumer::count)]{};
+    uint32_t behindChecked = 0;
 };
 
 class Reporter {
@@ -94,6 +98,13 @@ class Reporter {
         audit_.skew[i] = std::max(audit_.skew[i], d);
         if (d > skewFloor)
             ++audit_.skewFrames[i];
+    }
+    // A consumer's last used action serial against the published one.
+    void behind(Consumer c, uint32_t used, uint32_t published) {
+        if (c == Consumer::eyes)
+            ++audit_.behindChecked;
+        if (used != published)
+            ++audit_.behind[static_cast<int>(c)];
     }
     struct Out {
         bool line = false;
@@ -150,11 +161,13 @@ class Reporter {
             out, size,
             "direction audit: imposed view turn %.0f deg in %u frames (worst step %.0f deg, %u of %u frames "
             "over %.0f deg); worst skew eyes %.1f hands %.1f arms %.1f stick %.1f deg (frames off: %u/%u/%u/%u); "
-            "%u actions; imposed since start %.0f deg",
+            "%u actions; behind the last action's heading in %u/%u/%u of %u frames (eyes/hands/arms); imposed "
+            "since start %.0f deg",
             audit_.imposedDeg, audit_.imposedFrames, audit_.worstStep / degrees, audit_.imposedFrames,
             audit_.frames, imposedFloor / degrees, audit_.skew[0] / degrees, audit_.skew[1] / degrees,
             audit_.skew[2] / degrees, audit_.skew[3] / degrees, audit_.skewFrames[0], audit_.skewFrames[1],
-            audit_.skewFrames[2], audit_.skewFrames[3], audit_.actions, imposedTotal_);
+            audit_.skewFrames[2], audit_.skewFrames[3], audit_.actions, audit_.behind[0], audit_.behind[1],
+            audit_.behind[2], audit_.behindChecked, imposedTotal_);
         audit_ = {};
         return n;
     }
