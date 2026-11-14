@@ -80,6 +80,11 @@ add_executable(spidy_swing_kick_tests tests/swing_kick_tests.cpp)
 target_link_libraries(spidy_swing_kick_tests PRIVATE spidy_core)
 add_test(NAME swing_kick COMMAND spidy_swing_kick_tests)
 
+# GRIP ACROSS THE GAME (grip.hpp): the brake, the fling's math, history and grip states (portable).
+add_executable(spidy_grip_tests tests/grip_tests.cpp)
+target_link_libraries(spidy_grip_tests PRIVATE spidy_core)
+add_test(NAME grip COMMAND spidy_grip_tests)
+
 add_executable(spidy_handstand_tests tests/handstand_tests.cpp)
 target_link_libraries(spidy_handstand_tests PRIVATE spidy_core)
 add_test(NAME handstand COMMAND spidy_handstand_tests)

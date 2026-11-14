@@ -2257,6 +2257,20 @@ void App::options(ImVec2 origin, ImVec2 size) {
                "On a wall with the left stick at rest, squeeze a grip near the wall to hold on and pull to "
                "climb; both grips held roll your view along it.",
                S(42), [&] { tabToggle("##handclimb", Item::handClimb); });
+        settingOption(
+            Item::wallBrake, "Wall brake (experimental)",
+            "On a wall (with hand climbing on), squeeze a grip with your palm on it while sliding or "
+            "falling along it: you slow down as friction would (about 1.2 s from 10 m/s with one hand, "
+            "half that with two; pressing the palm in harder grips harder), then you hold on as usual. "
+            "Your hands buzz with the slide. Off by default.",
+            S(42), [&] { tabToggle("##wallbrake", Item::wallBrake); });
+        settingOption(
+            Item::gripFling, "Grip fling (experimental)",
+            "Squeeze a grip with your palm on a surface (the ground, a wall, anything), pull your hand "
+            "and let go: you are flung the other way, about 1.3 times your hand speed, at most 9 m/s. "
+            "Slow pulls do nothing. Letting go with the other hand still holding does nothing. Works from "
+            "the ground too, and a palm on a surface will not shoot a web. Off by default.",
+            S(42), [&] { tabToggle("##gripfling", Item::gripFling); });
         settingOption(Item::joystickRunCamera, "Joystick wall run camera",
                "On: a joystick run turns your view onto the wall, as before. Off: the left stick drives the "
                "momentum wall run's view and gait.",

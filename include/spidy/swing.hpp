@@ -1,4 +1,5 @@
 #pragma once
+#include "grip.hpp"
 #include "hitch_guard.hpp"
 #include "math.hpp"
 #include "swing_kick.hpp"
@@ -347,6 +348,7 @@ enum class EventKind {
     Slingshot, // both drawn webs released: strength is the stored charge
     Shoot,     // WEB SPEED: a web shot and flying, which holds nothing yet (Attach when it arrives)
     PointJump, // POINT JUMP (point_jump.hpp): off a surface the way he looks; strength: its speed, m/s
+    GripFling, // GRIP FLING (grip.hpp): a pull let go of launched the body; strength: its speed, m/s
 };
 struct Event {
     EventKind kind;
@@ -668,6 +670,38 @@ class Swing {
     // A near-wall squeeze that points at the wall (SwingConfig::gripAim)
     // belongs to climbing before other actions.
     bool wallHand(int hand, const Input&, const WorldQueries&) const;
+    // GRIP ACROSS THE GAME (grip.hpp, G1; both off until set). The wall brake: a hand climbing hold that
+    // closes on a sliding body slows it as friction does (and holds it under 0.5 m/s). The grip fling: a
+    // pull let go of, from a wall, the ground or the air, launches the body the other way.
+    void gripSettings(bool brake, bool fling, const grip::Config& config = {}) {
+        gripBrake_ = brake;
+        gripFling_ = fling;
+        grip_ = config;
+        if (!brake)
+            for (auto& c : climbing_)
+                c.braking = false;
+        if (!fling) {
+            gripHands_ = {};
+            flingQueued_ = false;
+        }
+    }
+    // The grip fling holds this hand's grip (a palm at a surface it faces, or the grip already closed on
+    // one): the caller starts no web with it, as for wallHand.
+    bool gripHand(int hand, const Input&, const WorldQueries&) const;
+    struct GripReport {
+        unsigned brakeHands{};  // bits: hands braking now
+        float brakeSpeed{};     // the slide along the wall, m/s
+        float brakeDecel{};     // the braking, m/s^2
+        std::uint32_t brakes{}; // brakes begun
+        std::uint32_t grips{};  // fling grips begun
+        std::uint32_t flings{}, groundFlings{}, wallFlings{}, airFlings{}, slow{}, refused{};
+        float flingSpeed{}; // the last fling's, m/s
+        Vec3 flingVelocity{};
+        std::uint32_t source{}; // the last: 1 ground, 2 wall, 3 air
+    };
+    const GripReport& gripReport() const {
+        return gripReport_;
+    }
     unsigned climbingHands() const {
         return (climbing_[0].attached ? 1u : 0u) | (climbing_[1].attached ? 2u : 0u);
     }
@@ -995,6 +1029,8 @@ class Swing {
     WallHold wall_{};
     struct ClimbingHand {
         bool attached{}, held = true;
+        bool braking{}; // the wall brake is slowing the body (grip.hpp)
+        float press{};  // the palm's depth past the wall's face, m
         Vec3 previous{}, rate{};
         uint64_t surface{};
     };
@@ -1002,6 +1038,17 @@ class Swing {
     bool handClimb_{};
     float climbSeconds_{};
     void climbInputs(const Input&, const WorldQueries&);
+    void gripInputs(const Input&, const WorldQueries&);
+    std::optional<RayHit> palmContact(const HandInput&, const WorldQueries&) const;
+    bool gripBrake_{}, gripFling_{};
+    grip::Config grip_{};
+    std::array<grip::Hand, 2> gripHands_{};
+    std::array<Vec3, 2> gripPrevious_{};
+    std::array<float, 2> gripYaw_{};
+    std::array<bool, 2> gripHave_{};
+    bool flingQueued_{};
+    Vec3 flingVelocity_{};
+    GripReport gripReport_{};
     std::optional<RayHit> wallContact(const HandInput&, const WorldQueries&) const;
     // The hand's aim meets the wall the body is on within gripAim of its palm.
     bool pointsAtWall(const HandInput&) const;

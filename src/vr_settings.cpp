@@ -733,6 +733,10 @@ template <class V> auto switchOf(Item item, V& v) -> decltype(&v.aimMarkers) {
         return &v.swingKickManual;
     case Item::swingKickAuto:
         return &v.swingKickAuto;
+    case Item::wallBrake:
+        return &v.wallBrake;
+    case Item::gripFling:
+        return &v.gripFling;
     case Item::legAirCrouch:
         return &v.legAirCrouch;
     case Item::legReachSpread:
@@ -879,6 +883,9 @@ Values sanitized(Values v) {
     // HANDSTAND (handstand.hpp).
     v.handstandPushGain = std::clamp(v.handstandPushGain, 100, 400);
     v.handstandPushMax = std::clamp(v.handstandPushMax, 2, 12);
+    v.wallBrakeMuPct = std::clamp(v.wallBrakeMuPct, 30, 150);
+    v.gripFlingGainPct = std::clamp(v.gripFlingGainPct, 50, 300);
+    v.gripFlingMax = std::clamp(v.gripFlingMax, 3, 20);
     v.handstandFallDegrees = std::clamp(v.handstandFallDegrees, 15, 60);
     v.handstandHeightCm = std::clamp(v.handstandHeightCm, 60, 140);
     v.handstandGainPct = std::clamp(v.handstandGainPct, 50, 600);
@@ -888,9 +895,9 @@ Values sanitized(Values v) {
     v.automaticHandThreshold = std::clamp(v.automaticHandThreshold, 50, 300);
     return v;
 }
-const std::array<Row, 164>& rows() {
+const std::array<Row, 166>& rows() {
     // The help fits the game's description column beside the rows.
-    static const std::array<Row, 164> all{{
+    static const std::array<Row, 166> all{{
         {Item::none, "WEBS", nullptr, {}},
         {Item::webStyle, "WEB STYLE",
          "Arcade: webs pass lamp posts, signs and cars, and swings stay above the street.", webStyleChoices},
@@ -1353,6 +1360,16 @@ const std::array<Row, 164>& rows() {
          "A fast flight at the ringed enemy dives in feet first. Off: kick by hand only.",
          {},
          Place::launcher},
+        {Item::wallBrake,
+         "WALL BRAKE (EXPERIMENTAL)",
+         "On a wall, squeeze a grip with your palm on it to brake a slide, then hold on.",
+         {},
+         Place::launcher},
+        {Item::gripFling,
+         "GRIP FLING (EXPERIMENTAL)",
+         "Grip a surface, pull your hand and let go: you launch the other way (9 m/s max).",
+         {},
+         Place::launcher},
     }};
     return all;
 }
@@ -1385,6 +1402,7 @@ const std::array<Screen, categoryCount>& screens() {
         Item::earlyJump, Item::softLanding, Item::webLandingSmooth, Item::webLandingImpact,
         Item::handClimb, Item::joystickRunCamera, Item::wallRunCameraTilt, Item::combatResponsive,
         Item::combatVisuals, Item::halfPunchDamage, Item::airFists, Item::runLogs,
+        Item::wallBrake, Item::gripFling,
     };
     static constexpr Item flips[] = {
         Item::realisticFlips, Item::flips, Item::controlledFlips, Item::flipSpeed,
@@ -2046,6 +2064,11 @@ constexpr TabOnly tabOnly[] = {
     {"camera_vr_stabilization", nullptr, &Values::cameraVrStabilization},
     {"swing_kick_manual", &Values::swingKickManual, nullptr},
     {"swing_kick_auto", &Values::swingKickAuto, nullptr},
+    {"wall_brake", &Values::wallBrake, nullptr},
+    {"grip_fling", &Values::gripFling, nullptr},
+    {"wall_brake_mu_pct", nullptr, &Values::wallBrakeMuPct},
+    {"grip_fling_gain_pct", nullptr, &Values::gripFlingGainPct},
+    {"grip_fling_max", nullptr, &Values::gripFlingMax},
     {"leg_air_crouch", &Values::legAirCrouch, nullptr},
     {"leg_reach_spread", &Values::legReachSpread, nullptr},
     {"air_fists", &Values::airFists, nullptr},

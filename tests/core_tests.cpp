@@ -3490,6 +3490,129 @@ int main() {
             check(body.position.y >= rested - .01f, "releasing a climb dropped the sticky body");
         }
     });
+    test("grip: the wall brake slows a slide as friction does, then holds", [] {
+        constexpr float dt = 1.f / 60;
+        for (const bool brake : {false, true}) {
+            Building w;
+            Swing s(walled());
+            s.allowHandClimb(true);
+            s.gripSettings(brake, false);
+            Input in;
+            Body body{{4.1f, 10, 0}, {1, 0, 0}, false};
+            auto advance = [&] {
+                const auto motion = s.predictNativeStep(dt, in, w, body);
+                check(motion.valid, "brake prediction failed");
+                body = {motion.target, motion.velocity, false};
+            };
+            advance();
+            check(s.wall().on, "the brake test body did not reach the wall");
+            auto& h = in.hands[0];
+            h.tracked = true;
+            h.wallPosition = {4.95f, 10, 0};
+            h.aim.orientation = arc({0, 0, -1}, {1, 0, 0});
+            h.gripRelativeToHead = {.4f, 0, 0};
+            advance();
+            body.velocity = {0, -8, 0}; // sliding down the facade
+            h.wallGrip = h.grip = 1;
+            advance();
+            check(s.climbingHands() == 1u, "the palm did not catch the wall");
+            if (!brake) {
+                check(length(body.velocity) < .01f, "without the brake the grip stops the slide at once");
+                continue;
+            }
+            check(body.velocity.y < -7.f && body.velocity.y > -8.f, "the brake took only a step of friction");
+            check(s.gripReport().brakeHands == 1u && s.gripReport().brakes == 1,
+                  "the brake was not reported");
+            float seconds = 0, speed = -body.velocity.y;
+            while (speed >= .5f && seconds < 3) {
+                const float before = speed;
+                advance();
+                speed = -body.velocity.y;
+                check(speed <= before + 1e-4f, "the slide sped up under the brake");
+                seconds += dt;
+            }
+            // One hand from 8 m/s at 8.8 m/s^2 (a little more as the palm sits .05 past the face): ~0.9 s.
+            check(seconds > .7f && seconds < 1.1f, "one hand's brake time from 8 m/s");
+            for (int i = 0; i < 10; ++i)
+                advance();
+            check(length(body.velocity) < .05f && s.climbingHands() == 1u, "under 0.5 m/s it is the hold");
+            check(s.gripReport().brakeHands == 0, "the brake ended");
+        }
+    });
+    test("grip: a pull let go of flings along a wall, from the ground and in the air; off by default", [] {
+        constexpr float dt = 1.f / 60;
+        enum class Where { wall, ground, air };
+        const auto fling = [&](Where where, bool on, bool otherHand = false) {
+            Building w;
+            Swing s(walled());
+            s.allowHandClimb(true);
+            s.gripSettings(false, on);
+            Input in;
+            Body body{where == Where::wall ? Vec3{4.1f, 10, 0} : Vec3{0, 10, 0},
+                      where == Where::wall ? Vec3{1, 0, 0} : Vec3{}, where == Where::ground};
+            auto advance = [&] {
+                const auto motion = s.predictNativeStep(dt, in, w, body);
+                check(motion.valid, "fling prediction failed");
+                body = {motion.target, motion.velocity, where == Where::ground && !motion.velocity.y};
+                return motion;
+            };
+            advance();
+            check(s.wall().on == (where == Where::wall), "the fling test body is not where it should be");
+            for (auto& h : in.hands) {
+                h.tracked = true;
+                h.wallPosition = {4.95f, where == Where::wall ? 10.f : 10.f, 0};
+                h.aim.orientation = arc({0, 0, -1}, {1, 0, 0});
+                h.gripRelativeToHead = {.4f, 0, 0};
+            }
+            in.hands[1].wallPosition.z = 3;
+            advance();
+            in.hands[0].wallGrip = 1; // the caller strips the web grip (Swing::gripHand)
+            if (otherHand)
+                in.hands[1].wallGrip = 1;
+            advance();
+            if (where == Where::wall)
+                check(s.climbingHands() & 1u, "the palm did not catch the wall");
+            for (int i = 0; i < 10; ++i) {
+                in.hands[0].gripRelativeToHead.z -= .02f; // a pull of 1.2 m/s
+                advance();
+            }
+            in.hands[0].wallGrip = 0;
+            advance();
+            return std::pair{s, body};
+        };
+        // Along a wall: 1.3 x the hand's 1.2 m/s, along the wall; still on it.
+        {
+            auto [s, body] = fling(Where::wall, true);
+            check(s.gripReport().wallFlings == 1 && s.wall().on, "a wall fling was not made");
+            check(body.velocity.z > 1.3f && body.velocity.z < 1.7f, "the wall fling's speed");
+            auto [off, rest] = fling(Where::wall, false);
+            check(off.gripReport().flings == 0 && rest.velocity.z < body.velocity.z * .85f,
+                  "off by default: no fling");
+            auto [held, kept] = fling(Where::wall, true, true);
+            check(held.gripReport().flings == 0, "the other hand still holding: no fling");
+        }
+        // The air: the velocity gains 1.3 x the hand's speed the other way, at most 9 m/s.
+        {
+            auto [s, body] = fling(Where::air, true);
+            check(s.gripReport().airFlings == 1, "an air fling was not made");
+            check(body.velocity.z > 1.3f && body.velocity.z < 1.7f && length(body.velocity) < 9.f,
+                  "the air fling's speed");
+            auto [off, rest] = fling(Where::air, false);
+            check(off.gripReport().flings == 0 && std::abs(rest.velocity.z) < .01f,
+                  "off by default: none in the air");
+        }
+        // The ground: out of the ground's own control, off it with the hop.
+        {
+            auto [s, body] = fling(Where::ground, true);
+            check(s.gripReport().groundFlings == 1, "a ground fling was not made");
+            check(body.velocity.y >= 2.2f && body.velocity.z > 1.3f && body.velocity.z < 1.7f,
+                  "the ground fling's launch");
+            bool launched = false;
+            for (const auto& e : s.events())
+                launched |= e.kind == EventKind::GripFling;
+            check(launched, "the ground fling did not announce itself as a takeoff");
+        }
+    });
     test("hand climbing: two hands share movement, handovers and jumps release holds", [] {
         constexpr float dt = 1.f / 60;
         Building w;
@@ -23976,7 +24099,8 @@ int main() {
         // November 13: TORSO TWIST and ARM AIM FALLBACK (launcher rows), appended after them.
         // November 14: STEADY's three rows, HORIZON LEVEL and VR STABILIZATION after them.
         // November 14: the swing kick's two switches after those.
-        constexpr size_t rowsAfter = 9;
+        // November 14: WALL BRAKE and GRIP FLING (launcher rows) after those.
+        constexpr size_t rowsAfter = 11;
         check(all.size() == firstRealistic + std::size(realistic) + rowsAfter,
               "the realistic flips' rows are not the last but the appended ones");
         for (size_t i = 0; i < std::size(realistic); ++i)
@@ -24543,7 +24667,7 @@ int main() {
                   "camera_stabilization=0\ncamera_vertical_ms=0\ncamera_horizontal_ms=0\ncamera_angle_ms=0\n"
                   "camera_light_vertical_ms=75\ncamera_light_horizontal_ms=50\ncamera_light_angle_ms=75\n"
                   "camera_heavy_vertical_ms=200\ncamera_heavy_horizontal_ms=150\ncamera_heavy_angle_ms=200\n"
-                  "spherical_aim=1\nleg_control=0\nleg_stiffness_pct=100\nleg_damping_pct=100\nleg_coupling_pct=50\nleg_double_tap_ms=300\npunch_view_ease_ms=250\nmove_haptics_pct=100\nview_yaw_source=1\nsound_trace=1\njump_handoff_ms=500\nair_view_ease_ms=250\nanim_yaw_sway_pct=20\nturn_in_place_deg=35\npassive_legs_pct=60\npassive_coupling_pct=15\nmovement_mode=0\nrear_snap_turn_ms=200\nanimated_torso_twist=80\nanim_forearm_fallback_deg=60\ncamera_steady_vertical_ms=350\ncamera_steady_horizontal_ms=300\ncamera_steady_angle_ms=450\ncamera_horizon_level_pct=0\ncamera_vr_stabilization=1\nswing_kick_manual=0\nswing_kick_auto=1\nleg_air_crouch=1\nleg_reach_spread=1\nair_fists=1\n"
+                  "spherical_aim=1\nleg_control=0\nleg_stiffness_pct=100\nleg_damping_pct=100\nleg_coupling_pct=50\nleg_double_tap_ms=300\npunch_view_ease_ms=250\nmove_haptics_pct=100\nview_yaw_source=1\nsound_trace=1\njump_handoff_ms=500\nair_view_ease_ms=250\nanim_yaw_sway_pct=20\nturn_in_place_deg=35\npassive_legs_pct=60\npassive_coupling_pct=15\nmovement_mode=0\nrear_snap_turn_ms=200\nanimated_torso_twist=80\nanim_forearm_fallback_deg=60\ncamera_steady_vertical_ms=350\ncamera_steady_horizontal_ms=300\ncamera_steady_angle_ms=450\ncamera_horizon_level_pct=0\ncamera_vr_stabilization=1\nswing_kick_manual=0\nswing_kick_auto=1\nwall_brake=0\ngrip_fling=0\nwall_brake_mu_pct=90\ngrip_fling_gain_pct=130\ngrip_fling_max=9\nleg_air_crouch=1\nleg_reach_spread=1\nair_fists=1\n"
                   "camera_pitch_pct=100\ncamera_roll_pct=100\ncamera_bob_vertical_pct=100\ncamera_bob_side_pct=100\n"
                   "camera_head_angle_deg=0\n"
                   "sidestep=1\nsidestep_distance_cm=200\nsidestep_ms=180\nsidestep_cooldown_ms=300\n"
@@ -31419,7 +31543,7 @@ int main() {
     test("Native Animation: combined menu inventory and upstream-compatible v39 settings packet", [] {
         using namespace vr_settings;
         const auto& all = rows();
-        check(all.size() == 164 && static_cast<unsigned>(lastItem) < 256, "row/Item bounds");
+        check(all.size() == 166 && static_cast<unsigned>(lastItem) < 256, "row/Item bounds");
         std::array<unsigned, 256> seen{};
         size_t start = all.size();
         for (size_t i = 0; i < all.size(); ++i) {

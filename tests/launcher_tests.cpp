@@ -757,6 +757,9 @@ int main() {
             // SWING KICK (K1, November 14): experimental, the player's own.
             if (key.rfind("swing_kick", 0) == 0)
                 continue;
+            // WALL BRAKE and GRIP FLING (G1, November 14): experimental, the player's own.
+            if (key.rfind("wall_brake", 0) == 0 || key.rfind("grip_fling", 0) == 0)
+                continue;
             // CAMERA MODES (November 13): the player's own comfort, not in shared profiles.
             if (key == "anim_head_ride" || key == "shoulder_limit" || key == "snap_realign")
                 continue;

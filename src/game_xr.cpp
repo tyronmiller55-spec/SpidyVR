@@ -18,6 +18,7 @@
 #include "spidy/game_dodge.hpp"
 #include "spidy/point_jump.hpp"
 #include "spidy/sidestep.hpp"
+#include "spidy/grip.hpp"
 #include "spidy/swing_kick.hpp"
 #include "spidy/game_fp.hpp"
 #include "spidy/web_aim.hpp"
@@ -597,6 +598,10 @@ BridgeCall swingSidestep{};
 // (SpidySwingKickLive); none in an older module (no manual kick, the auto dive as before).
 BridgeCall swingKick{};
 const game_swing::SwingKickLive* swingKickLive{};
+// GRIP ACROSS THE GAME's settings for the swing (SpidySwingGrip) and its account (SpidySwingGripLive); none
+// in an older module (the grip as before).
+BridgeCall swingGrip{};
+const game_swing::GripLive* swingGripLive{};
 const game_swing::SidestepLive* sidestepLive{};
 // Optional: the web tie's telemetry (game_grab::TieData; an older ray module has none).
 BridgeCall sampleTie{};
@@ -1410,6 +1415,11 @@ DWORD WINAPI run(void*) {
         swing_kick::Flick kickFlick;
         uint32_t kickFlickSerial{}, kickFlagsSent = ~0u, kickEventsSeen{};
         float kickSentAge{};
+        // GRIP ACROSS THE GAME (grip.hpp): the settings last taken by the swing, how long ago they were sent,
+        // the flings and brakes logged so far, and the brake's grain (time to the next pulse, per hand).
+        uint32_t gripSerial{}, gripFlagsSent = ~0u, gripFlingsSeen{}, gripBrakesSeen{};
+        float gripSentAge{};
+        std::array<float, 2> brakeGrain{};
         // The kick is armed or fading (last frame's): the legs keep the right stick, whose push up would
         // otherwise be the game's zip.
         bool kickHoldsStick{};
@@ -2533,6 +2543,33 @@ DWORD WINAPI run(void*) {
                             if (swingKick(&ask) == 0) {
                                 kickFlagsSent = ask.flags;
                                 kickSentAge = 0;
+                            }
+                        }
+                    }
+                    // GRIP ACROSS THE GAME (grip.hpp; wall_brake, grip_fling: off until set): the settings go
+                    // to the swing whenever they change and every second.
+                    if (swingGrip) {
+                        game_swing::GripAsk ask;
+                        ask.serial = gripSerial;
+                        ask.flags = (values.wallBrake ? 1u : 0u) | (values.gripFling ? 2u : 0u);
+                        ask.mu = static_cast<float>(values.wallBrakeMuPct) / 100.f;
+                        ask.gain = static_cast<float>(values.gripFlingGainPct) / 100.f;
+                        ask.vMax = static_cast<float>(values.gripFlingMax);
+                        gripSentAge += std::isfinite(frame.seconds) ? std::max(frame.seconds, 0.f) : 0.f;
+                        const uint32_t key = ask.flags | (static_cast<uint32_t>(values.wallBrakeMuPct) << 4) |
+                                             (static_cast<uint32_t>(values.gripFlingGainPct) << 12) |
+                                             (static_cast<uint32_t>(values.gripFlingMax) << 22);
+                        if (key != gripFlagsSent || gripSentAge > 1.f) {
+                            if (swingGrip(&ask) == 0) {
+                                if (key != gripFlagsSent)
+                                    diag_log::writef(
+                                        "grip: settings sent (wall brake %d mu %d%%, fling %d gain "
+                                        "%d%% max %d m/s)",
+                                        values.wallBrake ? 1 : 0, values.wallBrakeMuPct,
+                                        values.gripFling ? 1 : 0, values.gripFlingGainPct,
+                                        values.gripFlingMax);
+                                gripFlagsSent = key;
+                                gripSentAge = 0;
                             }
                         }
                     }
@@ -5027,6 +5064,65 @@ DWORD WINAPI run(void*) {
                                                      swing_kick::refusalName(
                                                          static_cast<swing_kick::Refusal>(kl->refusal)),
                                                      who, kl->cone, kl->speed, kl->distance);
+                            }
+                        }
+                        // GRIP ACROSS THE GAME: the swing's account of it. The wall brake's grain in the
+                        // hands that brake (pulses 30 to 160 a second by the slide, strong by the braking),
+                        // and a fling's log, thump and, off the ground, the owner's takeoff hold.
+                        if (const volatile game_swing::GripLive* gl = swingGripLive) {
+                            const uint32_t brakeHands = gl->brakeHands;
+                            const float slide = gl->brakeSpeed, decel = gl->brakeDecel;
+                            const float moveScale = static_cast<float>(values.moveHapticsPct) / 100;
+                            const float dtGrain =
+                                std::isfinite(frame.seconds) ? std::clamp(frame.seconds, 0.f, .1f) : 0.f;
+                            for (int h = 0; h < 2; ++h) {
+                                if (!(brakeHands & (1u << h))) {
+                                    brakeGrain[h] = 0;
+                                    continue;
+                                }
+                                brakeGrain[h] -= dtGrain;
+                                if (brakeGrain[h] <= 0) {
+                                    const float hz = grip::grainHz(slide);
+                                    brakeGrain[h] = 1.f / hz;
+                                    const auto p = move_haptics::scaled(
+                                        {h, grip::grainAmplitude(decel), std::max(.008f, .6f / hz)},
+                                        moveScale);
+                                    if (p.amplitude > 0)
+                                        runtime.hapticUnscaled(h, p.amplitude, p.seconds);
+                                }
+                            }
+                            if (const uint32_t brakes = gl->brakes; brakes != gripBrakesSeen) {
+                                gripBrakesSeen = brakes;
+                                diag_log::writef("grip: brake hands=%u v=%.1f m/s a=%.1f m/s2 (brakes %u)",
+                                                 brakeHands, slide, decel, brakes);
+                            }
+                            if (const uint32_t flings = gl->flings; flings != gripFlingsSeen) {
+                                gripFlingsSeen = flings;
+                                const uint32_t source = gl->source;
+                                diag_log::writef(
+                                    "grip: fling v=%.1f m/s (%.1f, %.1f, %.1f) from the %s (flings %u: "
+                                    "ground %u, wall %u, air %u; slow pulls %u, refused %u)",
+                                    gl->flingSpeed, gl->flingVelocity.x, gl->flingVelocity.y,
+                                    gl->flingVelocity.z,
+                                    source == 1   ? "ground"
+                                    : source == 2 ? "wall"
+                                                  : "air",
+                                    flings, gl->groundFlings, gl->wallFlings, gl->airFlings, gl->slow,
+                                    gl->refused);
+                                const float scale = static_cast<float>(values.moveHapticsPct) / 100;
+                                const auto thump = move_haptics::scaled(
+                                    {-1, std::clamp(gl->flingSpeed / 9.f, .2f, 1.f), .08f}, scale);
+                                if (thump.amplitude > 0) {
+                                    runtime.hapticUnscaled(0, thump.amplitude, thump.seconds);
+                                    runtime.hapticUnscaled(1, thump.amplitude, thump.seconds);
+                                }
+                                // Off the ground the owner is held on the swing's side through the takeoff,
+                                // as the point jump's.
+                                if (source == 1) {
+                                    pointJumpFired = pointJumpHold = true;
+                                    pointJumpHoldAge = 0;
+                                    pointJumpOffLogged = false;
+                                }
                             }
                         }
                         // Every landed blow, a fist's or a web strike's: the hand
@@ -10550,6 +10646,12 @@ extern "C" __declspec(dllexport) DWORD WINAPI SpidyXrStart(void* input) {
         (swingKickLive->magic != expected.magic || swingKickLive->version != expected.version ||
          swingKickLive->bytes != expected.bytes))
         swingKickLive = nullptr;
+    swingGrip = reinterpret_cast<BridgeCall>(GetProcAddress(rays, "SpidySwingGrip"));
+    swingGripLive = reinterpret_cast<const game_swing::GripLive*>(GetProcAddress(rays, "SpidySwingGripLive"));
+    if (const game_swing::GripLive expected; swingGripLive && (swingGripLive->magic != expected.magic ||
+                                                               swingGripLive->version != expected.version ||
+                                                               swingGripLive->bytes != expected.bytes))
+        swingGripLive = nullptr;
     sidestepLive = reinterpret_cast<const game_swing::SidestepLive*>(GetProcAddress(rays, "SpidySidestepLive"));
     if (const game_swing::SidestepLive expected;
         sidestepLive && (sidestepLive->magic != expected.magic || sidestepLive->version != expected.version ||

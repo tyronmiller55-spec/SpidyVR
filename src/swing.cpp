@@ -668,6 +668,8 @@ void Swing::climbInputs(const Input& in, const WorldQueries& world) {
         c.held = valid ? held : true;
         if (!held || (c.attached && !world.exists(c.surface)))
             c.attached = false;
+        if (!c.attached)
+            c.braking = false;
         if (press && !webs_[i].attached && wallHand(i, in, world)) {
             const auto hit = wallContact(h, world);
             if (hit) {
@@ -675,6 +677,15 @@ void Swing::climbInputs(const Input& in, const WorldQueries& world) {
                 c.surface = hit->surface;
                 c.previous = h.gripRelativeToHead;
                 events_.push_back({EventKind::WallGrip, i, .45f});
+                // WALL BRAKE (grip.hpp): a press on a sliding body is friction, not a stop at once; with
+                // the other hand holding, the body's speed is the hand's own and the brake stays out.
+                if (gripBrake_ && !climbing_[1 - i].attached) {
+                    const Vec3 slide = body_.velocity - wall_.normal * dot(body_.velocity, wall_.normal);
+                    if (grip::brakeBegins(length(slide), grip_)) {
+                        c.braking = true;
+                        ++gripReport_.brakes;
+                    }
+                }
             }
         }
         c.rate = {};
@@ -683,7 +694,82 @@ void Swing::climbInputs(const Input& in, const WorldQueries& world) {
                                  std::max(climbSeconds_, 1e-3f), 3.f);
             c.rate -= wall_.normal * dot(c.rate, wall_.normal);
             c.previous = h.gripRelativeToHead;
+            c.press = std::clamp(-dot(h.wallPosition - wall_.point, wall_.normal), 0.f, grip_.maxPress);
             hands_[i].held = true;
+        }
+    }
+}
+std::optional<RayHit> Swing::palmContact(const HandInput& hand, const WorldQueries& world) const {
+    if (!finite(hand.wallPosition))
+        return {};
+    const Vec3 forward = normalized(hand.aim.orientation.rotate({0, 0, -1}));
+    if (!finite(forward) || length(forward) < .5f)
+        return {};
+    // From a little behind the palm (the tracked hand may be past the face), to the contact reach ahead.
+    const float back = .15f;
+    const auto hit =
+        world.bodyRaycast(hand.wallPosition - forward * back, forward, back + grip_.contactReach);
+    if (hit && hit->fixed && world.exists(hit->surface) && finite(hit->point) && finite(hit->normal) &&
+        dot(hit->normal, forward) < -.3f)
+        return hit;
+    return {};
+}
+bool Swing::gripHand(int i, const Input& in, const WorldQueries& world) const {
+    if (!gripFling_ || i < 0 || i > 1 || webs_[i].attached || !in.focused)
+        return false;
+    const auto& h = in.hands[i];
+    if (!h.tracked || !finite(h.wallPosition) || !finite(h.gripRelativeToHead) ||
+        !std::isfinite(h.wallGrip) || h.wallGrip <= .35f)
+        return false;
+    return gripHands_[i].gripping() || palmContact(h, world).has_value();
+}
+void Swing::gripInputs(const Input& in, const WorldQueries& world) {
+    gripReport_.brakeHands = 0;
+    gripReport_.brakeSpeed = gripReport_.brakeDecel = 0;
+    if (!gripFling_)
+        return;
+    const float dt = std::max(climbSeconds_, 1e-3f);
+    std::array<grip::Hand::Out, 2> outs{};
+    for (int i = 0; i < 2; ++i) {
+        auto& g = gripHands_[i];
+        const auto& h = in.hands[i];
+        grip::Hand::Frame f;
+        f.dt = dt;
+        f.valid = in.focused && h.tracked && !webs_[i].attached && finite(h.gripRelativeToHead) &&
+                  finite(h.wallPosition) && std::isfinite(h.wallGrip) && std::isfinite(in.trackingYaw);
+        if (!f.valid) {
+            g.reset();
+            gripHave_[i] = false;
+            continue;
+        }
+        f.squeeze = h.wallGrip;
+        f.wall = climbing_[i].attached;
+        f.turned = !gripHave_[i] || std::abs(std::remainder(in.trackingYaw - gripYaw_[i], 6.2831853f)) > .12f;
+        if (!f.turned)
+            f.velocity = trackingTurn(in).rotate(h.gripRelativeToHead - gripPrevious_[i]) / dt;
+        gripPrevious_[i] = h.gripRelativeToHead;
+        gripYaw_[i] = in.trackingYaw;
+        gripHave_[i] = true;
+        // A contact is looked for only as the grip closes.
+        f.contact = !f.wall && !g.gripping() && h.wallGrip > .65f && palmContact(h, world).has_value();
+        outs[i] = g.update(f, grip_);
+        if (outs[i].pressed)
+            ++gripReport_.grips;
+    }
+    // A pull let go of launches him only when no other hand still holds on (hand over hand on a wall, the
+    // one letting go is a stroke, not a throw).
+    for (int i = 0; i < 2; ++i) {
+        if (!outs[i].released)
+            continue;
+        if (gripHands_[1 - i].gripping() || climbing_[1 - i].attached)
+            continue;
+        if (length(outs[i].launch) <= 0) {
+            ++gripReport_.slow;
+            continue;
+        }
+        if (!flingQueued_ || length(outs[i].launch) > length(flingVelocity_)) {
+            flingQueued_ = true;
+            flingVelocity_ = outs[i].launch;
         }
     }
 }
@@ -698,6 +784,33 @@ void Swing::wallMotion(float dt, const Input& in) {
         return;
     }
     if (handClimb_ && climbingHands()) {
+        // WALL BRAKE (grip.hpp): the hands that closed on a slide slow it, summing their friction; under
+        // stopSpeed each one turns into the hold below.
+        if (gripBrake_) {
+            const Vec3 slide = body_.velocity - n * dot(body_.velocity, n);
+            const float speed = length(slide);
+            unsigned braking{};
+            float decel{};
+            for (int i = 0; i < 2; ++i) {
+                auto& c = climbing_[i];
+                if (!c.attached || !c.braking)
+                    continue;
+                if (grip::brakeEnds(speed, grip_)) {
+                    c.braking = false;
+                    continue;
+                }
+                braking |= 1u << i;
+                decel += grip::brakeDecel(c.press, grip_);
+            }
+            if (braking) {
+                const float slower = grip::brakeSpeed(speed, decel, dt);
+                body_.velocity = slide * (slower / speed);
+                gripReport_.brakeHands = braking;
+                gripReport_.brakeSpeed = speed;
+                gripReport_.brakeDecel = decel;
+                return;
+            }
+        }
         Vec3 pull{};
         unsigned count{};
         for (const auto& hand : climbing_)
@@ -790,6 +903,9 @@ void Swing::reset(Body b) {
     kickKeep_ = -1;
     pointJumpQueued_ = false;
     pointJumpVelocity_ = {};
+    flingQueued_ = false;
+    gripHands_ = {};
+    gripHave_ = {};
     wall_ = {};
     wallLost_ = crest_ = 0;
     wrapWay_ = {};
@@ -1006,6 +1122,7 @@ void Swing::inputs(float dt, const Input& in, const WorldQueries& world) {
         zipGestureBlock_ = .2f;
     climbSeconds_ = dt;
     climbInputs(in, world);
+    gripInputs(in, world);
     // JUMP ALWAYS: a press while the swing runs the body on the ground
     // (SPIDY RUN, the landing carry) ends that run; the game has the body
     // back and makes the jump (the caller holds its A until then:
@@ -1546,6 +1663,59 @@ void Swing::step(float dt, const Input& in, const WorldQueries& world, const Wor
             events_.push_back({EventKind::PointJump, -1, length(body_.velocity)});
         }
         pointJumpQueued_ = false;
+    }
+    if (flingQueued_) {
+        // GRIP FLING (grip.hpp): the pull let go of launches him the other way, from the ground, a wall or
+        // the air; at most vMax, and never past a speed he already has.
+        Vec3 v = flingVelocity_;
+        flingQueued_ = false;
+        flingVelocity_ = {};
+        std::uint32_t source = 0;
+        if (wall_.on) {
+            // Along the wall: a stroke coasts; a push out of it (2 m/s or more) leaves it.
+            const Vec3 n = wall_.normal;
+            const float out = dot(v, n);
+            if (out >= 2.f) {
+                body_.velocity = limited(v, config_.maxSpeed);
+                leaveWall();
+                sinceWallJump_ = 0;
+                mountLeft_ = 0;
+                body_.grounded = false;
+            } else {
+                const Vec3 along = v - n * out;
+                body_.velocity = limited(along + n * std::min(0.f, dot(body_.velocity, n)), config_.maxSpeed);
+            }
+            source = 2;
+        } else if (body_.grounded) {
+            if (v.y < 0)
+                v.y = 0;
+            if (length(v) >= grip_.minHandSpeed) {
+                v.y = std::max(v.y, grip_.groundHop);
+                body_.velocity = limited(v, config_.maxSpeed);
+                body_.grounded = false;
+                leapQueued_ = 0;
+                jumpQueued_ = false;
+                runJump_ = 0;
+                source = 1;
+            }
+        } else {
+            const float before = length(body_.velocity);
+            body_.velocity =
+                limited(limited(body_.velocity + v, std::max(before, grip_.vMax)), config_.maxSpeed);
+            source = 3;
+        }
+        if (source) {
+            gripReport_.flings++;
+            (source == 1   ? gripReport_.groundFlings
+             : source == 2 ? gripReport_.wallFlings
+                           : gripReport_.airFlings)++;
+            gripReport_.flingSpeed = length(v);
+            gripReport_.flingVelocity = v;
+            gripReport_.source = source;
+            events_.push_back({EventKind::GripFling, -1, length(v)});
+        } else {
+            ++gripReport_.refused;
+        }
     }
     // SPIDY RUN JUMP: off the ground with the run's speed, as long as the
     // body is still seen on it (the command takes a native step to land).

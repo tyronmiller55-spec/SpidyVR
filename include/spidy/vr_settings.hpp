@@ -553,6 +553,12 @@ struct Values {
     // the swing's velocity. swing_kick_manual. And the auto dive (WebStrike::dive, today's) as its own
     // setting, on as before: swing_kick_auto. Both can be on; the dive holds back during a manual kick.
     bool swingKickManual = false, swingKickAuto = true;
+    // GRIP ACROSS THE GAME (G1, grip.hpp; November 14), EXPERIMENTAL: both off until set. wall_brake: on
+    // Spidy's wall a grip closed on a slide slows it as friction does (mu wall_brake_mu_pct, 90), then holds.
+    // grip_fling: a pull let go of while gripping a surface launches the body the other way (gain
+    // grip_fling_gain_pct, 130; at most grip_fling_max m/s, 9), the ground included.
+    bool wallBrake = false, gripFling = false;
+    int wallBrakeMuPct = 90, gripFlingGainPct = 130, gripFlingMax = 9;
     // PASSIVE LEGS (leg_layers.hpp; November 12 06:18): in SpidyVR's air with
     // LEG CONTROL not engaged, the legs' spring runs with no stick, so momentum
     // moves them; this share of it shown (0 OFF). 60 by default. passive_legs_pct.
@@ -813,8 +819,10 @@ enum class Item : uint8_t {
     cameraVrStabilization,
     swingKickManual,
     swingKickAuto,
+    wallBrake,
+    gripFling,
 };
-inline constexpr Item lastItem = Item::swingKickAuto;
+inline constexpr Item lastItem = Item::gripFling;
 // SLOW-MO LENGTH's last step: no time limit (until L3 toggles it off).
 inline constexpr int slowMotionEndless = 91;
 // Real seconds a full meter lasts for a SLOW-MO LENGTH value; 0 = endless.
@@ -844,7 +852,7 @@ struct Row {
     Place place{};
 };
 // Stable row/setting numbers; categories below determine presentation order.
-const std::array<Row, 164>& rows();
+const std::array<Row, 166>& rows();
 const Row* rowFor(Item);
 // camera, shooters and legs (November 11, the user: "I can't find legs or
 // camera settings in any of the menus. Make sure it's clearly labeled"): tabs

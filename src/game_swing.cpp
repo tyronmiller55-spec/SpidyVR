@@ -37,6 +37,8 @@ __declspec(dllexport) ClimbData SpidyClimbData;
 __declspec(dllexport) SidestepLive SpidySidestepLive;
 // MANUAL SWING KICK's account (SwingKickLive), for XR's log and its legs.
 __declspec(dllexport) SwingKickLive SpidySwingKickLive;
+// GRIP's account (GripLive), for XR's feel and log.
+__declspec(dllexport) GripLive SpidySwingGripLive;
 }
 namespace {
 // Each hand's web's edges (Bends, SpidySwingBends), written with Data.
@@ -234,6 +236,9 @@ uint32_t kickSerial{};
 bool kickWaiting{};
 constexpr uint64_t kickMaxAgeMs = 150;
 swing_kick::Kick kickState;
+// GRIP ACROSS THE GAME (SpidySwingGrip, grip.hpp): the latest settings (the swing's step applies them).
+SRWLOCK gripLock = SRWLOCK_INIT;
+GripAsk gripAsk{};
 std::atomic<bool> autoDiveOff{}, kickBusy{};
 // QUICK SIDESTEP (SpidySwingSidestep, sidestep.hpp): a burst waiting for the
 // next step, as the point jump's; and the burst under way (the swing's
@@ -746,7 +751,8 @@ void visit(const native_rays::QueryContext& world) {
     unsigned wallHands{};
     for (unsigned i = 0; i < 2; ++i)
         if (focused && (in.wallRotate || (handCrawl ? (crawlHands.hands() & (1u << i))
-                                                    : solver.wallHand(i, controllerAims(in), world)))) {
+                                                    : (solver.wallHand(i, controllerAims(in), world) ||
+                                                       solver.gripHand(i, controllerAims(in), world))))) {
             wallHands |= 1u << i;
             in.hands[i].grip = in.hands[i].trigger = 0;
         }
@@ -1239,6 +1245,18 @@ void visit(const native_rays::QueryContext& world) {
             }
         }
     }
+    // GRIP ACROSS THE GAME (grip.hpp; wall_brake and grip_fling, off until XR sends them: SpidySwingGrip):
+    // the settings reach the solver every step, and its account goes out for XR's feel.
+    {
+        AcquireSRWLockExclusive(&gripLock);
+        const GripAsk ask = gripAsk;
+        ReleaseSRWLockExclusive(&gripLock);
+        grip::Config gc;
+        gc.mu = ask.mu;
+        gc.gain = ask.gain;
+        gc.vMax = ask.vMax;
+        solver.gripSettings((ask.flags & 1u) != 0, (ask.flags & 2u) != 0, gc);
+    }
     // MANUAL SWING KICK (swing_kick.hpp; the settings and flicks XR sent: SpidySwingKick). Arms on a flick
     // while swinging with the legs engaged, at the ringed enemy within the cone of the velocity; steers the
     // swing a little toward him, lands the foot's blow, and fades out on a miss. It adds no speed.
@@ -1371,6 +1389,31 @@ void visit(const native_rays::QueryContext& world) {
         zipped |= event.kind == EventKind::Zip;
     }
     pointLaunched |= slingshotLaunched || solver.gestureTakeoff();
+    {
+        // GRIP ACROSS THE GAME: a fling off the ground takes off as the point jump does (the game's jump,
+        // then the velocity); the account for XR.
+        for (const auto& event : solver.events())
+            pointLaunched |= event.kind == EventKind::GripFling;
+        const auto& gr = solver.gripReport();
+        volatile GripLive& live = SpidySwingGripLive;
+        live.brakeHands = gr.brakeHands;
+        live.brakeSpeed = gr.brakeSpeed;
+        live.brakeDecel = gr.brakeDecel;
+        live.brakes = gr.brakes;
+        live.grips = gr.grips;
+        live.groundFlings = gr.groundFlings;
+        live.wallFlings = gr.wallFlings;
+        live.airFlings = gr.airFlings;
+        live.slow = gr.slow;
+        live.refused = gr.refused;
+        live.source = gr.source;
+        live.flingSpeed = gr.flingSpeed;
+        live.flingVelocity.x = gr.flingVelocity.x;
+        live.flingVelocity.y = gr.flingVelocity.y;
+        live.flingVelocity.z = gr.flingVelocity.z;
+        MemoryBarrier();
+        live.flings = gr.flings;
+    }
     // Keep released flight and the short post-zip landing window. This lets
     // the solver issue a point launch before handing ordinary walking back.
     // Native gravity history is not a reliable midair handoff source.
@@ -1905,6 +1948,9 @@ extern "C" __declspec(dllexport) DWORD WINAPI SpidySwingStart(void* input) {
         pointJumpAt = 0;
         pointJumpWaiting = false;
         ReleaseSRWLockExclusive(&pointJumpLock);
+        AcquireSRWLockExclusive(&gripLock);
+        gripAsk = {};
+        ReleaseSRWLockExclusive(&gripLock);
         AcquireSRWLockExclusive(&kickLock);
         kickAsk = {};
         kickAt = 0;
@@ -2069,6 +2115,22 @@ extern "C" __declspec(dllexport) DWORD WINAPI SpidySwingKick(void* input) {
     }
     ReleaseSRWLockExclusive(&kickLock);
     autoDiveOff.store((a.flags & 2u) != 0, std::memory_order_relaxed);
+    return 0;
+}
+// GRIP ACROSS THE GAME (grip.hpp): the VR worker's settings. 2001: not a GripAsk; 1004: the swing has not
+// started; 0 taken. What it did: SpidySwingGripLive.
+extern "C" __declspec(dllexport) DWORD WINAPI SpidySwingGrip(void* input) {
+    GripAsk a;
+    if (!input || !copy(&a, input, sizeof(a)) || !validGrip(a))
+        return 2001;
+    AcquireSRWLockShared(&lifecycle);
+    const bool running = started;
+    ReleaseSRWLockShared(&lifecycle);
+    if (!running)
+        return 1004;
+    AcquireSRWLockExclusive(&gripLock);
+    gripAsk = a;
+    ReleaseSRWLockExclusive(&gripLock);
     return 0;
 }
 // QUICK SIDESTEP (sidestep.hpp): the VR worker's burst for the next step.

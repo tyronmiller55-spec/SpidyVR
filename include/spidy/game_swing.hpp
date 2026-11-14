@@ -661,6 +661,36 @@ struct SwingKickLive {
     uint32_t autoOff{}, reserved{};
 };
 static_assert(sizeof(SwingKickLive) == 104);
+// Side channel from XR (GRIP ACROSS THE GAME, grip.hpp): the settings, sent whenever they change and again
+// every second (a swing module started anew starts from none). `flags` bit 0: wall_brake, bit 1:
+// grip_fling. mu: the brake's friction (0.9); gain and vMax: the fling's (1.3, 9 m/s). Not a Command or
+// Settings field and not versioned with them (an older swing module has no SpidySwingGrip export; XR then
+// sends none and the grip is as it was).
+struct GripAsk {
+    uint32_t magic = 0x53574750, version = 1, bytes = sizeof(GripAsk), serial{};
+    uint32_t flags{};
+    float mu = .9f, gain = 1.3f, vMax = 9.f;
+};
+static_assert(sizeof(GripAsk) == 32);
+inline bool validGrip(const GripAsk& a) {
+    return a.magic == 0x53574750 && a.version == 1 && a.bytes == sizeof(GripAsk) && !(a.flags & ~3u) &&
+           std::isfinite(a.mu) && a.mu >= .3f && a.mu <= 1.5f && std::isfinite(a.gain) && a.gain >= .5f &&
+           a.gain <= 3.f && std::isfinite(a.vMax) && a.vMax >= 3.f && a.vMax <= 20.f;
+}
+// SpidySwingGripLive: the grip's account for XR's feel and log. `brakeHands` (bits) is the hands braking
+// now, with the slide speed (m/s) and the braking (m/s^2); `flings` counts up, and the last one's source
+// (1 ground, 2 wall, 3 air), speed (m/s) and velocity; `grips` the fling grips begun, `slow` the pulls
+// let go of too slowly, `refused` the flings with nowhere to go.
+struct GripLive {
+    uint32_t magic = 0x5357474c, version = 1, bytes = sizeof(GripLive), brakeHands{};
+    float brakeSpeed{}, brakeDecel{};
+    uint32_t brakes{}, grips{}, flings{}, groundFlings{}, wallFlings{}, airFlings{}, slow{}, refused{};
+    uint32_t source{};
+    float flingSpeed{};
+    Vec3 flingVelocity{};
+    uint32_t reserved{};
+};
+static_assert(sizeof(GripLive) == 80);
 // A web's edges as Bends hands them on: its anchor is the edge nearest the
 // hand, and each edge records the one before it, back to where it sticks.
 inline Bends::Hand edgesOf(const Web& w) {
