@@ -24099,8 +24099,8 @@ int main() {
         // November 13: TORSO TWIST and ARM AIM FALLBACK (launcher rows), appended after them.
         // November 14: STEADY's three rows, HORIZON LEVEL and VR STABILIZATION after them.
         // November 14: the swing kick's two switches after those.
-        // November 14: WALL BRAKE and GRIP FLING (launcher rows) after those.
-        constexpr size_t rowsAfter = 11;
+        // November 14: WALL BRAKE and GRIP FLING (launcher rows) after those, then the handstand's eight.
+        constexpr size_t rowsAfter = 19;
         check(all.size() == firstRealistic + std::size(realistic) + rowsAfter,
               "the realistic flips' rows are not the last but the appended ones");
         for (size_t i = 0; i < std::size(realistic); ++i)
@@ -31540,10 +31540,110 @@ int main() {
         s.softLockMetres = 41;
         check(!game_swing::validSettings(s), "soft lock over 40 m accepted");
     });
+    test("handstand settings: launcher rows on the legs page, ranges, notes and ini keys", [] {
+        using namespace vr_settings;
+        struct Entry {
+            Item item;
+            const char* key;
+            int low, high, def;
+            int Values::* number;
+        };
+        const Entry numbers[] = {
+            {Item::handstandFall, "handstand_fall_degrees", 15, 60, 35, &Values::handstandFallDegrees},
+            {Item::handstandPushGain, "handstand_push_gain", 100, 400, 220, &Values::handstandPushGain},
+            {Item::handstandPushMax, "handstand_push_max", 2, 12, 7, &Values::handstandPushMax},
+            {Item::handstandHeight, "handstand_height_cm", 60, 140, 95, &Values::handstandHeightCm},
+            {Item::handstandGain, "handstand_gain_pct", 50, 600, 300, &Values::handstandGainPct},
+            {Item::handstandEyeDrop, "handstand_eye_drop_cm", 0, 120, 90, &Values::handstandEyeDropCm},
+        };
+        const auto legsItems = screens()[static_cast<size_t>(Category::legs)].items;
+        const auto onLegs = [&](Item item) {
+            return std::find(legsItems.begin(), legsItems.end(), item) != legsItems.end();
+        };
+        check(onLegs(Item::handstand) && onLegs(Item::handstandAssist),
+              "the switches are not on the legs page");
+        for (const Item item : {Item::handstand, Item::handstandAssist}) {
+            const Row* row = rowFor(item);
+            check(row && row->choices.empty() && row->place == Place::launcher && row->help &&
+                      std::strlen(row->help) <= 80 && std::strstr(row->title, "HANDSTAND"),
+                  "a handstand switch's row");
+        }
+        check(std::strstr(rowFor(Item::handstand)->title, "EXPERIMENTAL"),
+              "handstand is labelled experimental");
+        Values defaults;
+        check(choice(Item::handstand, defaults) == 1 && choice(Item::handstandAssist, defaults) == 1 &&
+                  defaultChoice(Item::handstand) == 1,
+              "handstand and the assist are on by default");
+        for (const Entry& e : numbers) {
+            check(onLegs(e.item), "a handstand row is not on the legs page");
+            const Row* row = rowFor(e.item);
+            check(row && row->place == Place::launcher && row->help && std::strlen(row->help) <= 80 &&
+                      std::strstr(row->title, "HANDSTAND"),
+                  "a handstand row's text");
+            const auto list = steps(e.item);
+            check(!list.empty() && list.size() == row->choices.size() && list.size() <= maxChoices,
+                  "the choices");
+            check(list.front() == e.low && list.back() == e.high, "the list spans the ini's range");
+            check(std::is_sorted(list.begin(), list.end()) &&
+                      std::find(list.begin(), list.end(), e.def) != list.end(),
+                  "sorted, with the default on a step");
+            check(defaultChoice(e.item) ==
+                      static_cast<int>(std::find(list.begin(), list.end(), e.def) - list.begin()),
+                  "the default's choice");
+            // Every step round-trips through the values and the ini text, and none is out of the sanitizer's
+            // range.
+            for (size_t i = 0; i < list.size(); ++i) {
+                Values v;
+                const bool changed = choose(e.item, static_cast<int>(i), v);
+                check(changed == (list[i] != e.def) && v.*(e.number) == list[i], "choose sets the value");
+                check(choice(e.item, v) == static_cast<int>(i), "choice reads it back");
+                const auto read = withTabOnly({}, std::string(e.key) + "=" + std::to_string(list[i]) + "\n");
+                check(read.*(e.number) == list[i], "the ini key reads the step");
+                check(tabOnlyText(v).find(std::string(e.key) + "=" + std::to_string(list[i]) + "\n") !=
+                          std::string::npos,
+                      "the ini key writes the step");
+            }
+            check(!choose(e.item, static_cast<int>(list.size()), defaults), "a choice past the end");
+            // An ini value between two steps shows the nearer one.
+            if (list[1] - list[0] > 1) {
+                Values between;
+                between.*(e.number) = e.low + 1;
+                check(choice(e.item, between) == 0, "an ini value between steps shows the nearer");
+            }
+        }
+        // They need REALISTIC FLIPS (the note says so, the row stays shown), then HANDSTAND on.
+        Values v;
+        v.realisticFlips = false;
+        for (const Item item :
+             {Item::handstand, Item::handstandAssist, Item::handstandFall, Item::handstandPushGain,
+              Item::handstandPushMax, Item::handstandHeight, Item::handstandGain, Item::handstandEyeDrop}) {
+            const char* why = inactiveReason(item, v);
+            check(why && std::strstr(why, "REALISTIC FLIPS") && shownWhenInactive(item),
+                  "needs realistic flips");
+        }
+        v.realisticFlips = true;
+        check(inactiveReason(Item::handstand, v) == nullptr &&
+                  inactiveReason(Item::handstandFall, v) == nullptr,
+              "available with realistic flips");
+        v.handstand = false;
+        check(inactiveReason(Item::handstand, v) == nullptr && inactiveReason(Item::handstandFall, v) &&
+                  std::strstr(inactiveReason(Item::handstandFall, v), "HANDSTAND"),
+              "the tuning waits for the switch");
+        // The switches and the ini.
+        Values on, off;
+        off.handstand = off.handstandAssist = false;
+        check(choose(Item::handstand, 0, on) && !on.handstand && choose(Item::handstandAssist, 0, on) &&
+                  !on.handstandAssist && choose(Item::handstand, 1, on) && on.handstand,
+              "the switches set the values");
+        const auto read = withTabOnly({}, "handstand=0\nhandstand_assist=0\n");
+        check(!read.handstand && !read.handstandAssist &&
+                  tabOnlyText(off).find("handstand=0\nhandstand_assist=0\n") != std::string::npos,
+              "handstand and its assist in the ini");
+    });
     test("Native Animation: combined menu inventory and upstream-compatible v39 settings packet", [] {
         using namespace vr_settings;
         const auto& all = rows();
-        check(all.size() == 166 && static_cast<unsigned>(lastItem) < 256, "row/Item bounds");
+        check(all.size() == 174 && static_cast<unsigned>(lastItem) < 256, "row/Item bounds");
         std::array<unsigned, 256> seen{};
         size_t start = all.size();
         for (size_t i = 0; i < all.size(); ++i) {

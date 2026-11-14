@@ -2698,6 +2698,50 @@ void App::options(ImVec2 origin, ImVec2 size) {
                 "can be on; the dive waits while a hand kick is under way. On by default.",
                 S(42), [&] { tabToggle("##swingkickauto", Item::swingKickAuto); });
         });
+        group(legsPage, 1, "Handstand (experimental)", [&] {
+            settingOption(
+                Item::handstand, "Handstand",
+                "Come down upside down (at least 100 degrees over) with both palms on a flat floor and your "
+                "hands catch you and balance you; push off the palms to launch, lift them to drop to your "
+                "feet. Needs Realistic flips (VR FLIPS) on; the rows here say so while it is off. On by "
+                "default.",
+                S(42), [&] { tabToggle("##handstand", Item::handstand); });
+            settingOption(
+                Item::handstandAssist, "Balance assist",
+                "Steadies the balance on your palms as you lean (it steers the centre of pressure). Off: "
+                "you balance it entirely yourself. Needs Realistic flips. On by default.",
+                S(42), [&] { tabToggle("##handstandassist", Item::handstandAssist); });
+            settingOption(
+                Item::handstandFall, "Fall angle",
+                "How far you can lean before you drop to your feet (15 to 60 degrees). 35 by default. "
+                "Needs Realistic flips.",
+                S(150), [&] { tabCombo("##handstandfall", Item::handstandFall); });
+            settingOption(
+                Item::handstandPushGain, "Push-off strength",
+                "How hard a push of your palms into the floor launches you, as a share of the palms' speed "
+                "(100% to 400%). 220% by default. Needs Realistic flips.",
+                S(150), [&] { tabCombo("##handstandpush", Item::handstandPushGain); });
+            settingOption(
+                Item::handstandPushMax, "Push-off top speed",
+                "The fastest a push-off can launch you, in metres per second (2 to 12). 7 by default. "
+                "Needs Realistic flips.",
+                S(150), [&] { tabCombo("##handstandpushmax", Item::handstandPushMax); });
+            settingOption(
+                Item::handstandHeight, "Balance height",
+                "Where the balance counts your centre of mass over your palms (60 to 140 cm). 95 by "
+                "default. Needs Realistic flips.",
+                S(150), [&] { tabCombo("##handstandheight", Item::handstandHeight); });
+            settingOption(
+                Item::handstandGain, "Balance assist strength",
+                "How strongly the balance assist steers (50% to 600%). 300% by default. Needs Realistic "
+                "flips.",
+                S(150), [&] { tabCombo("##handstandgain", Item::handstandGain); });
+            settingOption(
+                Item::handstandEyeDrop, "View drop",
+                "How far your view comes down toward the floor when you are upside down (0 to 120 cm). 90 "
+                "by default. Needs Realistic flips.",
+                S(150), [&] { tabCombo("##handstandeye", Item::handstandEyeDrop); });
+        });
         group(pointJumpPage, 0, "Point jump (experimental)", [&] {
             settingOption(Item::pointJump, "Point jump",
                    "Whenever you touch a surface (the ground, a perch, a wall you run on), press A and B "

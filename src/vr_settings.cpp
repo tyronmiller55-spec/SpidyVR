@@ -268,6 +268,29 @@ static_assert(std::size(animForearmFallbackChoices) == std::size(animForearmFall
 constexpr int cameraHorizonLevelSteps[] = {0, 25, 50, 75, 100};
 constexpr const char* cameraHorizonLevelChoices[] = {"OFF", "25%", "50%", "75%", "100%"};
 static_assert(std::size(cameraHorizonLevelChoices) == std::size(cameraHorizonLevelSteps));
+// HANDSTAND (handstand.hpp): each list holds the default and the ini's whole range's ends.
+constexpr int handstandFallSteps[] = {15, 20, 25, 30, 35, 40, 45, 50, 60};
+constexpr const char* handstandFallChoices[] = {"15 DEG", "20 DEG", "25 DEG", "30 DEG", "35 DEG",
+                                                "40 DEG", "45 DEG", "50 DEG", "60 DEG"};
+static_assert(std::size(handstandFallChoices) == std::size(handstandFallSteps));
+constexpr int handstandPushGainSteps[] = {100, 150, 200, 220, 250, 300, 400};
+constexpr const char* handstandPushGainChoices[] = {"100%", "150%", "200%", "220%", "250%", "300%", "400%"};
+static_assert(std::size(handstandPushGainChoices) == std::size(handstandPushGainSteps));
+constexpr int handstandPushMaxSteps[] = {2, 3, 4, 5, 6, 7, 8, 9, 10, 12};
+constexpr const char* handstandPushMaxChoices[] = {"2 M/S", "3 M/S", "4 M/S", "5 M/S",  "6 M/S",
+                                                   "7 M/S", "8 M/S", "9 M/S", "10 M/S", "12 M/S"};
+static_assert(std::size(handstandPushMaxChoices) == std::size(handstandPushMaxSteps));
+constexpr int handstandHeightSteps[] = {60, 70, 80, 90, 95, 100, 110, 120, 130, 140};
+constexpr const char* handstandHeightChoices[] = {"60 CM",  "70 CM",  "80 CM",  "90 CM",  "95 CM",
+                                                  "100 CM", "110 CM", "120 CM", "130 CM", "140 CM"};
+static_assert(std::size(handstandHeightChoices) == std::size(handstandHeightSteps));
+constexpr int handstandGainSteps[] = {50, 100, 150, 200, 300, 400, 500, 600};
+constexpr const char* handstandGainChoices[] = {"50%",  "100%", "150%", "200%",
+                                                "300%", "400%", "500%", "600%"};
+static_assert(std::size(handstandGainChoices) == std::size(handstandGainSteps));
+constexpr int handstandEyeDropSteps[] = {0, 30, 60, 90, 120};
+constexpr const char* handstandEyeDropChoices[] = {"0 CM", "30 CM", "60 CM", "90 CM", "120 CM"};
+static_assert(std::size(handstandEyeDropChoices) == std::size(handstandEyeDropSteps));
 constexpr int cameraVrStabilizationSteps[] = {0, 1};
 constexpr const char* cameraVrStabilizationChoices[] = {"OFF", "ON"};
 static_assert(std::size(cameraVrStabilizationChoices) == std::size(cameraVrStabilizationSteps));
@@ -379,6 +402,18 @@ std::span<const int> steps(Item item) {
         return cameraVrStabilizationSteps;
     case Item::cameraHorizonLevel:
         return cameraHorizonLevelSteps;
+    case Item::handstandFall:
+        return handstandFallSteps;
+    case Item::handstandPushGain:
+        return handstandPushGainSteps;
+    case Item::handstandPushMax:
+        return handstandPushMaxSteps;
+    case Item::handstandHeight:
+        return handstandHeightSteps;
+    case Item::handstandGain:
+        return handstandGainSteps;
+    case Item::handstandEyeDrop:
+        return handstandEyeDropSteps;
     case Item::steadyAngle:
         return steadySmoothSteps;
     case Item::steadyHorizontal:
@@ -564,6 +599,18 @@ float numberOf(Item item, const Values& v) {
         return static_cast<float>(v.cameraVrStabilization);
     case Item::cameraHorizonLevel:
         return static_cast<float>(v.cameraHorizonLevelPct);
+    case Item::handstandFall:
+        return static_cast<float>(v.handstandFallDegrees);
+    case Item::handstandPushGain:
+        return static_cast<float>(v.handstandPushGain);
+    case Item::handstandPushMax:
+        return static_cast<float>(v.handstandPushMax);
+    case Item::handstandHeight:
+        return static_cast<float>(v.handstandHeightCm);
+    case Item::handstandGain:
+        return static_cast<float>(v.handstandGainPct);
+    case Item::handstandEyeDrop:
+        return static_cast<float>(v.handstandEyeDropCm);
     case Item::steadyAngle:
         return static_cast<float>(v.steadyAngleMs);
     case Item::steadyHorizontal:
@@ -733,6 +780,10 @@ template <class V> auto switchOf(Item item, V& v) -> decltype(&v.aimMarkers) {
         return &v.swingKickManual;
     case Item::swingKickAuto:
         return &v.swingKickAuto;
+    case Item::handstand:
+        return &v.handstand;
+    case Item::handstandAssist:
+        return &v.handstandAssist;
     case Item::wallBrake:
         return &v.wallBrake;
     case Item::gripFling:
@@ -895,9 +946,9 @@ Values sanitized(Values v) {
     v.automaticHandThreshold = std::clamp(v.automaticHandThreshold, 50, 300);
     return v;
 }
-const std::array<Row, 166>& rows() {
+const std::array<Row, 174>& rows() {
     // The help fits the game's description column beside the rows.
-    static const std::array<Row, 166> all{{
+    static const std::array<Row, 174> all{{
         {Item::none, "WEBS", nullptr, {}},
         {Item::webStyle, "WEB STYLE",
          "Arcade: webs pass lamp posts, signs and cars, and swings stay above the street.", webStyleChoices},
@@ -1370,6 +1421,34 @@ const std::array<Row, 166>& rows() {
          "Grip a surface, pull your hand and let go: you launch the other way (9 m/s max).",
          {},
          Place::launcher},
+        {Item::handstand,
+         "HANDSTAND (EXPERIMENTAL)",
+         "Catch a handstand: land inverted, both palms on a floor. Needs REALISTIC FLIPS.",
+         {},
+         Place::launcher},
+        {Item::handstandAssist,
+         "HANDSTAND BALANCE ASSIST",
+         "Steadies the balance on your palms as you lean. Off: you balance it yourself.",
+         {},
+         Place::launcher},
+        {Item::handstandFall, "HANDSTAND FALL ANGLE",
+         "Lean past this and you drop to your feet. 35 deg by default.", handstandFallChoices,
+         Place::launcher},
+        {Item::handstandPushGain, "HANDSTAND PUSH-OFF",
+         "How hard a push off the palms launches you, against the palms' speed. 220%.",
+         handstandPushGainChoices, Place::launcher},
+        {Item::handstandPushMax, "HANDSTAND PUSH-OFF MAX",
+         "The fastest a handstand push-off launches you (m/s). 7 by default.", handstandPushMaxChoices,
+         Place::launcher},
+        {Item::handstandHeight, "HANDSTAND BALANCE HEIGHT",
+         "Your centre of mass over the palms, for the balance. 95 cm by default.", handstandHeightChoices,
+         Place::launcher},
+        {Item::handstandGain, "HANDSTAND BALANCE GAIN",
+         "How strongly the balance assist steers (percent). 300% by default.", handstandGainChoices,
+         Place::launcher},
+        {Item::handstandEyeDrop, "HANDSTAND VIEW DROP",
+         "How far your view comes down when you are inverted. 90 cm by default.", handstandEyeDropChoices,
+         Place::launcher},
     }};
     return all;
 }
@@ -1459,6 +1538,8 @@ const std::array<Screen, categoryCount>& screens() {
         Item::legControl,      Item::legStiffness,    Item::legDamping,   Item::legCoupling,
         Item::passiveLegs,     Item::passiveCoupling, Item::legAirCrouch, Item::legReachSpread,
         Item::swingKickManual, Item::swingKickAuto,
+        Item::handstand, Item::handstandAssist, Item::handstandFall, Item::handstandPushGain,
+        Item::handstandPushMax, Item::handstandHeight, Item::handstandGain, Item::handstandEyeDrop,
     };
     // POINT JUMP (November 11): its switch, trigger and feel.
     static constexpr Item pointJump[] = {
@@ -1514,6 +1595,18 @@ const char* inactiveReason(Item item, const Values& v) {
         return !v.webLandingSmooth ? "Enable Smooth web landing first." : nullptr;
     case Item::controlledFlips:
         return v.realisticFlips ? "Realistic flips takes priority over Controlled flips." : nullptr;
+    case Item::handstand:
+        return !v.realisticFlips ? "Handstands need REALISTIC FLIPS on." : nullptr;
+    case Item::handstandAssist:
+    case Item::handstandFall:
+    case Item::handstandPushGain:
+    case Item::handstandPushMax:
+    case Item::handstandHeight:
+    case Item::handstandGain:
+    case Item::handstandEyeDrop:
+        return !v.realisticFlips ? "Handstands need REALISTIC FLIPS on."
+               : !v.handstand    ? "Turn HANDSTAND on first."
+                                 : nullptr;
     case Item::legControl:
         return !v.controlledFlips && !v.realisticFlips
                    ? "Needs CONTROLLED or REALISTIC FLIPS. ON here turns CONTROLLED FLIPS on."
@@ -1567,6 +1660,14 @@ const char* inactiveReason(Item item, const Values& v) {
 }
 bool shownWhenInactive(Item item) {
     switch (item) {
+    case Item::handstand:
+    case Item::handstandAssist:
+    case Item::handstandFall:
+    case Item::handstandPushGain:
+    case Item::handstandPushMax:
+    case Item::handstandHeight:
+    case Item::handstandGain:
+    case Item::handstandEyeDrop:
     case Item::legControl:
     case Item::legStiffness:
     case Item::legDamping:
@@ -1813,6 +1914,24 @@ bool choose(Item item, int index, Values& v) {
         break;
     case Item::cameraHorizonLevel:
         v.cameraHorizonLevelPct = s[index];
+        break;
+    case Item::handstandFall:
+        v.handstandFallDegrees = s[index];
+        break;
+    case Item::handstandPushGain:
+        v.handstandPushGain = s[index];
+        break;
+    case Item::handstandPushMax:
+        v.handstandPushMax = s[index];
+        break;
+    case Item::handstandHeight:
+        v.handstandHeightCm = s[index];
+        break;
+    case Item::handstandGain:
+        v.handstandGainPct = s[index];
+        break;
+    case Item::handstandEyeDrop:
+        v.handstandEyeDropCm = s[index];
         break;
     case Item::steadyAngle:
         v.steadyAngleMs = s[index];
