@@ -81,6 +81,7 @@ std::array<float, 2> overlayArmWeight{};
 bool overlayTorsoAssist{};
 Quat yieldTiltBody{}, yieldTiltHands{}; // ANIMATED AIR SPIN (setYieldTilt), world axes
 bool viewSoftlock{}; // midair softlock / headbone remap player frame
+float overlayTorsoTwist = body::Config{}.overlayTorsoYawMax; // setTorsoTwist
 SRWLOCK anchorLock = SRWLOCK_INIT;
 upper_frame::Anchor originalHead{};
 Quat actionJobTurn{};
@@ -713,6 +714,7 @@ void solveHero(float* out, uintptr_t job, uintptr_t instance) {
         config.hideHead = upper_frame::hideHead((wanted.flags & native_body::hideHead) != 0,
             armsOverlayOn, game_fp::followingHero());
         config.handOrientation = wanted.flags & native_body::handTurn;
+        config.overlayTorsoYawMax = overlayTorsoTwist;
         // The player's size: their T-pose calibration's eye height and arm,
         // or the headset's running height and the hero's own arms.
         heroProportions = body_calibration::proportions(cache.ik);
@@ -885,6 +887,12 @@ void solveHero(float* out, uintptr_t job, uintptr_t instance) {
         overlayTrackingSample.playerYaw = state.overlayPlayerYaw;
         overlayTrackingSample.remapped = armsOverlayOn && !lastTargets.viewMapped ? 1u : 0u;
         overlayTrackingSample.softlock = state.overlaySoftlock ? 1u : 0u;
+        overlayTrackingSample.chestTwist = state.overlayTorsoYaw;
+        overlayTrackingSample.twistWanted = state.overlayTwistWanted;
+        overlayTrackingSample.twistCap = state.overlayTwistCap;
+        overlayTrackingSample.twistShare = state.overlayTwistShare;
+        overlayTrackingSample.armScale[0] = state.overlayArmScale[0];
+        overlayTrackingSample.armScale[1] = state.overlayArmScale[1];
     }
     if (probing) {
         // And as the body left it, then published (its own lock, a copy).
@@ -1084,6 +1092,13 @@ void native_body::setYieldTilt(Quat bodyTilt, Quat handTilt) {
     AcquireSRWLockExclusive(&solveLock);
     yieldTiltBody = clean(bodyTilt);
     yieldTiltHands = clean(handTilt);
+    ReleaseSRWLockExclusive(&solveLock);
+}
+
+void native_body::setTorsoTwist(float maxRadians) {
+    AcquireSRWLockExclusive(&solveLock);
+    overlayTorsoTwist = std::isfinite(maxRadians) ? std::clamp(maxRadians, 0.f, 1.5707963f)
+                                                  : body::Config{}.overlayTorsoYawMax;
     ReleaseSRWLockExclusive(&solveLock);
 }
 

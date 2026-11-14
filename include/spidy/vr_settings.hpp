@@ -534,6 +534,12 @@ struct Values {
     // v2 (t86u "do a head rotation instead of a frame switch"): eased by default; the
     // ini key was renamed from rear_snap_ms so 5061b4a's saved INSTANT does not stick.
     int rearSnapMs = 200;
+    // TORSO UPDATE (Nov 13): the most the animation's arm overlay turns the chest toward the player, degrees
+    // (0 off, 40 the old cap). animated_torso_twist.
+    int animatedTorsoTwist = 80;
+    // TORSO UPDATE (Nov 13): in the animation the web line falls back to the controller's once the forearm
+    // is this many degrees off it (0 off). anim_forearm_fallback_deg.
+    int animForearmFallbackDeg = 60;
     // PASSIVE LEGS (leg_layers.hpp; November 12 06:18): in SpidyVR's air with
     // LEG CONTROL not engaged, the legs' spring runs with no stick, so momentum
     // moves them; this share of it shown (0 OFF). 60 by default. passive_legs_pct.
@@ -785,8 +791,10 @@ enum class Item : uint8_t {
     // November 12 (hybrid movement): MOVEMENT MODE, REAR SNAP TURN (hybrid_movement.hpp), VR CAMERA & STABILIZATION.
     movementMode,
     rearSnap,
+    animatedTorsoTwist,
+    animForearmFallback,
 };
-inline constexpr Item lastItem = Item::rearSnap;
+inline constexpr Item lastItem = Item::animForearmFallback;
 // SLOW-MO LENGTH's last step: no time limit (until L3 toggles it off).
 inline constexpr int slowMotionEndless = 91;
 // Real seconds a full meter lasts for a SLOW-MO LENGTH value; 0 = endless.
@@ -816,7 +824,7 @@ struct Row {
     Place place{};
 };
 // Stable row/setting numbers; categories below determine presentation order.
-const std::array<Row, 155>& rows();
+const std::array<Row, 157>& rows();
 const Row* rowFor(Item);
 // camera, shooters and legs (November 11, the user: "I can't find legs or
 // camera settings in any of the menus. Make sure it's clearly labeled"): tabs

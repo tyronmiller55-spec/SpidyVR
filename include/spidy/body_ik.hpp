@@ -361,7 +361,9 @@ struct Config {
     float blendSpeed = 4;
     // ANIMATED TORSO: waist yaw cap; pitch uses OG lean/maxLean.
     // overlayTorsoPitchMax retained for config source compatibility.
-    float overlayTorsoYawMax = .6981317f;   // ~40°
+    // (TORSO UPDATE: the cap on the chest's turn toward the player, default ~80 degrees;
+    // vr_settings animated_torso_twist, via native_body::setTorsoTwist. 40 was the old waist cap.)
+    float overlayTorsoYawMax = 1.3962634f;  // ~80°
     float overlayTorsoPitchMax = .4363323f; // ~25°
 };
 struct State {
@@ -381,6 +383,14 @@ struct State {
     // Slice C tracking-lock diag: last armsOnly chest vs player look yaw (rad).
     float overlayChestYaw{};
     float overlayPlayerYaw{};
+    // TORSO UPDATE diag: the yaw the chest needs toward the player (rad, before the cap),
+    // the cap, the share of the capped yaw that kept both wrists reachable, the scale each
+    // overlay arm took and the elbow poles (chest axes) last used.
+    float overlayTwistWanted{};
+    float overlayTwistCap{};
+    float overlayTwistShare{1.f};
+    std::array<float, 2> overlayArmScale{1.f, 1.f};
+    std::array<Vec3, 2> overlayChestPole{};
     bool overlaySoftlock{};
     float crawlWeight{};
     float crawlTwist{};

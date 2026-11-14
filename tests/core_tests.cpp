@@ -23973,7 +23973,10 @@ int main() {
         // November 11 (POINT JUMP): its six rows after HEAD ANGLE, before them too.
         // November 12: PUNCH VIEW EASE after POINT JUMP's.
         constexpr size_t firstRealistic = 144;
-        check(all.size() == firstRealistic + std::size(realistic), "the realistic flips' rows are not the last");
+        // November 13: TORSO TWIST and ARM AIM FALLBACK (launcher rows), appended after them.
+        constexpr size_t rowsAfter = 2;
+        check(all.size() == firstRealistic + std::size(realistic) + rowsAfter,
+              "the realistic flips' rows are not the last but the appended ones");
         for (size_t i = 0; i < std::size(realistic); ++i)
             check(all[firstRealistic + i].item == realistic[i], "the realistic flips' rows out of order");
         check(std::strcmp(all[firstRealistic].title, "REALISTIC FLIPS") == 0 && all[firstRealistic].choices.empty(),
@@ -24238,7 +24241,9 @@ int main() {
                 row.item == Item::palmShooters ||
                 // November 12 (hybrid movement): MOVEMENT MODE supersedes VIEW YAW SOURCE; TURN-IN-PLACE
                 // ANGLE is STABLE's only (the in-game camera tab holds 20).
-                row.item == Item::viewYawSource || row.item == Item::turnInPlace;
+                row.item == Item::viewYawSource || row.item == Item::turnInPlace ||
+                // November 13 (torso update on): launcher rows, no room in the in-game tabs.
+                row.item >= Item::animatedTorsoTwist;
             check(row.place == (row.item == Item::view ? Place::page
                                 : launcherOnly           ? Place::launcher
                                                          : Place::tab),
@@ -24536,7 +24541,7 @@ int main() {
                   "camera_stabilization=0\ncamera_vertical_ms=0\ncamera_horizontal_ms=0\ncamera_angle_ms=0\n"
                   "camera_light_vertical_ms=75\ncamera_light_horizontal_ms=50\ncamera_light_angle_ms=75\n"
                   "camera_heavy_vertical_ms=200\ncamera_heavy_horizontal_ms=150\ncamera_heavy_angle_ms=200\n"
-                  "spherical_aim=1\nleg_control=0\nleg_stiffness_pct=100\nleg_damping_pct=100\nleg_coupling_pct=50\nleg_double_tap_ms=300\npunch_view_ease_ms=250\nmove_haptics_pct=100\nview_yaw_source=1\nsound_trace=1\njump_handoff_ms=500\nair_view_ease_ms=250\nanim_yaw_sway_pct=20\nturn_in_place_deg=35\npassive_legs_pct=60\npassive_coupling_pct=15\nmovement_mode=0\nrear_snap_turn_ms=200\nleg_air_crouch=1\nleg_reach_spread=1\nair_fists=1\n"
+                  "spherical_aim=1\nleg_control=0\nleg_stiffness_pct=100\nleg_damping_pct=100\nleg_coupling_pct=50\nleg_double_tap_ms=300\npunch_view_ease_ms=250\nmove_haptics_pct=100\nview_yaw_source=1\nsound_trace=1\njump_handoff_ms=500\nair_view_ease_ms=250\nanim_yaw_sway_pct=20\nturn_in_place_deg=35\npassive_legs_pct=60\npassive_coupling_pct=15\nmovement_mode=0\nrear_snap_turn_ms=200\nanimated_torso_twist=80\nanim_forearm_fallback_deg=60\nleg_air_crouch=1\nleg_reach_spread=1\nair_fists=1\n"
                   "camera_pitch_pct=100\ncamera_roll_pct=100\ncamera_bob_vertical_pct=100\ncamera_bob_side_pct=100\n"
                   "camera_head_angle_deg=0\n"
                   "sidestep=1\nsidestep_distance_cm=200\nsidestep_ms=180\nsidestep_cooldown_ms=300\n"
@@ -27803,6 +27808,58 @@ int main() {
     });
 
 
+    test("TORSO UPDATE: the chest turns up to the TORSO TWIST to reach hands off to the side; legs and "
+         "pelvis stay",
+         [] {
+             auto b = testBody(true);
+             auto data = b.rest;
+             body::Pose base(data.data(), static_cast<int>(b.rig.parent.size()));
+             const Vec3 pelvis = base.position(b.rig.pelvis);
+             // Both hands where the animation's wrists would be after a 70 degree turn of the chest.
+             const float turn = 70.f * 3.14159265f / 180.f;
+             const Quat around = Quat::yaw(turn);
+             auto run = [&](float maxDegrees, float& error, float& yawDegrees, bool& legsStayed) {
+                 body::Targets t;
+                 t.armsOnly = t.viewMapped = t.viewSoftlock = t.torsoAssist = true;
+                 t.armWeight = {1, 1};
+                 t.up = {0, 1, 0};
+                 t.head = true;
+                 t.eyes = base.position(b.rig.head);
+                 t.facing = Quat::yaw(3.14159265f + turn);
+                 body::Config c;
+                 c.hideHead = false;
+                 c.overlayTorsoYawMax = maxDegrees * 3.14159265f / 180.f;
+                 for (unsigned i = 0; i < 2; ++i) {
+                     const Vec3 offset{i == 0 ? -c.wristFromGrip.x : c.wristFromGrip.x, c.wristFromGrip.y,
+                                       c.wristFromGrip.z};
+                     const Vec3 wrist = pelvis + around.rotate(base.position(b.rig.arms[i].hand) - pelvis);
+                     t.hands[i] = {true, wrist - offset, {}, 0, 0};
+                 }
+                 body::State st;
+                 error = 0;
+                 legsStayed = true;
+                 for (int frame = 0; frame < 90; ++frame) {
+                     auto fresh = b.rest;
+                     body::Pose pose(fresh.data(), static_cast<int>(b.rig.parent.size()));
+                     const auto solved = body::solve(pose, b.rig, t, c, st, true, 1.f / 90, 1.f, 1.f);
+                     error = std::max(solved.handError[0], solved.handError[1]);
+                     for (int joint :
+                          {b.rig.pelvis, b.rig.legs[0].upper, b.rig.legs[0].foot, b.rig.legs[1].foot})
+                         legsStayed =
+                             legsStayed && length(pose.position(joint) - base.position(joint)) < 1e-3f;
+                 }
+                 yawDegrees = std::abs(st.overlayTorsoYaw) * 180.f / 3.14159265f;
+             };
+             float wideError = 0, oldError = 0, wideYaw = 0, oldYaw = 0;
+             bool wideLegs = false, oldLegs = false;
+             run(80.f, wideError, wideYaw, wideLegs);
+             run(40.f, oldError, oldYaw, oldLegs);
+             check(wideLegs && oldLegs, "the pelvis and legs stay animated");
+             check(oldYaw <= 40.5f && wideYaw <= 80.5f, "the chest twist is bounded by the setting");
+             check(wideYaw > oldYaw + 10.f, "the 80 degree cap turns further than the old 40");
+             check(wideError < oldError, "the wider twist reaches the wrists better than the old cap");
+         });
+
     test("ANIMATED ARMS: soft floor, motion, intent, tracking loss, chest remap", [] {
         using namespace animated_arms;
         State st;
@@ -28160,10 +28217,39 @@ int main() {
                   all[89].choices.size() == 9 && std::strcmp(all[89].choices[0], "OFF") == 0 &&
                   std::strcmp(all[89].choices[8], "500 MS") == 0 && all[89].place == Place::tab,
               "ANIMATED HYBRID SPEED row");
-        check(lastItem == Item::rearSnap && Item::legReachSpread < lastItem && Item::turnInPlace < lastItem && Item::airViewEase < lastItem && Item::soundTrace < lastItem && Item::punchViewEase < lastItem && Item::pointJumpPush < lastItem && Item::cameraHeadAngle < lastItem && Item::airFists < lastItem && Item::legCoupling < lastItem && Item::animatedHeadsetSmooth < lastItem &&
+        check(Item::rearSnap <= lastItem && Item::legReachSpread < lastItem && Item::turnInPlace < lastItem && Item::airViewEase < lastItem && Item::soundTrace < lastItem && Item::punchViewEase < lastItem && Item::pointJumpPush < lastItem && Item::cameraHeadAngle < lastItem && Item::airFists < lastItem && Item::legCoupling < lastItem && Item::animatedHeadsetSmooth < lastItem &&
                   Item::softLock < Item::cameraStabilization,
               "SMOOTHING not included in the last Item bound");
     });
+
+    test("TORSO TWIST and ARM AIM FALLBACK: 80 and 60 degrees by default, launcher rows, kept and sanitized",
+         [] {
+             using namespace vr_settings;
+             const Values defaults{};
+             check(defaults.animatedTorsoTwist == 80 && defaults.animForearmFallbackDeg == 60, "defaults");
+             const Row* twist = rowFor(Item::animatedTorsoTwist);
+             const Row* fallback = rowFor(Item::animForearmFallback);
+             check(twist && fallback && twist->place == Place::launcher && fallback->place == Place::launcher,
+                   "launcher rows");
+             check(twist && twist->choices.size() == 7 && std::strcmp(twist->choices[5], "80 DEG") == 0 &&
+                       std::strcmp(twist->choices[2], "40 DEG (OLD)") == 0,
+                   "twist choices keep the old 40 and the new 80");
+             check(fallback && fallback->choices.size() == 5 && std::strcmp(fallback->choices[0], "OFF") == 0,
+                   "fallback choices");
+             check(defaultChoice(Item::animatedTorsoTwist) == 5 &&
+                       defaultChoice(Item::animForearmFallback) == 2,
+                   "RESET puts back 80 and 60");
+             const Values kept =
+                 withTabOnly(Values{}, "animated_torso_twist=60\nanim_forearm_fallback_deg=0\n");
+             check(kept.animatedTorsoTwist == 60 && kept.animForearmFallbackDeg == 0, "read back");
+             const Values wild =
+                 withTabOnly(Values{}, "animated_torso_twist=400\nanim_forearm_fallback_deg=-5\n");
+             check(wild.animatedTorsoTwist == 90 && wild.animForearmFallbackDeg == 0, "sanitized");
+             const Values old = withTabOnly(Values{}, "animated_torso=1\n");
+             check(old.animatedTorsoTwist == 80, "an older file gets the new default");
+             const Values again = withTabOnly(Values{}, tabOnlyText(kept));
+             check(again.animatedTorsoTwist == 60 && again.animForearmFallbackDeg == 0, "round trip");
+         });
 
     test("ANIMATED ONLY: every gameplay state yields, no web interrupt, cutscene grace", [] {
         using namespace animated_moves;
@@ -31331,7 +31417,7 @@ int main() {
     test("Native Animation: combined menu inventory and upstream-compatible v39 settings packet", [] {
         using namespace vr_settings;
         const auto& all = rows();
-        check(all.size() == 155 && static_cast<unsigned>(lastItem) < 256, "row/Item bounds");
+        check(all.size() == 157 && static_cast<unsigned>(lastItem) < 256, "row/Item bounds");
         std::array<unsigned, 256> seen{};
         size_t start = all.size();
         for (size_t i = 0; i < all.size(); ++i) {

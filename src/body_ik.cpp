@@ -21,6 +21,15 @@ Vec3 across(Vec3 v, Vec3 axis) {
 float wrap(float a) {
     return std::remainder(a, 2 * pi);
 }
+// TORSO UPDATE (Targets::armsOnly): the yaw the spine takes toward the player eases in at this
+// pace (seconds; and no faster than twistMaxRate radians a second), and a wrist counts as
+// reachable inside twistReach of its arm's length.
+constexpr float twistEaseSeconds = .06f, twistMaxRate = 14.f, twistReach = .97f;
+// The overlay's arms take the player's arm length (s * armScale) within these bounds.
+constexpr float armScaleMin = .75f, armScaleMax = 1.5f;
+// The clavicle's shrug toward a far wrist starts at this share of the arm's length, and turns
+// at most this share of the way (it was .8 and .35).
+constexpr float clavicleFrom = .65f, clavicleShare = .8f;
 float approach(float value, float target, float step) {
     return value < target ? std::min(target, value + step) : std::max(target, value - step);
 }
@@ -629,16 +638,94 @@ Result solve(Pose& pose, const Rig& rig, const Targets& targets, const Config& c
             for (const auto j : rig.spine)
                 pose.turn(rig.below[j], partial(bend, w / static_cast<float>(rig.spine.size())),
                           pose.position(j));
-            // Distribute player yaw along actual spine pivots. Keep the existing
-            // anatomical waist yaw cap; head look and arm poles use full player yaw.
+            // TORSO UPDATE (the user, Nov 13: "the arms are deforming terribly and
+            // preventing aiming the webshooters"): SpidyVR turns its whole body to
+            // face the player (fullTurn/upperTurn), so the shoulders always face
+            // the hands. The overlay kept the animation's chest and turned it at
+            // most 40 degrees, while in the 22:24 session the chest was 45 deg off
+            // the player at the median and over 90 deg off in 19% of the overlay's
+            // samples (|dYaw| p90 108): the forearm sat 49 deg (p90 104) off the
+            // controller there. Now the chest subtree (the spine, so the clavicles,
+            // arms and head with it) turns toward the player by the largest yaw up
+            // to the TORSO TWIST cap that keeps both wrists within reach, the way
+            // the crawl's torso twist picks its yaw (reachable(), below, bisects the
+            // same way); the pelvis and legs stay on the animation, and the yaw
+            // eases in and out (twistEaseSeconds) so a cut of the animation does not
+            // snap the shoulders.
             const Vec3 at = normalized(across(pose.direction(rig.spine.back(), rig.spineForward.back()), up));
             const float yawCap = std::isfinite(c.overlayTorsoYawMax)
                 ? std::clamp(c.overlayTorsoYawMax,0.f,1.5707963f) : animated_torso::yawMax;
-            const float yaw = std::clamp(std::atan2(dot(cross(at, playerLook), up), dot(at, playerLook)),
-                                        -yawCap, yawCap);
+            const float needed = std::atan2(dot(cross(at, playerLook), up), dot(at, playerLook));
+            const float capped = std::clamp(needed, -yawCap, yawCap);
+            const size_t spineCount = std::min<size_t>(rig.spine.size(), 16);
+            // Where a shoulder lands when the spine's yaw `y` is applied joint by
+            // joint exactly as below (each joint's rigid turn about `up` through
+            // its own, already moved, pivot).
+            const auto shoulderAfter = [&](int arm, float y) {
+                Vec3 pivots[16];
+                for (size_t k = 0; k < spineCount; ++k)
+                    pivots[k] = pose.position(rig.spine[k]);
+                Vec3 p = pose.position(rig.arms[arm].upper);
+                const Quat step = axisAngle(up, y * w / static_cast<float>(rig.spine.size()));
+                for (size_t k = 0; k < spineCount; ++k) {
+                    const auto& below = rig.below[rig.spine[k]];
+                    const auto has = [&](int joint) {
+                        return std::find(below.begin(), below.end(), joint) != below.end();
+                    };
+                    for (size_t m = k + 1; m < spineCount; ++m)
+                        if (has(rig.spine[m]))
+                            pivots[m] = pivots[k] + step.rotate(pivots[m] - pivots[k]);
+                    if (has(rig.arms[arm].upper))
+                        p = pivots[k] + step.rotate(p - pivots[k]);
+                }
+                return p;
+            };
+            // How far past the arm's reach the wrist is with the yaw applied (0: reachable).
+            const auto overReach = [&](float y) {
+                float worst = 0;
+                for (int i = 0; i < 2; ++i) {
+                    if (weights[i] < .05f || !handsRemapped[i].tracked || !finite(wrists[i]))
+                        continue;
+                    worst =
+                        std::max(worst, length(wrists[i] - shoulderAfter(i, y)) - twistReach * armLens[i]);
+                }
+                return worst;
+            };
+            float share = 1.f;
+            if (spineCount == rig.spine.size() && std::abs(capped) > 1e-4f) {
+                // The largest share of the wanted yaw that keeps both wrists reachable;
+                // if none does, the share that leaves them nearest.
+                float best = 1.f, bestOver = 1e9f;
+                bool found = false;
+                for (int step = 8; step >= 0; --step) {
+                    const float t = static_cast<float>(step) / 8.f;
+                    const float over = overReach(capped * t);
+                    if (over <= 1e-3f) {
+                        best = t;
+                        found = true;
+                        break;
+                    }
+                    if (over < bestOver - 1e-4f) {
+                        bestOver = over;
+                        best = t;
+                    }
+                }
+                share = best;
+                (void)found;
+            }
+            const float target = capped * share;
+            // Eased: the yaw applied last solve (state.overlayTorsoYaw) moves toward the
+            // target at the exponential's pace, never faster than twistMaxRate.
+            const float previous = std::isfinite(state.overlayTorsoYaw) ? state.overlayTorsoYaw : 0.f;
+            const float follow = dt > 0 ? 1.f - std::exp(-dt / twistEaseSeconds) : 0.f;
+            const float yaw =
+                previous + std::clamp((target - previous) * follow, -twistMaxRate * dt, twistMaxRate * dt);
             for (const auto j : rig.spine)
                 pose.turn(rig.below[j], axisAngle(up, yaw * w / static_cast<float>(rig.spine.size())),
                           pose.position(j));
+            state.overlayTwistWanted = needed;
+            state.overlayTwistCap = yawCap;
+            state.overlayTwistShare = share;
             // Rooted CCD fits tracked head translation without moving a single
             // lower-body matrix or stretching a bone. Unreachable targets retain
             // a measured residual; never translate the torso to manufacture reach.
@@ -673,6 +760,8 @@ Result solve(Pose& pose, const Rig& rig, const Targets& targets, const Config& c
             for (int i = 0; i < 2; ++i) shoulders[i] = pose.position(rig.arms[i].upper);
         } else {
             state.overlayTorsoYaw = state.overlayTorsoPitch = 0;
+            state.overlayTwistWanted = 0;
+            state.overlayTwistShare = 1.f;
         }
         // Publish chest/player yaw for XR dense diag (side channel).
         state.overlayChestYaw = animated_arms::lookYaw(chestLook);
@@ -698,16 +787,52 @@ Result solve(Pose& pose, const Rig& rig, const Targets& targets, const Config& c
             const Vec3 right = normalized(hand.orientation.rotate({1, 0, 0}));
             const Vec3 wrist = wrists[i];
             const float length2 = armLens[i];
+            // The player's arm, as SpidyVR scales it (the OG branch scales the body by `s`
+            // and each arm, hand and all, about its shoulder by `arms`): the hero stays at
+            // his own size here, so his arm takes both, about the shoulder, fading in with
+            // the arm's weight. armLens (the reach below) is that length.
+            if (arm.upper >= 0 && static_cast<size_t>(arm.upper) < rig.below.size()) {
+                const float full = std::clamp(s * std::clamp(arms, .5f, 2.f), armScaleMin, armScaleMax);
+                const float factor = 1.f + (full - 1.f) * std::clamp(aw, 0.f, 1.f);
+                if (std::abs(factor - 1.f) > .004f)
+                    pose.scale(rig.below[static_cast<size_t>(arm.upper)], factor, pose.position(arm.upper));
+                state.overlayArmScale[i] = factor;
+            }
             if (arm.clavicle >= 0) {
+                // Shrug toward a wrist that is nearly out of reach (stronger than the old
+                // .35 from 80% of the arm: from 65% of it, up to .8 of the turn).
                 const Vec3 base = pose.position(arm.clavicle), shoulder = pose.position(arm.upper);
-                const float stretch =
-                    std::clamp((length(wrist - shoulder) - .8f * length2) / (.4f * length2), 0.f, 1.f);
+                const float stretch = std::clamp((length(wrist - shoulder) - clavicleFrom * length2) /
+                                                     ((1.f - clavicleFrom) * length2),
+                                                 0.f, 1.f);
                 if (stretch > 0)
                     pose.turn(rig.below[arm.clavicle],
-                              partial(between(shoulder - base, wrist - base), .35f * stretch * aw), base);
+                              partial(between(shoulder - base, wrist - base), clavicleShare * stretch * aw),
+                              base);
             }
-            const Vec3 side = i == 0 ? left : left * -1.f;
-            const Vec3 pole = normalized(up * -1.f + side * .6f - look * .3f);
+            // The elbow's pole from the solved chest's own axes (SpidyVR's body_ik: the pole
+            // is turned by upperTurn, the chest's turn, so it follows the chest's lean and
+            // yaw), not world up and the player's look: the chest as the torso block left it.
+            Vec3 pole = normalized(up * -1.f + (i == 0 ? left : left * -1.f) * .6f - look * .3f);
+            if (!rig.spine.empty() && rig.spineForward.size() == rig.spine.size()) {
+                const Vec3 shL = pose.position(rig.arms[0].upper), shR = pose.position(rig.arms[1].upper);
+                Vec3 chestForward = pose.direction(rig.spine.back(), rig.spineForward.back());
+                Vec3 lateral = shL - shR;
+                if (finite(chestForward) && finite(lateral) && length(chestForward) > .2f &&
+                    length(lateral) > .05f) {
+                    lateral = normalized(lateral);
+                    chestForward = chestForward - lateral * dot(chestForward, lateral);
+                    if (length(chestForward) > .2f) {
+                        chestForward = normalized(chestForward);
+                        const Vec3 chestUp = normalized(cross(chestForward, lateral));
+                        const Vec3 chestPole = normalized(
+                            chestUp * -1.f + (i == 0 ? lateral : lateral * -1.f) * .6f - chestForward * .3f);
+                        if (finite(chestPole) && length(chestPole) > .5f)
+                            pole = chestPole;
+                    }
+                }
+            }
+            state.overlayChestPole[i] = pole;
             limb(pose, rig, arm.upper, arm.lower, arm.hand, wrist, pole, aw);
             r.handError[i] = length(pose.position(arm.hand) - wrist);
             if (c.handOrientation) {

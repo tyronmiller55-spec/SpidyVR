@@ -253,6 +253,13 @@ static_assert(std::size(passiveLegsChoices) == std::size(passiveLegsSteps));
 constexpr int movementModes[] = {0, 1, 2};
 constexpr const char* movementModeChoices[] = {"HYBRID", "STABLE", "OLD"};
 static_assert(std::size(movementModeChoices) == std::size(movementModes));
+constexpr int animatedTorsoTwistSteps[] = {0, 20, 40, 60, 70, 80, 90};
+constexpr const char* animatedTorsoTwistChoices[] = {"OFF",    "20 DEG", "40 DEG (OLD)", "60 DEG",
+                                                     "70 DEG", "80 DEG", "90 DEG"};
+static_assert(std::size(animatedTorsoTwistChoices) == std::size(animatedTorsoTwistSteps));
+constexpr int animForearmFallbackSteps[] = {0, 45, 60, 75, 90};
+constexpr const char* animForearmFallbackChoices[] = {"OFF", "45 DEG", "60 DEG", "75 DEG", "90 DEG"};
+static_assert(std::size(animForearmFallbackChoices) == std::size(animForearmFallbackSteps));
 constexpr int rearSnaps[] = {0, 100, 150, 200, 300};
 constexpr const char* rearSnapChoices[] = {"INSTANT", "100 MS", "150 MS", "200 MS", "300 MS"};
 static_assert(std::size(rearSnapChoices) == std::size(rearSnaps));
@@ -357,6 +364,10 @@ std::span<const int> steps(Item item) {
         return movementModes;
     case Item::rearSnap:
         return rearSnaps;
+    case Item::animForearmFallback:
+        return animForearmFallbackSteps;
+    case Item::animatedTorsoTwist:
+        return animatedTorsoTwistSteps;
     case Item::pointJumpMinSpeed:
         return pointJumpMinSpeeds;
     case Item::pointJumpMaxSpeed:
@@ -528,6 +539,10 @@ float numberOf(Item item, const Values& v) {
         return static_cast<float>(v.movementMode);
     case Item::rearSnap:
         return static_cast<float>(v.rearSnapMs);
+    case Item::animForearmFallback:
+        return static_cast<float>(v.animForearmFallbackDeg);
+    case Item::animatedTorsoTwist:
+        return static_cast<float>(v.animatedTorsoTwist);
     case Item::pointJumpMinSpeed:
         return static_cast<float>(v.pointJumpMinSpeed);
     case Item::pointJumpMaxSpeed:
@@ -772,6 +787,8 @@ Values sanitized(Values v) {
     v.passiveCouplingPct = std::clamp(v.passiveCouplingPct, 0, 100);
     v.movementMode = std::clamp(v.movementMode, 0, 2);
     v.rearSnapMs = std::clamp(v.rearSnapMs, 0, 1000);
+    v.animForearmFallbackDeg = std::clamp(v.animForearmFallbackDeg, 0, 180);
+    v.animatedTorsoTwist = std::clamp(v.animatedTorsoTwist, 0, 90);
     v.pointJumpChordMs = std::clamp(v.pointJumpChordMs, 20, 150);
     v.pointJumpTapMs = std::clamp(v.pointJumpTapMs, 50, 400);
     v.pointJumpFullMs = std::clamp(v.pointJumpFullMs, 300, 2000);
@@ -831,9 +848,9 @@ Values sanitized(Values v) {
     v.automaticHandThreshold = std::clamp(v.automaticHandThreshold, 50, 300);
     return v;
 }
-const std::array<Row, 155>& rows() {
+const std::array<Row, 157>& rows() {
     // The help fits the game's description column beside the rows.
-    static const std::array<Row, 155> all{{
+    static const std::array<Row, 157> all{{
         {Item::none, "WEBS", nullptr, {}},
         {Item::webStyle, "WEB STYLE",
          "Arcade: webs pass lamp posts, signs and cars, and swings stay above the street.", webStyleChoices},
@@ -1268,6 +1285,12 @@ const std::array<Row, 155>& rows() {
          "FLIPS IN COMBAT",
          "Off: with enemies near, arms and webs stop turning you and you come upright.",
          {}},
+        {Item::animatedTorsoTwist, "TORSO TWIST",
+         "Most his chest turns toward you so the arms reach your hands. 40: old cap.",
+         animatedTorsoTwistChoices, Place::launcher},
+        {Item::animForearmFallback, "ARM AIM FALLBACK",
+         "Webs aim along your controller past this forearm angle. OFF: forearm only.",
+         animForearmFallbackChoices, Place::launcher},
     }};
     return all;
 }
@@ -1322,7 +1345,9 @@ const std::array<Screen, categoryCount>& screens() {
         Item::animatedMoves, Item::animatedHybrid, Item::animatedAir, Item::animatedOnly,
         Item::animatedSteering, Item::viewYawSource, Item::movementMode, Item::jumpHandoff, Item::animatedAirSpin, Item::headProbe, Item::soundTrace,
         Item::runSpeed,
-        Item::slowMotionLength, Item::softLock,
+        Item::slowMotionLength,
+        Item::softLock,
+        Item::animatedTorsoTwist,
     };
     // CAMERA & STABILIZATION (November 11): how much the animation moves the
     // view (amounts, HEAD ANGLE), then how smoothly (the response times).
@@ -1336,9 +1361,9 @@ const std::array<Screen, categoryCount>& screens() {
     // WEB SHOOTERS (November 11): one choice and its strength, WEB ANGLE on
     // top; the old rows they replace stay in the launcher's file only.
     static constexpr Item shooters[] = {
-        Item::shooterMode, Item::shooterLock, Item::webAngle,
-        Item::webAimSource, Item::forearmBlend, Item::forearmAimLimit, Item::wristShooters,
-        Item::palmShooters,
+        Item::shooterMode,   Item::shooterLock,  Item::webAngle,
+        Item::webAimSource,  Item::forearmBlend, Item::forearmAimLimit,
+        Item::wristShooters, Item::palmShooters, Item::animForearmFallback,
     };
     // LEGS (ADVANCED) (November 11): shown even while unavailable, the help
     // saying why (shownWhenInactive).
@@ -1694,6 +1719,12 @@ bool choose(Item item, int index, Values& v) {
     case Item::rearSnap:
         v.rearSnapMs = s[index];
         break;
+    case Item::animForearmFallback:
+        v.animForearmFallbackDeg = s[index];
+        break;
+    case Item::animatedTorsoTwist:
+        v.animatedTorsoTwist = s[index];
+        break;
     case Item::pointJumpMinSpeed:
         v.pointJumpMinSpeed = s[index];
         v.pointJumpMaxSpeed = std::max(v.pointJumpMaxSpeed, v.pointJumpMinSpeed);
@@ -1920,6 +1951,8 @@ constexpr TabOnly tabOnly[] = {
     {"passive_coupling_pct", nullptr, &Values::passiveCouplingPct},
     {"movement_mode", nullptr, &Values::movementMode},
     {"rear_snap_turn_ms", nullptr, &Values::rearSnapMs},
+    {"animated_torso_twist", nullptr, &Values::animatedTorsoTwist},
+    {"anim_forearm_fallback_deg", nullptr, &Values::animForearmFallbackDeg},
     {"leg_air_crouch", &Values::legAirCrouch, nullptr},
     {"leg_reach_spread", &Values::legReachSpread, nullptr},
     {"air_fists", &Values::airFists, nullptr},

@@ -1133,6 +1133,7 @@ DWORD WINAPI run(void*) {
         // largest step of the forearm's turn from frame to frame since the
         // last line (its jitter). webTurnsOn: turns are being sent.
         std::array<web_aim::ForearmAim, 2> forearmAims;
+        std::array<bool, 2> forearmMisaligned{}; // ARM AIM FALLBACK (anim_forearm_fallback_deg)
         // SPHERICAL AIM: each hand's learned forearm (controller frame) and
         // the eased trust in the solve (spherical_aim.hpp). The model lives
         // for the session: owner switches keep it.
@@ -4425,8 +4426,31 @@ DWORD WINAPI run(void*) {
                                         web_aim::signedPalmAngle(forearmDir, aimNow, static_cast<int>(i)) *
                                         57.29578f;
                                 }
+                                // TORSO UPDATE: in the animation a forearm more than ARM AIM
+                                // FALLBACK degrees (60) off the controller's line is the
+                                // animation's deformed arm, not where the player points: the
+                                // webs take the controller's line (faded over the usual
+                                // forearmFallbackSeconds), back onto the forearm once it is
+                                // within 10 degrees less. 22:24 session: the forearm was a
+                                // median 43 deg and p90 73 deg off the controller.
+                                {
+                                    const bool animArms =
+                                        animatedMovesHandoff.yielding && values.animatedArms;
+                                    if (animArms && values.animForearmFallbackDeg > 0 && alignDeg >= 0 &&
+                                        f.valid) {
+                                        const float enter = static_cast<float>(values.animForearmFallbackDeg);
+                                        const float leave =
+                                            std::max(0.f, enter - web_aim::forearmFallbackHysteresis);
+                                        forearmMisaligned[i] =
+                                            forearmMisaligned[i] ? alignDeg > leave : alignDeg > enter;
+                                    } else {
+                                        forearmMisaligned[i] = false;
+                                    }
+                                    if (why == Fallback::none && forearmMisaligned[i])
+                                        why = Fallback::misaligned;
+                                }
                                 // A large forearm-vs-controller angle is no longer a
-                                // fallback: the world-frame clamp keeps the web on the
+                                // fallback elsewhere: the world-frame clamp keeps the web on the
                                 // forearm instead of snapping to the controller.
                                 // ANIMATED ARMS yield: wait only until the overlay
                                 // weight is up; do not require the old 45° align check.
@@ -4447,8 +4471,7 @@ DWORD WINAPI run(void*) {
                                 const bool solvedOk = why == Fallback::none;
                                 const bool modelAllowed = values.sphericalAim &&
                                     (solvedOk || why == Fallback::notSolved || why == Fallback::stale ||
-                                     why == Fallback::wristMiss || why == Fallback::armsOverlay ||
-                                     why == Fallback::misaligned);
+                                     why == Fallback::wristMiss || why == Fallback::armsOverlay);
                                 const Vec3 solvedDir = solvedOk ? normalized(f.wrist - f.elbow) : Vec3{};
                                 const bool modelReady = forearmModels[i].ready();
                                 const float offModel = modelReady && solvedOk
@@ -4467,7 +4490,8 @@ DWORD WINAPI run(void*) {
                                         solvedDir, forearmModels[i].world(aimNow), trustNow, dt);
                                 else
                                     forearmBlends[i].reset();
-                                const bool haveLine = spherical_aim::unitish(webLine);
+                                const bool haveLine =
+                                    spherical_aim::unitish(webLine) && why != Fallback::misaligned;
                                 if (haveLine) {
                                     // Exactly on the forearm: no inward wrist cap (0 degrees).
                                     target = web_aim::forearmWorldTurn(webLine, aimNow, static_cast<int>(i), 0.f);
@@ -8551,6 +8575,9 @@ DWORD WINAPI run(void*) {
                         // keep calling update + armsOverlay so the crossfade reaches bodyOn.
                         animated_arms::update(animatedArmsState, armDt, armsWanted, motion.anchor, armSamples,
                                               hybridOn && values.animatedHead != 0);
+                        // TORSO UPDATE: how far the overlay turns the chest toward the player.
+                        native_body::setTorsoTwist(static_cast<float>(values.animatedTorsoTwist) *
+                                                   3.14159265f / 180.f);
                         if (armsWanted) {
                             // Flag while yielding so native_body can blend arm
                             // weights out smoothly when idle; soft floor keeps
@@ -8630,10 +8657,16 @@ DWORD WINAPI run(void*) {
                                 animated_arms::yieldFloor, offL, offR, actorYaw, chestYaw, playerYaw,
                                 chestYaw - playerYaw, hmdY, hmdP, hmdR, animY, animP, animR, ot.remapped,
                                 ot.softlock, animated_moves::headFollowName(animHeadMode));
-                            diag_log::writef("player torso: active %u serial %llu job %llu head residual %.3f m root drift %.2f deg actual hands %u/%u",
-                                ot.playerTorso, static_cast<unsigned long long>(ot.serial),
-                                static_cast<unsigned long long>(ot.job), ot.headError,
-                                ot.rootDrift * 57.29578f, ot.actualValid[0], ot.actualValid[1]);
+                            diag_log::writef("player torso: active %u serial %llu job %llu head residual "
+                                             "%.3f m root drift %.2f deg actual hands %u/%u "
+                                             "chest twist %.0f deg (needed %.0f, cap %.0f, reach share %.2f) "
+                                             "arm scale %.2f/%.2f forearm vs controller %.0f/%.0f deg",
+                                             ot.playerTorso, static_cast<unsigned long long>(ot.serial),
+                                             static_cast<unsigned long long>(ot.job), ot.headError,
+                                             ot.rootDrift * 57.29578f, ot.actualValid[0], ot.actualValid[1],
+                                             ot.chestTwist * 57.29578f, ot.twistWanted * 57.29578f,
+                                             ot.twistCap * 57.29578f, ot.twistShare, ot.armScale[0],
+                                             ot.armScale[1], offL, offR);
                             if (ot.targetFrame != animated_view::Frame::none) {
                                 for (unsigned i = 0; i < 2; ++i) {
                                     diag_log::writef(

@@ -1796,6 +1796,10 @@ void App::nativeAnimation(ImVec2 origin, ImVec2 size) {
                [&] { tabToggle("##nativearms", Item::animatedArms); });
         option("Torso", "Bounded upper-body reach assist. The animation keeps the head, root and legs.",
                S(42), [&] { tabToggle("##nativetorso", Item::animatedTorso); });
+        option("Torso twist",
+               "Native Animation arms: the most his chest turns toward you so the arms reach your hands, "
+               "the hips and legs stay animated. 40 degrees is the old limit; 80 by default.",
+               S(150), [&] { tabCombo("##nativetorsotwist", Item::animatedTorsoTwist); });
         option("Model yaw",
                "Run with the left stick and turn with the right without losing running strength.", S(42),
                [&] { tabToggle("##nativemodelyaw", Item::animatedModelYaw); });
@@ -2589,6 +2593,11 @@ void App::options(ImVec2 origin, ImVec2 size) {
                    "Tilts the line your webs leave along, up or down, 15 to 45 degrees, on top of Shooters. "
                    "0: as chosen above. Punches keep the controller's own.",
                    S(150), [&] { tabCombo("##webangleshooters", Item::webAngle); });
+            settingOption(
+                Item::animForearmFallback, "Arm aim fallback",
+                "In Native Animation, webs aim along your controller once his forearm is this far off it "
+                "(his arm is deformed there). Off: always the forearm. 60 degrees by default.",
+                S(150), [&] { tabCombo("##animforearmfallback", Item::animForearmFallback); });
         });
         group(shootersPage, 1, "Replaced settings", [&] {
             ImGui::PushTextWrapPos(0);

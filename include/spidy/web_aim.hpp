@@ -75,6 +75,10 @@ enum class Source : int { controller = 0, forearm = 1 };
 // had the forearm 35-77 degrees off the controller in 267 of its 394 active
 // samples, so the webs stayed clamped near the controller ("they keep
 // tracking my palm"): v6 takes the limit from the setting, none by default.
+// ARM AIM FALLBACK (vr_settings anim_forearm_fallback_deg, default 60): in the animation, a forearm
+// more than this off the controller falls back to the controller's line, and returns to the
+// forearm once within forearmFallbackHysteresis degrees less than it (the Fallback::misaligned).
+constexpr float forearmFallbackHysteresis = 10.f;
 constexpr float forearmClampDegrees = 35, forearmLimitDefault = 180, forearmSmoothSeconds = .2f, forearmFallbackSeconds = .3f,
                 forearmMiss = .1f,
                 forearmAlignDegrees = 45.f;

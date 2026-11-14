@@ -300,6 +300,11 @@ void setYieldTilt(Quat body, Quat hands);
 // Midair softlock / headbone view: remap grips in the character view frame
 // (chest-forward eyes) instead of raw HMD tracking. Side channel like setYieldTilt.
 void setViewSoftlock(bool on);
+// TORSO UPDATE (vr_settings animated_torso_twist): the most the ARMS overlay turns the chest toward
+// the player, radians (0 to pi/2); the largest yaw within it that keeps both wrists reachable is
+// used. Not called: the default of body::Config (~80 degrees). Side channel: no Command layout or
+// version change.
+void setTorsoTwist(float maxRadians);
 // Midair swing / adopted-leap look: the hero's world velocity (metres per
 // second, same space as Command grips) so the next bodyOn pose job can trail
 // the air pose's legs. A non-finite or near-zero vector clears it. Side
@@ -344,6 +349,11 @@ struct OverlayTracking {
     float playerYaw{}; // rad, player/softlock look
     uint32_t remapped{}; // 1 when armsOnly chest remap ran
     uint32_t softlock{}; // 1 when remap used softlock/headbone player frame
+    // TORSO UPDATE: the chest's yaw toward the player the solve applied (rad, eased), the
+    // yaw it needed before the cap, the cap, the share of the capped yaw that kept both
+    // wrists reachable, and the scale each overlay arm took.
+    float chestTwist{}, twistWanted{}, twistCap{}, twistShare{1.f};
+    float armScale[2]{1.f, 1.f};
 };
 // Gameplay only: 1 fresh original calibrated eye anchor in current world transform,
 // 0 not managed by player torso, -1 managed but missing/expired (never read
