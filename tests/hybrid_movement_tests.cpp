@@ -401,6 +401,8 @@ int main() {
         check(!airSyncWanted(true, true, true, true, false, 0, 90 * deg), "on a web: no");
         check(!airSyncWanted(true, true, false, false, false, 0, 90 * deg), "grounded: no");
         check(!airSyncWanted(true, false, true, false, false, 0, 90 * deg), "the animation's: no");
+        // The stick is retired (5061b4a playtest: 170 syncs, the facing did not move); the gate stays.
+        check(!airSyncStick, "the sync stick is retired");
     }
     std::printf("hybrid movement tests: %d passed\n", passed);
     return 0;

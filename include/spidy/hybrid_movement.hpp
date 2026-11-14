@@ -378,6 +378,11 @@ inline const char* holdName(Heading::Hold h) {
 // HYBRID in SpidyVR's air: the walk stick toward the view while the actor's facing is
 // more than this off it (no web, no wall, the swing owns him), so the landing plays on it.
 inline constexpr float airSyncAngle = 20.f * degrees, airSyncTilt = .3f;
+// RETIRED (the 5061b4a playtest, Nov 12): in 170 syncs the game's facing did not move (median 0 deg,
+// 19% moved at all) and the landings still came down a median 57 deg off the view (37 deg at the
+// sync's start): the game does not turn its actor from a walk stick in SpidyVR's air. The gate still
+// runs for the log (how long the gap lasted); the stick no longer goes out. true restores it.
+inline constexpr bool airSyncStick = false;
 inline bool airSyncWanted(bool hybrid, bool vrOwned, bool airborne, bool webbed, bool wall, float actorYaw,
                           float viewYaw) {
     if (!hybrid || !vrOwned || !airborne || webbed || wall || !std::isfinite(actorYaw) || !std::isfinite(viewYaw))
