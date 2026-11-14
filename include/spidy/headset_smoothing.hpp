@@ -51,8 +51,9 @@ struct Params {
 constexpr float maxVerticalLag = .4f, maxHorizontalLag = .5f;
 // Speed damping per bank: OFF's CAMERA rows, LIGHT, HEAVY (heavier holds on
 // through faster motion before letting it through).
-// STEADY (the fourth bank, November 14) holds on longest.
-constexpr float bankAngleBeta[] = {.5f, .45f, .25f, .12f}, bankPositionBeta[] = {1.f, .6f, .25f, .12f};
+// STEADY (the fourth bank, November 14) holds on longest. Polish pass: STEADY's .12 / .12 became .2 / .2,
+// so a quick head or body move gets through sooner (with its response times 350/300/450 -> 200/200/200 ms).
+constexpr float bankAngleBeta[] = {.5f, .45f, .25f, .2f}, bankPositionBeta[] = {1.f, .6f, .25f, .2f};
 constexpr int bankCount = 4;
 constexpr int maxResponseMs = 1000;
 // The old SMOOTHING level alone: angle only, as before.

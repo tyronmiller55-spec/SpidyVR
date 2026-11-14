@@ -289,7 +289,7 @@ struct Values {
     // from before it gets RUN CURVE on and EARLY JUMP QUICK TAP once (the
     // user: "movement fixes will be defaults"); after that the player's own
     // choice stands. Not a row. movement_defaults.
-    int movementDefaults = 1;
+    int movementDefaults = 2;
     // SOFT LANDING (the tab's SOFT LANDING; Swing::allowSoftLanding,
     // run_update::softLandVertical): a fall the swing flies, with no web
     // holding, eases to 9 m/s down over its last 3 m (or 0.35 s), its speed
@@ -541,7 +541,9 @@ struct Values {
     // is this many degrees off it (0 off). anim_forearm_fallback_deg.
     int animForearmFallbackDeg = 60;
     // STEADY (November 14): STABILIZATION's fourth bank, above HEAVY (heavier speed damping again), ms.
-    int steadyVerticalMs = 350, steadyHorizontalMs = 300, steadyAngleMs = 450;
+    // Polish pass: 200/200/200 (was 350/300/450), so the view answers the head sooner; the bank's speed
+    // terms went up with them (headset_smoothing.hpp bankAngleBeta / bankPositionBeta).
+    int steadyVerticalMs = 200, steadyHorizontalMs = 200, steadyAngleMs = 200;
     // HORIZON LEVEL (November 14): this share of the view's roll and pitch tilt removed, in the animation and
     // in SpidyVR; flips pass whole. camera_horizon_level_pct.
     int cameraHorizonLevelPct = 0;
@@ -962,10 +964,12 @@ std::string tabOnlyText(const Values&);
 // key, or whose value is no whole number, is passed over.
 Values withTabOnly(Values, std::string_view text);
 // The movement defaults' revision (Values::movementDefaults) this build has.
-inline constexpr int movementDefaultsRevision = 1;
+inline constexpr int movementDefaultsRevision = 2;
 // November 12 movement cleanup: a settings file (that text) older than
 // movementDefaultsRevision gets the new movement defaults once - RUN CURVE
 // on, EARLY JUMP at least QUICK TAP - and is marked as having seen them; a
-// newer one is left as it is. Call after withTabOnly on the same text.
+// newer one is left as it is. Revision 2 (polish pass): STEADY's three times saved at the old defaults
+// (350/300/450 ms, never tuned) become the new ones (200/200/200); any other value stays.
+// Call after withTabOnly on the same text.
 Values withMovementDefaults(Values, std::string_view text);
 } // namespace spidy::vr_settings

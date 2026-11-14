@@ -94,6 +94,7 @@
 #include "spidy/hybrid_movement.hpp"
 #include "spidy/animated_arms.hpp"
 #include "spidy/frame_stats.hpp"
+#include "spidy/low_fps.hpp"
 #include "spidy/hitch_guard.hpp"
 #include "spidy/seated.hpp"
 #include "spidy/slow_motion.hpp"
@@ -604,6 +605,8 @@ BridgeCall swingKick{};
 const game_swing::SwingKickLive* swingKickLive{};
 // The swing module's cost to the game thread, per 10 s window (SpidySwingCostLive): the "game thread cost:" line.
 const game_swing::SwingCostLive* swingCostLive{};
+// Where that window's longest visit went (SpidySwingCostSections): the "game thread sections:" line.
+const game_swing::SwingCostSections* swingCostSections{};
 // AIR KICKS' settings and gestures for the swing (SpidyAirKick), and its account (SpidyAirKickLive); none in an
 // older module (no air kicks).
 BridgeCall airKick{};
@@ -697,6 +700,29 @@ bool read(uintptr_t p, void* out, size_t bytes) {
         return false;
     }
 }
+// FIRST-USE STARTS (polish pass; the 4d58169 playtest had one 750 ms stall in `prepare` at t=15 s, and G1 763 /
+// 827 ms, from something built on the first gameplay frame that no line named): a start that takes more than
+// 20 ms is written with its name, so the next session's log says which.
+struct StartTimer {
+    explicit StartTimer(const char* name) : name_(name) {
+        QueryPerformanceCounter(&start_);
+    }
+    ~StartTimer() {
+        LARGE_INTEGER end{}, hz{};
+        QueryPerformanceCounter(&end);
+        QueryPerformanceFrequency(&hz);
+        if (hz.QuadPart <= 0 || end.QuadPart < start_.QuadPart)
+            return;
+        const double ms = static_cast<double>(end.QuadPart - start_.QuadPart) * 1000. / static_cast<double>(hz.QuadPart);
+        if (ms < 20.)
+            return;
+        char line[120];
+        std::snprintf(line, sizeof line, "module start: %s took %.0f ms", name_, ms);
+        diag_log::write(line);
+    }
+    const char* name_;
+    LARGE_INTEGER start_{};
+};
 void check(DWORD code, const char* operation) {
     if (code)
         throw std::runtime_error(std::string(operation) + ": " + std::to_string(code));
@@ -1181,11 +1207,14 @@ DWORD WINAPI run(void*) {
         ground_state::StateLog stateLog;
         // perf: lines (frame_stats.hpp).
         frame_stats::FrameStats frameStats;
+        // LOW FPS (low_fps.hpp): a game stuck under 15 fps puts the diagnostics in their quiet mode.
+        low_fps::Watch lowFps;
         // game frame: lines (hitch_guard.hpp): the game thread's own step times, spikes with their length.
         hitch_guard::FreshHold swingFreshHold; // swingFresh with hysteresis (hitch_guard.hpp)
         float swingFreshLogAge{};
         view_yaw_lock::DodgeTail dodgeTail; // the turn after a dodge, whatever the fight's tail says
         uint32_t swingCostWindow = 0; // the last SpidySwingCostLive window logged
+        uint32_t swingSectionsWindow = 0; // the last SpidySwingCostSections window logged
         hitch_guard::GameFrameClock gameFrameClock;
         hitch_guard::GameFrameClock::Lines gameFrameLines;
         // HEAD PROBE (off by default; head_probe.hpp): read only. Its numbers
@@ -4115,7 +4144,10 @@ DWORD WINAPI run(void*) {
                         rays.pid = config.pid;
                         rays.base = config.base;
                         rays.durationMs = moduleDuration;
-                        check(startRays(&rays), "Start controller world rays");
+                        {
+                            const StartTimer timed("controller world rays");
+                            check(startRays(&rays), "Start controller world rays");
+                        }
                         raysStarted = true;
                     }
                     if (raysStarted) {
@@ -4189,11 +4221,17 @@ DWORD WINAPI run(void*) {
                         swing.maxSpeed = values.swingSpeed;
                         swing.gravity = vr_settings::gravity(values.weight);
                         swing.grabKinds = !values.webGrab || !sampleGrab ? 0 : game_grab::movableKinds;
-                        check(startSwing(&swing), "Start native swinging");
+                        {
+                            const StartTimer timed("native swinging");
+                            check(startSwing(&swing), "Start native swinging");
+                        }
                         swingStarted = true;
                         // Fists and the web shooter take the swing's input samples;
                         // both are optional and, like the grab, can be switched on later.
-                        applySettings();
+                        {
+                            const StartTimer timed("swing settings");
+                            applySettings();
+                        }
                     }
                     // Raw motion.grips remains the next IK input. Action emitters
                     // use a separate completed-job pose; never feed solved hands back.
@@ -5040,6 +5078,27 @@ DWORD WINAPI run(void*) {
                                     swingCostWindow = window;
                                     char line[320];
                                     hitch_guard::costLine(w, line, sizeof line);
+                                    diag_log::write(line);
+                                }
+                            }
+                        }
+                        // And where the window's longest visit went (lock waits, the wall and grab tests, the
+                        // enemy scan, kicks, the solver): the part "game thread cost" could not name.
+                        if (const volatile game_swing::SwingCostSections* sc = swingCostSections) {
+                            const uint32_t window = sc->window;
+                            if (window != swingSectionsWindow) {
+                                hitch_guard::SectionWindow::Account a;
+                                a.worstUs = sc->worstUs;
+                                a.restUs = sc->restUs;
+                                for (unsigned i = 0; i < hitch_guard::sectionCount; ++i) {
+                                    a.worst[i] = sc->worst[i];
+                                    a.peak[i] = sc->peak[i];
+                                }
+                                MemoryBarrier();
+                                if (sc->window == window) {
+                                    swingSectionsWindow = window;
+                                    char line[420];
+                                    hitch_guard::sectionLine(a, line, sizeof line);
                                     diag_log::write(line);
                                 }
                             }
@@ -6896,6 +6955,17 @@ DWORD WINAPI run(void*) {
                                 if (const char* line =
                                         frameStats.update(frame.seconds, work, runGate.fighting))
                                     diag_log::write(line);
+                                // LOW FPS: the quiet log mode while the game is stuck slow (the launcher is told by
+                                // tools/run_game_vr.py, which counts the same frames).
+                                if (const auto event = lowFps.frame(frame.seconds); event != low_fps::Event::none) {
+                                    char text[200];
+                                    if (event == low_fps::Event::normal)
+                                        diag_log::setSlow(false);
+                                    diag_log::write(low_fps::line(event, text, sizeof text, lowFps.fps(),
+                                                                  lowFps.slowFor()));
+                                    if (event == low_fps::Event::slow)
+                                        diag_log::setSlow(true);
+                                }
                             }
                         }
                         walk.scan = templePress.held() && steering;
@@ -11263,6 +11333,12 @@ extern "C" __declspec(dllexport) DWORD WINAPI SpidyXrStart(void* input) {
         (swingCostLive->magic != expected.magic || swingCostLive->version != expected.version ||
          swingCostLive->bytes != expected.bytes))
         swingCostLive = nullptr;
+    swingCostSections =
+        reinterpret_cast<const game_swing::SwingCostSections*>(GetProcAddress(rays, "SpidySwingCostSections"));
+    if (const game_swing::SwingCostSections expected;
+        swingCostSections && (swingCostSections->magic != expected.magic ||
+                              swingCostSections->version != expected.version || swingCostSections->bytes != expected.bytes))
+        swingCostSections = nullptr;
     airKick = reinterpret_cast<BridgeCall>(GetProcAddress(rays, "SpidyAirKick"));
     airKickLive = reinterpret_cast<const game_swing::AirKickLive*>(GetProcAddress(rays, "SpidyAirKickLive"));
     if (const game_swing::AirKickLive expected;

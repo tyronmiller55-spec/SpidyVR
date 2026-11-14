@@ -523,6 +523,9 @@ Settings loadSettings() {
     std::istringstream lines(readText(settingsPath(), 1 << 16));
     std::string line;
     int weight = 0, percentWeight = 0, legacyWeight = 0;
+    // Polish pass: the default scene resolution went from 67% to 50%. A file that has not seen that
+    // (no upscale_default) with the old default saved in it takes the new one once; any other choice stays.
+    int upscaleDefault = 0;
     while (std::getline(lines, line)) {
         if (!line.empty() && line.back() == '\r')
             line.pop_back();
@@ -559,6 +562,7 @@ Settings loadSettings() {
         // eye_size (a square size, before October 8) is no longer read: 2048 x 2048 rendered one player's game
         // below the 2496 x 2688 their headset asked for, and it looked blurry.
         else if (key == "render_scale") o.renderScale = spidy::validRenderScale(number()) ? number() : 100;
+        else if (key == "upscale_default") upscaleDefault = number();
         else if (key == "upscale")
             o.upscale = spidy::validEyeUpscale(number()) ? number() : static_cast<int>(spidy::defaultEyeUpscale);
         else if (key == "monitor_rate")
@@ -590,6 +594,8 @@ Settings loadSettings() {
         else if (key == "update_check") settings.updateCheck = number() != 0;
         else if (key == "profile") settings.profile = value;
     }
+    if (upscaleDefault < 2 && settings.options.upscale == 67)
+        settings.options.upscale = static_cast<int>(spidy::defaultEyeUpscale);
     if (weight)
         settings.options.weight = weight;
     else if (percentWeight && percentWeight != 80)
@@ -620,6 +626,7 @@ void saveSettings(const Settings& settings) {
          << "\ngame_depth_of_field=" << o.gameDepthOfField
          << "\ngame_sharpening=" << o.gameSharpening
          << "\nrender_scale=" << o.renderScale << "\nupscale=" << o.upscale
+         << "\nupscale_default=2"
          << "\nmonitor_rate=" << o.monitorRate
          << "\nswing_speed=" << o.swingSpeed << "\ngravity_percent=" << o.weight << "\nsnap_turn=" << o.snapTurn
          << "\nsmooth_turn=" << o.smoothTurn

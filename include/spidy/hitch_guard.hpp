@@ -352,6 +352,65 @@ class CostWindow {
     double total_{}, max_{}, solverMax_{}, kickMax_{};
     Window done_{};
 };
+// WHERE THE LONGEST VISIT WENT (the 4d58169 playtest: "game thread cost" had visits over 5 ms about 5 times a
+// second and one a window over 20-57 ms, and the solver and kicks were 0.7% of the longest: the rest was
+// unaccounted). Each visit's time is split into named sections; per window this keeps the sections of the
+// WORST visit, the largest value each section reached, and the share of the worst visit no section holds.
+// Index order is `SectionName`. Pure.
+inline constexpr unsigned sectionCount = 8;
+inline const char* sectionName(unsigned i) {
+    static constexpr const char* names[sectionCount] = {"lock waits",   "crawl",  "wall tests", "grab and tethers",
+                                                        "grip settings", "punch scan", "kicks",   "solver"};
+    return i < sectionCount ? names[i] : "?";
+}
+class SectionWindow {
+  public:
+    struct Account {
+        float worstUs{}, restUs{};
+        float worst[sectionCount]{}, peak[sectionCount]{};
+    };
+    // One visit: its whole cost and its sections (microseconds).
+    void add(double visitUs, const double (&sections)[sectionCount]) {
+        if (!std::isfinite(visitUs))
+            return;
+        double sum = 0;
+        for (unsigned i = 0; i < sectionCount; ++i) {
+            const double s = std::isfinite(sections[i]) && sections[i] > 0 ? sections[i] : 0.;
+            sum += s;
+            peak_[i] = std::max(peak_[i], static_cast<float>(s));
+        }
+        if (visitUs >= worstUs_) {
+            worstUs_ = static_cast<float>(visitUs);
+            restUs_ = static_cast<float>(std::max(0., visitUs - sum));
+            for (unsigned i = 0; i < sectionCount; ++i)
+                worst_[i] = std::isfinite(sections[i]) && sections[i] > 0 ? static_cast<float>(sections[i]) : 0.f;
+        }
+    }
+    // The window's account, and a fresh window.
+    Account take() {
+        Account a;
+        a.worstUs = worstUs_;
+        a.restUs = restUs_;
+        std::copy(std::begin(worst_), std::end(worst_), a.worst);
+        std::copy(std::begin(peak_), std::end(peak_), a.peak);
+        *this = SectionWindow{};
+        return a;
+    }
+
+  private:
+    float worstUs_{}, restUs_{};
+    float worst_[sectionCount]{}, peak_[sectionCount]{};
+};
+// The sections as the diag's line.
+inline void sectionLine(const SectionWindow::Account& a, char* out, size_t size) {
+    int n = std::snprintf(out, size, "game thread sections: longest visit %.0f us =", a.worstUs);
+    for (unsigned i = 0; i < sectionCount && n > 0 && static_cast<size_t>(n) < size; ++i)
+        n += std::snprintf(out + n, size - static_cast<size_t>(n), " %s %.0f,", sectionName(i), a.worst[i]);
+    if (n > 0 && static_cast<size_t>(n) < size)
+        n += std::snprintf(out + n, size - static_cast<size_t>(n), " untimed %.0f; section peaks us:", a.restUs);
+    for (unsigned i = 0; i < sectionCount && n > 0 && static_cast<size_t>(n) < size; ++i)
+        n += std::snprintf(out + n, size - static_cast<size_t>(n), " %.0f", a.peak[i]);
+}
 // The account as the diag's line (one per window).
 inline void costLine(const CostWindow::Window& w, char* out, size_t size) {
     std::snprintf(out, size,

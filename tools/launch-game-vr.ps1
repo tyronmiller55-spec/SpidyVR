@@ -2,7 +2,7 @@ param(
     [ValidateRange(0,25)][int]$Seconds=0,
     [ValidateRange(0,8192)][int]$Size=0,
     [ValidateRange(50,200)][int]$RenderScale=100,
-    [ValidateRange(50,100)][int]$Upscale=67,
+    [ValidateRange(50,100)][int]$Upscale=50,
     [ValidateRange(0,240)][int]$MonitorRate=30,
     [ValidateRange(1,65)][float]$SwingSpeed=32,
     [ValidateRange(40,300)][int]$Weight=80,
@@ -77,7 +77,7 @@ if($Size) { Write-Host "Eye resolution override: $Size x $Size." }
 elseif($RenderScale -ne 100) { Write-Host "Eye resolution: $RenderScale% of the VR runtime's recommendation, per side." }
 else { Write-Host "Eye resolution: the VR runtime's recommendation (add -RenderScale 125 for sharper, slower images)." }
 if($NoEyeAntialiasing) { Write-Host "Eyes: no anti-aliasing and no upscaling, as before October 10's eighth build (jagged and slower)." }
-elseif($Upscale -eq 100) { Write-Host 'Eyes: anti-aliased, the scene rendered at their full size (-Upscale 67 is faster).' }
+elseif($Upscale -eq 100) { Write-Host 'Eyes: anti-aliased, the scene rendered at their full size (-Upscale 50 is faster).' }
 else { Write-Host "Eyes: the scene rendered at $Upscale% of their size per side, anti-aliased and upscaled (-Upscale 100: full size, slower)." }
 if($Seconds) { Write-Host "Timed test: $Seconds seconds." }
 else { Write-Host 'VR stays active until you close the game or press Ctrl+C here.' }

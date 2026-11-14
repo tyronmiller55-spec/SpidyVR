@@ -127,6 +127,10 @@ add_test(NAME sidestep COMMAND spidy_sidestep_tests)
 add_executable(spidy_direction_report_tests tests/direction_report_tests.cpp)
 target_link_libraries(spidy_direction_report_tests PRIVATE spidy_core)
 add_test(NAME direction_report COMMAND spidy_direction_report_tests)
+# POLISH PASS, slice 6: the longest visit's sections, the LOW FPS watch, the quiet log's new kinds, the new defaults.
+add_executable(spidy_polish_runtime_tests tests/polish_runtime_tests.cpp)
+target_link_libraries(spidy_polish_runtime_tests PRIVATE spidy_core)
+add_test(NAME polish_runtime COMMAND spidy_polish_runtime_tests)
 
 # HEADSET FIRST (hybrid_steer::Basis, hybrid_movement::viewRunDirection, Gate::updateView): the stick's basis, the whole circle runs him,
 # the setting (portable).

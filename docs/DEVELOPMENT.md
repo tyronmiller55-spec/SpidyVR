@@ -1146,7 +1146,7 @@ reattaching after a stopped session or a rebuilt DLL.
 | `-ScreenDepth Medium` | Depth of cutscenes on the game screen (stereo): Off (flat), Low, Medium or High |
 | `-RenderScale 125` | Eye resolution in percent of the runtime's recommendation, per side (50-200; 100 by default) |
 | `-Size 2048` | Square eye resolution instead of the runtime's recommendation (not with `-RenderScale`) |
-| `-Upscale 67` | The size the scene inside each eye is rendered at, in percent of the eye's size per side; the game's temporal anti-aliasing brings it to the eye's size (50-100; 67 by default, 100 is anti-aliasing alone) |
+| `-Upscale 67` | The size the scene inside each eye is rendered at, in percent of the eye's size per side; the game's temporal anti-aliasing brings it to the eye's size (50-100; 50 by default since the polish pass, was 67; 100 is anti-aliasing alone) |
 | `-NoEyeAntialiasing` | The eyes as they were before October 10's eighth build: no anti-aliasing, no upscaling, for comparison |
 | `-NoPromptHelp` | Leave the game's own button prompts alone: Spidy neither reads which button they ask for nor names the VR control in them, and the interact button is the game's Y as before (the pad layer still gives the whole controller) |
 | `-NoWebGrab` | Webs swing only; they do not catch props or thugs |

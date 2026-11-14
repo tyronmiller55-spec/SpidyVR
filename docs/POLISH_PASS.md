@@ -46,3 +46,16 @@ Look for: after `hybrid: vr->anim (land ...)`, `facing check: landing hero turn 
 **Pitch and roll.** Not touched: they follow the animated head as before, with `camera_pitch_pct` 50 and `camera_roll_pct` 25 (the user: "Keep animation pitch/roll tilt on the view, just no yaw turning").
 
 Look for: `imposed view turn` at or near 0 in `direction audit:` outside your own turns (it was about 880 deg a minute); `view guard:` lines rare (each is a hole to find: it names the last action); `facing check: ... view ... off, kept (the view is yours)` instead of `corrected`; in `direction:` `view` equal to `shown + hmd` and `hmd`, `shown` moving only when you turn.
+
+## Runtime, lag and loading (slice 6)
+
+**Where the longest visit goes.** `game thread sections:` follows `game thread cost:` every 10 s: `longest visit N us = lock waits A, crawl B, wall tests C, grab and tethers D, grip settings E, punch scan F, kicks G, solver H, untimed R; section peaks us: ...`. The playtest had 5 visits a second over 5 ms and one a window over 20-57 ms with the solver and kicks at 0.7% of it. If `untimed` is the whole of the longest visit, the time is outside `visit()` (the game thread was preempted, or the game's own call). Look for: which section carries the 20 ms visit. (`SpidySwingCostSections`, 88 bytes, `hitch_guard::SectionWindow`; the sections are timed with QPC around code that already ran.)
+
+**First-use starts.** `module start: controller world rays took N ms`, `native swinging`, `swing settings`: any start over 20 ms. The 750 ms `prepare` stall at t=15 s (and G1's 763 and 827 ms) is not named by the logs we have; this names it next time.
+
+**Low fps.** `low_fps.hpp`: windows of 5 s, SLOW after 60 s under 15 fps, normal again after two windows at 24 or more. In the diagnostics: `low fps: ...` then quiet mode, `low fps over: ...`. In the console and launcher: `WARNING: the game has run slowly, about N fps for N s ...` (one per spell), `The game is back up to speed: about N fps.` A stopped game (no frames) is not this: the freeze watch has it.
+
+**Defaults.** Scene resolution 50% (was 67%), STEADY 200/200/200 ms (was 350/300/450) with speed terms .2/.2 (were .12/.12). The 4d58169 sessions all ran the scene at 67% (1120x1128); the 50% advice had not been applied. The reset path: movement-defaults revision 2 and the launcher's `upscale_default=2`.
+
+(PUNCH and jump pull: see the sections below.)
+

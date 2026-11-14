@@ -671,6 +671,14 @@ struct SwingCostLive {
     uint32_t reserved[2]{};
 };
 static_assert(sizeof(SwingCostLive) == 64);
+// SpidySwingCostSections: where the longest visit of the window went (hitch_guard::SectionWindow), beside
+// SpidySwingCostLive (which keeps its 64 bytes): `window` counts up last, as there. Microseconds.
+struct SwingCostSections {
+    uint32_t magic = 0x53575343, version = 1, bytes = sizeof(SwingCostSections), window{};
+    float worstUs{}, restUs{};
+    float worst[8]{}, peak[8]{};
+};
+static_assert(sizeof(SwingCostSections) == 88);
 // Side channel from XR (AIR KICKS, air_kick.hpp, K2): the settings, sent whenever they change and again every
 // second, and on a flick the ask (`serial` new): `gesture` (air_kick::Gesture, 1 dive, 2 double, 3 roundhouse,
 // 4 freeform, 5 sweep: GROUND KICKS, K3), `side` (-1 left, +1 right) and `angle` (degrees from up) of the flick, the eyes' offset from the

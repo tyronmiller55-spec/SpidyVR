@@ -1293,6 +1293,41 @@ class ProtocolTests(unittest.TestCase):
                          "Rendering 3072 x 3264 pixels per eye (100% of the headset's 3072 x 3264), without "
                          'anti-aliasing.')
 
+    def test_the_scene_is_rendered_at_half_by_default(self):
+        import run_game_vr
+        self.assertEqual(run_game_vr.DEFAULT_UPSCALE, 50)
+
+    def test_low_fps_is_said_once_after_a_minute_and_again_when_it_clears(self):
+        import run_game_vr
+        watch, said = {}, []
+
+        def run(seconds, fps, start):
+            frames = 0
+            for t in range(0, seconds + 1):
+                frames = int(fps * t)
+                result = run_game_vr.low_fps_watch(watch, dict(seconds=start + t, frames=frames))
+                if result:
+                    said.append((result, start + t))
+            return start + seconds
+        # a 36 fps game says nothing; the counter restarting (a new session) is not a rate
+        end = run(30, 36, 0)
+        self.assertEqual(said, [])
+        # 9 fps: said once, not before 60 s of it
+        end = run(50, 9, end)
+        self.assertEqual(said, [])
+        end = run(40, 9, end)
+        self.assertEqual([s[0] for s in said], ['slow'])
+        end = run(30, 9, end)
+        self.assertEqual([s[0] for s in said], ['slow'])
+        # back to 40 fps: said once, after two good windows
+        end = run(30, 40, end)
+        self.assertEqual([s[0] for s in said], ['slow', 'over'])
+        self.assertIn('close the game', run_game_vr.low_fps_advice(9, 60))
+        # a game that stopped (0 fps) is the freeze watch's
+        stopped = {}
+        for t in range(0, 200):
+            self.assertIsNone(run_game_vr.low_fps_watch(stopped, dict(seconds=t, frames=100)))
+
     def test_the_upscale_is_checked_before_anything_starts(self):
         import run_game_vr
         for argv in (['--upscale', '49'], ['--upscale', '101']):

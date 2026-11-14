@@ -43,6 +43,8 @@ __declspec(dllexport) SwingKickLive SpidySwingKickLive;
 __declspec(dllexport) AirKickLive SpidyAirKickLive;
 // The swing module's cost to the game thread, per 10 s window (SwingCostLive), for XR's diag.
 __declspec(dllexport) SwingCostLive SpidySwingCostLive;
+// Where the window's longest visit went (SwingCostSections), beside it.
+__declspec(dllexport) SwingCostSections SpidySwingCostSections;
 // GRIP's account (GripLive), for XR's feel and log.
 __declspec(dllexport) GripLive SpidySwingGripLive;
 // HAND GRAB's account (HandGrabLive), for XR's log and feel.
@@ -75,6 +77,10 @@ hitch_guard::VelocityGuard velocityGuard;
 // What visit() costs the game thread (hitch_guard::CostWindow), published every 10 s as SpidySwingCostLive.
 hitch_guard::CostWindow costWindow;
 double costSolverUs{}, costKickUs{};
+// The visit's sections in microseconds (hitch_guard::sectionName): 0 lock waits, 1 crawl, 2 wall tests, 3 grab and
+// tethers, 4 grip settings, 5 punch scan (the enemies), 6 kicks, 7 solver. The last two are costKickUs / costSolverUs.
+double costSection[hitch_guard::sectionCount]{};
+hitch_guard::SectionWindow sectionWindow;
 // Times a stretch of visit() and adds it to `total` (microseconds).
 struct CostTimer {
     explicit CostTimer(double& total) : total_(total) {
@@ -90,10 +96,25 @@ struct CostTimer {
     double& total_;
     LARGE_INTEGER start_{};
 };
+// A stretch of visit() timed by hand where it cannot be a scope: begin(), then end(section).
+struct SectionClock {
+    LARGE_INTEGER start_{};
+    void begin() {
+        QueryPerformanceCounter(&start_);
+    }
+    void end(double& total) const {
+        LARGE_INTEGER now{}, hz{};
+        QueryPerformanceCounter(&now);
+        QueryPerformanceFrequency(&hz);
+        if (hz.QuadPart > 0 && now.QuadPart >= start_.QuadPart)
+            total += static_cast<double>(now.QuadPart - start_.QuadPart) * 1e6 / static_cast<double>(hz.QuadPart);
+    }
+};
 // One visit's whole cost, from the lock's wait to the return (the game thread waits for all of it).
 struct VisitCost {
     VisitCost() {
         costSolverUs = costKickUs = 0;
+        std::fill(std::begin(costSection), std::end(costSection), 0.);
         QueryPerformanceCounter(&start_);
     }
     ~VisitCost() {
@@ -103,6 +124,9 @@ struct VisitCost {
         if (hz.QuadPart <= 0 || end.QuadPart < start_.QuadPart)
             return;
         const double us = static_cast<double>(end.QuadPart - start_.QuadPart) * 1e6 / static_cast<double>(hz.QuadPart);
+        costSection[6] = costKickUs;
+        costSection[7] = costSolverUs;
+        sectionWindow.add(us, costSection);
         if (!costWindow.add(static_cast<uint64_t>(end.QuadPart), hz.QuadPart, us, costSolverUs, costKickUs,
                             velocityGuard.rejected(), solver.hitchIgnored()))
             return;
@@ -120,6 +144,16 @@ struct VisitCost {
         live.kickMaxUs = w.kickMaxUs;
         MemoryBarrier();
         live.window = live.window + 1;
+        const auto account = sectionWindow.take();
+        volatile SwingCostSections& sections = SpidySwingCostSections;
+        sections.worstUs = account.worstUs;
+        sections.restUs = account.restUs;
+        for (unsigned i = 0; i < hitch_guard::sectionCount; ++i) {
+            sections.worst[i] = account.worst[i];
+            sections.peak[i] = account.peak[i];
+        }
+        MemoryBarrier();
+        sections.window = sections.window + 1;
     }
     LARGE_INTEGER start_{};
 };
@@ -649,7 +683,10 @@ void idleRopeInput(const Command& c, const Input& in, const native_rays::QueryCo
 void visit(const native_rays::QueryContext& world) {
     const VisitCost visitCost;
     // Stop waits for this lock before stopping the movement module.
-    AcquireSRWLockExclusive(&simulation);
+    {
+        const CostTimer wait(costSection[0]);
+        AcquireSRWLockExclusive(&simulation);
+    }
     struct Unlock {
         ~Unlock() {
             ReleaseSRWLockExclusive(&simulation);
@@ -799,6 +836,8 @@ void visit(const native_rays::QueryContext& world) {
     // ordinary exposed building walls retain all outdoor run transitions.
     const bool nativeCrawl = length(crawlNormal) > .5f;
     bool handCrawl{};
+    SectionClock crawlClock;
+    crawlClock.begin();
     if constexpr (ventHandCrawl) {
         bool enclosed{};
         if (solver.handClimbEnabled() && !ventCrawlMode.active() && nativeCrawl)
@@ -813,7 +852,11 @@ void visit(const native_rays::QueryContext& world) {
     crawlHands.update(handCrawl, sampleSeconds, controllerAims(in), crawlNormal,
                       crawlPoint + crawlNormal * .4f, world, webHands, crawlPoint);
     if (handCrawl) solver.leaveWall(); // native crawl retains collision and scripted turns
-    AcquireSRWLockExclusive(&output);
+    crawlClock.end(costSection[1]);
+    {
+        const CostTimer wait(costSection[0]);
+        AcquireSRWLockExclusive(&output);
+    }
     if (handCrawl) {
         // Publish even at rest, before the native-physics early returns.
         InterlockedIncrement64(&SpidySwingData.sequence);
@@ -838,6 +881,8 @@ void visit(const native_rays::QueryContext& world) {
     ReleaseSRWLockExclusive(&output);
     // HAND GRAB (hand_grab.hpp; off until XR sends hand_grab): the settings, and the hands whose squeeze
     // belongs to a body in reach (an enemy or a prop before a wall): they grip no wall this sample.
+    SectionClock grabClock;
+    grabClock.begin();
     {
         AcquireSRWLockExclusive(&handGrabLock);
         const HandGrabAsk ask = handGrabAsk;
@@ -856,6 +901,9 @@ void visit(const native_rays::QueryContext& world) {
         for (unsigned i = 0; i < 2; ++i)
             if (game_grab::handClaims(i, in))
                 wallView.hands[i].wallGrip = 0;
+    grabClock.end(costSection[3]);
+    SectionClock wallClock;
+    wallClock.begin();
     unsigned wallHands{};
     for (unsigned i = 0; i < 2; ++i)
         if (focused &&
@@ -865,6 +913,7 @@ void visit(const native_rays::QueryContext& world) {
             wallHands |= 1u << i;
             in.hands[i].grip = in.hands[i].trigger = 0;
         }
+    wallClock.end(costSection[2]);
     // While either hand holds the wall, neither starts a web (Adrian's pull
     // request 24): no grab here, no shot (Swing::inputs), no web ball (the
     // shooter's busy below). Refused, not zeroed, so a button held on as the
@@ -880,7 +929,10 @@ void visit(const native_rays::QueryContext& world) {
         // A press with the hand on the other hand's web takes hold of that
         // web, whatever the hand points at.
         const unsigned onStrand = (solver.onStrand(0) ? 1u : 0u) | (solver.onStrand(1) ? 2u : 0u);
+        SectionClock claimClock;
+        claimClock.begin();
         game_grab::claim(sampleSeconds, in, world, player, onStrand | noNewWebs);
+        claimClock.end(costSection[3]);
         {
             // HAND GRAB's account for XR.
             const auto hg = game_grab::handData();
@@ -1173,7 +1225,10 @@ void visit(const native_rays::QueryContext& world) {
             }
             // A web strike is the player's whole motion: the webs let go, and
             // the web that held the one struck with them.
+            SectionClock punchClock;
+            punchClock.begin();
             const auto opened = game_punch::update(sampleSeconds, controllerAims(in), fighter, world);
+            punchClock.end(costSection[5]);
             if (opened.strike) {
                 solver.releaseAll();
                 takeoffTransition.reset();
@@ -1410,6 +1465,7 @@ void visit(const native_rays::QueryContext& world) {
     // GRIP ACROSS THE GAME (grip.hpp; wall_brake and grip_fling, off until XR sends them: SpidySwingGrip):
     // the settings reach the solver every step, and its account goes out for XR's feel.
     {
+        const CostTimer gripTimer(costSection[4]);
         AcquireSRWLockExclusive(&gripLock);
         const GripAsk ask = gripAsk;
         ReleaseSRWLockExclusive(&gripLock);

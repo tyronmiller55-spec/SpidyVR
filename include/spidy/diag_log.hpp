@@ -104,10 +104,14 @@ class ChangeOnly {
 class Throttle {
   public:
     static constexpr double heartbeat = 2.0, slowHeartbeat = 10.0;
-    static constexpr unsigned kinds = 8, shapeChars = 48;
+    static constexpr unsigned kinds = 12, shapeChars = 48;
+    // Polish pass: and the repeats of the 4d58169 playtest (point jump: denied 296, handstand: no catch 673,
+    // sidestep: denied 54, hybrid: adopt never seeded 27): a new REASON is a new shape and is kept at once.
     static constexpr const char* noisy[kinds] = {"head probe: cutscene", "forearm sign:",  "shooter lock:",
                                                  "spherical aim:",       "animated hand:", "animated hand points:",
-                                                 "tracking lock:",       "vr stabilization: tilt"};
+                                                 "tracking lock:",       "vr stabilization: tilt",
+                                                 "point jump: denied",   "sidestep: denied",
+                                                 "handstand: no catch",  "hybrid: adopt never seeded"};
     // Is `text` (without the time stamp) one of the noisy kinds? Its index, or -1.
     static int kindOf(std::string_view text) {
         for (unsigned i = 0; i < kinds; ++i) {

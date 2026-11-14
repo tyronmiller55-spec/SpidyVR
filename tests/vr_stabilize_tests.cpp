@@ -40,15 +40,15 @@ int main() {
         check(!r.changed && std::abs(degreesOf(r.tilt) - 20.f) < .01f,
               "the identity leaves the tilt as it is");
     }
-    // STEADY: the fourth bank, 350/300/450 ms, held on hardest, up to 1000 ms.
+    // STEADY: the fourth bank, 200/200/200 ms (was 350/300/450), held on hardest, up to 1000 ms.
     {
         Values v;
-        check(v.steadyVerticalMs == 350 && v.steadyHorizontalMs == 300 && v.steadyAngleMs == 450,
+        check(v.steadyVerticalMs == 200 && v.steadyHorizontalMs == 200 && v.steadyAngleMs == 200,
               "STEADY defaults");
         v.cameraStabilization = 3;
         const auto p = headset_smoothing::fromValues(v);
-        check(std::abs(p.verticalSec - .35f) < 1e-5f && std::abs(p.horizontalSec - .3f) < 1e-5f &&
-                  std::abs(p.angleSec - .45f) < 1e-5f,
+        check(std::abs(p.verticalSec - .2f) < 1e-5f && std::abs(p.horizontalSec - .2f) < 1e-5f &&
+                  std::abs(p.angleSec - .2f) < 1e-5f,
               "STEADY's response times");
         v.cameraStabilization = 2;
         const auto heavy = headset_smoothing::fromValues(v);
@@ -76,7 +76,7 @@ int main() {
     {
         const Values old =
             vr_settings::withTabOnly(Values{}, "camera_stabilization=2\ncamera_heavy_angle_ms=500\n");
-        check(old.cameraStabilization == 2 && old.heavyAngleMs == 500 && old.steadyAngleMs == 450 &&
+        check(old.cameraStabilization == 2 && old.heavyAngleMs == 500 && old.steadyAngleMs == 200 &&
                   old.cameraHorizonLevelPct == 0 && old.cameraVrStabilization == 1,
               "an older file keeps its bank and gets the new defaults (no migration needed)");
         const Values fresh = vr_settings::withTabOnly(
@@ -139,7 +139,7 @@ int main() {
         Values v;
         v.cameraStabilization = 3;
         const auto s = vr_stabilize::fromValues(v);
-        check(s.any() && !s.levels() && std::abs(s.angleSec - .45f) < 1e-5f,
+        check(s.any() && !s.levels() && std::abs(s.angleSec - .2f) < 1e-5f,
               "STEADY's angle reaches the VR filter");
         const Quat yaw = Quat::yaw(0.f);
         vr_stabilize::TiltFilter filter;

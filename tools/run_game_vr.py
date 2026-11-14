@@ -51,7 +51,7 @@ GAME_HOOKS = (*HOOKS, 0x2e67010, 0x1fbe360, 0x1fbda50, 0xa7b3a0, 0x1f9db60,
 RENDER_SCALES = (50, 200)
 # Upscaling: the percent of the eye's size, per side, the eyes' scene is rendered at, and its default
 # (spidy::minimumEyeUpscale, maximumEyeUpscale and defaultEyeUpscale).
-UPSCALES, DEFAULT_UPSCALE = (50, 100), 67
+UPSCALES, DEFAULT_UPSCALE = (50, 100), 50
 # How often the game's window gets the left eye in immersive VR: presents a second, 0 for every frame
 # (include/spidy/monitor_rate.hpp).
 MONITOR_RATES, DEFAULT_MONITOR_RATE = (0, 240), 30
@@ -613,6 +613,55 @@ def pad_ignored(watch, sample, quiet=5):
         watch['warned'] = True
         return True
     return False
+
+
+# LOW FPS (polish pass; include/spidy/low_fps.hpp is the same rule for the diagnostics' quiet mode). The 4d58169
+# playtest's game ran at 8.7 fps for 104 minutes (its own render load and a failing DLSS evaluate; the mod was
+# under 1% of the game thread) and nothing told the player. A rate under LOW_FPS for LOW_FPS_SECONDS says so,
+# once, and a return to LOW_FPS_GOOD says that too. A game that stops altogether is the freeze watch's.
+LOW_FPS, LOW_FPS_GOOD, LOW_FPS_SECONDS, LOW_FPS_WINDOW = 15.0, 24.0, 60.0, 5.0
+LOW_FPS_LINE = 'WARNING: the game has run slowly'
+LOW_FPS_OVER = 'The game is back up to speed'
+
+
+def low_fps_advice(fps, seconds):
+    return (f"{LOW_FPS_LINE}, about {fps:.0f} fps for {seconds:.0f} s. That is the game's own drawing (a render load "
+            "or a failing DLSS evaluate), not Spidy: its cost is in the diagnostics' 'game thread cost' lines. If "
+            "it does not clear, close the game and start VR again from Spidy's launcher. A lower Upscaling in the "
+            "launcher (50% is the default now) and a lower render scale also help.")
+
+
+def low_fps_watch(watch, sample):
+    """None, 'slow' or 'over' (once each per spell): `watch` (at, frames, slow_for, slow, good, fps) carries what
+    earlier samples showed; the rate is the frame counter's over windows of LOW_FPS_WINDOW seconds."""
+    frames = sample.get('frames', sample.get('submitted'))
+    now = sample.get('seconds')
+    if frames is None or now is None:
+        return None
+    if watch.get('at') is None or frames < watch.get('frames', 0):
+        watch.update(at=now, frames=frames)
+        return None
+    if now-watch['at'] < LOW_FPS_WINDOW:
+        return None
+    span, count = now-watch['at'], frames-watch['frames']
+    watch.update(at=now, frames=frames, fps=count/span)
+    fps = watch['fps']
+    if 0.5 < fps < LOW_FPS:
+        watch['good'] = 0
+        watch['slow_for'] = watch.get('slow_for', 0.0)+span
+        if not watch.get('slow') and watch['slow_for'] >= LOW_FPS_SECONDS:
+            watch['slow'] = True
+            return 'slow'
+    elif fps >= LOW_FPS:
+        watch['slow_for'] = 0.0
+        if watch.get('slow') and fps >= LOW_FPS_GOOD:
+            watch['good'] = watch.get('good', 0)+1
+            if watch['good'] >= 2:
+                watch.update(slow=False, good=0)
+                return 'over'
+        elif fps < LOW_FPS_GOOD:
+            watch['good'] = 0
+    return None
 
 
 # What the game makes while it runs - eye images, frames of its screen, camera commits, reads of Spidy's
@@ -2676,6 +2725,7 @@ def session(a, startup):
         # The game's reads of Spidy's controller: none while buttons are held on the game screen means its
         # menus cannot be played (the October 7 Steam Link session: the game had turned XInput off).
         pad_watch = dict(reads=None, since=0.0, warned=False)
+        low_fps_state = {}
         # A game that stops answering: the counters it stood still with, and its threads once saved.
         freeze_watch, freeze = {}, None
 
@@ -2969,6 +3019,11 @@ def session(a, startup):
                     samples.append(sample)
                     if pad_ignored(pad_watch, sample):
                         print(PAD_IGNORED, flush=True)
+                    slowed = low_fps_watch(low_fps_state, sample)
+                    if slowed == 'slow':
+                        print(low_fps_advice(low_fps_state['fps'], low_fps_state['slow_for']), flush=True)
+                    elif slowed == 'over':
+                        print(f"{LOW_FPS_OVER}: about {low_fps_state['fps']:.0f} fps.", flush=True)
                     # Saved once, while it still hangs: the dump is what says where (game_freeze.py).
                     if freeze is None and game_frozen(freeze_watch, sample) and \
                             time.monotonic() >= freeze_watch.get('asked', 0)+1:

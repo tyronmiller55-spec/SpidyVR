@@ -1542,12 +1542,12 @@ const std::array<Row, 189>& rows() {
          tetherSubstepChoices, Place::launcher},
         {Item::headsetFirst,
          "HEADSET FIRST",
-         "The left stick runs where your headset looks when you press it. Off: the old heading.",
+         "The stick runs where your headset looks when you press it. Off: the old heading.",
          {},
          Place::launcher},
         {Item::animHeadRide,
          "ANIM HEAD RIDE",
-         "In a landing or perch the view rides his head, its turn included. Off by default.",
+         "In a landing or perch the view rides his head, turn too. Off by default.",
          {},
          Place::launcher},
         {Item::shoulderLimit,
@@ -2365,7 +2365,6 @@ constexpr TabOnly tabOnly[] = {
     {"hand_grab_force", nullptr, &Values::handGrabForce},
     {"enemy_hold_cost", nullptr, &Values::enemyHoldCost},
     {"kicks", &Values::kicks, nullptr},
-    {"headset_first", &Values::headsetFirst, nullptr},
     {"kick_gaze_cone_deg", nullptr, &Values::kickGazeConeDeg},
     {"kick_spin_pct", nullptr, &Values::kickSpinPct},
     {"ground_kicks", &Values::groundKicks, nullptr},
@@ -2413,6 +2412,7 @@ constexpr TabOnly tabOnly[] = {
     {"point_jump_dodge_hold_ms", nullptr, &Values::pointJumpDodgeHoldMs},
     {"point_jump_in_combat", &Values::pointJumpInCombat, nullptr},
     // CAMERA MODES (camera_mode.hpp): spidy_vr.ini only.
+    {"headset_first", &Values::headsetFirst, nullptr},
     {"anim_head_ride", &Values::animHeadRide, nullptr},
     {"shoulder_limit", &Values::shoulderLimit, nullptr},
     {"snap_realign", &Values::snapRealign, nullptr},
@@ -2475,6 +2475,14 @@ Values withMovementDefaults(Values v, std::string_view text) {
         // Revision 1 (November 12): RUN CURVE on, EARLY JUMP QUICK TAP (RUNNING kept).
         v.runCurve = true;
         v.earlyJump = std::max(v.earlyJump, 1);
+    }
+    if (seen < 2 && v.steadyVerticalMs == 350 && v.steadyHorizontalMs == 300 && v.steadyAngleMs == 450) {
+        // Revision 2 (polish pass): the STEADY bank answers the head sooner. Saved at the old defaults is
+        // untuned; a value the player changed stays.
+        const Values fresh;
+        v.steadyVerticalMs = fresh.steadyVerticalMs;
+        v.steadyHorizontalMs = fresh.steadyHorizontalMs;
+        v.steadyAngleMs = fresh.steadyAngleMs;
     }
     v.movementDefaults = movementDefaultsRevision;
     return sanitized(v);

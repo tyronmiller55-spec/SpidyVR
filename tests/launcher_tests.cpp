@@ -206,7 +206,11 @@ int main() {
         check(args.size() == 9 && args[7] == L"--upscale" && args[8] == L"100", "no upscaling");
         options.upscale = 20;
         args = sessionArguments(options, L"r.json", L"", L"");
-        check(args.size() == 9 && args[7] == L"--upscale" && args[8] == L"50", "the upscale at least 50%");
+        check(args.size() == 7, "the upscale at least 50%, which is the default and goes unsaid");
+        options.upscale = 67;
+        args = sessionArguments(options, L"r.json", L"", L"");
+        check(args.size() == 9 && args[7] == L"--upscale" && args[8] == L"67", "the old default is passed now");
+        check(options.upscale != static_cast<int>(spidy::defaultEyeUpscale) && spidy::defaultEyeUpscale == 50, "the default is 50%");
         options.renderScale = 125;
         options.upscale = 58;
         args = sessionArguments(options, L"r.json", L"", L"");

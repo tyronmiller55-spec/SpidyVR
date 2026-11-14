@@ -21,8 +21,10 @@ inline bool validRenderScale(uint64_t percent) {
 // Upscaling: percent of the eye's size, per side, its scene is rendered at.
 // The engine's temporal anti-aliasing gathers the frames' jittered samples
 // into the eye's full size, so 67 renders 45% of the pixels (the ratio of the
-// game's own "Quality" upscaling) and 100 only anti-aliases.
-inline constexpr uint32_t minimumEyeUpscale = 50, maximumEyeUpscale = 100, defaultEyeUpscale = 67;
+// game's own "Quality" upscaling), 50 renders a quarter and 100 only anti-aliases.
+// Polish pass: 50 by default (was 67). The 4d58169 playtest's game rendered at 67% fell under 15 fps with
+// the mod at under 1% of the thread's time (docs/HITCHES.md); the render load is the player's to lower.
+inline constexpr uint32_t minimumEyeUpscale = 50, maximumEyeUpscale = 100, defaultEyeUpscale = 50;
 inline bool validEyeUpscale(uint64_t percent) {
     return percent >= minimumEyeUpscale && percent <= maximumEyeUpscale;
 }

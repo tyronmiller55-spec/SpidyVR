@@ -948,6 +948,21 @@ void App::startPanel(ImVec2 size) {
             headline = format("In VR  \xC2\xB7  %d:%02d", elapsed / 60, elapsed % 60);
             narration = "Keep the game window in front. Behind other windows the game pauses.";
             tint = kCyan;
+            // LOW FPS (polish pass): the session said the game has run under 15 fps for a minute and has
+            // not said it is back (tools/run_game_vr.py low_fps_watch).
+            const auto lastAt = [&](const char* text) {
+                for (size_t i = log_.size(); i-- > 0;)
+                    if (log_[i].text.find(text) != std::string::npos)
+                        return i + 1;
+                return size_t{0};
+            };
+            if (lastAt("WARNING: the game has run slowly") > lastAt("The game is back up to speed")) {
+                headline = format("Game running slowly  \xC2\xB7  %d:%02d", elapsed / 60, elapsed % 60);
+                narration = "The game itself is under 15 fps, not Spidy. If it does not clear, close the game and "
+                            "start VR again.";
+                aside = "A lower Upscaling (50% is the default) helps too.";
+                tint = kYellow;
+            }
         } else if (seen("Starting Spider-Man") || seen("Using the running game")) {
             headline = seen("Using the running game") ? "Attaching to the game" : "Starting the game";
             narration = "Its menus show on a screen in the headset. Pick your save with the controllers.";
