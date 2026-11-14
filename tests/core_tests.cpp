@@ -24546,6 +24546,7 @@ int main() {
                   "point_jump_normal_bias=25\npoint_jump_min_out_degrees=10\npoint_jump_keep=25\n"
                   "point_jump_coyote_ms=120\npoint_jump_buffer_ms=150\npoint_jump_cooldown_ms=250\n"
                   "point_jump_zip_guard_ms=400\npoint_jump_dodge_hold_ms=250\npoint_jump_in_combat=1\n"
+                  "anim_head_ride=1\nshoulder_limit=1\nsnap_realign=1\n"
                   "movement_defaults=1\n",
               "the defaults' text");
         Values changed = defaults;

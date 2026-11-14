@@ -1958,6 +1958,10 @@ constexpr TabOnly tabOnly[] = {
     {"point_jump_zip_guard_ms", nullptr, &Values::pointJumpZipGuardMs},
     {"point_jump_dodge_hold_ms", nullptr, &Values::pointJumpDodgeHoldMs},
     {"point_jump_in_combat", &Values::pointJumpInCombat, nullptr},
+    // CAMERA MODES (camera_mode.hpp): spidy_vr.ini only.
+    {"anim_head_ride", &Values::animHeadRide, nullptr},
+    {"shoulder_limit", &Values::shoulderLimit, nullptr},
+    {"snap_realign", &Values::snapRealign, nullptr},
     {"movement_defaults", nullptr, &Values::movementDefaults},
 };
 } // namespace

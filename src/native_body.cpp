@@ -139,6 +139,10 @@ std::atomic<uint64_t> lastDrawn{};
 std::atomic<bool> latestSolved{};
 // HEAD PROBE (head_probe.hpp): on, and the latest sample (headLock).
 std::atomic<bool> headProbeOn{};
+// SHOULDER LIMIT (camera_mode.hpp): the chest's forward in world (x, z) as the
+// game's animation left it, before the body's solve, and when (GetTickCount64).
+std::atomic<float> chestForwardX{0}, chestForwardZ{0};
+std::atomic<uint64_t> chestTick{};
 head_probe::Sample headProbeSample{};
 uint64_t headProbeJobs{};
 
@@ -466,6 +470,22 @@ void solveHero(float* out, uintptr_t job, uintptr_t instance) {
             probe.head = -1;
         }
     }
+    // SHOULDER LIMIT: the chest (the spine's top) as the animation left it,
+    // before the body's solve (the player's torso turns the drawn one toward
+    // the headset; the limit is the animation's shoulders). Read only.
+    if (!problem && turned && cache.ik.ready && !cache.ik.spine.empty() &&
+        cache.ik.spineForward.size() == cache.ik.spine.size()) {
+        const int chest = cache.ik.spine.back();
+        if (chest >= 0 && chest < static_cast<int>(cache.joints)) {
+            const body::Pose game(out, static_cast<int>(cache.joints));
+            const Vec3 f = toWorld.rotate(game.direction(chest, cache.ik.spineForward.back()));
+            if (finite(f) && std::hypot(f.x, f.z) > .2f) {
+                chestForwardX.store(f.x, std::memory_order_relaxed);
+                chestForwardZ.store(f.z, std::memory_order_relaxed);
+                chestTick.store(GetTickCount64(), std::memory_order_release);
+            }
+        }
+    }
     // The gameplay camera must never anchor to the HMD-driven render head.
     // Preserve explicit authored full-body air-spin's original camera/torso
     // policy; its arm solve and actual action frames still run below.
@@ -644,6 +664,8 @@ void solveHero(float* out, uintptr_t job, uintptr_t instance) {
                     lock.yaw = view.lockYaw;
                     lock.sway = view.lockSway;
                     lock.heroYaw = view.lockHero;
+                    lock.ride = view.lockRide;
+                    lock.limit = view.lockLimit;
                     view_yaw_lock::turnModel(anchor, toWorld, lock);
                 }
                 if (valid) {
@@ -1250,6 +1272,16 @@ int native_body::viewAnchorWorld(Mat4& world) {
 }
 void native_body::setHeadProbe(bool on) {
     headProbeOn = on;
+}
+bool native_body::heroChestYaw(float& yaw) {
+    const uint64_t at = chestTick.load(std::memory_order_acquire);
+    if (!at || GetTickCount64() - at > 250)
+        return false;
+    const float x = chestForwardX.load(std::memory_order_relaxed), z = chestForwardZ.load(std::memory_order_relaxed);
+    if (!std::isfinite(x) || !std::isfinite(z) || std::hypot(x, z) < .2f)
+        return false;
+    yaw = std::atan2(-x, -z); // the rig's yaw (view_yaw_lock::nativeYaw's)
+    return true;
 }
 head_probe::Sample native_body::headSample() {
     AcquireSRWLockShared(&headLock);

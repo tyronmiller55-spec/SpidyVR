@@ -74,6 +74,7 @@
 #include "spidy/animated_model_yaw.hpp"
 #include "spidy/animated_air_spin.hpp"
 #include "spidy/hybrid_owner.hpp"
+#include "spidy/camera_mode.hpp"
 #include "spidy/handstand.hpp"
 #include "spidy/aim_steady.hpp"
 #include "spidy/hybrid_handoff.hpp"
@@ -1229,7 +1230,25 @@ DWORD WINAPI run(void*) {
         float hybridAirSyncSec = 0, hybridHoldLoggedAge = 0;
         uint32_t hybridAirSyncStarts = 0;
         view_yaw_lock::Divergence viewDivergence{};
-        view_yaw_lock::ViewLimit viewLimit{}; // THE 90-DEGREE RULE
+        // CAMERA MODES (camera_mode.hpp; the user, November 13 15:42): the animation's
+        // head ride, the shoulder limit (it replaced THE 90-DEGREE RULE), the
+        // snap/realign (its own system) and the perch watch.
+        camera_mode::HeadRide headRide{};
+        camera_mode::ShoulderLimit shoulderLimit{};
+        camera_mode::SnapRealign snapRealign{};
+        camera_mode::PerchWatch perchWatch{};
+        camera_mode::RideWhy rideWhy = camera_mode::RideWhy::none;
+        bool snapRealignPending = false; // the head's reference re-zeroed (a seat recenter) this frame
+        float snapStartView = NAN;       // the view a smooth-mode tap began on
+        float lastViewYaw = NAN;         // last frame's shown yaw + headset (where the player looked)
+        float rideAnimAge = 1e9f;        // seconds since the animation took the body
+        bool rideAnimLanding = false;    // ... with a landing (a perch's included) or a zip's arrival
+        float rideMoveStick = 0, rideSpeed = 0;
+        bool rideFighting = false, rideOnWall = false;
+        uint32_t snapRealigns = 0;
+        int64_t shoulderLogAt = 0;
+        bool sceneBodyHeld = false; // the game's own body while a scene or menu has the view
+        bool rideStepped = false;   // the head ride was stepped by last frame's view (else: not wanted)
         aim_steady::AnchorSteady aimAnchorSteady{}; // AIM STEADY (Nov 13)
         float viewLimitCorrection = 0;
         view_yaw_lock::TurnWatch viewTurnWatch{};
@@ -3835,10 +3854,50 @@ DWORD WINAPI run(void*) {
                     // mapped; eyes, hands and arms all take the published lock.
                     viewLockDelta = 0;
                     viewLockSnapped = false;
+                    // SNAP / REALIGN (camera_mode.hpp; the user, November 13 15:42): its own
+                    // system on the right stick's taps left/right, round the full 360, every
+                    // tap a realign of the heading, the model and the headset. Where the R
+                    // stick turns the view (Full on the ground) or the head ride runs; never
+                    // with LEG CONTROL or basic flips on the stick, or another mode holding it.
+                    const bool snapHybrid =
+                        hybrid_movement::modeOf(values.movementMode) == hybrid_movement::Mode::hybrid;
+                    const bool snapGate = values.snapRealign && snapHybrid && viewLockActive && viewLock.set &&
+                                          hybridHeading.set && (fullLockGate || headRide.active()) &&
+                                          !legStickActive && !motion.basicFlipControls && frame.hands[1].valid &&
+                                          !camera_mode::snapInputYielded.load(std::memory_order_relaxed);
+                    const auto snapTap = snapRealign.update(frame.seconds, snapGate ? frame.hands[1].stickX : 0.f,
+                                                            values.smoothTurn > 0, values.snapTurn);
+                    if (snapTap.began)
+                        snapStartView = lastViewYaw;
+                    bool realignNow = false;
+                    float realignTo = NAN, realignTurn = 0;
+                    const char* realignWhy = "tap";
+                    if (snapTap.fire && snapGate) {
+                        const float from = values.smoothTurn > 0 && std::isfinite(snapStartView) ? snapStartView
+                                                                                                : lastViewYaw;
+                        if (std::isfinite(from)) {
+                            realignNow = true;
+                            realignTurn = snapTap.turn;
+                            realignTo = stable_yaw::wrap(from + snapTap.turn);
+                        }
+                    }
+                    {
+                        float asked = NAN;
+                        if (camera_mode::takeRealign(asked) && snapHybrid && viewLock.set && hybridHeading.set) {
+                            realignNow = true;
+                            realignWhy = "asked";
+                            realignTurn = 0;
+                            realignTo = std::isfinite(asked) ? stable_yaw::wrap(asked) : lastViewYaw;
+                        }
+                    }
+                    // The snap's flick is the realign's now (SMOOTH TURN still turns while held).
+                    const float turnX = values.snapRealign && snapHybrid && values.smoothTurn <= 0
+                                            ? 0.f
+                                            : frame.hands[1].stickX;
                     if (fullLockGate && viewLockActive && viewLock.set && !legStickActive &&
                         !motion.basicFlipControls && frame.hands[1].valid) {
                         const uint32_t snapsBefore = viewLock.snaps;
-                        viewLockDelta = viewLock.turn(frame.seconds, frame.hands[1].stickX, values.smoothTurn,
+                        viewLockDelta = viewLock.turn(frame.seconds, turnX, values.smoothTurn,
                                                       values.snapTurn);
                         viewLockSnapped = viewLock.snaps != snapsBefore;
                         if (viewLockSnapped)
@@ -3877,6 +3936,37 @@ DWORD WINAPI run(void*) {
                                              "again (heading %.0f hero %.0f)", hybridHeading.yaw * toDeg, hin.hero * toDeg);
                         viewLock.yaw = hybridHeading.yaw;
                     }
+                    if (realignNow && std::isfinite(realignTo)) {
+                        // REALIGN: the heading is where he looked (+ the tap's snap); the hero is
+                        // brought onto it (the snap hold's walk stick), the headset's turn is
+                        // zeroed on it (the head seat recenters below), and the gaze cone, the
+                        // rear snap's arming, the shoulder limit and the hands' filters start afresh.
+                        constexpr float toDeg = 180.f / 3.14159265f;
+                        const float heroNow = std::hypot(body[8], body[10]) > .2f
+                                                  ? hybrid_handoff::actorLookYaw({body[8], body[9], body[10]})
+                                                  : NAN;
+                        const float viewWas = lastViewYaw;
+                        hybridHeading.begin(hybrid_movement::Heading::Hold::snap, realignTo, 0.f);
+                        viewLock.yaw = hybridHeading.yaw;
+                        snapRealignPending = true;
+                        if (headRide.active())
+                            rideWhy = camera_mode::RideWhy::none;
+                        headRide.reset();
+                        hybridGate.reset();
+                        hybridStick = {};
+                        shoulderLimit.reset();
+                        viewLimitCorrection = 0;
+                        turnInPlace.reset();
+                        animHeadTurn = 0;
+                        viewLockSnapped = true;
+                        ++armEpoch; // a realign is a jump of the frame, not a hand's motion
+                        ++snapRealigns;
+                        diag_log::writef("snap realign: %s %+.0f deg -> heading %.0f (view was %.0f, hero %.0f); "
+                                         "model, headset, gaze cone, rear snap and filters re-synced, #%u",
+                                         realignWhy, realignTurn * toDeg, realignTo * toDeg,
+                                         std::isfinite(viewWas) ? viewWas * toDeg : -999.f,
+                                         std::isfinite(heroNow) ? heroNow * toDeg : -999.f, snapRealigns);
+                    }
                     {
                         const bool hybridNow =
                             hybrid_movement::modeOf(values.movementMode) == hybrid_movement::Mode::hybrid;
@@ -3887,9 +3977,20 @@ DWORD WINAPI run(void*) {
                         lock.heroYaw = std::hypot(body[8], body[10]) > .2f
                                            ? hybrid_handoff::actorLookYaw({body[8], body[9], body[10]})
                                            : NAN; // no facing: no sway term
-                        // THE 90-DEGREE RULE: last frame's hold until this frame's (below).
-                        if (lock.on && std::isfinite(viewLimitCorrection))
-                            lock.yaw = stable_yaw::wrap(lock.yaw + viewLimitCorrection);
+                        // ANIM HEAD RIDE: a frame without the head lock's view (the air, a scene)
+                        // wants no ride - it blends out, so a later lock never starts on the bone.
+                        if (!rideStepped) {
+                            if (headRide.update(frame.seconds, false).exited) {
+                                rideWhy = camera_mode::RideWhy::none;
+                                diag_log::writef("camera mode: %s (the head lock's view ended), blend %.0f ms, #%u",
+                                                 camera_mode::modeName(headRide.mode),
+                                                 camera_mode::HeadRide::exitSeconds * 1000.f, headRide.exits);
+                            }
+                        }
+                        rideStepped = false;
+                        // ANIM HEAD RIDE and the SHOULDER LIMIT: last frame's until this frame's (below).
+                        lock.ride = headRide.eased();
+                        lock.limit = lock.on && std::isfinite(viewLimitCorrection) ? viewLimitCorrection : 0.f;
                         view_yaw_lock::publish(lock);
                     }
                     // H1: the hands' velocities, in tracking space.
@@ -7416,9 +7517,47 @@ DWORD WINAPI run(void*) {
                                                         std::isfinite(frame.hands[0].stickY)
                                                     ? std::hypot(frame.hands[0].stickX, frame.hands[0].stickY)
                                                     : -1.f;
+                        {
+                            // PERCH (camera_mode::PerchWatch): still off the game's ground on a
+                            // perch it holds him on - the animation's, as a landing (ANIM HEAD RIDE).
+                            camera_mode::PerchWatch::In pin;
+                            pin.dt = frame.seconds;
+                            pin.airborne = swingFresh && !swingState.grounded;
+                            pin.free = swingFresh && animState.playing && !animState.owned && !animState.webbed &&
+                                       animState.wall == 0 && !animState.zipping && !animState.fighting &&
+                                       !animState.dodging && !motion.handstand.holdVr;
+                            pin.speed = hybridSpeedH;
+                            pin.up = hybridFrame.velY;
+                            const auto po = perchWatch.update(pin);
+                            if (po.began)
+                                diag_log::writef("perch: still %.0f ms off the game's ground (%.1f m/s across, %+.1f "
+                                                 "up), the animation's (owner %s), #%u",
+                                                 camera_mode::PerchWatch::enterSeconds * 1000.f, pin.speed, pin.up,
+                                                 hybridOwner.domain == hybrid_owner::Domain::vr ? "vr" : "anim",
+                                                 perchWatch.perches);
+                            if (po.ended)
+                                diag_log::writef("perch: left (%.1f m/s across, %+.1f up, %s)", pin.speed, pin.up,
+                                                 !pin.airborne ? "the ground" : !pin.free ? "a web, wall, swing or fight"
+                                                                                          : "moving");
+                            hybridFrame.perched = values.animHeadRide && perchWatch.perched;
+                            rideMoveStick = std::max(0.f, hybridFrame.moveStick);
+                            rideSpeed = hybridSpeedH;
+                            rideFighting = animState.fighting || animState.dodging;
+                            rideOnWall = animState.wall != 0;
+                        }
                         legChordAirAnimLast = false;
                         if (hybridOn) {
                             hybridOwner.update(hybridFrame, handoffNs);
+                            if (hybridOwner.enterAnim) {
+                                rideAnimAge = 0;
+                                rideAnimLanding = hybridOwner.lastEnterAnim == hybrid_owner::EnterAnim::land ||
+                                                  hybridOwner.lastEnterAnim == hybrid_owner::EnterAnim::zip;
+                            } else if (hybridOwner.enterVr) {
+                                rideAnimAge = 1e9f;
+                                rideAnimLanding = false;
+                            } else if (rideAnimAge < 1e8f && std::isfinite(frame.seconds)) {
+                                rideAnimAge += std::clamp(frame.seconds, 0.f, .1f);
+                            }
                             legChordAirAnimLast = hybridOwner.domain == hybrid_owner::Domain::anim &&
                                                   hybrid_owner::midairAnimation(true, animState) &&
                                                   !hybridFrame.cutscene;
@@ -8060,6 +8199,12 @@ DWORD WINAPI run(void*) {
                             animSeatStateWas = -1;
                             animSeatActionWas = 0xffffffffu;
                         }
+                        // SNAP REALIGN: the headset's turn is zeroed on the new heading (the
+                        // lock starts afresh on the neck, the heading kept by its snap hold).
+                        if (snapRealignPending) {
+                            seatWhy = head_seat::Why::recenter;
+                            snapRealignPending = false;
+                        }
                         const int modeNow = headFollow ? static_cast<int>(animHeadMode) : -1;
                         if (headFollow != animatedHeadFollowWas || modeNow != animatedHeadModeWas) {
                             // softlock|full|level|off — never silent "level" for Full midair.
@@ -8099,8 +8244,23 @@ DWORD WINAPI run(void*) {
                             values.animatedArms && yieldAnim && !flatScreen && values.body;
                         const bool armsOverlayLive =
                             armsWanted || (hybridArmFade && animated_arms::anyActive(animatedArmsState));
+                        // A scene or menu has the view (the owner is frozen there, so the
+                        // animation never "owns" it): the game's own body, never SpidyVR's pose
+                        // flashing in. After it, a VR body is seeded from the live pose again.
+                        const bool sceneBody = hybridOn && !animState.playing && !calibrationInput;
+                        if (sceneBody != sceneBodyHeld) {
+                            diag_log::writef(sceneBody ? "scene body: the game's own body while it has the view (owner %s)"
+                                                       : "scene body: play again, owner %s%s",
+                                             hybridOwner.domain == hybrid_owner::Domain::vr ? "vr" : "anim",
+                                             !sceneBody && hybridOwner.domain == hybrid_owner::Domain::vr
+                                                 ? " (the body reseeded from the live pose)"
+                                                 : "");
+                            if (!sceneBody && hybridOwner.domain == hybrid_owner::Domain::vr)
+                                native_body::beginReclaim();
+                            sceneBodyHeld = sceneBody;
+                        }
                         pose.flags =
-                            (flatScreen || !values.body || yieldAnim ? 0u : native_body::bodyOn) |
+                            (flatScreen || !values.body || yieldAnim || sceneBody ? 0u : native_body::bodyOn) |
                             native_body::hideHead | native_body::handTurn |
                             ((swingState.owned || hybridLeapAir) && !motion.standing ? native_body::airborne
                                                                                      : 0u) |
@@ -8726,7 +8886,12 @@ DWORD WINAPI run(void*) {
                                 fs.heroMatters = true;
                                 fs.heroOk = std::isfinite(heroYawNow);
                                 fs.hero = heroYawNow;
-                                const auto fc = facingCheck.update(frame.seconds, fs);
+                                auto fc = facingCheck.update(frame.seconds, fs);
+                                // ANIM HEAD RIDE: the view is his head; nothing turns him onto an old view.
+                                if (headRide.active()) {
+                                    fc.viewFix = 0.f;
+                                    fc.heroTurn = false;
+                                }
                                 if (fc.viewFix != 0.f) {
                                     viewLock.yaw = stable_yaw::wrap(viewLock.yaw + fc.viewFix);
                                     if (hybridLock)
@@ -8750,23 +8915,109 @@ DWORD WINAPI run(void*) {
                             lock.yaw = viewLock.yaw;
                             lock.sway = sway;
                             lock.heroYaw = heroYawNow;
-                            // THE 90-DEGREE RULE (view_yaw_lock::ViewLimit): the view
-                            // (shown + headset) held within 90 degrees of the hero, this
-                            // frame only, on the published yaw every anchor reads.
                             float hmdNow = 0;
                             if (validTrackedPose(frame.head))
                                 hmdNow = stable_yaw::wrap(
                                     hybrid_handoff::lookYaw(screenAhead(frame.head, 0).orientation.rotate({0, 0, -1})) -
                                     hybrid_handoff::lookYaw(animHeadRef.orientation.rotate({0, 0, -1})));
+                            // ANIM HEAD RIDE (camera_mode.hpp): in a game animation - a landing, a
+                            // perch, standing still - the view's yaw rides his head bone (position,
+                            // pitch and roll were the head's already), the headset's turn on top.
+                            // Walking, running and the air stay LOCOMOTION (Hybrid v2).
+                            {
+                                camera_mode::RideIn rin;
+                                rin.enabled = values.animHeadRide;
+                                rin.lockOn = hybridLock && viewLockActive && boneOk;
+                                rin.animOwns = hybridOwner.domain == hybrid_owner::Domain::anim;
+                                rin.fighting = rideFighting;
+                                rin.onWall = rideOnWall;
+                                rin.turning = values.smoothTurn > 0 && frame.hands[1].valid &&
+                                              std::abs(frame.hands[1].stickX) > view_yaw_lock::turnZone &&
+                                              !legStickActive;
+                                rin.legs = legStickActive;
+                                rin.snapHold = hybridHeading.hold == hybrid_movement::Heading::Hold::snap;
+                                rin.perched = perchWatch.perched;
+                                rin.landing = rideAnimLanding;
+                                rin.sinceAnim = rideAnimAge;
+                                rin.moveStick = rideMoveStick;
+                                rin.speed = rideSpeed;
+                                const auto why = camera_mode::rideWanted(rin);
+                                const float ageWas = headRide.age;
+                                const auto rs = headRide.update(frame.seconds, why != camera_mode::RideWhy::none);
+                                if (rs.entered || rs.exited) {
+                                    const float viewNow =
+                                        stable_yaw::wrap(view_yaw_lock::shownYaw(lock, boneYaw) + hmdNow);
+                                    const char* reason = rs.entered ? camera_mode::rideWhyName(why)
+                                                         : !rin.animOwns  ? "SpidyVR took the body"
+                                                         : !rin.lockOn    ? "the head lock ended"
+                                                         : rin.fighting   ? "a fight"
+                                                         : rin.onWall     ? "a wall"
+                                                         : rin.turning    ? "the right stick turns"
+                                                         : rin.legs       ? "leg control"
+                                                         : rin.snapHold   ? "a snap"
+                                                         : rin.moveStick >= camera_mode::runStick ? "the walk stick"
+                                                                                                  : "moving";
+                                    diag_log::writef(
+                                        "camera mode: %s (%s)%s, blend %.0f ms; head bone %.0f, view %.0f (view-bone "
+                                        "%+.0f), hero %.0f, #%u",
+                                        camera_mode::modeName(headRide.mode), reason,
+                                        rs.exited ? "" : " - the view rides his head", 
+                                        (rs.entered ? camera_mode::HeadRide::enterSeconds
+                                                    : camera_mode::HeadRide::exitSeconds) * 1000.f,
+                                        boneYaw * toDeg, viewNow * toDeg, stable_yaw::wrap(viewNow - boneYaw) * toDeg,
+                                        std::isfinite(heroYawNow) ? heroYawNow * toDeg : -999.f,
+                                        rs.entered ? headRide.enters : headRide.exits);
+                                    if (rs.exited)
+                                        diag_log::writef("camera mode: the head ride lasted %.0f ms", ageWas * 1000.f);
+                                }
+                                if (rs.entered) {
+                                    // The held heading is let go (no forced turn onto an old view):
+                                    // it follows him from here, under the ride's blend.
+                                    hybridHeading.hold = hybrid_movement::Heading::Hold::none;
+                                    hybridHeading.anchored = false;
+                                }
+                                rideWhy = why;
+                                rideStepped = true;
+                                lock.ride = headRide.eased();
+                            }
+                            // SHOULDER LIMIT (camera_mode::ShoulderLimit; it replaced THE 90-DEGREE
+                            // RULE): the view (shown + headset) never past his shoulders - within 90
+                            // degrees of his chest (the animation's chest bone while the animation has
+                            // him, else his facing), this frame only, on the published yaw.
                             viewLimitCorrection = 0;
-                            if (viewLockActive && boneOk && std::isfinite(heroYawNow)) {
-                                viewLimitCorrection = viewLimit.correction(
-                                    stable_yaw::wrap(view_yaw_lock::shownYaw(lock, boneYaw) + hmdNow), heroYawNow);
-                                lock.yaw = stable_yaw::wrap(lock.yaw + viewLimitCorrection);
-                            } else {
-                                viewLimit.reset();
+                            lock.limit = 0;
+                            {
+                                float chestYaw = NAN;
+                                const bool chestRead = hybridOwner.domain == hybrid_owner::Domain::anim &&
+                                                       native_body::heroChestYaw(chestYaw);
+                                bool usedChest = false;
+                                const float shoulders =
+                                    camera_mode::shouldersYaw(chestRead, chestYaw, heroYawNow, &usedChest);
+                                const bool limitOn =
+                                    values.shoulderLimit && camera_mode::viewLimitActive.load(std::memory_order_relaxed);
+                                if (limitOn && viewLockActive && boneOk && std::isfinite(shoulders)) {
+                                    const unsigned streakWas = shoulderLimit.streak;
+                                    const float worstWas = shoulderLimit.streakWorst;
+                                    const float sideWas = shoulderLimit.lastOut;
+                                    viewLimitCorrection = shoulderLimit.correction(
+                                        stable_yaw::wrap(view_yaw_lock::shownYaw(lock, boneYaw) + hmdNow), shoulders);
+                                    ++(usedChest ? shoulderLimit.chest : shoulderLimit.hero);
+                                    lock.limit = viewLimitCorrection;
+                                    if (streakWas >= 10 && shoulderLimit.streak == 0 &&
+                                        eyeBlendNow - shoulderLogAt > 1'000'000'000) {
+                                        shoulderLogAt = eyeBlendNow;
+                                        diag_log::writef("shoulder limit: held the view at his %s shoulder %u frames "
+                                                         "(largest excess %.0f deg; shoulders from the %s)",
+                                                         sideWas > 0 ? "left" : "right", streakWas, worstWas * toDeg,
+                                                         usedChest ? "chest bone" : "hero's facing");
+                                    }
+                                } else {
+                                    shoulderLimit.reset();
+                                }
                             }
                             view_yaw_lock::publish(lock);
+                            if (viewLockActive && boneOk)
+                                lastViewYaw = stable_yaw::wrap(view_yaw_lock::shownYaw(lock, boneYaw) + hmdNow);
                             if (viewLockActive && boneOk) {
                                 // Divergence: the view (lock + sway + headset) against the
                                 // hero's facing and against the old view (head bone + headset).
@@ -8810,12 +9061,17 @@ DWORD WINAPI run(void*) {
                                         turnInPlace.done, turnInPlace.gaveUp, turnInPlace.wrongWays,
                                         hybrid_movement::modeName(moveMode), hybridGate.snaps, hybridHeading.arrived,
                                         hybridHeading.gaveUp);
-                                    if (viewLimit.held)
-                                        diag_log::writef("view limit: held the view at 90 deg off the hero %u frames "
-                                                         "(largest excess %.0f deg)",
-                                                         viewLimit.held, viewLimit.worst * toDeg);
-                                    viewLimit.held = 0;
-                                    viewLimit.worst = 0;
+                                    if (shoulderLimit.held || headRide.enters)
+                                        diag_log::writef(
+                                            "shoulder limit: held %u frames in 10 s (largest excess %.0f deg; "
+                                            "shoulders from the chest bone %u, the hero's facing %u frames); head "
+                                            "ride %u on / %u off, snap realigns %u, perches %u",
+                                            shoulderLimit.held, shoulderLimit.worst * toDeg, shoulderLimit.chest,
+                                            shoulderLimit.hero, headRide.enters, headRide.exits, snapRealigns,
+                                            perchWatch.perches);
+                                    shoulderLimit.held = 0;
+                                    shoulderLimit.worst = 0;
+                                    shoulderLimit.chest = shoulderLimit.hero = 0;
                                     viewDivergence.reset();
                                 }
                             }
@@ -8993,6 +9249,8 @@ DWORD WINAPI run(void*) {
                                 handView.lockYaw = lock.yaw;
                                 handView.lockSway = lock.sway;
                                 handView.lockHero = lock.heroYaw;
+                                handView.lockRide = lock.ride;
+                                handView.lockLimit = lock.limit;
                             }
                             handView.head = animated_view::relative(frame.head, reference, turn);
                             for (unsigned i = 0; i < 2; ++i) {

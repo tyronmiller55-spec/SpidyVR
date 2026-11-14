@@ -749,6 +749,9 @@ int main() {
             // HANDSTAND (H1, November 12): experimental, the player's own.
             if (key.rfind("handstand", 0) == 0)
                 continue;
+            // CAMERA MODES (November 13): the player's own comfort, not in shared profiles.
+            if (key == "anim_head_ride" || key == "shoulder_limit" || key == "snap_realign")
+                continue;
             ++lines;
             check(at(key) < std::size(profileSettings) &&
                       (profileSettings[at(key)].flag || profileSettings[at(key)].number),

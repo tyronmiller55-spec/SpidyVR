@@ -405,6 +405,9 @@ ActionFrame actionFrame();
 // 0 before any). Off, the writer does nothing more than before.
 void setHeadProbe(bool on);
 head_probe::Sample headSample();
+// SHOULDER LIMIT (camera_mode.hpp): the hero's chest yaw (the rig's yaw, as
+// view_yaw_lock::nativeYaw) as his animation posed it in the last 250 ms.
+bool heroChestYaw(float& yaw);
 
 // Wire formats of the probe exports (SpidyBodyStart, SpidyBodySubmit,
 // SpidyBodyCapture), which drive the body without the OpenXR worker.

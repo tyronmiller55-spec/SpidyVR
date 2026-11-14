@@ -21,6 +21,7 @@ struct Targets {
     // pose job turns its Full anchor as the eyes are turned.
     bool yawLock{};
     float lockYaw{}, lockSway{}, lockHero{};
+    float lockRide{}, lockLimit{}; // ANIM HEAD RIDE / SHOULDER LIMIT (view_yaw_lock::State)
 };
 inline Pose relative(Pose raw, Pose reference, float turn) {
     return compose({{}, Quat::yaw(turn)}, compose(inverse(reference), raw));

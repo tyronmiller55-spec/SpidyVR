@@ -105,6 +105,10 @@ add_test(NAME jump_handoff COMMAND spidy_jump_handoff_tests)
 add_executable(spidy_view_yaw_lock_tests tests/view_yaw_lock_tests.cpp)
 target_link_libraries(spidy_view_yaw_lock_tests PRIVATE spidy_core)
 add_test(NAME view_yaw_lock COMMAND spidy_view_yaw_lock_tests)
+# CAMERA MODES (camera_mode.hpp): the head ride, the shoulder limit, the snap/realign, the perch (portable).
+add_executable(spidy_camera_mode_tests tests/camera_mode_tests.cpp)
+target_link_libraries(spidy_camera_mode_tests PRIVATE spidy_core)
+add_test(NAME camera_mode COMMAND spidy_camera_mode_tests)
 # PASSIVE LEGS, AIR CROUCH, REACH SPREAD, FLAIL (leg_layers.hpp; portable).
 add_executable(spidy_passive_legs_tests tests/passive_legs_tests.cpp)
 target_link_libraries(spidy_passive_legs_tests PRIVATE spidy_core)

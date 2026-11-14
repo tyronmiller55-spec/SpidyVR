@@ -570,6 +570,14 @@ struct Values {
     int sidestepDistanceCm = 200, sidestepMs = 180, sidestepCooldownMs = 300, sidestepChain = 3;
     int sidestepLockoutMs = 800, sidestepFlickFrom = 30, sidestepFlickTo = 80, sidestepFlickMs = 80;
     int sidestepAMs = 120;
+    // CAMERA MODES (camera_mode.hpp; the user, November 13 15:42). ANIM HEAD
+    // RIDE: in a game animation (a landing, a perch, standing still) the view
+    // rides Spider-Man's head, the headset on top; a perch is the animation's
+    // as a landing is. SHOULDER LIMIT: the view never turns past his shoulders
+    // (it replaced the 90-degree rule). SNAP REALIGN: the right stick's tap is
+    // a snap round the full 360 and a realign of the heading, the model and the
+    // headset. spidy_vr.ini only, on by default; 0 turns each off.
+    bool animHeadRide = true, shoulderLimit = true, snapRealign = true;
     bool operator==(const Values&) const = default;
 };
 inline constexpr int eyeAimShots = 1, eyeAimZips = 2;

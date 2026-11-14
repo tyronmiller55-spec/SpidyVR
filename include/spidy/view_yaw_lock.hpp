@@ -53,6 +53,12 @@ struct State {
     float yaw = 0;     // the lock's heading (world, rig yaw: 0 facing -z)
     float sway = 0;    // 0..1
     float heroYaw = 0; // the hero's facing (the actor's forward)
+    // ANIM HEAD RIDE (camera_mode.hpp): 0..1, how far the shown yaw is taken
+    // from the lock onto the head bone itself (eased entry and exit).
+    float ride = 0;
+    // SHOULDER LIMIT (camera_mode::ShoulderLimit): this frame's correction,
+    // radians, added last (after the ride), so the view stays within the shoulders.
+    float limit = 0;
 };
 
 // The yaw the eyes' anchor shows for a head bone yaw.
@@ -80,7 +86,12 @@ inline float shownYaw(const State& s, float boneYaw) {
     if (!s.on || !std::isfinite(s.yaw) || !std::isfinite(boneYaw))
         return boneYaw;
     const float hero = std::isfinite(s.heroYaw) ? s.heroYaw : boneYaw;
-    return wrap(s.yaw + swayOffset(boneYaw, hero, s.sway));
+    float shown = wrap(s.yaw + swayOffset(boneYaw, hero, s.sway));
+    if (std::isfinite(s.ride) && s.ride > 0.f)
+        shown = wrap(shown + std::min(s.ride, 1.f) * wrap(boneYaw - shown));
+    if (std::isfinite(s.limit) && s.limit != 0.f)
+        shown = wrap(shown + s.limit);
+    return shown;
 }
 
 inline float yawOf(Vec3 forward) {
@@ -156,8 +167,10 @@ inline bool turnModel(Mat4& model, Quat toWorld, const State& s, float* delta = 
 
 // The published state (the render thread reads it in game_fp::frame).
 inline std::atomic<bool> liveOn{false};
-inline std::atomic<float> liveYaw{0}, liveSway{0}, liveHero{0};
+inline std::atomic<float> liveYaw{0}, liveSway{0}, liveHero{0}, liveRide{0}, liveLimit{0};
 inline void publish(const State& s) {
+    liveRide.store(s.ride, std::memory_order_relaxed);
+    liveLimit.store(s.limit, std::memory_order_relaxed);
     liveYaw.store(s.yaw, std::memory_order_relaxed);
     liveSway.store(s.sway, std::memory_order_relaxed);
     liveHero.store(s.heroYaw, std::memory_order_relaxed);
@@ -169,6 +182,8 @@ inline State live() {
     s.yaw = liveYaw.load(std::memory_order_relaxed);
     s.sway = liveSway.load(std::memory_order_relaxed);
     s.heroYaw = liveHero.load(std::memory_order_relaxed);
+    s.ride = liveRide.load(std::memory_order_relaxed);
+    s.limit = liveLimit.load(std::memory_order_relaxed);
     return s;
 }
 

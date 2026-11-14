@@ -299,6 +299,11 @@ struct Frame {
     // balancing, or just let go of): SpidyVR keeps the body, ground included;
     // the landing waits until this ends.
     bool handSupport{};
+    // PERCH (camera_mode::PerchWatch; the user, November 13 15:42: perches
+    // "should be animations with smooth entry and exits"): still off the
+    // game's ground on a perch it holds him on (a pole, a zip's point) - no
+    // web, no wall, the swing not driving. The animation's, as the ground is.
+    bool perched{};
 };
 
 // The view ease (view_ease.hpp) a switch to VR takes, in ms (0: the snap):
@@ -573,10 +578,10 @@ struct HybridOwner {
         // GROUND: the animation's, always. Landing comes back at once; nothing
         // on the ground (grip, trigger, a web, a jump press) switches. Only a
         // takeoff the swing actually dispatched leaves VR there to leave.
-        if (supported(f.state)) {
+        if (supported(f.state) || (f.perched && f.state.wall != surfaceWall)) {
             airAnimNs = fallNs = -1;
             if (domain == Domain::vr && !f.groundAction && !f.pointJumpHold)
-                goAnim(nowNs, f.state.grounded ? EnterAnim::land : EnterAnim::mount);
+                goAnim(nowNs, f.state.grounded || f.perched ? EnterAnim::land : EnterAnim::mount);
             if (f.zipPress || f.state.zipping) {
                 zipNs = nowNs;
                 if (f.zipPress || zipPressNs < 0)
