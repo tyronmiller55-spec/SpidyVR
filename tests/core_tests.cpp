@@ -32156,6 +32156,66 @@ int main() {
         check(lines.count == 0 || std::string(lines.text[0]).find("spike") == std::string::npos,
               "a pause was logged as a spike");
     });
+    test("hitch: a 70 ms step is counted in the summary but gets no line of its own", [&] {
+        hitch_guard::GameFrameClock clock;
+        hitch_guard::GameFrameClock::Lines lines;
+        const int64_t hz = 10'000'000;
+        uint64_t t = 1'000'000'000;
+        unsigned spikeLines = 0;
+        std::string summary;
+        for (int i = 0; i < 900; ++i) {
+            t += (i % 100 == 50) ? hz * 70 / 1000 : hz / 36;
+            clock.update(t, hz, .0139f, lines);
+            for (unsigned k = 0; k < lines.count; ++k) {
+                const std::string line = lines.text[k];
+                if (line.find("spike") != std::string::npos)
+                    ++spikeLines;
+                if (line.find("game steps") != std::string::npos && summary.empty())
+                    summary = line;
+            }
+        }
+        check(spikeLines == 0, "a 70 ms step wrote a line of its own");
+        check(clock.spikesTotal() == 9, "the 70 ms steps were not all counted");
+        check(summary.find("over 50 ms") != std::string::npos, "the summary lost its over 50 ms count");
+    });
+    test("hitch: cost window reports the mod's share and the guards' fire counts", [&] {
+        hitch_guard::CostWindow cost;
+        const int64_t hz = 10'000'000;
+        uint64_t t = 5'000'000'000;
+        bool closed = false;
+        unsigned windows = 0;
+        for (int i = 0; i < 1500; ++i) { // 25 s of 60 Hz steps
+            t += hz / 60;
+            // 200 us steps, one of 7 ms; the guards fire 4 times then once more
+            const double us = i == 300 ? 7000. : 200.;
+            closed = cost.add(t, hz, us, us / 2, i % 2 ? 30. : 10., 100 + (i > 200) * 4 + (i > 900), 7 + (i > 900) * 2);
+            if (closed) {
+                ++windows;
+                if (windows == 1) {
+                    const auto& w = cost.done();
+                    check(w.seconds >= 10. && w.seconds < 10.1, "the window was not 10 s");
+                    check(w.visits >= 599 && w.visits <= 603, "the window's visit count is wrong");
+                    check(w.maxUs == 7000.f && w.over5ms == 1 && w.over1ms == 1, "the 7 ms step was not counted");
+                    check(std::abs(w.solverMaxUs - 3500.f) < 1.f && w.kickMaxUs == 30.f, "the shares are wrong");
+                    check(w.rejected == 4 && w.ignored == 0, "the guards' first window counts are wrong");
+                    char line[320];
+                    hitch_guard::costLine(w, line, sizeof line);
+                    check(std::string(line).find("4 velocity samples held") != std::string::npos &&
+                              std::string(line).find("longest 7000 us") != std::string::npos,
+                          "the cost line lost a field");
+                } else if (windows == 2) {
+                    check(cost.done().rejected == 1 && cost.done().ignored == 2, "the second window's guard counts");
+                }
+            }
+        }
+        check(windows == 2, "25 s should close two 10 s windows");
+        // A guard that was reset (its counter went down) counts the new value whole.
+        hitch_guard::CostWindow reset;
+        reset.add(t, hz, 100., 50., 5., 9, 9);
+        check(reset.add(t + hz * 11, hz, 100., 50., 5., 2, 3) && reset.done().rejected == 2 && reset.done().ignored == 3,
+              "a reset counter was not counted whole");
+        check(!hitch_guard::CostWindow().add(0, hz, 1., 1., 1., 0, 0), "a zero stamp was taken");
+    });
     std::cout << total - failed << '/' << total << " tests passed\n";
     return failed ? 1 : 0;
 }

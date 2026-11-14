@@ -140,4 +140,28 @@ class TiltFilter {
     Quat shown_{};
     bool ready_{};
 };
+// When the diag's "vr stabilization:" line is due (G1 playtest: twice a second was 2,500 lines in 20 minutes).
+// On change: when the rig starts working (tilt over `threshold`), when the tilt it wants has moved `step` degrees
+// since the last line, and as a heartbeat every `heartbeatSeconds` while it keeps working; never when idle.
+class LogGate {
+  public:
+    static constexpr float threshold = 2.f, step = 10.f, heartbeatSeconds = 5.f;
+    bool due(float seconds, bool active, float wantedDegrees) {
+        if (!active || !(wantedDegrees > threshold) || !std::isfinite(wantedDegrees)) {
+            logged_ = false;
+            return false;
+        }
+        age_ += std::isfinite(seconds) ? std::clamp(seconds, 0.f, .1f) : 0.f;
+        if (logged_ && std::abs(wantedDegrees - last_) < step && age_ < heartbeatSeconds)
+            return false;
+        logged_ = true;
+        last_ = wantedDegrees;
+        age_ = 0;
+        return true;
+    }
+
+  private:
+    bool logged_{};
+    float last_{}, age_{};
+};
 } // namespace spidy::vr_stabilize

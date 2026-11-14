@@ -209,6 +209,21 @@ int main() {
         const Mat4 eased = g.update(t, .011f, r, nullptr);
         check(std::abs(eased[8] - t[8]) > .05f, "in a ride a 60 degree turn is still eased");
     }
+    // The diag line is on change: once at the start, again on a 10 degree move or a 5 s heartbeat, never idle.
+    {
+        vr_stabilize::LogGate gate;
+        check(!gate.due(.011f, true, 1.f), "under 2 degrees: no line");
+        check(gate.due(.011f, true, 6.f), "the first working frame logs");
+        unsigned lines = 0;
+        for (int i = 0; i < 90 * 4; ++i) // four seconds of the same tilt
+            lines += gate.due(1.f / 90.f, true, 6.5f);
+        check(lines == 0, "a steady tilt was logged again inside the heartbeat");
+        check(gate.due(.011f, true, 17.f), "a 10 degree change logs");
+        for (int i = 0; i < 90 * 6; ++i)
+            lines += gate.due(1.f / 90.f, true, 17.f);
+        check(lines == 1, "a steady tilt logs once on the 5 s heartbeat");
+        check(!gate.due(.011f, false, 17.f) && gate.due(.011f, true, 17.f), "after it idled, the next work logs again");
+    }
     std::printf("vr stabilize: %d checks passed\n", passed);
     return 0;
 }

@@ -601,6 +601,8 @@ BridgeCall swingSidestep{};
 // (SpidySwingKickLive); none in an older module (no manual kick, the auto dive as before).
 BridgeCall swingKick{};
 const game_swing::SwingKickLive* swingKickLive{};
+// The swing module's cost to the game thread, per 10 s window (SpidySwingCostLive): the "game thread cost:" line.
+const game_swing::SwingCostLive* swingCostLive{};
 // AIR KICKS' settings and gestures for the swing (SpidyAirKick), and its account (SpidyAirKickLive); none in an
 // older module (no air kicks).
 BridgeCall airKick{};
@@ -1179,6 +1181,7 @@ DWORD WINAPI run(void*) {
         // perf: lines (frame_stats.hpp).
         frame_stats::FrameStats frameStats;
         // game frame: lines (hitch_guard.hpp): the game thread's own step times, spikes with their length.
+        uint32_t swingCostWindow = 0; // the last SpidySwingCostLive window logged
         hitch_guard::GameFrameClock gameFrameClock;
         hitch_guard::GameFrameClock::Lines gameFrameLines;
         // HEAD PROBE (off by default; head_probe.hpp): read only. Its numbers
@@ -1234,7 +1237,7 @@ DWORD WINAPI run(void*) {
             bool vrOwns{}, flipAir{}, onLine{}, ground{}, landing{};
         } handstandGates;
         float handstandLogAge{};
-        float vrStabilizeLogAge{}; // VR STABILIZATION's diag line, twice a second
+        vr_stabilize::LogGate vrStabilizeLog; // VR STABILIZATION's diag line, on change
         int64_t hybridSteerDiagAt{};
         // VIEW YAW SOURCE: STABLE's heading (stable_yaw.hpp), the hero-vs-steer
         // watch and the runaway-turn detector.
@@ -3339,14 +3342,11 @@ DWORD WINAPI run(void*) {
                                         {camera[8], camera[9], camera[10]}, gameplay,
                                         swingState.owned ? Vec3{0, 1, 0} : heroUp, flipAir, hold,
                                         {camera[4], camera[5], camera[6]});
-                    // VR STABILIZATION: how much tilt the rig wanted and what is shown, twice a second
+                    // VR STABILIZATION: how much tilt the rig wanted and what is shown, on change
                     // while it is doing anything (tilt over 2 degrees), with the bank in force.
                     {
-                        vrStabilizeLogAge +=
-                            std::isfinite(frame.seconds) ? std::clamp(frame.seconds, 0.f, .1f) : 0.f;
                         const auto vs = vr_stabilize::fromValues(values);
-                        if (vs.any() && vrStabilizeLogAge >= .5f && motion.vrTiltRaw > 2.f) {
-                            vrStabilizeLogAge = 0;
+                        if (vrStabilizeLog.due(frame.seconds, vs.any(), motion.vrTiltRaw)) {
                             diag_log::writef(
                                 "vr stabilization: tilt wanted %.1f deg, shown %.1f deg (levelled to "
                                 "pitch %.0f%% roll %.0f%%, angle %.0f ms, bank %d, owner %s)",
@@ -4908,6 +4908,31 @@ DWORD WINAPI run(void*) {
                                               frame.seconds, gameFrameLines);
                         for (unsigned i = 0; i < gameFrameLines.count; ++i)
                             diag_log::write(gameFrameLines.text[i]);
+                        // What the swing module itself cost the game thread, one line per 10 s window
+                        // (G1 playtest: the mod's share of a hitch could not be told from the render load).
+                        if (const volatile game_swing::SwingCostLive* cl = swingCostLive) {
+                            const uint32_t window = cl->window;
+                            if (window != swingCostWindow) {
+                                hitch_guard::CostWindow::Window w;
+                                w.seconds = cl->seconds;
+                                w.visits = cl->visits;
+                                w.over1ms = cl->over1ms;
+                                w.over5ms = cl->over5ms;
+                                w.rejected = cl->rejected;
+                                w.ignored = cl->ignored;
+                                w.meanUs = cl->meanUs;
+                                w.maxUs = cl->maxUs;
+                                w.solverMaxUs = cl->solverMaxUs;
+                                w.kickMaxUs = cl->kickMaxUs;
+                                MemoryBarrier();
+                                if (cl->window == window) {
+                                    swingCostWindow = window;
+                                    char line[320];
+                                    hitch_guard::costLine(w, line, sizeof line);
+                                    diag_log::write(line);
+                                }
+                            }
+                        }
                         game_swing::SlingshotData slingshot;
                         slingshotPulseSeconds += frame.seconds;
                         if ((values.webSlingshot || values.airSlingshot) && input.focused &&
@@ -10951,6 +10976,13 @@ extern "C" __declspec(dllexport) DWORD WINAPI SpidyXrStart(void* input) {
         (swingKickLive->magic != expected.magic || swingKickLive->version != expected.version ||
          swingKickLive->bytes != expected.bytes))
         swingKickLive = nullptr;
+    swingCostLive =
+        reinterpret_cast<const game_swing::SwingCostLive*>(GetProcAddress(rays, "SpidySwingCostLive"));
+    if (const game_swing::SwingCostLive expected;
+        swingCostLive &&
+        (swingCostLive->magic != expected.magic || swingCostLive->version != expected.version ||
+         swingCostLive->bytes != expected.bytes))
+        swingCostLive = nullptr;
     airKick = reinterpret_cast<BridgeCall>(GetProcAddress(rays, "SpidyAirKick"));
     airKickLive = reinterpret_cast<const game_swing::AirKickLive*>(GetProcAddress(rays, "SpidyAirKickLive"));
     if (const game_swing::AirKickLive expected;

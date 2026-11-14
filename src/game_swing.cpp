@@ -41,6 +41,8 @@ __declspec(dllexport) SidestepLive SpidySidestepLive;
 __declspec(dllexport) SwingKickLive SpidySwingKickLive;
 // AIR KICKS' account (AirKickLive), for XR's log, legs and feel.
 __declspec(dllexport) AirKickLive SpidyAirKickLive;
+// The swing module's cost to the game thread, per 10 s window (SwingCostLive), for XR's diag.
+__declspec(dllexport) SwingCostLive SpidySwingCostLive;
 // GRIP's account (GripLive), for XR's feel and log.
 __declspec(dllexport) GripLive SpidySwingGripLive;
 // HAND GRAB's account (HandGrabLive), for XR's log and feel.
@@ -70,6 +72,57 @@ VentCrawlMode ventCrawlMode;
 InputSampleClock inputClock, grabInputClock;
 // WEBS SURVIVE HITCHES (hitch_guard.hpp): the mover's measured velocity, believed only off a normal step.
 hitch_guard::VelocityGuard velocityGuard;
+// What visit() costs the game thread (hitch_guard::CostWindow), published every 10 s as SpidySwingCostLive.
+hitch_guard::CostWindow costWindow;
+double costSolverUs{}, costKickUs{};
+// Times a stretch of visit() and adds it to `total` (microseconds).
+struct CostTimer {
+    explicit CostTimer(double& total) : total_(total) {
+        QueryPerformanceCounter(&start_);
+    }
+    ~CostTimer() {
+        LARGE_INTEGER end{}, hz{};
+        QueryPerformanceCounter(&end);
+        QueryPerformanceFrequency(&hz);
+        if (hz.QuadPart > 0 && end.QuadPart >= start_.QuadPart)
+            total_ += static_cast<double>(end.QuadPart - start_.QuadPart) * 1e6 / static_cast<double>(hz.QuadPart);
+    }
+    double& total_;
+    LARGE_INTEGER start_{};
+};
+// One visit's whole cost, from the lock's wait to the return (the game thread waits for all of it).
+struct VisitCost {
+    VisitCost() {
+        costSolverUs = costKickUs = 0;
+        QueryPerformanceCounter(&start_);
+    }
+    ~VisitCost() {
+        LARGE_INTEGER end{}, hz{};
+        QueryPerformanceCounter(&end);
+        QueryPerformanceFrequency(&hz);
+        if (hz.QuadPart <= 0 || end.QuadPart < start_.QuadPart)
+            return;
+        const double us = static_cast<double>(end.QuadPart - start_.QuadPart) * 1e6 / static_cast<double>(hz.QuadPart);
+        if (!costWindow.add(static_cast<uint64_t>(end.QuadPart), hz.QuadPart, us, costSolverUs, costKickUs,
+                            velocityGuard.rejected(), solver.hitchIgnored()))
+            return;
+        const auto& w = costWindow.done();
+        volatile SwingCostLive& live = SpidySwingCostLive;
+        live.visits = w.visits;
+        live.over1ms = w.over1ms;
+        live.over5ms = w.over5ms;
+        live.rejected = w.rejected;
+        live.ignored = w.ignored;
+        live.seconds = static_cast<float>(w.seconds);
+        live.meanUs = w.meanUs;
+        live.maxUs = w.maxUs;
+        live.solverMaxUs = w.solverMaxUs;
+        live.kickMaxUs = w.kickMaxUs;
+        MemoryBarrier();
+        live.window = live.window + 1;
+    }
+    LARGE_INTEGER start_{};
+};
 // The web tie's gesture (web_tie.hpp): a web on a surface in one hand, a
 // webbed-up enemy on the other's, hands together, the right stick's click.
 TieGesture tieGesture;
@@ -594,6 +647,7 @@ void idleRopeInput(const Command& c, const Input& in, const native_rays::QueryCo
     ReleaseSRWLockExclusive(&output);
 }
 void visit(const native_rays::QueryContext& world) {
+    const VisitCost visitCost;
     // Stop waits for this lock before stopping the movement module.
     AcquireSRWLockExclusive(&simulation);
     struct Unlock {
@@ -1369,6 +1423,7 @@ void visit(const native_rays::QueryContext& world) {
     // while swinging with the legs engaged, at the ringed enemy within the cone of the velocity; steers the
     // swing a little toward him, lands the foot's blow, and fades out on a miss. It adds no speed.
     {
+        const CostTimer kickTimer(costKickUs);
         AcquireSRWLockExclusive(&kickLock);
         const SwingKickAsk ask = kickAsk;
         const bool waiting = kickWaiting;
@@ -1468,6 +1523,7 @@ void visit(const native_rays::QueryContext& world) {
     // legs engaged sends the legs out: the foot's swept sphere against every fighting enemy, the blow's strength
     // from its speed. The swing kick (above) keeps the flick it armed on; this one is every other.
     {
+        const CostTimer kickTimer(costKickUs);
         AcquireSRWLockExclusive(&airKickLock);
         const AirKickAsk ask = airKickAsk, flickAsk = airKickFlick;
         const bool waiting = airKickWaiting;
@@ -1608,8 +1664,10 @@ void visit(const native_rays::QueryContext& world) {
         for (auto& hand : swingInput.hands) hand.wallGrip = 0;
     }
     const LineWorld webWorld(world, webLines);
-    const auto predicted = solver.predictNativeStep(motion.dt, swingInput, webWorld,
-                                                    body, inputSeconds);
+    const auto predicted = [&] {
+        const CostTimer timer(costSolverUs);
+        return solver.predictNativeStep(motion.dt, swingInput, webWorld, body, inputSeconds);
+    }();
     if (world.error()) {
         fault(world.error());
         return;

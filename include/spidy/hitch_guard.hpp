@@ -12,7 +12,10 @@
 //  - OverLimit: the swing's own let-go on an over-limit speed needs several consecutive valid
 //    frames (sustainedFrames or sustainedSeconds), never one, and never a frame over 50 ms.
 // GameFrameClock: the game thread's own frame time, from the swing sample's QPC stamp, as diag
-// "game frame:" lines: each spike (a step over 50 ms) with its duration, and a summary.
+// "game frame:" lines: each spike (a step over 100 ms) with its duration, and a summary that counts
+// every step over 50 ms.
+// CostWindow: what the mod itself cost the game thread, per 10 s window (G1 playtest: the mod's share of
+// a hitch could not be told from the render load), and how often the hitch guards fired.
 #pragma once
 #include "math.hpp"
 #include <algorithm>
@@ -164,9 +167,11 @@ class OverLimit {
 // The game thread's frame time from the swing sample's QPC stamp (one new stamp per game step).
 class GameFrameClock {
   public:
-    static constexpr float spikeSeconds = .05f, pauseSeconds = 2.f, summaryEvery = 10.f;
+    // A step over spikeSeconds is counted in the summary; one over lineSeconds also gets a line of its own
+    // (the G1 playtest wrote 1,100 lines in 20 minutes at 50 ms: the summary now carries the rest).
+    static constexpr float spikeSeconds = .05f, lineSeconds = .1f, pauseSeconds = 2.f, summaryEvery = 10.f;
     // qpc: the sample's stamp (0: none). Writes lines into `out` (count of lines returned):
-    // "game frame: spike ..." for a step over spikeSeconds, and a summary every summaryEvery of
+    // "game frame: spike ..." for a step over lineSeconds, and a summary every summaryEvery of
     // game time. wall: seconds since the last call (the reader's own clock), to pace summaries.
     struct Lines {
         char text[2][200]{};
@@ -190,11 +195,12 @@ class GameFrameClock {
                         ++spikes_;
                         ++spikesTotal_;
                         worstTotal_ = std::max(worstTotal_, gap);
-                        std::snprintf(out.text[out.count++], sizeof out.text[0],
-                                      "game frame: spike %d ms between game steps (spike %u, steps %llu; "
-                                      "the swing sample, the game thread's own cadence)",
-                                      static_cast<int>(gap * 1000 + .5f), spikesTotal_,
-                                      static_cast<unsigned long long>(steps_));
+                        if (gap > lineSeconds)
+                            std::snprintf(out.text[out.count++], sizeof out.text[0],
+                                          "game frame: spike %d ms between game steps (spike %u, steps %llu; "
+                                          "the swing sample, the game thread's own cadence)",
+                                          static_cast<int>(gap * 1000 + .5f), spikesTotal_,
+                                          static_cast<unsigned long long>(steps_));
                     }
                 }
             }
@@ -226,4 +232,71 @@ class GameFrameClock {
     float total_{}, longest_{}, worstTotal_{}, sinceSummary_{};
     unsigned spikes_{}, spikesTotal_{};
 };
+
+// What the mod's game-thread step cost, in microseconds, over a window of game time (QPC). `add` takes one
+// visit's cost, the solver's share of it, and the kick blocks' share, plus the hitch guards' cumulative
+// counters (a counter that went down was reset: the new value counts whole). Returns true when a window
+// closed; `done()` is then that window's account.
+class CostWindow {
+  public:
+    static constexpr double windowSeconds = 10.;
+    struct Window {
+        double seconds{};
+        uint32_t visits{}, over1ms{}, over5ms{}, rejected{}, ignored{};
+        float meanUs{}, maxUs{}, solverMaxUs{}, kickMaxUs{};
+    };
+    bool add(uint64_t qpc, int64_t frequency, double visitUs, double solverUs, double kickUs, uint32_t rejected,
+             uint32_t ignored) {
+        if (!qpc || frequency <= 0 || !std::isfinite(visitUs))
+            return false;
+        if (!started_) {
+            started_ = true;
+            start_ = qpc;
+            rejectedAt_ = rejected;
+            ignoredAt_ = ignored;
+        }
+        ++visits_;
+        total_ += visitUs;
+        max_ = std::max(max_, visitUs);
+        solverMax_ = std::max(solverMax_, std::isfinite(solverUs) ? solverUs : 0.);
+        kickMax_ = std::max(kickMax_, std::isfinite(kickUs) ? kickUs : 0.);
+        over1ms_ += visitUs > 1000.;
+        over5ms_ += visitUs > 5000.;
+        const double seconds = qpc > start_ ? static_cast<double>(qpc - start_) / static_cast<double>(frequency) : 0.;
+        if (seconds < windowSeconds)
+            return false;
+        done_.seconds = seconds;
+        done_.visits = visits_;
+        done_.over1ms = over1ms_;
+        done_.over5ms = over5ms_;
+        done_.rejected = rejected >= rejectedAt_ ? rejected - rejectedAt_ : rejected;
+        done_.ignored = ignored >= ignoredAt_ ? ignored - ignoredAt_ : ignored;
+        done_.meanUs = visits_ ? static_cast<float>(total_ / visits_) : 0.f;
+        done_.maxUs = static_cast<float>(max_);
+        done_.solverMaxUs = static_cast<float>(solverMax_);
+        done_.kickMaxUs = static_cast<float>(kickMax_);
+        started_ = false;
+        visits_ = over1ms_ = over5ms_ = 0;
+        total_ = max_ = solverMax_ = kickMax_ = 0;
+        return true;
+    }
+    const Window& done() const {
+        return done_;
+    }
+
+  private:
+    bool started_{};
+    uint64_t start_{};
+    uint32_t visits_{}, over1ms_{}, over5ms_{}, rejectedAt_{}, ignoredAt_{};
+    double total_{}, max_{}, solverMax_{}, kickMax_{};
+    Window done_{};
+};
+// The account as the diag's line (one per window).
+inline void costLine(const CostWindow::Window& w, char* out, size_t size) {
+    std::snprintf(out, size,
+                  "game thread cost: %.1f s, %u mod steps, mean %.0f us, longest %.0f us (solver %.0f us, kicks %.0f us), "
+                  "%u over 1 ms, %u over 5 ms; hitch guard: %u velocity samples held, %u over-limit frames ignored",
+                  w.seconds, w.visits, w.meanUs, w.maxUs, w.solverMaxUs, w.kickMaxUs, w.over1ms, w.over5ms,
+                  w.rejected, w.ignored);
+}
 } // namespace spidy::hitch_guard

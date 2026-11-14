@@ -661,6 +661,16 @@ struct SwingKickLive {
     uint32_t autoOff{}, reserved{};
 };
 static_assert(sizeof(SwingKickLive) == 104);
+// SpidySwingCostLive: what the swing module cost the game thread, one account per 10 s window (hitch_guard.hpp
+// CostWindow), for XR's "game thread cost:" diag line. `window` counts up last (read it, then the rest, then
+// `window` again: a change in between means the account was being written). Times are microseconds.
+struct SwingCostLive {
+    uint32_t magic = 0x53574353, version = 1, bytes = sizeof(SwingCostLive), window{};
+    uint32_t visits{}, over1ms{}, over5ms{}, rejected{}, ignored{};
+    float seconds{}, meanUs{}, maxUs{}, solverMaxUs{}, kickMaxUs{};
+    uint32_t reserved[2]{};
+};
+static_assert(sizeof(SwingCostLive) == 64);
 // Side channel from XR (AIR KICKS, air_kick.hpp, K2): the settings, sent whenever they change and again every
 // second, and on a flick the ask (`serial` new): `gesture` (air_kick::Gesture, 1 dive, 2 double, 3 roundhouse,
 // 4 freeform, 5 sweep: GROUND KICKS, K3), `side` (-1 left, +1 right) and `angle` (degrees from up) of the flick, the eyes' offset from the
