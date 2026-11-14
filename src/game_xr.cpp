@@ -23,6 +23,7 @@
 #include "spidy/air_kick.hpp"
 #include "spidy/ground_kick.hpp"
 #include "spidy/game_fp.hpp"
+#include "spidy/game_joints.hpp"
 #include "spidy/web_aim.hpp"
 #include "spidy/game_grab.hpp"
 #include "spidy/game_lines.hpp"
@@ -1438,7 +1439,8 @@ DWORD WINAPI run(void*) {
         float airSentAge{}, airAngle{}, airSeconds{};
         // GROUND KICKS: the player stands slow with the setting on (this frame); the kick under way began
         // standing, and its foot from the feet (the swing's account).
-        bool groundStand{}, airOnGround{};
+        bool groundStand{}, airOnGround{}, airZoneByJoints{};
+        uint32_t jointNamedSeen = ~0u, jointValidSeen = ~0u;
         Vec3 airFoot{};
         air_kick::Gesture airGesture{};
         int airSide{};
@@ -2622,7 +2624,8 @@ DWORD WINAPI run(void*) {
                         }
                         ask.serial = airSerial;
                         ask.flags = (values.kicks ? 1u : 0u) | (legHoldOut.engaged ? 2u : 0u) |
-                                    (values.groundKicks ? 4u : 0u);
+                                    (values.groundKicks ? 4u : 0u) | (values.enemyJoints ? 8u : 0u) |
+                                    (values.enemyJoints && values.enemyLimbZones ? 16u : 0u);
                         ask.gesture = static_cast<uint32_t>(flick.gesture);
                         ask.side = flick.side;
                         ask.angle = flick.angle;
@@ -5211,6 +5214,25 @@ DWORD WINAPI run(void*) {
                             airState = al->state;
                             const uint32_t gestureRaw = al->gesture, zoneRaw = al->zone;
                             airGesture = static_cast<air_kick::Gesture>(std::min<uint32_t>(gestureRaw, 5));
+                            // ENEMY JOINTS: what the swing's reads found, once per change (which of the hero's
+                            // joint names an enemy's rig has: the probe's question, answered by the game log).
+                            if (const uint32_t named = al->jointNamed, valid = al->jointValid, reads = al->jointReads;
+                                reads != 0 && (named != jointNamedSeen || valid != jointValidSeen)) {
+                                jointNamedSeen = named;
+                                jointValidSeen = valid;
+                                char have[160]{}, lack[160]{};
+                                for (int r = 0; r < enemy_joints::roleCount; ++r) {
+                                    char* into = (named & (1u << r)) ? have : lack;
+                                    std::strncat(into, enemy_joints::roleNames[r], 12);
+                                    std::strncat(into, " ", 2);
+                                }
+                                diag_log::writef("enemy joints: a rig of %u joints names [%s] and lacks [%s]; read %#x; "
+                                                 "(reads %u, no head+chest %u, last why: %s)",
+                                                 al->jointCount, have, lack, valid, reads, al->jointMisses,
+                                                 game_joints::failureName(
+                                                     static_cast<game_joints::Failure>(al->jointWhy)));
+                            }
+                            airZoneByJoints = (al->reserved & 2u) != 0;
                             airOnGround = (al->reserved & 1u) != 0 && airState != 0;
                             airFoot = {al->footX, al->footY, al->footZ};
                             airSide = al->side;
@@ -5220,17 +5242,18 @@ DWORD WINAPI run(void*) {
                                 airEventsSeen = events;
                                 const uint32_t what = al->lastEvent;
                                 const unsigned long long who = al->target;
-                                const auto zone = static_cast<air_kick::Zone>(std::min<uint32_t>(zoneRaw, 2));
+                                const auto zone = static_cast<air_kick::Zone>(std::min<uint32_t>(zoneRaw, 3));
                                 const auto gesture = airGesture;
                                 if (what == 1)
                                     diag_log::writef("kick: %s start zone=%s target=%llu",
                                                      air_kick::gestureName(gesture), air_kick::zoneName(zone), who);
                                 else if (what == 2)
-                                    diag_log::writef("kick: %s hit foot=%.1f zone=%s strength=%.2f target=%llu "
-                                                     "(started %u, hits %u, flies %u, misses %u)",
+                                    diag_log::writef("kick: %s hit foot=%.1f zone=%s (%s) strength=%.2f target=%llu "
+                                                     "(started %u, hits %u, flies %u, misses %u; zones by joints %u)",
                                                      air_kick::gestureName(gesture), al->foot,
-                                                     air_kick::zoneName(zone), al->strength, who, al->started,
-                                                     al->hits, al->flies, al->misses);
+                                                     air_kick::zoneName(zone), airZoneByJoints ? "joints" : "bands",
+                                                     al->strength, who, al->started, al->hits, al->flies,
+                                                     al->misses, al->jointZones);
                                 else if (what == 3)
                                     diag_log::writef("kick: %s miss (started %u, hits %u, misses %u)",
                                                      air_kick::gestureName(gesture), al->started, al->hits,

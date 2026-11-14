@@ -764,7 +764,8 @@ int main() {
             if (key.rfind("hand_grab", 0) == 0 || key == "enemy_hold_cost")
                 continue;
             // AIR KICKS (K2, November 14): experimental, the player's own.
-            if (key == "kicks" || key.rfind("kick_", 0) == 0 || key == "ground_kicks")
+            if (key == "kicks" || key.rfind("kick_", 0) == 0 || key == "ground_kicks" ||
+                key == "enemy_joints" || key == "enemy_limb_zones")
                 continue;
             // PHYSICAL WEB TETHERS (W1, November 14): experimental, the player's own.
             if (key == "physical_tethers" || key.rfind("tether_", 0) == 0)

@@ -841,6 +841,10 @@ template <class V> auto switchOf(Item item, V& v) -> decltype(&v.aimMarkers) {
         return &v.kicks;
     case Item::groundKicks:
         return &v.groundKicks;
+    case Item::enemyJoints:
+        return &v.enemyJoints;
+    case Item::enemyLimbZones:
+        return &v.enemyLimbZones;
     case Item::physicalTethers:
         return &v.physicalTethers;
     case Item::legAirCrouch:
@@ -1007,9 +1011,9 @@ Values sanitized(Values v) {
     v.automaticHandThreshold = std::clamp(v.automaticHandThreshold, 50, 300);
     return v;
 }
-const std::array<Row, 184>& rows() {
+const std::array<Row, 186>& rows() {
     // The help fits the game's description column beside the rows.
-    static const std::array<Row, 184> all{{
+    static const std::array<Row, 186> all{{
         {Item::none, "WEBS", nullptr, {}},
         {Item::webStyle, "WEB STYLE",
          "Arcade: webs pass lamp posts, signs and cars, and swings stay above the street.", webStyleChoices},
@@ -1488,6 +1492,16 @@ const std::array<Row, 184>& rows() {
          "Standing, Y+X, flick the right stick: front kick, side kick or a leg sweep.",
          {},
          Place::launcher},
+        {Item::enemyJoints,
+         "ENEMY JOINTS (EXPERIMENTAL)",
+         "Kicks use an enemy's own head and chest joints for zones, not just his height.",
+         {},
+         Place::launcher},
+        {Item::enemyLimbZones,
+         "ENEMY LIMB ZONES (EXPERIMENTAL)",
+         "Arms and legs from his joints. Run probe_c0_skeleton.py first: untested.",
+         {},
+         Place::launcher},
         {Item::wallBrake,
          "WALL BRAKE (EXPERIMENTAL)",
          "On a wall, squeeze a grip with your palm on it to brake a slide, then hold on.",
@@ -1638,6 +1652,7 @@ const std::array<Screen, categoryCount>& screens() {
         Item::legControl,      Item::legStiffness,    Item::legDamping,   Item::legCoupling,
         Item::passiveLegs,     Item::passiveCoupling, Item::legAirCrouch, Item::legReachSpread,
         Item::swingKickManual, Item::swingKickAuto, Item::kicks, Item::kickGazeCone, Item::kickSpin, Item::groundKicks,
+        Item::enemyJoints, Item::enemyLimbZones,
         Item::handstand, Item::handstandAssist, Item::handstandFall, Item::handstandPushGain,
         Item::handstandPushMax, Item::handstandHeight, Item::handstandGain, Item::handstandEyeDrop,
     };
@@ -1714,6 +1729,8 @@ const char* inactiveReason(Item item, const Values& v) {
         return !v.kicks && !v.groundKicks ? "Turn AIR KICKS or GROUND KICKS on first." : nullptr;
     case Item::kickSpin:
         return !v.kicks ? "Turn AIR KICKS on first." : nullptr;
+    case Item::enemyLimbZones:
+        return !v.enemyJoints ? "Turn ENEMY JOINTS on first." : nullptr;
     case Item::tetherParticles:
     case Item::tetherSubsteps:
         return !v.physicalTethers ? "Turn WEB TETHERS on first." : nullptr;
@@ -1782,6 +1799,7 @@ bool shownWhenInactive(Item item) {
     case Item::enemyHoldCost:
     case Item::kickGazeCone:
     case Item::kickSpin:
+    case Item::enemyLimbZones:
     case Item::tetherParticles:
     case Item::tetherSubsteps:
     case Item::legControl:
@@ -2329,6 +2347,8 @@ constexpr TabOnly tabOnly[] = {
     {"kick_gaze_cone_deg", nullptr, &Values::kickGazeConeDeg},
     {"kick_spin_pct", nullptr, &Values::kickSpinPct},
     {"ground_kicks", &Values::groundKicks, nullptr},
+    {"enemy_joints", &Values::enemyJoints, nullptr},
+    {"enemy_limb_zones", &Values::enemyLimbZones, nullptr},
     {"physical_tethers", &Values::physicalTethers, nullptr},
     {"tether_particles", nullptr, &Values::tetherParticles},
     {"tether_substeps", nullptr, &Values::tetherSubsteps},

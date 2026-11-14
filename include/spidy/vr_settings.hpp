@@ -579,6 +579,12 @@ struct Values {
     // while the animation owns the body (ANIMATED moves); the blow lands either way. kick_gaze_cone_deg aims
     // these too.
     bool groundKicks = false;
+    // ENEMY JOINTS (R1, enemy_joints.hpp; November 14), EXPERIMENTAL: off until set. enemy_joints: a kick (air
+    // or ground) reads the enemy's head and chest joints, so the zone it aims at and the zone it hits are the
+    // enemy's own, not a capsule's bands (the bands remain the fallback for any joint a rig lacks).
+    // enemy_limb_zones: also the legs from the shins and the arms from the forearms; leave it off until
+    // probe_c0_skeleton.py has said READABLE on your game (no enemy's limb joint has been read yet).
+    bool enemyJoints = false, enemyLimbZones = false;
     // PHYSICAL WEB TETHERS (W1, tether.hpp; November 14), EXPERIMENTAL: off until set. physical_tethers: a
     // simulated rope on each web (a held line sags and drapes), a whip of the hand jerks what is on it, circling
     // the hand turns it round you, and a throw with the trigger held keeps the line, paid out by the trigger.
@@ -862,6 +868,8 @@ enum class Item : uint8_t {
     kickGazeCone,
     kickSpin,
     groundKicks,
+    enemyJoints,
+    enemyLimbZones,
     physicalTethers,
     tetherParticles,
     tetherSubsteps,
@@ -896,7 +904,7 @@ struct Row {
     Place place{};
 };
 // Stable row/setting numbers; categories below determine presentation order.
-const std::array<Row, 184>& rows();
+const std::array<Row, 186>& rows();
 const Row* rowFor(Item);
 // camera, shooters and legs (November 11, the user: "I can't find legs or
 // camera settings in any of the menus. Make sure it's clearly labeled"): tabs

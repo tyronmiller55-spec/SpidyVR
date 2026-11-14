@@ -21,6 +21,7 @@
 #include "spidy/web_aim.hpp"
 #include "spidy/sidestep.hpp"
 #include "spidy/air_kick.hpp"
+#include "spidy/game_joints.hpp"
 #include "spidy/swing_kick.hpp"
 #include <atomic>
 #include <cstring>
@@ -1476,6 +1477,10 @@ void visit(const native_rays::QueryContext& world) {
         volatile AirKickLive& live = SpidyAirKickLive;
         air_kick::Config ac;
         ac.gazeCone = ask.gazeCone;
+        // ENEMY JOINTS (R1; off by default): the zones from the enemies' own joints, the limb zones only with
+        // their own setting.
+        const bool readJoints = (ask.flags & 8u) != 0;
+        ac.limbZones = readJoints && (ask.flags & 16u) != 0;
         airKickState.configure(ac);
         const float scale = game_punch::worldScale();
         air_kick::Kick::Frame af;
@@ -1498,10 +1503,33 @@ void visit(const native_rays::QueryContext& world) {
             for (size_t i = 0; i < count; ++i)
                 targets[i] = {candidates[i].id, candidates[i].feet, candidates[i].height, candidates[i].radius};
         }
-        af.targets = {targets.data(), count};
         using Event = air_kick::Kick::Event;
         air_kick::Kick::Output ao;
         const bool flicked = waiting && flickAsk.gesture != 0 && GetTickCount64() - askedAt <= airKickMaxAgeMs;
+        // ENEMY JOINTS: read the nearest few enemies' joints only for a kick being asked or under way (not
+        // every step), within 3.5 m of the feet.
+        if (readJoints && (flicked || airKickState.busy())) {
+            size_t reads = 0;
+            for (size_t i = 0; i < count && reads < 6; ++i) {
+                if (length(targets[i].feet - at) > 3.5f)
+                    continue;
+                ++reads;
+                game_joints::Read joints;
+                game_joints::Failure why{};
+                const bool ok = game_joints::read(targets[i].id, ac.limbZones, joints, &why);
+                live.jointReads = live.jointReads + 1;
+                live.jointNamed = joints.named;
+                live.jointCount = joints.count;
+                live.jointValid = joints.joints.valid;
+                if (ok) {
+                    targets[i].joints = joints.joints;
+                } else {
+                    live.jointMisses = live.jointMisses + 1;
+                    live.jointWhy = static_cast<uint32_t>(why);
+                }
+            }
+        }
+        af.targets = {targets.data(), count};
         if (flicked) {
             live.asked = live.asked + 1;
             // The swing kick armed (this step or before) keeps the flick.
@@ -1514,6 +1542,7 @@ void visit(const native_rays::QueryContext& world) {
             live.gesture = static_cast<uint32_t>(ao.gesture);
             live.side = ao.side;
             live.zone = static_cast<uint32_t>(ao.zone);
+            live.reserved = (live.reserved & ~2u) | (ao.byJoints ? 2u : 0u); // the event's zone: joints, not bands
             live.target = ao.target;
             live.foot = ao.foot;
             live.strength = ao.strength;
@@ -1542,6 +1571,8 @@ void visit(const native_rays::QueryContext& world) {
             account();
             if (blow) {
                 live.hits = live.hits + 1;
+                if (ao.byJoints)
+                    live.jointZones = live.jointZones + 1;
                 if (ao.fly)
                     live.flies = live.flies + 1;
             } else {
@@ -1564,7 +1595,7 @@ void visit(const native_rays::QueryContext& world) {
             live.footZ = foot.z;
         }
         live.speed = af.speed;
-        live.reserved = airKickState.busy() && airKickState.onGround() ? 1u : 0u;
+        live.reserved = (live.reserved & ~1u) | (airKickState.busy() && airKickState.onGround() ? 1u : 0u);
         kickBusy.store(kickState.busy() || airKickState.busy(), std::memory_order_relaxed);
     }
     // A press aimed at something a web can catch belongs to the grab: the

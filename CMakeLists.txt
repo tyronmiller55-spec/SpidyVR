@@ -86,6 +86,12 @@ add_executable(spidy_ground_kick_tests tests/ground_kick_tests.cpp)
 target_link_libraries(spidy_ground_kick_tests PRIVATE spidy_core)
 add_test(NAME ground_kick COMMAND spidy_ground_kick_tests)
 
+# ENEMY JOINTS (enemy_joints.hpp): the name hash, the roles in a joint table, a joint in the world, the zones from
+# joints with the bands as the fallback and the limb zones gated (portable).
+add_executable(spidy_enemy_joints_tests tests/enemy_joints_tests.cpp)
+target_link_libraries(spidy_enemy_joints_tests PRIVATE spidy_core)
+add_test(NAME enemy_joints COMMAND spidy_enemy_joints_tests)
+
 # PHYSICAL WEB TETHERS (tether.hpp): the XPBD rope, whip, spin, payout and the web grab's use of them (portable).
 add_executable(spidy_tether_tests tests/tether_tests.cpp)
 target_link_libraries(spidy_tether_tests PRIVATE spidy_core)
@@ -230,7 +236,7 @@ if(SPIDY_BUILD_OBSERVER)
   add_library(spidy_ray_bridge SHARED src/native_rays.cpp src/game_swing.cpp src/game_targets.cpp
               src/game_grab.cpp src/native_bodies.cpp src/game_punch.cpp src/game_shooter.cpp
               src/game_warp.cpp src/game_offers.cpp src/game_sense.cpp src/game_focus.cpp
-              src/game_sound.cpp src/game_throw.cpp src/game_dodge.cpp)
+              src/game_sound.cpp src/game_throw.cpp src/game_dodge.cpp src/game_joints.cpp)
   target_include_directories(spidy_ray_bridge PRIVATE include)
   target_compile_definitions(spidy_ray_bridge PRIVATE WIN32_LEAN_AND_MEAN NOMINMAX)
   target_compile_options(spidy_ray_bridge PRIVATE /W4 /permissive-)

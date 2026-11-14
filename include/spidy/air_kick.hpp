@@ -27,6 +27,7 @@
 //
 // Engine independent. XR detects the gesture (Gestures) and asks (game_swing::AirKickAsk); the swing module
 // runs the kick (Kick) and lands it; XR poses the legs from its account (legPose).
+#include "enemy_joints.hpp"
 #include "leg_control.hpp"
 #include "math.hpp"
 #include "swing_kick.hpp"
@@ -56,9 +57,10 @@ inline const char* gestureName(Gesture g) {
         return "none";
     }
 }
-enum class Zone : std::uint8_t { head, chest, legs };
+// arms: only with ENEMY LIMB ZONES (R1), from an enemy's forearm joints; never from the capsule.
+enum class Zone : std::uint8_t { head, chest, legs, arms };
 inline const char* zoneName(Zone z) {
-    return z == Zone::head ? "head" : z == Zone::legs ? "legs" : "chest";
+    return z == Zone::head ? "head" : z == Zone::legs ? "legs" : z == Zone::arms ? "arms" : "chest";
 }
 
 struct Config {
@@ -98,6 +100,9 @@ struct Config {
     float groundSpeed = 2.f, groundSlack = 1.5f;
     float sweepReach = .9f, sweepHeight = .12f, sweepArc = 180.f, sweepExtend = .35f;
     float groundFlightShare = .5f, groundFlightMax = 6.f, groundFlightUp = .5f;
+    // ENEMY LIMB ZONES (R1, enemy_joints.hpp): the legs and the arms from an enemy's shin and forearm joints
+    // (a Target's joints); off, the legs are the capsule's band and there is no arms zone.
+    bool limbZones = false;
 };
 // The same, standing: no lunge.
 inline Config standingConfig(Config c) {
@@ -214,6 +219,42 @@ inline Vec3 zonePoint(Vec3 feet, float height, Zone z) {
     const float share = z == Zone::head ? .9f : z == Zone::legs ? .2f : .65f;
     return feet + Vec3{0, height * share, 0};
 }
+// The same for an enemy whose joints were read (R1): the joint's own place where it has one (the head and chest
+// points; with the limb zones the nearer shin or forearm to `ref`), else the capsule's band. `byJoints` says
+// which.
+inline Vec3 zonePoint(Vec3 feet, float height, Zone z, const enemy_joints::Joints& joints, bool limbs, Vec3 ref,
+                      bool* byJoints = nullptr) {
+    Vec3 on;
+    if (joints.valid && enemy_joints::partPoint(joints, static_cast<int>(z), limbs, ref, on)) {
+        if (byJoints)
+            *byJoints = true;
+        return on;
+    }
+    if (byJoints)
+        *byJoints = false;
+    return zonePoint(feet, height, z == Zone::arms ? Zone::chest : z);
+}
+// The zone a hit at `point` met on an enemy: from his joints when they give a head and a chest (the nearest
+// of head, chest and, with the limb zones, forearms and shins; without them the band under 35 % is the legs),
+// else the capsule's bands (zoneAt of the height share).
+inline Zone zoneOfHit(Vec3 feet, float height, Vec3 point, const enemy_joints::Joints& joints, bool limbs,
+                      bool* byJoints = nullptr) {
+    const float share = std::clamp((point.y - feet.y) / std::max(height, .5f), 0.f, 1.f);
+    if (byJoints)
+        *byJoints = false;
+    if (joints.valid) {
+        const int part = enemy_joints::partOfHit(joints, point, limbs);
+        if (part >= 0) {
+            if (byJoints)
+                *byJoints = true;
+            // The legs without the limb zones: the band (a shin joint is not read for them).
+            if (!limbs && part != enemy_joints::partHead && share < .35f)
+                return Zone::legs;
+            return static_cast<Zone>(part);
+        }
+    }
+    return zoneAt(share);
+}
 // The zones a gesture goes for, nearest to the gaze among them: the dives the chest, a one-leg dive the
 // chest or the head, the roundhouse the head, a freeform blow any.
 inline std::uint32_t zonesFor(Gesture g) {
@@ -227,7 +268,7 @@ inline std::uint32_t zonesFor(Gesture g) {
     case Gesture::roundhouse:
         return 1u << static_cast<int>(Zone::head);
     default:
-        return 7u;
+        return 7u; // (a freeform blow may also go for the arms, 8, with the limb zones: Kick::ask)
     }
 }
 // The gaze's weight on a zone point: smoothstep(cos 25, cos 8, gaze . (point - eye)^).
@@ -397,6 +438,8 @@ class Kick {
         std::uint64_t id{};
         Vec3 feet{};
         float height = 1.8f, radius = .3f;
+        // ENEMY JOINTS (R1): his joints in the world when they were read (valid is 0 otherwise: the bands).
+        enemy_joints::Joints joints{};
     };
     struct Frame {
         float seconds{}; // real
@@ -420,6 +463,7 @@ class Kick {
         Zone zone = Zone::chest;
         float foot{}, strength{};
         bool fly{}, lost{};
+        bool byJoints{}; // the zone (the hit's, or the one asked for) came from his joints, not the bands
         Vec3 point{}, way{}, enemy{};
     };
     explicit Kick(Config c = {}) : config_(c) {}
@@ -505,12 +549,19 @@ class Kick {
         zone_ = Zone::chest;
         float best = 0;
         const Vec3 pelvis = f.feet + Vec3{0, c.hipHeight, 0};
-        const std::uint32_t zones = zonesFor(gesture_);
+        std::uint32_t zones = zonesFor(gesture_);
+        if (c.limbZones && zones == 7u)
+            zones |= 8u;
+        bool askedByJoints = false;
         for (const auto& t : f.targets) {
-            for (int z = 0; z < 3; ++z) {
+            for (int z = 0; z < (c.limbZones ? 4 : 3); ++z) {
                 if (!(zones & (1u << z)))
                     continue;
-                const Vec3 p = zonePoint(t.feet, t.height, static_cast<Zone>(z));
+                // The arms are a joint zone only: an enemy whose forearms were not read has none.
+                if (z == static_cast<int>(Zone::arms) && !enemy_joints::hasPart(t.joints, enemy_joints::partArms, true))
+                    continue;
+                bool byJoints = false;
+                const Vec3 p = zonePoint(t.feet, t.height, static_cast<Zone>(z), t.joints, c.limbZones, gazeRef(t), &byJoints);
                 if (length(p - pelvis) > (gesture_ == Gesture::sweep ? c.sweepReach + c.footRadius : c.reach + c.lunge) +
                                              t.radius)
                     continue;
@@ -527,12 +578,14 @@ class Kick {
                     best = w;
                     target_ = t.id;
                     zone_ = static_cast<Zone>(z);
+                    askedByJoints = byJoints;
                 }
             }
         }
         out.event = Event::started;
         out.target = target_;
         out.zone = zone_;
+        out.byJoints = askedByJoints && target_ != 0;
         return out;
     }
     // One step.
@@ -568,7 +621,7 @@ class Kick {
             if (gesture_ == Gesture::sweep)
                 foot = Vec3{foot.x, f.feet.y + c.sweepHeight, foot.z}; // low: the sweep takes the legs
             if (chosen && gesture_ != Gesture::roundhouse && gesture_ != Gesture::sweep) {
-                const Vec3 p = zonePoint(chosen->feet, chosen->height, zone_);
+                const Vec3 p = zonePoint(chosen->feet, chosen->height, zone_, chosen->joints, c.limbZones, gazeRef(*chosen));
                 foot = bentFoot(pelvis, foot, p, gazeWeight(gaze_, eye_, p, c), c);
             }
             const Vec3 from = footSet_ ? lastFoot_ : foot;
@@ -589,8 +642,7 @@ class Kick {
                     const Vec3 way = length(foot - from) > 1e-4f ? normalized(foot - from) : gaze_;
                     out.way = way;
                     out.point = foot;
-                    out.zone =
-                        zoneAt(std::clamp((foot.y - met->feet.y) / std::max(met->height, .5f), 0.f, 1.f));
+                    out.zone = zoneOfHit(met->feet, met->height, foot, met->joints, c.limbZones, &out.byJoints);
                     out.strength = strengthOf(speed, c);
                     out.fly = flies(out.strength, c);
                     out.enemy = !out.fly ? Vec3{}
@@ -614,6 +666,11 @@ class Kick {
     }
 
   private:
+    // Where the gaze passes his middle: which of his two arms or legs a limb zone means (the nearer to it).
+    Vec3 gazeRef(const Target& t) const {
+        const Vec3 mid = t.feet + Vec3{0, t.height * .5f, 0};
+        return eye_ + gaze_ * std::max(0.f, dot(mid - eye_, gaze_));
+    }
     static Vec3 turned(Vec3 v, float yaw) {
         const float c = std::cos(yaw), s = std::sin(yaw);
         return {v.x * c - v.z * s, v.y, v.x * s + v.z * c}; // + yaw turns toward +x, the right
