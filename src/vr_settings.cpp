@@ -307,6 +307,13 @@ static_assert(std::size(kickGazeConeChoices) == std::size(kickGazeConeSteps));
 constexpr int kickSpinSteps[] = {0, 10, 20, 30, 40, 60, 80, 100};
 constexpr const char* kickSpinChoices[] = {"NONE", "10%", "20%", "30% (DEFAULT)", "40%", "60%", "80%", "100%"};
 static_assert(std::size(kickSpinChoices) == std::size(kickSpinSteps));
+// PHYSICAL WEB TETHERS (tether.hpp): the rope's points and its steps a frame.
+constexpr int tetherParticleSteps[] = {12, 16, 20, 24, 28, 32};
+constexpr const char* tetherParticleChoices[] = {"12", "16", "20", "24 (DEFAULT)", "28", "32"};
+static_assert(std::size(tetherParticleChoices) == std::size(tetherParticleSteps));
+constexpr int tetherSubstepSteps[] = {4, 6, 8, 10, 12, 16};
+constexpr const char* tetherSubstepChoices[] = {"4", "6", "8 (DEFAULT)", "10", "12", "16"};
+static_assert(std::size(tetherSubstepChoices) == std::size(tetherSubstepSteps));
 constexpr int cameraVrStabilizationSteps[] = {0, 1};
 constexpr const char* cameraVrStabilizationChoices[] = {"OFF", "ON"};
 static_assert(std::size(cameraVrStabilizationChoices) == std::size(cameraVrStabilizationSteps));
@@ -438,6 +445,10 @@ std::span<const int> steps(Item item) {
         return kickGazeConeSteps;
     case Item::kickSpin:
         return kickSpinSteps;
+    case Item::tetherParticles:
+        return tetherParticleSteps;
+    case Item::tetherSubsteps:
+        return tetherSubstepSteps;
     case Item::steadyAngle:
         return steadySmoothSteps;
     case Item::steadyHorizontal:
@@ -643,6 +654,10 @@ float numberOf(Item item, const Values& v) {
         return static_cast<float>(v.kickGazeConeDeg);
     case Item::kickSpin:
         return static_cast<float>(v.kickSpinPct);
+    case Item::tetherParticles:
+        return static_cast<float>(v.tetherParticles);
+    case Item::tetherSubsteps:
+        return static_cast<float>(v.tetherSubsteps);
     case Item::steadyAngle:
         return static_cast<float>(v.steadyAngleMs);
     case Item::steadyHorizontal:
@@ -824,6 +839,8 @@ template <class V> auto switchOf(Item item, V& v) -> decltype(&v.aimMarkers) {
         return &v.handGrab;
     case Item::kicks:
         return &v.kicks;
+    case Item::physicalTethers:
+        return &v.physicalTethers;
     case Item::legAirCrouch:
         return &v.legAirCrouch;
     case Item::legReachSpread:
@@ -977,6 +994,8 @@ Values sanitized(Values v) {
     v.enemyHoldCost = std::clamp(v.enemyHoldCost, 0, 5);
     v.kickGazeConeDeg = std::clamp(v.kickGazeConeDeg, 10, 50);
     v.kickSpinPct = std::clamp(v.kickSpinPct, 0, 100);
+    v.tetherParticles = std::clamp(v.tetherParticles, 8, 32);
+    v.tetherSubsteps = std::clamp(v.tetherSubsteps, 2, 16);
     v.handstandFallDegrees = std::clamp(v.handstandFallDegrees, 15, 60);
     v.handstandHeightCm = std::clamp(v.handstandHeightCm, 60, 140);
     v.handstandGainPct = std::clamp(v.handstandGainPct, 50, 600);
@@ -986,9 +1005,9 @@ Values sanitized(Values v) {
     v.automaticHandThreshold = std::clamp(v.automaticHandThreshold, 50, 300);
     return v;
 }
-const std::array<Row, 180>& rows() {
+const std::array<Row, 183>& rows() {
     // The help fits the game's description column beside the rows.
-    static const std::array<Row, 180> all{{
+    static const std::array<Row, 183> all{{
         {Item::none, "WEBS", nullptr, {}},
         {Item::webStyle, "WEB STYLE",
          "Arcade: webs pass lamp posts, signs and cars, and swings stay above the street.", webStyleChoices},
@@ -1483,6 +1502,17 @@ const std::array<Row, 180>& rows() {
         {Item::enemyHoldCost, "HAND GRAB HOLD COST",
          "How fast holding an enemy tires your hand; a heavy one much faster.",
          enemyHoldCostChoices, Place::launcher},
+        {Item::physicalTethers,
+         "WEB TETHERS (EXPERIMENTAL)",
+         "Whip, spin or throw what a web holds; a trigger-held throw keeps the line.",
+         {},
+         Place::launcher},
+        {Item::tetherParticles, "TETHER POINTS",
+         "How many points the rope is simulated with. More is smoother, costs more.",
+         tetherParticleChoices, Place::launcher},
+        {Item::tetherSubsteps, "TETHER STEPS",
+         "How many steps a frame the rope takes. More is stiffer and costs more.",
+         tetherSubstepChoices, Place::launcher},
         {Item::handstand,
          "HANDSTAND (EXPERIMENTAL)",
          "Catch a handstand: land inverted, both palms on a floor. Needs REALISTIC FLIPS.",
@@ -1544,6 +1574,7 @@ const std::array<Screen, categoryCount>& screens() {
         Item::handClimb, Item::joystickRunCamera, Item::wallRunCameraTilt, Item::combatResponsive,
         Item::combatVisuals, Item::halfPunchDamage, Item::airFists, Item::runLogs,
         Item::wallBrake, Item::gripFling, Item::handGrab, Item::handGrabForce, Item::enemyHoldCost,
+        Item::physicalTethers, Item::tetherParticles, Item::tetherSubsteps,
     };
     static constexpr Item flips[] = {
         Item::realisticFlips, Item::flips, Item::controlledFlips, Item::flipSpeed,
@@ -1675,6 +1706,9 @@ const char* inactiveReason(Item item, const Values& v) {
     case Item::kickGazeCone:
     case Item::kickSpin:
         return !v.kicks ? "Turn AIR KICKS on first." : nullptr;
+    case Item::tetherParticles:
+    case Item::tetherSubsteps:
+        return !v.physicalTethers ? "Turn WEB TETHERS on first." : nullptr;
     case Item::legControl:
         return !v.controlledFlips && !v.realisticFlips
                    ? "Needs CONTROLLED or REALISTIC FLIPS. ON here turns CONTROLLED FLIPS on."
@@ -1740,6 +1774,8 @@ bool shownWhenInactive(Item item) {
     case Item::enemyHoldCost:
     case Item::kickGazeCone:
     case Item::kickSpin:
+    case Item::tetherParticles:
+    case Item::tetherSubsteps:
     case Item::legControl:
     case Item::legStiffness:
     case Item::legDamping:
@@ -2017,6 +2053,12 @@ bool choose(Item item, int index, Values& v) {
     case Item::kickSpin:
         v.kickSpinPct = s[index];
         break;
+    case Item::tetherParticles:
+        v.tetherParticles = s[index];
+        break;
+    case Item::tetherSubsteps:
+        v.tetherSubsteps = s[index];
+        break;
     case Item::steadyAngle:
         v.steadyAngleMs = s[index];
         break;
@@ -2278,6 +2320,9 @@ constexpr TabOnly tabOnly[] = {
     {"kicks", &Values::kicks, nullptr},
     {"kick_gaze_cone_deg", nullptr, &Values::kickGazeConeDeg},
     {"kick_spin_pct", nullptr, &Values::kickSpinPct},
+    {"physical_tethers", &Values::physicalTethers, nullptr},
+    {"tether_particles", nullptr, &Values::tetherParticles},
+    {"tether_substeps", nullptr, &Values::tetherSubsteps},
     {"leg_air_crouch", &Values::legAirCrouch, nullptr},
     {"leg_reach_spread", &Values::legReachSpread, nullptr},
     {"air_fists", &Values::airFists, nullptr},

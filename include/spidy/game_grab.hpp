@@ -198,6 +198,23 @@ struct HandData {
     float lastMass{}, lastSpeed{};
 };
 HandData handData();
+// PHYSICAL WEB TETHERS (W1, tether.hpp; physical_tethers, tether_particles, tether_substeps), EXPERIMENTAL: a
+// simulated rope on each web, a whip, a spin and a throw that keeps its line. Off (as at a start): the lines
+// kept after a throw are let go of and every web is as it was.
+void tetherSettings(bool on, unsigned particles, unsigned substeps);
+// Its account (WebGrab::tetherReport) and each hand's line to draw (WebGrab::tetherView), for the swing's TetherLive.
+struct TetherLine {
+    uint32_t count{}, flags{}; // flags: bit 0 active, 1 spinning, 2 kept after a throw
+    float tension{};
+    Vec3 end{};
+    Vec3 points[6]{};
+};
+struct TetherData {
+    uint32_t whips{}, spins{}, slings{}, throws{}, cuts{}, lastAction{}, serial{};
+    float lastSpeed{};
+    TetherLine lines[2];
+};
+TetherData tetherData();
 // Whether this hand's squeeze belongs to the hand grab in this sample (WebGrab::handClaims): the swing
 // gives such a hand no wall grip.
 bool handClaims(unsigned hand, const Input&);

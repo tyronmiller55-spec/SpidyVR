@@ -572,6 +572,12 @@ struct Values {
     // kick_spin_pct: how much of the kick's spin reaction the legs' coupling keeps (30).
     bool kicks = false;
     int kickGazeConeDeg = 25, kickSpinPct = 30;
+    // PHYSICAL WEB TETHERS (W1, tether.hpp; November 14), EXPERIMENTAL: off until set. physical_tethers: a
+    // simulated rope on each web (a held line sags and drapes), a whip of the hand jerks what is on it, circling
+    // the hand turns it round you, and a throw with the trigger held keeps the line, paid out by the trigger.
+    // tether_particles: points in the rope (24). tether_substeps: its steps a frame (8).
+    bool physicalTethers = false;
+    int tetherParticles = 24, tetherSubsteps = 8;
     // PASSIVE LEGS (leg_layers.hpp; November 12 06:18): in SpidyVR's air with
     // LEG CONTROL not engaged, the legs' spring runs with no stick, so momentum
     // moves them; this share of it shown (0 OFF). 60 by default. passive_legs_pct.
@@ -848,8 +854,11 @@ enum class Item : uint8_t {
     kicks,
     kickGazeCone,
     kickSpin,
+    physicalTethers,
+    tetherParticles,
+    tetherSubsteps,
 };
-inline constexpr Item lastItem = Item::kickSpin;
+inline constexpr Item lastItem = Item::tetherSubsteps;
 // SLOW-MO LENGTH's last step: no time limit (until L3 toggles it off).
 inline constexpr int slowMotionEndless = 91;
 // Real seconds a full meter lasts for a SLOW-MO LENGTH value; 0 = endless.
@@ -879,7 +888,7 @@ struct Row {
     Place place{};
 };
 // Stable row/setting numbers; categories below determine presentation order.
-const std::array<Row, 180>& rows();
+const std::array<Row, 183>& rows();
 const Row* rowFor(Item);
 // camera, shooters and legs (November 11, the user: "I can't find legs or
 // camera settings in any of the menus. Make sure it's clearly labeled"): tabs

@@ -2291,6 +2291,25 @@ void App::options(ImVec2 origin, ImVec2 size) {
             "How fast holding an enemy tires your grip (none, 1, 2, 3 or 5): a normal enemy costs "
             "almost nothing at 1, a heavy one much more. None: it never tires. Needs Hand grab on.",
             S(150), [&] { tabCombo("##holdcost", Item::enemyHoldCost); });
+        settingOption(
+            Item::physicalTethers, "Web tethers (experimental)",
+            "A simulated rope on each web you hold on a prop or an enemy, so the line sags and drapes, drawn "
+            "in the game's own web. Snap your hand and the wave runs down the line and jerks what is on it "
+            "toward you (up to 14 m/s, less for a heavy one). Circle your hand and what is on the web orbits "
+            "you; let go and it is slung. Let go of the grip with the trigger held and the line pays out "
+            "after the prop: the trigger's depth brakes it, fully squeezed it locks, and letting go of the "
+            "trigger cuts it. A sharp pull yanks it back. Off by default.",
+            S(42), [&] { tabToggle("##webtethers", Item::physicalTethers); });
+        settingOption(
+            Item::tetherParticles, "Tether points",
+            "How many points the rope is simulated with (12 to 32). Drawing is at most 6 bends either way. "
+            "Needs Web tethers on.",
+            S(150), [&] { tabCombo("##tetherpoints", Item::tetherParticles); });
+        settingOption(
+            Item::tetherSubsteps, "Tether steps",
+            "How many steps a frame the rope takes (4 to 16). Fewer is cheaper and a little stretchier. "
+            "Needs Web tethers on.",
+            S(150), [&] { tabCombo("##tethersteps", Item::tetherSubsteps); });
         settingOption(Item::joystickRunCamera, "Joystick wall run camera",
                "On: a joystick run turns your view onto the wall, as before. Off: the left stick drives the "
                "momentum wall run's view and gait.",

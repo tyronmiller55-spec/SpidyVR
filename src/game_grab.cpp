@@ -925,6 +925,8 @@ void release(Tracked& t, bool thrown, Vec3 velocity, bool flung);
 // scripted scene) is steered on his mover. Down in the hand's hold (a flop, knocked out), nothing steers him
 // and the hand lets go of him after handDownSeconds.
 hand_grab::Config handConfig{};
+// PHYSICAL WEB TETHERS' settings as last accepted (tetherSettings).
+tether::Config tetherConfig{};
 uint64_t handKnocks{};
 constexpr float handDownSeconds = 1.5f;
 void carry(Tracked& t, const TargetCommand& c, float dt, const WorldQueries& world, bool flung, bool down,
@@ -1336,6 +1338,37 @@ void game_grab::handGrab(bool on, float force, float holdCost) {
         c.holdCost = std::clamp(holdCost, 0.f, 5.f);
     if (core.handGrab(c))
         handConfig = c;
+}
+void game_grab::tetherSettings(bool on, unsigned particles, unsigned substeps) {
+    tether::Config c = tetherConfig;
+    c.enabled = on;
+    c.particles = static_cast<int>(std::min(particles, 32u));
+    c.substeps = static_cast<int>(std::min(substeps, 16u));
+    if (core.tether(c))
+        tetherConfig = c;
+}
+game_grab::TetherData game_grab::tetherData() {
+    const auto& r = core.tetherReport();
+    TetherData d;
+    d.whips = r.whips;
+    d.spins = r.spins;
+    d.slings = r.slings;
+    d.throws = r.throws;
+    d.cuts = r.cuts;
+    d.lastAction = r.lastAction;
+    d.serial = r.serial;
+    d.lastSpeed = r.lastSpeed;
+    for (int i = 0; i < 2; ++i) {
+        const auto& v = core.tetherView(i);
+        auto& l = d.lines[i];
+        l.count = std::min<uint32_t>(v.count, 6);
+        l.flags = (v.active ? 1u : 0u) | (v.spinning ? 2u : 0u) | (v.kept ? 4u : 0u);
+        l.tension = v.tension;
+        l.end = v.end;
+        for (uint32_t k = 0; k < l.count; ++k)
+            l.points[k] = v.points[k];
+    }
+    return d;
 }
 bool game_grab::handClaims(unsigned hand, const Input& in) {
     return offered && allowed && hand < 2 && core.handClaims(static_cast<int>(hand), in.hands[hand], targets);

@@ -1,5 +1,6 @@
 #pragma once
 #include "hand_grab.hpp"
+#include "tether.hpp"
 #include "swing.hpp"
 #include <vector>
 
@@ -125,6 +126,9 @@ struct GrabConfig {
     // HAND GRAB (G2, hand_grab.hpp): off until enabled. A grip closed with the palm on a target takes it by
     // hand, held by a spring at the palm instead of hanging on a web.
     hand_grab::Config hand{};
+    // PHYSICAL WEB TETHERS (W1, tether.hpp): off until enabled. A simulated rope on each web, with a whip, a
+    // spin and a throw that keeps its line.
+    tether::Config tether{};
 };
 enum class GrabPhase : std::uint8_t { None, Tethered, Yanked, Held };
 struct Grab {
@@ -207,6 +211,23 @@ struct HandReport {
     std::uint32_t lastAction{}, lastKind{}, serial{};
     float lastMass{}, lastSpeed{};
 };
+// PHYSICAL WEB TETHERS' view of one hand's line, for drawing: the points past the ends (at most
+// tether::maxDrawn), the target's end, how taut it is, and whether the hand is spinning the target or the
+// line was kept after a throw.
+struct TetherView {
+    bool active{}, spinning{}, kept{};
+    std::uint32_t count{};
+    std::array<Vec3, tether::maxDrawn> points{};
+    Vec3 end{};
+    float tension{};
+};
+// Its account: whips, spins begun, slings (a spinning target let go of), throws that kept the line, lines
+// cut, and the latest action (1 whip, 2 spin, 3 sling, 4 throw on a tether, 5 cut) with its speed (m/s).
+struct TetherReport {
+    std::uint32_t whips{}, spins{}, slings{}, throws{}, cuts{};
+    std::uint32_t lastAction{}, serial{};
+    float lastSpeed{};
+};
 class WebGrab {
   public:
     explicit WebGrab(GrabConfig config = {});
@@ -253,6 +274,15 @@ class WebGrab {
     // its palm, or its squeeze begins with a body within reach (what claim() would take). The swing leaves
     // such a hand no wall grip: an enemy in reach is taken before a wall.
     bool handClaims(int hand, const HandInput&, const TargetQueries&) const;
+    // PHYSICAL WEB TETHERS, switched during play (an invalid one is refused). Turned off, the lines kept after a
+    // throw are let go of and every web is as it was.
+    bool tether(const tether::Config&);
+    const TetherReport& tetherReport() const {
+        return tether_;
+    }
+    const TetherView& tetherView(int hand) const {
+        return views_[hand & 1];
+    }
     // GrabConfig::yankOnlyCharacters, switched during play.
     void yankOnlyCharacters(bool on) {
         config_.yankOnlyCharacters = on;
@@ -278,6 +308,9 @@ class WebGrab {
         bool squeezed{};
         Vec3 palm{}, palmVelocity{};
         hand_grab::Samples samples;
+        // TETHERS: the trigger's depth, and the line kept after a throw (the grip is let go; the trigger holds it).
+        float trigger{};
+        bool kept{};
     };
     std::optional<GrabTarget> pickHand(Vec3 palm, const TargetQueries&) const;
     bool startHand(int hand, const TargetQueries&);
@@ -285,6 +318,7 @@ class WebGrab {
                   std::size_t first);
     void letGoHand(int hand, const TargetQueries&, bool otherReleasing);
     void end(int hand, GrabEventKind reason, Vec3 velocity = {});
+    void note(std::uint32_t action, float speed);
     void letGo(int hand, const TargetQueries&, const Body& player, bool otherReleasing);
     float holdLength(int hand) const;
     // How long a yanked target's arc to `hold` takes: as long as a straight
@@ -297,6 +331,10 @@ class WebGrab {
     std::vector<GrabEvent> events_;
     std::vector<TargetCommand> pending_; // throws, sent with the next step
     HandReport report_;
+    TetherReport tether_;
+    std::array<tether::Rope, 2> ropes_{};
+    std::array<tether::Spinner, 2> spinners_{};
+    std::array<TetherView, 2> views_{};
     // The player's velocity at the latest sample: a yank's arc is aimed where
     // the hand is carried, not where the pulling gesture itself would take it.
     Vec3 playerVelocity_{};

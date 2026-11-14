@@ -610,6 +610,10 @@ const game_swing::GripLive* swingGripLive{};
 // HAND GRAB's settings for the swing (SpidySwingHandGrab) and its account (SpidySwingHandGrabLive); none in
 // an older module (no hand takes anything).
 BridgeCall swingHandGrab{};
+// PHYSICAL WEB TETHERS' settings for the swing (SpidyTether) and its lines and account (SpidyTetherLive); none in
+// an older swing module: the webs are as they were.
+BridgeCall swingTether{};
+const game_swing::TetherLive* tetherLive{};
 const game_swing::HandGrabLive* handGrabLive{};
 const game_swing::SidestepLive* sidestepLive{};
 // Optional: the web tie's telemetry (game_grab::TieData; an older ray module has none).
@@ -1440,6 +1444,8 @@ DWORD WINAPI run(void*) {
         // HAND GRAB: settings sent (a key of them, ~0 none), seconds since, the account's serial seen.
         uint32_t handGrabSerial{}, handGrabKeySent = ~0u, handGrabSeen{};
         float handGrabSentAge{};
+        uint32_t tetherSerial{}, tetherKeySent = ~0u, tetherSeen{};
+        float tetherSentAge{};
         // The kick is armed or fading (last frame's): the legs keep the right stick, whose push up would
         // otherwise be the game's zip.
         bool kickHoldsStick{};
@@ -2653,6 +2659,27 @@ DWORD WINAPI run(void*) {
                                                      values.enemyHoldCost);
                                 handGrabKeySent = key;
                                 handGrabSentAge = 0;
+                            }
+                        }
+                    }
+                    // PHYSICAL WEB TETHERS (tether.hpp; off until set): the settings go to the swing whenever they
+                    // change and every second.
+                    if (swingTether) {
+                        game_swing::TetherAsk ask;
+                        ask.serial = tetherSerial;
+                        ask.flags = values.physicalTethers ? 1u : 0u;
+                        ask.particles = static_cast<uint32_t>(std::clamp(values.tetherParticles, 8, 32));
+                        ask.substeps = static_cast<uint32_t>(std::clamp(values.tetherSubsteps, 2, 16));
+                        tetherSentAge += std::isfinite(frame.seconds) ? std::max(frame.seconds, 0.f) : 0.f;
+                        const uint32_t key = ask.flags | (ask.particles << 1) | (ask.substeps << 8);
+                        if (key != tetherKeySent || tetherSentAge > 1.f) {
+                            if (swingTether(&ask) == 0) {
+                                if (key != tetherKeySent)
+                                    diag_log::writef("tethers: settings sent (%s, %u points, %u steps)",
+                                                     values.physicalTethers ? "on" : "off", ask.particles,
+                                                     ask.substeps);
+                                tetherKeySent = key;
+                                tetherSentAge = 0;
                             }
                         }
                     }
@@ -5278,6 +5305,32 @@ DWORD WINAPI run(void*) {
                                 }
                             }
                         }
+                        // PHYSICAL WEB TETHERS: the swing's account. A whip, a spin, a sling, a throw that kept
+                        // its line and a cut are each logged and thump the hands by their speed.
+                        if (const volatile game_swing::TetherLive* tl = tetherLive) {
+                            if (const uint32_t serial = tl->serial; serial != tetherSeen) {
+                                tetherSeen = serial;
+                                const uint32_t action = tl->lastAction;
+                                const float speed = tl->lastSpeed;
+                                diag_log::writef("tethers: %s v=%.1f m/s (whips %u, spins %u, slings %u, "
+                                                 "kept throws %u, cuts %u)",
+                                                 action == 1   ? "whip"
+                                                 : action == 2 ? "spin"
+                                                 : action == 3 ? "sling"
+                                                 : action == 4 ? "throw on a tether"
+                                                               : "cut",
+                                                 speed, tl->whips, tl->spins, tl->slings, tl->throws, tl->cuts);
+                                const float scale = static_cast<float>(values.moveHapticsPct) / 100;
+                                const auto thump = move_haptics::scaled(
+                                    {-1, action == 5 ? .3f : std::clamp(speed / 18.f, .3f, 1.f),
+                                     action == 1 ? .06f : .08f},
+                                    scale);
+                                if (thump.amplitude > 0) {
+                                    runtime.hapticUnscaled(0, thump.amplitude, thump.seconds);
+                                    runtime.hapticUnscaled(1, thump.amplitude, thump.seconds);
+                                }
+                            }
+                        }
                         // Every landed blow, a fist's or a web strike's: the hand
                         // that threw it kicks, as hard and as long as the blow was
                         // (a jab 60 ms, a blow that sends him flying 180 ms and the
@@ -5642,6 +5695,31 @@ DWORD WINAPI run(void*) {
                                         bent[i].points[k] = flyingWebPoint(
                                             hand.wrist, hand.anchor, float(k + 1) / float(bent[i].count + 1),
                                             age, progress, flightVisual[from].direction());
+                                }
+                                // PHYSICAL WEB TETHERS: a web a grab holds is drawn through the simulated rope's
+                                // bends, from the hand to the target (at most 6 points past the ends: the game's
+                                // rope takes 8, and more crashed it). Only with the hand points hook; without it the
+                                // web stays the straight line.
+                                if (const volatile game_swing::TetherLive* tl = tetherLive;
+                                    tl && values.physicalTethers && hand.attached == 1 && grabPhases[from] &&
+                                    native_webs::drawsHeld()) {
+                                    const volatile game_swing::TetherLiveLine& line = tl->lines[from];
+                                    const uint32_t flags = line.flags, count = line.count;
+                                    if ((flags & 1u) && count && count <= native_webs::maxRopeBends) {
+                                        const Vec3 end{line.end.x, line.end.y, line.end.z};
+                                        Vec3 laid[native_webs::maxRopeBends]{};
+                                        bool sound = finite(end);
+                                        for (uint32_t k = 0; k < count && sound; ++k) {
+                                            laid[k] = {line.points[k].x, line.points[k].y, line.points[k].z};
+                                            sound = finite(laid[k]);
+                                        }
+                                        if (sound) {
+                                            bent[i].count = count;
+                                            for (uint32_t k = 0; k < count; ++k)
+                                                bent[i].points[k] = laid[k];
+                                            hand.anchor = end;
+                                        }
+                                    }
                                 }
                                 // A web round edges: to where it sticks, round each of them. The
                                 // swing's anchor is the nearest edge, and drawn to it the web's end
@@ -10827,6 +10905,12 @@ extern "C" __declspec(dllexport) DWORD WINAPI SpidyXrStart(void* input) {
         handGrabLive && (handGrabLive->magic != expected.magic || handGrabLive->version != expected.version ||
                          handGrabLive->bytes != expected.bytes))
         handGrabLive = nullptr;
+    swingTether = reinterpret_cast<BridgeCall>(GetProcAddress(rays, "SpidyTether"));
+    tetherLive = reinterpret_cast<const game_swing::TetherLive*>(GetProcAddress(rays, "SpidyTetherLive"));
+    if (const game_swing::TetherLive expected;
+        tetherLive && (tetherLive->magic != expected.magic || tetherLive->version != expected.version ||
+                       tetherLive->bytes != expected.bytes))
+        tetherLive = nullptr;
     sidestepLive = reinterpret_cast<const game_swing::SidestepLive*>(GetProcAddress(rays, "SpidySidestepLive"));
     if (const game_swing::SidestepLive expected;
         sidestepLive && (sidestepLive->magic != expected.magic || sidestepLive->version != expected.version ||

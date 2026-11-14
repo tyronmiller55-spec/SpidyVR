@@ -758,6 +758,38 @@ struct HandGrabLive {
     uint32_t serial{};
 };
 static_assert(sizeof(HandGrabLive) == 68);
+// Side channel from XR (PHYSICAL WEB TETHERS, tether.hpp, W1): the settings, sent whenever they change and again
+// every second. `flags` bit 0: physical_tethers. particles: tether_particles (8 to 32, 24); substeps:
+// tether_substeps (2 to 16, 8). Not a Command or Settings field and not versioned with them (an older swing
+// module has no SpidyTether export; XR then sends none and the webs are as they were).
+struct TetherAsk {
+    uint32_t magic = 0x53575448, version = 1, bytes = sizeof(TetherAsk), serial{};
+    uint32_t flags{}, particles = 24, substeps = 8, reserved{};
+};
+static_assert(sizeof(TetherAsk) == 32);
+inline bool validTether(const TetherAsk& a) {
+    return a.magic == 0x53575448 && a.version == 1 && a.bytes == sizeof(TetherAsk) && !(a.flags & ~1u) &&
+           a.particles >= 8 && a.particles <= 32 && a.substeps >= 2 && a.substeps <= 16;
+}
+// SpidyTetherLive: each hand's line to draw and the account, for XR. `lines[i]`: `count` points past the ends
+// (at most 6: the game's rope takes 8 in all), `end` where it meets the target, `tension` 0 to 1; `flags` bit 0
+// the line is live, 1 the hand is spinning its target, 2 the line was kept after a throw. The counts: whips,
+// spins begun, slings, throws that kept the line, lines cut; the latest action (1 whip, 2 spin, 3 sling,
+// 4 throw on a tether, 5 cut) with its speed (m/s); `serial` counts up last.
+struct TetherLiveLine {
+    uint32_t count{}, flags{};
+    float tension{};
+    Vec3 end{};
+    Vec3 points[6]{};
+};
+struct TetherLive {
+    uint32_t magic = 0x5357544c, version = 1, bytes = sizeof(TetherLive), active{};
+    uint32_t whips{}, spins{}, slings{}, throws{}, cuts{}, lastAction{};
+    float lastSpeed{};
+    TetherLiveLine lines[2];
+    uint32_t serial{};
+};
+static_assert(sizeof(TetherLiveLine) == 96 && sizeof(TetherLive) == 240);
 // A web's edges as Bends hands them on: its anchor is the edge nearest the
 // hand, and each edge records the one before it, back to where it sticks.
 inline Bends::Hand edgesOf(const Web& w) {

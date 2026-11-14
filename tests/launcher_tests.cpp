@@ -766,6 +766,9 @@ int main() {
             // AIR KICKS (K2, November 14): experimental, the player's own.
             if (key == "kicks" || key.rfind("kick_", 0) == 0)
                 continue;
+            // PHYSICAL WEB TETHERS (W1, November 14): experimental, the player's own.
+            if (key == "physical_tethers" || key.rfind("tether_", 0) == 0)
+                continue;
             // CAMERA MODES (November 13): the player's own comfort, not in shared profiles.
             if (key == "anim_head_ride" || key == "shoulder_limit" || key == "snap_realign")
                 continue;

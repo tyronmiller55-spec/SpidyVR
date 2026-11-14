@@ -44,6 +44,8 @@ __declspec(dllexport) AirKickLive SpidyAirKickLive;
 __declspec(dllexport) GripLive SpidySwingGripLive;
 // HAND GRAB's account (HandGrabLive), for XR's log and feel.
 __declspec(dllexport) HandGrabLive SpidySwingHandGrabLive;
+// PHYSICAL WEB TETHERS' lines and account (TetherLive), for XR.
+__declspec(dllexport) TetherLive SpidyTetherLive;
 }
 namespace {
 // Each hand's web's edges (Bends, SpidySwingBends), written with Data.
@@ -257,6 +259,9 @@ GripAsk gripAsk{};
 // HAND GRAB (SpidySwingHandGrab, hand_grab.hpp): the latest settings (the sample callback applies them).
 SRWLOCK handGrabLock = SRWLOCK_INIT;
 HandGrabAsk handGrabAsk{};
+// PHYSICAL WEB TETHERS (SpidyTether, tether.hpp): the latest settings (the sample callback applies them).
+SRWLOCK tetherLock = SRWLOCK_INIT;
+TetherAsk tetherAsk{};
 std::atomic<bool> autoDiveOff{}, kickBusy{};
 // QUICK SIDESTEP (SpidySwingSidestep, sidestep.hpp): a burst waiting for the
 // next step, as the point jump's; and the burst under way (the swing's
@@ -784,6 +789,13 @@ void visit(const native_rays::QueryContext& world) {
         ReleaseSRWLockExclusive(&handGrabLock);
         game_grab::handGrab((ask.flags & 1u) != 0, ask.force, ask.holdCost);
     }
+    // PHYSICAL WEB TETHERS (tether.hpp; off until XR sends physical_tethers).
+    {
+        AcquireSRWLockExclusive(&tetherLock);
+        const TetherAsk ask = tetherAsk;
+        ReleaseSRWLockExclusive(&tetherLock);
+        game_grab::tetherSettings((ask.flags & 1u) != 0, ask.particles, ask.substeps);
+    }
     Input wallView = in;
     if (focused)
         for (unsigned i = 0; i < 2; ++i)
@@ -833,6 +845,39 @@ void visit(const native_rays::QueryContext& world) {
             live.lastSpeed = hg.lastSpeed;
             MemoryBarrier();
             live.serial = hg.serial;
+        }
+        {
+            // PHYSICAL WEB TETHERS' lines and account for XR.
+            const auto tt = game_grab::tetherData();
+            volatile TetherLive& live = SpidyTetherLive;
+            live.whips = tt.whips;
+            live.spins = tt.spins;
+            live.slings = tt.slings;
+            live.throws = tt.throws;
+            live.cuts = tt.cuts;
+            live.lastAction = tt.lastAction;
+            live.lastSpeed = tt.lastSpeed;
+            uint32_t active = 0;
+            for (unsigned i = 0; i < 2; ++i) {
+                const auto& src = tt.lines[i];
+                volatile TetherLiveLine& dst = live.lines[i];
+                dst.count = src.count;
+                dst.flags = src.flags;
+                dst.tension = src.tension;
+                dst.end.x = src.end.x;
+                dst.end.y = src.end.y;
+                dst.end.z = src.end.z;
+                for (unsigned k = 0; k < 6; ++k) {
+                    dst.points[k].x = src.points[k].x;
+                    dst.points[k].y = src.points[k].y;
+                    dst.points[k].z = src.points[k].z;
+                }
+                if (src.flags & 1u)
+                    active |= 1u << i;
+            }
+            live.active = active;
+            MemoryBarrier();
+            live.serial = tt.serial;
         }
         // The web tie: the click (Command::asks bit 1) with the hands together,
         // one on a web stuck to a surface, the other on a webbed-up enemy.
@@ -2111,6 +2156,9 @@ extern "C" __declspec(dllexport) DWORD WINAPI SpidySwingStart(void* input) {
         AcquireSRWLockExclusive(&handGrabLock);
         handGrabAsk = {};
         ReleaseSRWLockExclusive(&handGrabLock);
+        AcquireSRWLockExclusive(&tetherLock);
+        tetherAsk = {};
+        ReleaseSRWLockExclusive(&tetherLock);
         AcquireSRWLockExclusive(&kickLock);
         kickAsk = {};
         kickAt = 0;
@@ -2338,6 +2386,22 @@ extern "C" __declspec(dllexport) DWORD WINAPI SpidySwingHandGrab(void* input) {
     AcquireSRWLockExclusive(&handGrabLock);
     handGrabAsk = a;
     ReleaseSRWLockExclusive(&handGrabLock);
+    return 0;
+}
+// PHYSICAL WEB TETHERS (tether.hpp): the VR worker's settings. 2001: not a TetherAsk; 1004: the swing has not
+// started; 0 taken. What it did: SpidyTetherLive.
+extern "C" __declspec(dllexport) DWORD WINAPI SpidyTether(void* input) {
+    TetherAsk a;
+    if (!input || !copy(&a, input, sizeof(a)) || !validTether(a))
+        return 2001;
+    AcquireSRWLockShared(&lifecycle);
+    const bool running = started;
+    ReleaseSRWLockShared(&lifecycle);
+    if (!running)
+        return 1004;
+    AcquireSRWLockExclusive(&tetherLock);
+    tetherAsk = a;
+    ReleaseSRWLockExclusive(&tetherLock);
     return 0;
 }
 // QUICK SIDESTEP (sidestep.hpp): the VR worker's burst for the next step.
