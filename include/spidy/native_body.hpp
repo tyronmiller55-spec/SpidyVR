@@ -322,6 +322,11 @@ float tuckWeight();
 // legs blend back over body::airLegBlendSeconds. Side channel: no Command
 // layout or version change.
 void setLegControl(bool on, const std::array<body::Targets::LegAngles, 2>& legs, float amount = 1.f);
+// GROUND KICKS (ground_kick.hpp, K3; ground_kicks, EXPERIMENTAL): a standing kick's leg for the pose jobs
+// while the animation owns the body (the armsOnly path; the VR-owned body has no ground leg). `leg` 0 left,
+// 1 right; `foot` the kick's foot from the player's feet in the world's axes (metres); `weight` 0..1.
+// on false: the leg blends back to the game's pose. Side channel: no Command layout or version change.
+void setGroundKick(bool on, int leg, Vec3 foot, float weight);
 // Slice C tracking-lock diag (side channel; no Command / Forearms layout change).
 // Latest armsOnly chest vs player yaw and overlay weights after a pose job.
 struct OverlayTracking {

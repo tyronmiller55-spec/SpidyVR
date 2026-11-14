@@ -1,6 +1,6 @@
 # Air kicks (K2)
 
-Off by default, EXPERIMENTAL, like the handstand. `kicks=1` in `spidy_vr.ini` (or **Air kicks (experimental)** on the launcher's Legs page, with **Air kick aim** and **Air kick spin** under it) turns it on. It builds on the leg control (Y + X, `leg_hold.hpp`, which needs LEG CONTROL and a flip mode as today) and the swing kick (K1). It is the plan's Pillar 5 (milestone K2), air only: the ground is K3's.
+Off by default, EXPERIMENTAL, like the handstand. `kicks=1` in `spidy_vr.ini` (or **Air kicks (experimental)** on the launcher's Legs page, with **Air kick aim** and **Air kick spin** under it) turns it on. It builds on the leg control (Y + X, `leg_hold.hpp`, which needs LEG CONTROL and a flip mode as today) and the swing kick (K1). It is the plan's Pillar 5 (milestone K2), air only: the ground is K3's ([GROUND_KICKS.md](GROUND_KICKS.md)).
 
 ## Controls
 
@@ -47,7 +47,7 @@ No game address is used: the targets and the blow are the web strike's and the p
 
 - **The torso** (pitch back up to 25 degrees for the dives, pelvis yaw 0.8 x the sweep and a counter-yaw of the chest for the roundhouse) and `kick_torso_pct`: body_ik has no torso channel for this and the body command's layout is the official one; a new field is a protocol change. Without it the kick moves the legs only.
 - **The spin vignette** (above 60 degrees a second): the mod has no vignette to drive.
-- **Kicking off an enemy** (the small rebound of the plan's extra ideas) and **ground sweeps** (K3).
+- **Kicking off an enemy** (the small rebound of the plan's extra ideas) and ground sweeps (built in K3: [GROUND_KICKS.md](GROUND_KICKS.md)).
 - **Enemy classes** (a heavy shrugging a kick off): no verified flag, as in G2.
 
 ## Unverified (needs a headset)

@@ -19,7 +19,7 @@
 // own and the player's motion) gives the kick's strength: nothing under 3 m/s, full at 10 m/s. The gaze
 // picks the zone point (head over 80 % of the capsule, legs under 35 %, chest between) of an enemy within
 // 25 degrees of it and within reach, and bends the foot toward it by w = smoothstep(cos 25, cos 8, gaze . to
-// zone), at most 0.25 m or 15 degrees. Only air: on the ground the legs are K3's.
+// zone), at most 0.25 m or 15 degrees. Standing is ground_kick.hpp's (K3): the same kick with no lunge.
 //
 // The kick's legs are leg_layers' top layer (a pose of leg_control's angles); its spin reaction goes through
 // the legs' coupling scaled by KICK SPIN (30 % by default). No game address is used: the blow is the web
@@ -39,7 +39,7 @@ namespace spidy::air_kick {
 inline constexpr float pi = 3.14159265f;
 inline constexpr float deg = pi / 180.f;
 
-enum class Gesture : std::uint8_t { none, dive, doubleDive, roundhouse, freeform };
+enum class Gesture : std::uint8_t { none, dive, doubleDive, roundhouse, freeform, sweep };
 inline const char* gestureName(Gesture g) {
     switch (g) {
     case Gesture::dive:
@@ -50,6 +50,8 @@ inline const char* gestureName(Gesture g) {
         return "roundhouse";
     case Gesture::freeform:
         return "free";
+    case Gesture::sweep:
+        return "sweep";
     default:
         return "none";
     }
@@ -87,7 +89,21 @@ struct Config {
     float cooldown = .15f;
     // The flight a blow gives (share of the foot's speed, the most, and a little up).
     float flightShare = .8f, flightMax = 14.f, flightUp = 1.5f;
+    // GROUND KICKS (K3, ground_kick.hpp): standing, the player may not be faster than groundSpeed (m/s) when
+    // a kick starts (or groundSpeed + groundSlack while it runs); the leg has no lunge. A sweep (the stick's
+    // half circle across the bottom) swings the foot round the pelvis at sweepReach, sweepHeight over the
+    // feet, through sweepArc degrees in sweepExtend seconds. A ground blow knocks down rather than throws:
+    // the enemy's flight is groundFlightShare of the foot's speed, at most groundFlightMax m/s, groundFlightUp
+    // up.
+    float groundSpeed = 2.f, groundSlack = 1.5f;
+    float sweepReach = .9f, sweepHeight = .12f, sweepArc = 180.f, sweepExtend = .35f;
+    float groundFlightShare = .5f, groundFlightMax = 6.f, groundFlightUp = .5f;
 };
+// The same, standing: no lunge.
+inline Config standingConfig(Config c) {
+    c.lunge = 0;
+    return c;
+}
 
 // The stick's way: degrees from straight up, + to the right (0..180).
 inline float stickAngle(float x, float y) {
@@ -202,6 +218,8 @@ inline Vec3 zonePoint(Vec3 feet, float height, Zone z) {
 // chest or the head, the roundhouse the head, a freeform blow any.
 inline std::uint32_t zonesFor(Gesture g) {
     switch (g) {
+    case Gesture::sweep:
+        return 1u << static_cast<int>(Zone::legs);
     case Gesture::doubleDive:
         return 1u << static_cast<int>(Zone::chest);
     case Gesture::dive:
@@ -250,6 +268,13 @@ inline float strengthOf(float footSpeed, const Config& c = {}) {
 inline bool flies(float strength, const Config& c = {}) {
     return strength >= c.flyStrength;
 }
+// A blow on the ground knocks down: a shorter, flatter flight.
+inline Vec3 groundFlight(Vec3 way, float footSpeed, const Config& c = {}) {
+    if (!finite(way) || length(way) < 1e-4f)
+        return {};
+    return normalized(way) * std::min(c.groundFlightMax, std::max(footSpeed, 0.f) * c.groundFlightShare) +
+           Vec3{0, c.groundFlightUp, 0};
+}
 inline Vec3 enemyFlight(Vec3 way, float footSpeed, const Config& c = {}) {
     if (!finite(way) || length(way) < 1e-4f)
         return {};
@@ -261,6 +286,7 @@ inline Vec3 enemyFlight(Vec3 way, float footSpeed, const Config& c = {}) {
 inline float extendOf(Gesture g, const Config& c = {}) {
     return g == Gesture::roundhouse ? c.roundhouseExtend
            : g == Gesture::freeform ? c.freeformExtend
+           : g == Gesture::sweep    ? c.sweepExtend
                                     : c.extend;
 }
 // The part of the kick the foot can land a blow in, and all of it.
@@ -281,11 +307,15 @@ inline float amountAt(Gesture g, float t, const Config& c = {}) {
 }
 // The reach the foot has at `t` (a freeform blow's is shorter).
 inline float reachAt(Gesture g, float t, const Config& c = {}) {
+    if (g == Gesture::sweep)
+        return c.sweepReach; // the foot is out from the first step: the sweep is round the pelvis
     const float full = (c.reach + c.lunge) * (g == Gesture::freeform ? c.freeformReach : 1.f);
     return g == Gesture::roundhouse ? full : full * smoothstep(0, extendOf(g, c), t);
 }
 // A roundhouse's foot comes in from the side (the yaw off the gaze, radians, signed as `side`).
 inline float sweepYaw(Gesture g, int side, float t, const Config& c = {}) {
+    if (g == Gesture::sweep) // a sweep: from one side through the front to the other
+        return static_cast<float>(side) * c.sweepArc * .5f * deg * (1.f - 2.f * smoothstep(0, extendOf(g, c), t));
     if (g != Gesture::roundhouse)
         return 0;
     return static_cast<float>(side) * c.roundhouseArc * deg * (1.f - smoothstep(0, extendOf(g, c), t));
@@ -297,7 +327,7 @@ inline float sweepYaw(Gesture g, int side, float t, const Config& c = {}) {
 inline leg_control::Legs legPose(Gesture g, int side, float angle, float t, const Config& c = {}) {
     leg_control::Legs out = leg_control::centrePose;
     const float a = amountAt(g, t, c);
-    if (g == Gesture::none || !(a > 0))
+    if (g == Gesture::none || g == Gesture::sweep || !(a > 0)) // a sweep is the ground's: no air pose
         return out;
     const int kick = side >= 0 ? 1 : 0, other = 1 - kick;
     const float outward = kick == 1 ? -1.f : 1.f; // a leg's side angle away from the body's middle
@@ -336,7 +366,7 @@ inline leg_control::Legs legPose(Gesture g, int side, float angle, float t, cons
 }
 
 // ---- the kick in the swing module ----
-enum class Refusal : std::uint8_t { none, off, legs, grounded, wall, busy, noGesture };
+enum class Refusal : std::uint8_t { none, off, legs, grounded, wall, busy, noGesture, moving, groundOnly };
 inline const char* refusalName(Refusal r) {
     switch (r) {
     case Refusal::off:
@@ -351,6 +381,10 @@ inline const char* refusalName(Refusal r) {
         return "a kick is under way";
     case Refusal::noGesture:
         return "no gesture";
+    case Refusal::moving:
+        return "moving too fast";
+    case Refusal::groundOnly:
+        return "a sweep is for the ground";
     default:
         return "none";
     }
@@ -366,7 +400,10 @@ class Kick {
     };
     struct Frame {
         float seconds{}; // real
-        bool focused = true, enabled = true, legs = true, grounded{}, wall{};
+        // enabled: AIR KICKS is on; ground: GROUND KICKS is on (a kick off the ground needs the first, on it the
+        // second); speed: the player's, m/s.
+        bool focused = true, enabled = true, legs = true, grounded{}, wall{}, ground{};
+        float speed{};
         Vec3 feet{};                // the player's
         Vec3 eyeOffset{0, 1.6f, 0}; // eyes from the feet, world axes
         Vec3 gaze{0, 0, -1};
@@ -404,6 +441,10 @@ class Kick {
     int side() const {
         return side_;
     }
+    // The running kick began standing (GROUND KICKS).
+    bool onGround() const {
+        return startedGrounded_;
+    }
     float angle() const {
         return angle_;
     }
@@ -433,18 +474,23 @@ class Kick {
             out.refusal = r;
             return out;
         };
-        if (!f.enabled)
-            return refuse(Refusal::off);
+        // Off the ground AIR KICKS' setting rules, on it GROUND KICKS'.
+        if (f.grounded ? !f.ground : !f.enabled)
+            return refuse(f.grounded ? Refusal::grounded : Refusal::off);
         if (flick.gesture == Gesture::none)
             return refuse(Refusal::noGesture);
         if (!f.legs)
             return refuse(Refusal::legs);
-        if (f.grounded)
-            return refuse(Refusal::grounded);
+        if (!f.grounded && flick.gesture == Gesture::sweep)
+            return refuse(Refusal::groundOnly);
+        if (f.grounded && !(f.speed <= config_.groundSpeed)) // (also a speed that is not a number)
+            return refuse(Refusal::moving);
         if (f.wall)
             return refuse(Refusal::wall);
         if (busy() || since_ < config_.cooldown)
             return refuse(Refusal::busy);
+        const Config c = f.grounded ? standingConfig(config_) : config_;
+        startedGrounded_ = f.grounded;
         gesture_ = flick.gesture;
         side_ = flick.side >= 0 ? 1 : -1;
         angle_ = flick.angle;
@@ -458,16 +504,25 @@ class Kick {
         target_ = 0;
         zone_ = Zone::chest;
         float best = 0;
-        const Vec3 pelvis = f.feet + Vec3{0, config_.hipHeight, 0};
+        const Vec3 pelvis = f.feet + Vec3{0, c.hipHeight, 0};
         const std::uint32_t zones = zonesFor(gesture_);
         for (const auto& t : f.targets) {
             for (int z = 0; z < 3; ++z) {
                 if (!(zones & (1u << z)))
                     continue;
                 const Vec3 p = zonePoint(t.feet, t.height, static_cast<Zone>(z));
-                if (length(p - pelvis) > config_.reach + config_.lunge + t.radius)
+                if (length(p - pelvis) > (gesture_ == Gesture::sweep ? c.sweepReach + c.footRadius : c.reach + c.lunge) +
+                                             t.radius)
                     continue;
-                const float w = gazeWeight(gaze_, eye_, p, config_);
+                float w = gazeWeight(gaze_, eye_, p, c);
+                if (gesture_ == Gesture::sweep) {
+                    // A sweep is low: the gaze is not on the legs. The nearest in the half in front.
+                    Vec3 ahead{gaze_.x, 0, gaze_.z}, to{p.x - pelvis.x, 0, p.z - pelvis.z};
+                    const float la = length(ahead), lt = length(to);
+                    w = la > 1e-3f && (lt < 1e-3f || dot(ahead / la, to / lt) >= 0)
+                            ? std::max(.01f, 1.f - length(p - pelvis) / (c.sweepReach + c.footRadius + t.radius + 1.f))
+                            : 0.f;
+                }
                 if (w > best) {
                     best = w;
                     target_ = t.id;
@@ -491,32 +546,37 @@ class Kick {
             return out;
         }
         t_ += dt;
-        if (!f.enabled || !f.focused || f.grounded || f.wall) {
-            // The air or the setting is gone: the kick ends where it is, nothing snaps (the legs ease back).
+        if (!(f.grounded ? f.ground : f.enabled) || !f.focused || f.grounded != startedGrounded_ || f.wall ||
+            (f.grounded && f.speed > config_.groundSpeed + config_.groundSlack)) {
+            // The air, the ground or the setting is gone (or a standing kick's player runs): the kick ends
+            // where it is, nothing snaps (the legs ease back).
             out.event = hit_ ? Event::none : Event::miss;
             out.lost = true;
             finish();
             return out;
         }
-        const float window = windowOf(gesture_, config_), total = totalOf(gesture_, config_);
-        const Vec3 pelvis = f.feet + Vec3{0, config_.hipHeight, 0};
+        const Config c = startedGrounded_ ? standingConfig(config_) : config_;
+        const float window = windowOf(gesture_, c), total = totalOf(gesture_, c);
+        const Vec3 pelvis = f.feet + Vec3{0, c.hipHeight, 0};
         if (phase_ == Phase::kicking) {
             const Target* chosen{};
             for (const auto& t : f.targets)
                 if (t.id == target_)
                     chosen = &t;
-            const Vec3 yawed = turned(gaze_, sweepYaw(gesture_, side_, t_, config_));
-            Vec3 foot = pelvis + yawed * reachAt(gesture_, t_, config_);
-            if (chosen && gesture_ != Gesture::roundhouse) {
+            const Vec3 yawed = turned(gaze_, sweepYaw(gesture_, side_, t_, c));
+            Vec3 foot = pelvis + yawed * reachAt(gesture_, t_, c);
+            if (gesture_ == Gesture::sweep)
+                foot = Vec3{foot.x, f.feet.y + c.sweepHeight, foot.z}; // low: the sweep takes the legs
+            if (chosen && gesture_ != Gesture::roundhouse && gesture_ != Gesture::sweep) {
                 const Vec3 p = zonePoint(chosen->feet, chosen->height, zone_);
-                foot = bentFoot(pelvis, foot, p, gazeWeight(gaze_, eye_, p, config_), config_);
+                foot = bentFoot(pelvis, foot, p, gazeWeight(gaze_, eye_, p, c), c);
             }
             const Vec3 from = footSet_ ? lastFoot_ : foot;
             lastFoot_ = foot;
             footSet_ = true;
             const float speed = dt > 1e-4f ? length(foot - from) / dt : 0.f;
             out.foot = speed;
-            if (!hit_ && speed >= config_.minFoot) {
+            if (!hit_ && speed >= c.minFoot) {
                 const Target* met{};
                 for (const auto& t : f.targets)
                     if (swing_kick::footHits(from, foot, config_.footRadius, t.feet, t.height, t.radius) &&
@@ -531,9 +591,11 @@ class Kick {
                     out.point = foot;
                     out.zone =
                         zoneAt(std::clamp((foot.y - met->feet.y) / std::max(met->height, .5f), 0.f, 1.f));
-                    out.strength = strengthOf(speed, config_);
-                    out.fly = flies(out.strength, config_);
-                    out.enemy = out.fly ? enemyFlight(way, speed, config_) : Vec3{};
+                    out.strength = strengthOf(speed, c);
+                    out.fly = flies(out.strength, c);
+                    out.enemy = !out.fly ? Vec3{}
+                                : startedGrounded_ ? groundFlight(way, speed, c)
+                                                   : enemyFlight(way, speed, c);
                     t_ = std::max(t_, window); // a landed kick holds, then comes back
                 }
             }
@@ -570,6 +632,6 @@ class Kick {
     Zone zone_ = Zone::chest;
     std::uint64_t target_{};
     Vec3 gaze_{0, 0, -1}, eye_{}, lastFoot_{};
-    bool footSet_{}, hit_{};
+    bool footSet_{}, hit_{}, startedGrounded_{};
 };
 } // namespace spidy::air_kick

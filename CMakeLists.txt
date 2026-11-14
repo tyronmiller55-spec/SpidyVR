@@ -81,6 +81,11 @@ add_executable(spidy_air_kick_tests tests/air_kick_tests.cpp)
 target_link_libraries(spidy_air_kick_tests PRIVATE spidy_core)
 add_test(NAME air_kick COMMAND spidy_air_kick_tests)
 
+# GROUND KICKS (ground_kick.hpp): the stick's flicks and half circle, the kick standing (portable).
+add_executable(spidy_ground_kick_tests tests/ground_kick_tests.cpp)
+target_link_libraries(spidy_ground_kick_tests PRIVATE spidy_core)
+add_test(NAME ground_kick COMMAND spidy_ground_kick_tests)
+
 # PHYSICAL WEB TETHERS (tether.hpp): the XPBD rope, whip, spin, payout and the web grab's use of them (portable).
 add_executable(spidy_tether_tests tests/tether_tests.cpp)
 target_link_libraries(spidy_tether_tests PRIVATE spidy_core)

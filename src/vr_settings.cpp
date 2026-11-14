@@ -839,6 +839,8 @@ template <class V> auto switchOf(Item item, V& v) -> decltype(&v.aimMarkers) {
         return &v.handGrab;
     case Item::kicks:
         return &v.kicks;
+    case Item::groundKicks:
+        return &v.groundKicks;
     case Item::physicalTethers:
         return &v.physicalTethers;
     case Item::legAirCrouch:
@@ -1005,9 +1007,9 @@ Values sanitized(Values v) {
     v.automaticHandThreshold = std::clamp(v.automaticHandThreshold, 50, 300);
     return v;
 }
-const std::array<Row, 183>& rows() {
+const std::array<Row, 184>& rows() {
     // The help fits the game's description column beside the rows.
-    static const std::array<Row, 183> all{{
+    static const std::array<Row, 184> all{{
         {Item::none, "WEBS", nullptr, {}},
         {Item::webStyle, "WEB STYLE",
          "Arcade: webs pass lamp posts, signs and cars, and swings stay above the street.", webStyleChoices},
@@ -1481,6 +1483,11 @@ const std::array<Row, 183>& rows() {
         {Item::kickSpin, "AIR KICK SPIN",
          "How much of a kick's spin the legs pass to your body. NONE: no spin.",
          kickSpinChoices, Place::launcher},
+        {Item::groundKicks,
+         "GROUND KICKS (EXPERIMENTAL)",
+         "Standing, Y+X, flick the right stick: front kick, side kick or a leg sweep.",
+         {},
+         Place::launcher},
         {Item::wallBrake,
          "WALL BRAKE (EXPERIMENTAL)",
          "On a wall, squeeze a grip with your palm on it to brake a slide, then hold on.",
@@ -1630,7 +1637,7 @@ const std::array<Screen, categoryCount>& screens() {
     static constexpr Item legs[] = {
         Item::legControl,      Item::legStiffness,    Item::legDamping,   Item::legCoupling,
         Item::passiveLegs,     Item::passiveCoupling, Item::legAirCrouch, Item::legReachSpread,
-        Item::swingKickManual, Item::swingKickAuto, Item::kicks, Item::kickGazeCone, Item::kickSpin,
+        Item::swingKickManual, Item::swingKickAuto, Item::kicks, Item::kickGazeCone, Item::kickSpin, Item::groundKicks,
         Item::handstand, Item::handstandAssist, Item::handstandFall, Item::handstandPushGain,
         Item::handstandPushMax, Item::handstandHeight, Item::handstandGain, Item::handstandEyeDrop,
     };
@@ -1704,6 +1711,7 @@ const char* inactiveReason(Item item, const Values& v) {
     case Item::enemyHoldCost:
         return !v.handGrab ? "Turn HAND GRAB on first." : nullptr;
     case Item::kickGazeCone:
+        return !v.kicks && !v.groundKicks ? "Turn AIR KICKS or GROUND KICKS on first." : nullptr;
     case Item::kickSpin:
         return !v.kicks ? "Turn AIR KICKS on first." : nullptr;
     case Item::tetherParticles:
@@ -2320,6 +2328,7 @@ constexpr TabOnly tabOnly[] = {
     {"kicks", &Values::kicks, nullptr},
     {"kick_gaze_cone_deg", nullptr, &Values::kickGazeConeDeg},
     {"kick_spin_pct", nullptr, &Values::kickSpinPct},
+    {"ground_kicks", &Values::groundKicks, nullptr},
     {"physical_tethers", &Values::physicalTethers, nullptr},
     {"tether_particles", nullptr, &Values::tetherParticles},
     {"tether_substeps", nullptr, &Values::tetherSubsteps},

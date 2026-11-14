@@ -21,6 +21,7 @@
 #include "spidy/grip.hpp"
 #include "spidy/swing_kick.hpp"
 #include "spidy/air_kick.hpp"
+#include "spidy/ground_kick.hpp"
 #include "spidy/game_fp.hpp"
 #include "spidy/web_aim.hpp"
 #include "spidy/game_grab.hpp"
@@ -1432,8 +1433,13 @@ DWORD WINAPI run(void*) {
         // swing, the events logged so far, and the kick under way (its phase, gesture, side, flick angle and
         // seconds into it) for the legs.
         air_kick::Gestures airGestures;
+        ground_kick::Gestures groundGestures;
         uint32_t airSerial{}, airFlagsSent = ~0u, airEventsSeen{}, airState{};
         float airSentAge{}, airAngle{}, airSeconds{};
+        // GROUND KICKS: the player stands slow with the setting on (this frame); the kick under way began
+        // standing, and its foot from the feet (the swing's account).
+        bool groundStand{}, airOnGround{};
+        Vec3 airFoot{};
         air_kick::Gesture airGesture{};
         int airSide{};
         // GRIP ACROSS THE GAME (grip.hpp): the settings last taken by the swing, how long ago they were sent,
@@ -2514,9 +2520,19 @@ DWORD WINAPI run(void*) {
                     // stay while the right stick is moved; neutral ends them on that
                     // frame. Never the left stick's click: that is slow motion.
                     {
-                        const bool master = values.legControl && (values.controlledFlips || values.realisticFlips) &&
-                                            values.body && !flatScreen && viewing && gameplay && motion.active &&
-                                            spiderMan && !calibrationInput && !phone.open() && !padLayer.latched();
+                        // GROUND KICKS (K3, ground_kicks): standing and slow, the chord is the kicks' too, without
+                        // LEG CONTROL or a flip mode (its legs are the air's).
+                        const bool swingStood = swingState.status && swingState.qpc &&
+                                                static_cast<int64_t>(swingState.qpc) >
+                                                    now.QuadPart - frequency.QuadPart / 10;
+                        groundStand = values.groundKicks && swingStood && swingState.grounded != 0 &&
+                                      finite(swingState.velocity) &&
+                                      std::hypot(swingState.velocity.x, swingState.velocity.z) <= 2.f;
+                        const bool lively = viewing && gameplay && motion.active && spiderMan && !flatScreen &&
+                                            !calibrationInput && !phone.open() && !padLayer.latched();
+                        const bool master = (values.legControl && (values.controlledFlips || values.realisticFlips) &&
+                                             values.body && lively) ||
+                                            (groundStand && lively);
                         leg_hold::Hold::Input in;
                         in.seconds = frame.seconds;
                         in.x = (frame.buttons & buttonX) != 0;
@@ -2526,7 +2542,7 @@ DWORD WINAPI run(void*) {
                         in.master = master;
                         // A chord may start where the legs could move (last frame's finding),
                         // with no prompt naming X or Y and the wheel shut.
-                        in.allowed = master && (legBaseLast || legChordAirAnimLast) && !gadgetWheel.open() &&
+                        in.allowed = master && (legBaseLast || legChordAirAnimLast || groundStand) && !gadgetWheel.open() &&
                                      !(namedPress.claimed() &
                                        (game_pad::NamedPress::controlX | game_pad::NamedPress::controlY));
                         legHoldOut = legHold.update(in);
@@ -2578,11 +2594,17 @@ DWORD WINAPI run(void*) {
                     // world's axes (last frame's turn of the rig); the settings go over whenever they change
                     // and every second.
                     {
+                        const bool groundHere = airKick && groundStand && !flatScreen && !calibrationInput &&
+                                                legHoldOut.engaged && frame.hands[1].valid;
                         const bool kickHere = airKick && values.kicks && !flatScreen && !calibrationInput &&
-                                              legHoldOut.engaged && frame.hands[1].valid &&
+                                              legHoldOut.engaged && frame.hands[1].valid && !groundStand &&
                                               hybridOwner.domain == hybrid_owner::Domain::vr;
-                        const air_kick::Flick flick = airGestures.update(frame.seconds, frame.hands[1].stickX,
-                                                                         frame.hands[1].stickY, kickHere);
+                        const air_kick::Flick airFlick = airGestures.update(
+                            frame.seconds, frame.hands[1].stickX, frame.hands[1].stickY, kickHere);
+                        // GROUND KICKS: standing, the stick's flicks and half circle (ground_kick.hpp).
+                        const air_kick::Flick groundFlick = groundGestures.update(
+                            frame.seconds, frame.hands[1].stickX, frame.hands[1].stickY, groundHere);
+                        const air_kick::Flick flick = groundHere ? groundFlick : airFlick;
                         game_swing::AirKickAsk ask;
                         if (flick.gesture != air_kick::Gesture::none) {
                             ++airSerial;
@@ -2599,7 +2621,8 @@ DWORD WINAPI run(void*) {
                             ask.eyeOffset = {eyes.x, eyes.y, eyes.z};
                         }
                         ask.serial = airSerial;
-                        ask.flags = (values.kicks ? 1u : 0u) | (legHoldOut.engaged ? 2u : 0u);
+                        ask.flags = (values.kicks ? 1u : 0u) | (legHoldOut.engaged ? 2u : 0u) |
+                                    (values.groundKicks ? 4u : 0u);
                         ask.gesture = static_cast<uint32_t>(flick.gesture);
                         ask.side = flick.side;
                         ask.angle = flick.angle;
@@ -3242,7 +3265,8 @@ DWORD WINAPI run(void*) {
                     // on where the legs could move last frame, the legs' at once.
                     legStickActive =
                         gesturesPlay && legHoldOut.engaged &&
-                        (legStickOwns || kickHoldsStick || airState != 0 || (legHoldOut.engagedNow && legBaseLast));
+                        (legStickOwns || kickHoldsStick || airState != 0 || groundStand ||
+                         (legHoldOut.engagedNow && legBaseLast));
                     legStickOwns = false;
                     rig.legStick(legStickActive);
                     if (legStickActive)
@@ -5186,7 +5210,9 @@ DWORD WINAPI run(void*) {
                             const uint32_t events = al->events;
                             airState = al->state;
                             const uint32_t gestureRaw = al->gesture, zoneRaw = al->zone;
-                            airGesture = static_cast<air_kick::Gesture>(std::min<uint32_t>(gestureRaw, 4));
+                            airGesture = static_cast<air_kick::Gesture>(std::min<uint32_t>(gestureRaw, 5));
+                            airOnGround = (al->reserved & 1u) != 0 && airState != 0;
+                            airFoot = {al->footX, al->footY, al->footZ};
                             airSide = al->side;
                             airAngle = al->angle;
                             airSeconds = al->progress * air_kick::totalOf(airGesture);
@@ -5214,6 +5240,16 @@ DWORD WINAPI run(void*) {
                                                      air_kick::refusalName(
                                                          static_cast<air_kick::Refusal>(al->refusal)));
                             }
+                        }
+                        // GROUND KICKS: a standing kick's leg, shown while the animation owns the body (the
+                        // pose job's armsOnly path; the VR-owned body has no ground leg): the foot the swing
+                        // modelled, eased in and out by the kick's timeline.
+                        {
+                            const bool legOn = values.groundKicks && airOnGround && airState != 0 &&
+                                               airGesture != air_kick::Gesture::none && finite(airFoot);
+                            const float share =
+                                legOn ? air_kick::amountAt(airGesture, airSeconds, air_kick::standingConfig({})) : 0.f;
+                            native_body::setGroundKick(legOn, airSide >= 0 ? 1 : 0, airFoot, share);
                         }
                         // GRIP ACROSS THE GAME: the swing's account of it. The wall brake's grain in the
                         // hands that brake (pulses 30 to 160 a second by the slide, strong by the braking),
@@ -8886,7 +8922,8 @@ DWORD WINAPI run(void*) {
                             layerIn.handBetween[1] = reachHand[1];
                             // AIR KICKS: a kick under way is the legs' top layer (its pose, the spin reaction at
                             // KICK SPIN).
-                            if (airState != 0 && airGesture != air_kick::Gesture::none && values.kicks) {
+                            if (airState != 0 && airGesture != air_kick::Gesture::none && values.kicks &&
+                                !airOnGround) {
                                 layerIn.kick = true;
                                 layerIn.kickPose = air_kick::legPose(airGesture, airSide, airAngle, airSeconds);
                                 layerIn.kickSpin = static_cast<float>(values.kickSpinPct) / 100.f;

@@ -853,8 +853,28 @@ Result solve(Pose& pose, const Rig& rig, const Targets& targets, const Config& c
             // keeps authored hand poses; fist/shoot still drive web systems
             // outside this overlay.
         }
+        // GROUND KICKS: one leg out at the foot's target on the game's standing pose (the pelvis and the other
+        // leg stay), eased in and out; the knee bends forward. Only a leg whose joints are all in the rig.
+        {
+            const int leg = tg.groundKickLeg == 0 ? 0 : 1;
+            const auto& l = rig.legs[leg];
+            const int n = pose.count();
+            const bool usable = tg.groundKick && finite(tg.groundKickAt) && l.upper >= 0 && l.lower >= 0 &&
+                                l.foot >= 0 && l.upper < n && l.lower < n && l.foot < n &&
+                                static_cast<size_t>(l.foot) < rig.below.size() &&
+                                static_cast<size_t>(l.upper) < rig.below.size() &&
+                                static_cast<size_t>(l.lower) < rig.below.size();
+            const float want = usable ? std::clamp(std::isfinite(tg.groundKickWeight) ? tg.groundKickWeight : 0.f,
+                                                   0.f, 1.f)
+                                      : 0.f;
+            state.groundKickWeight = approach(state.groundKickWeight, want, c.blendSpeed * 2.f * dt);
+            if (usable && state.groundKickWeight > .001f) {
+                limb(pose, rig, l.upper, l.lower, l.foot, tg.groundKickAt, look, state.groundKickWeight);
+                r.solved = true;
+            }
+        }
         r.weight = maxW;
-        r.solved = any || maxW > .001f || (tg.torsoAssist && tg.head && tg.viewMapped);
+        r.solved = r.solved || any || maxW > .001f || (tg.torsoAssist && tg.head && tg.viewMapped);
         if (spinning && rig.pelvis >= 0 && static_cast<size_t>(rig.pelvis) < rig.below.size()) {
             Vec3 pivot = rig.head >= 0 ? pose.position(rig.head) : Vec3{};
             if (!finite(pivot) || rig.head < 0)

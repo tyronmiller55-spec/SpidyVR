@@ -24101,8 +24101,8 @@ int main() {
         // November 14: the swing kick's two switches after those.
         // November 14: WALL BRAKE and GRIP FLING (launcher rows) after those, then HAND GRAB and the handstand's eight,
         // then (still November 14) HAND GRAB STRENGTH and HOLD COST, then AIR KICKS, AIM and SPIN.
-        // then (still November 14) WEB TETHERS, TETHER POINTS and TETHER STEPS.
-        constexpr size_t rowsAfter = 28;
+        // then (still November 14) WEB TETHERS, TETHER POINTS and TETHER STEPS, then GROUND KICKS.
+        constexpr size_t rowsAfter = 29;
         check(all.size() == firstRealistic + std::size(realistic) + rowsAfter,
               "the realistic flips' rows are not the last but the appended ones");
         for (size_t i = 0; i < std::size(realistic); ++i)
@@ -24669,7 +24669,7 @@ int main() {
                   "camera_stabilization=0\ncamera_vertical_ms=0\ncamera_horizontal_ms=0\ncamera_angle_ms=0\n"
                   "camera_light_vertical_ms=75\ncamera_light_horizontal_ms=50\ncamera_light_angle_ms=75\n"
                   "camera_heavy_vertical_ms=200\ncamera_heavy_horizontal_ms=150\ncamera_heavy_angle_ms=200\n"
-                  "spherical_aim=1\nleg_control=0\nleg_stiffness_pct=100\nleg_damping_pct=100\nleg_coupling_pct=50\nleg_double_tap_ms=300\npunch_view_ease_ms=250\nmove_haptics_pct=100\nview_yaw_source=1\nsound_trace=1\njump_handoff_ms=500\nair_view_ease_ms=250\nanim_yaw_sway_pct=20\nturn_in_place_deg=35\npassive_legs_pct=60\npassive_coupling_pct=15\nmovement_mode=0\nrear_snap_turn_ms=200\nanimated_torso_twist=80\nanim_forearm_fallback_deg=60\ncamera_steady_vertical_ms=350\ncamera_steady_horizontal_ms=300\ncamera_steady_angle_ms=450\ncamera_horizon_level_pct=0\ncamera_vr_stabilization=1\nswing_kick_manual=0\nswing_kick_auto=1\nwall_brake=0\ngrip_fling=0\nwall_brake_mu_pct=90\ngrip_fling_gain_pct=130\ngrip_fling_max=9\nhand_grab=0\nhand_grab_force=1200\nenemy_hold_cost=1\nkicks=0\nkick_gaze_cone_deg=25\nkick_spin_pct=30\nphysical_tethers=0\ntether_particles=24\ntether_substeps=8\nleg_air_crouch=1\nleg_reach_spread=1\nair_fists=1\n"
+                  "spherical_aim=1\nleg_control=0\nleg_stiffness_pct=100\nleg_damping_pct=100\nleg_coupling_pct=50\nleg_double_tap_ms=300\npunch_view_ease_ms=250\nmove_haptics_pct=100\nview_yaw_source=1\nsound_trace=1\njump_handoff_ms=500\nair_view_ease_ms=250\nanim_yaw_sway_pct=20\nturn_in_place_deg=35\npassive_legs_pct=60\npassive_coupling_pct=15\nmovement_mode=0\nrear_snap_turn_ms=200\nanimated_torso_twist=80\nanim_forearm_fallback_deg=60\ncamera_steady_vertical_ms=350\ncamera_steady_horizontal_ms=300\ncamera_steady_angle_ms=450\ncamera_horizon_level_pct=0\ncamera_vr_stabilization=1\nswing_kick_manual=0\nswing_kick_auto=1\nwall_brake=0\ngrip_fling=0\nwall_brake_mu_pct=90\ngrip_fling_gain_pct=130\ngrip_fling_max=9\nhand_grab=0\nhand_grab_force=1200\nenemy_hold_cost=1\nkicks=0\nkick_gaze_cone_deg=25\nkick_spin_pct=30\nground_kicks=0\nphysical_tethers=0\ntether_particles=24\ntether_substeps=8\nleg_air_crouch=1\nleg_reach_spread=1\nair_fists=1\n"
                   "camera_pitch_pct=100\ncamera_roll_pct=100\ncamera_bob_vertical_pct=100\ncamera_bob_side_pct=100\n"
                   "camera_head_angle_deg=0\n"
                   "sidestep=1\nsidestep_distance_cm=200\nsidestep_ms=180\nsidestep_cooldown_ms=300\n"
@@ -31682,6 +31682,36 @@ int main() {
             check(inactiveReason(e.item, off) == nullptr, "available with the switch on");
         }
     });
+    test("ground kicks settings: the switch on the legs page, off by default, the ini key, the aim row waits for either", [] {
+        using namespace vr_settings;
+        const auto legsItems = screens()[static_cast<size_t>(Category::legs)].items;
+        check(std::find(legsItems.begin(), legsItems.end(), Item::groundKicks) != legsItems.end(),
+              "the switch is on the legs page");
+        const Row* row = rowFor(Item::groundKicks);
+        check(row && row->choices.empty() && row->place == Place::launcher && row->help &&
+                  std::strlen(row->help) <= 80 && std::strstr(row->title, "GROUND KICKS") &&
+                  std::strstr(row->title, "EXPERIMENTAL"),
+              "the ground kicks row, labelled experimental");
+        Values defaults;
+        check(!defaults.groundKicks && choice(Item::groundKicks, defaults) == 0 &&
+                  defaultChoice(Item::groundKicks) == 0,
+              "ground kicks are off by default");
+        Values v;
+        check(choose(Item::groundKicks, 1, v) && v.groundKicks && choose(Item::groundKicks, 0, v) && !v.groundKicks,
+              "the switch turns on and off");
+        const auto read = withTabOnly({}, "ground_kicks=1\n");
+        check(read.groundKicks && !read.kicks, "the ini key reads, and is not the air kicks'");
+        Values on;
+        on.groundKicks = true;
+        check(tabOnlyText(on).find("ground_kicks=1\n") != std::string::npos, "the ini key writes");
+        check(tabOnlyText(defaults).find("ground_kicks=0\n") != std::string::npos, "and writes 0 by default");
+        Values aim;
+        check(inactiveReason(Item::kickGazeCone, aim) && std::strstr(inactiveReason(Item::kickGazeCone, aim), "GROUND KICKS"),
+              "the aim waits for a kick switch");
+        aim.groundKicks = true;
+        check(inactiveReason(Item::kickGazeCone, aim) == nullptr, "the aim is available with ground kicks on");
+        check(inactiveReason(Item::kickSpin, aim) != nullptr, "the spin is the air's: still waiting");
+    });
     test("web tether settings: the switch, points and steps rows on the movement page, steps, notes and ini keys", [] {
         using namespace vr_settings;
         const auto movementItems = screens()[static_cast<size_t>(Category::movement)].items;
@@ -31947,7 +31977,7 @@ int main() {
     test("Native Animation: combined menu inventory and upstream-compatible v39 settings packet", [] {
         using namespace vr_settings;
         const auto& all = rows();
-        check(all.size() == 183 && static_cast<unsigned>(lastItem) < 256, "row/Item bounds");
+        check(all.size() == 184 && static_cast<unsigned>(lastItem) < 256, "row/Item bounds");
         std::array<unsigned, 256> seen{};
         size_t start = all.size();
         for (size_t i = 0; i < all.size(); ++i) {

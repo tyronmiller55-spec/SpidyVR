@@ -101,6 +101,11 @@ bool airTuckHeld{};
 bool legControlOn{};
 std::array<body::Targets::LegAngles, 2> legControlAngles{};
 float legControlAmount = 1.f; // PASSIVE LEGS' shown share (setLegControl)
+// GROUND KICKS (setGroundKick): the standing kick's leg, mapped onto Targets::groundKick in the armsOnly path.
+bool groundKickOn{};
+int groundKickLeg{};
+Vec3 groundKickFoot{};
+float groundKickShare{};
 // ANIMATED HYBRID jump / air adopt (beginJumpAdopt): wanted since this tick (0 none), the live
 // pose snapshot taken at the first bodyOn job, and that first frame's result.
 uint64_t adoptWantedTick{};
@@ -537,7 +542,10 @@ void solveHero(float* out, uintptr_t job, uintptr_t instance) {
         trackingYaw = wanted.trackingYaw;
         trackingYawSet = true;
     }
-    const bool armsBlend = !on && !armsOverlayOn && (state.armWeight[0] > .001f || state.armWeight[1] > .001f);
+    const bool groundKickLive = live && !on && groundKickOn;
+    const bool armsBlend = !on && !armsOverlayOn &&
+                           (state.armWeight[0] > .001f || state.armWeight[1] > .001f || groundKickLive ||
+                            state.groundKickWeight > .001f);
     if (!problem && (on || armsOverlayOn || armsBlend || spinOn || state.weight > 0)) {
         if (on) {
             // World axes relative to the feet into the hero's model space.
@@ -638,6 +646,10 @@ void solveHero(float* out, uintptr_t job, uintptr_t instance) {
             }
             t.viewSoftlock = viewSoftlock;
             t.up = toModel.rotate(Vec3{0, 1, 0});
+            t.groundKick = groundKickLive && finite(groundKickFoot);
+            t.groundKickLeg = groundKickLeg;
+            t.groundKickAt = t.groundKick ? toModel.rotate(groundKickFoot) : Vec3{};
+            t.groundKickWeight = groundKickShare;
             t.eyes = toModel.rotate(wanted.eyes);
             t.facing = toModel * wanted.facing;
             for (int i = 0; i < 2; ++i) {
@@ -1116,6 +1128,19 @@ void native_body::setAirMomentum(const Vec3& worldVelocity) {
     } else {
         airWorldVel = {};
         airWorldVelSet = false;
+    }
+    ReleaseSRWLockExclusive(&solveLock);
+}
+
+void native_body::setGroundKick(bool on, int leg, Vec3 foot, float weight) {
+    AcquireSRWLockExclusive(&solveLock);
+    groundKickOn = on && finite(foot);
+    if (groundKickOn) {
+        groundKickLeg = leg == 0 ? 0 : 1;
+        groundKickFoot = foot;
+        groundKickShare = std::isfinite(weight) ? std::clamp(weight, 0.f, 1.f) : 0.f;
+    } else {
+        groundKickShare = 0.f;
     }
     ReleaseSRWLockExclusive(&solveLock);
 }

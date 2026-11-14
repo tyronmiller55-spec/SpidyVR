@@ -1483,7 +1483,9 @@ void visit(const native_rays::QueryContext& world) {
         af.focused = focused;
         af.enabled = (ask.flags & 1u) != 0;
         af.legs = (ask.flags & 2u) != 0;
+        af.ground = (ask.flags & 4u) != 0; // GROUND KICKS (ground_kick.hpp): standing, and slow
         af.grounded = body.grounded != 0;
+        af.speed = finite(body.velocity) ? length(Vec3{body.velocity.x, 0.f, body.velocity.z}) * scale : 1e3f;
         af.wall = solver.wall().on;
         af.feet = at;
         af.eyeOffset = {flickAsk.eyeOffset.x, flickAsk.eyeOffset.y, flickAsk.eyeOffset.z};
@@ -1491,7 +1493,7 @@ void visit(const native_rays::QueryContext& world) {
         std::array<game_punch::KickCandidate, 12> candidates{};
         std::array<air_kick::Kick::Target, 12> targets{};
         size_t count = 0;
-        if (af.enabled || airKickState.busy()) {
+        if (af.enabled || af.ground || airKickState.busy()) {
             count = game_punch::kickCandidates(candidates.data(), candidates.size(), at);
             for (size_t i = 0; i < count; ++i)
                 targets[i] = {candidates[i].id, candidates[i].feet, candidates[i].height, candidates[i].radius};
@@ -1555,7 +1557,14 @@ void visit(const native_rays::QueryContext& world) {
         if (airKickState.busy()) {
             live.gesture = static_cast<uint32_t>(airKickState.gesture());
             live.side = airKickState.side();
+            // The kick's foot, from the player's feet (XR poses a standing kick's leg to it).
+            const Vec3 foot = airKickState.foot() - at;
+            live.footX = foot.x;
+            live.footY = foot.y;
+            live.footZ = foot.z;
         }
+        live.speed = af.speed;
+        live.reserved = airKickState.busy() && airKickState.onGround() ? 1u : 0u;
         kickBusy.store(kickState.busy() || airKickState.busy(), std::memory_order_relaxed);
     }
     // A press aimed at something a web can catch belongs to the grab: the

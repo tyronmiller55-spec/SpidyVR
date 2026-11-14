@@ -162,6 +162,13 @@ struct Targets {
     bool armsOnly{};
     // Wanted per-arm blend 0..1 while armsOnly (native_body fills from XR).
     std::array<float, 2> armWeight{};
+    // GROUND KICKS (K3), armsOnly only: one leg (0 left, 1 right) kicks out to groundKickAt (model space, a
+    // point in the pose's own frame) over the game's standing pose, at groundKickWeight 0..1; the pelvis, the
+    // other leg and the torso stay on the animation. EXPERIMENTAL and headset-untested.
+    bool groundKick{};
+    int groundKickLeg{};
+    Vec3 groundKickAt{};
+    float groundKickWeight{};
     // ANIMATED TORSO: a mapped/tracked head drives articulated spine/neck
     // rooted at the authored waist, then arm IK. Actor/pelvis/lower joints
     // never move here. Missing mapped head is not a guessed torso target.
@@ -377,6 +384,8 @@ struct State {
     bool adoptArms{};
     // Per-arm overlay blend while Targets::armsOnly (separate from weight).
     std::array<float, 2> armWeight{};
+    // GROUND KICKS: the kicking leg's blend (Targets::groundKick), easing in and out.
+    float groundKickWeight{};
     // Actual player torso demand angles for diagnostics (rad).
     float overlayTorsoYaw{};
     float overlayTorsoPitch{};

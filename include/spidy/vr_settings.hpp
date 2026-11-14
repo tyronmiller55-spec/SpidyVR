@@ -572,6 +572,13 @@ struct Values {
     // kick_spin_pct: how much of the kick's spin reaction the legs' coupling keeps (30).
     bool kicks = false;
     int kickGazeConeDeg = 25, kickSpinPct = 30;
+    // GROUND KICKS (K3, ground_kick.hpp; November 14), EXPERIMENTAL: off until set. ground_kicks: standing
+    // (slower than 2 m/s) with the legs engaged (Y + X), a quick flick of the right stick kicks: up a front
+    // kick, sideways a side kick, a half circle across the bottom sweeps the legs (a knock-down). The Y + X
+    // chord is then the kicks' on the ground (no web strike or zip with both held). The kick's leg shows
+    // while the animation owns the body (ANIMATED moves); the blow lands either way. kick_gaze_cone_deg aims
+    // these too.
+    bool groundKicks = false;
     // PHYSICAL WEB TETHERS (W1, tether.hpp; November 14), EXPERIMENTAL: off until set. physical_tethers: a
     // simulated rope on each web (a held line sags and drapes), a whip of the hand jerks what is on it, circling
     // the hand turns it round you, and a throw with the trigger held keeps the line, paid out by the trigger.
@@ -854,6 +861,7 @@ enum class Item : uint8_t {
     kicks,
     kickGazeCone,
     kickSpin,
+    groundKicks,
     physicalTethers,
     tetherParticles,
     tetherSubsteps,
@@ -888,7 +896,7 @@ struct Row {
     Place place{};
 };
 // Stable row/setting numbers; categories below determine presentation order.
-const std::array<Row, 183>& rows();
+const std::array<Row, 184>& rows();
 const Row* rowFor(Item);
 // camera, shooters and legs (November 11, the user: "I can't find legs or
 // camera settings in any of the menus. Make sure it's clearly labeled"): tabs
