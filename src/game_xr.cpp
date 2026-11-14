@@ -20,6 +20,7 @@
 #include "spidy/sidestep.hpp"
 #include "spidy/grip.hpp"
 #include "spidy/swing_kick.hpp"
+#include "spidy/air_kick.hpp"
 #include "spidy/game_fp.hpp"
 #include "spidy/web_aim.hpp"
 #include "spidy/game_grab.hpp"
@@ -598,6 +599,10 @@ BridgeCall swingSidestep{};
 // (SpidySwingKickLive); none in an older module (no manual kick, the auto dive as before).
 BridgeCall swingKick{};
 const game_swing::SwingKickLive* swingKickLive{};
+// AIR KICKS' settings and gestures for the swing (SpidyAirKick), and its account (SpidyAirKickLive); none in an
+// older module (no air kicks).
+BridgeCall airKick{};
+const game_swing::AirKickLive* airKickLive{};
 // GRIP ACROSS THE GAME's settings for the swing (SpidySwingGrip) and its account (SpidySwingGripLive); none
 // in an older module (the grip as before).
 BridgeCall swingGrip{};
@@ -1419,6 +1424,14 @@ DWORD WINAPI run(void*) {
         swing_kick::Flick kickFlick;
         uint32_t kickFlickSerial{}, kickFlagsSent = ~0u, kickEventsSeen{};
         float kickSentAge{};
+        // AIR KICKS (air_kick.hpp): the right stick's gestures, the gestures sent, the flags last taken by the
+        // swing, the events logged so far, and the kick under way (its phase, gesture, side, flick angle and
+        // seconds into it) for the legs.
+        air_kick::Gestures airGestures;
+        uint32_t airSerial{}, airFlagsSent = ~0u, airEventsSeen{}, airState{};
+        float airSentAge{}, airAngle{}, airSeconds{};
+        air_kick::Gesture airGesture{};
+        int airSide{};
         // GRIP ACROSS THE GAME (grip.hpp): the settings last taken by the swing, how long ago they were sent,
         // the flings and brakes logged so far, and the brake's grain (time to the next pulse, per hand).
         uint32_t gripSerial{}, gripFlagsSent = ~0u, gripFlingsSeen{}, gripBrakesSeen{};
@@ -2553,6 +2566,47 @@ DWORD WINAPI run(void*) {
                             }
                         }
                     }
+                    // AIR KICKS (air_kick.hpp; kicks, off until set): off the ground with the legs engaged, a
+                    // quick flick of the right stick (a slow push is the legs' pose) is a gesture: the swing
+                    // kicks at the enemy the gaze picks. The gaze and the eyes go with the flick, in the
+                    // world's axes (last frame's turn of the rig); the settings go over whenever they change
+                    // and every second.
+                    {
+                        const bool kickHere = airKick && values.kicks && !flatScreen && !calibrationInput &&
+                                              legHoldOut.engaged && frame.hands[1].valid &&
+                                              hybridOwner.domain == hybrid_owner::Domain::vr;
+                        const air_kick::Flick flick = airGestures.update(frame.seconds, frame.hands[1].stickX,
+                                                                         frame.hands[1].stickY, kickHere);
+                        game_swing::AirKickAsk ask;
+                        if (flick.gesture != air_kick::Gesture::none) {
+                            ++airSerial;
+                            const Quat world = Quat::yaw(motion.swing.trackingYaw) * motion.swing.tilt;
+                            const Vec3 gaze = world.rotate(frame.head.orientation.rotate({0, 0, -1}));
+                            const Vec3 eyes = world.rotate({0, std::clamp(frame.head.position.y, .3f, 2.5f), 0});
+                            ask.gaze = {gaze.x, gaze.y, gaze.z};
+                            ask.eyeOffset = {eyes.x, eyes.y, eyes.z};
+                            diag_log::writef("air kick: gesture %s side=%d angle=%.0f size=%.2f",
+                                             air_kick::gestureName(flick.gesture), flick.side, flick.angle,
+                                             flick.size);
+                        } else {
+                            const Vec3 eyes{0, std::clamp(frame.head.position.y, .3f, 2.5f), 0};
+                            ask.eyeOffset = {eyes.x, eyes.y, eyes.z};
+                        }
+                        ask.serial = airSerial;
+                        ask.flags = (values.kicks ? 1u : 0u) | (legHoldOut.engaged ? 2u : 0u);
+                        ask.gesture = static_cast<uint32_t>(flick.gesture);
+                        ask.side = flick.side;
+                        ask.angle = flick.angle;
+                        ask.gazeCone = static_cast<float>(values.kickGazeConeDeg);
+                        airSentAge += std::isfinite(frame.seconds) ? std::max(frame.seconds, 0.f) : 0.f;
+                        const bool sent = flick.gesture != air_kick::Gesture::none;
+                        if (airKick && (sent || ask.flags != airFlagsSent || airSentAge > 1.f)) {
+                            if (airKick(&ask) == 0) {
+                                airFlagsSent = ask.flags;
+                                airSentAge = 0;
+                            }
+                        }
+                    }
                     // GRIP ACROSS THE GAME (grip.hpp; wall_brake, grip_fling: off until set): the settings go
                     // to the swing whenever they change and every second.
                     if (swingGrip) {
@@ -3161,7 +3215,7 @@ DWORD WINAPI run(void*) {
                     // on where the legs could move last frame, the legs' at once.
                     legStickActive =
                         gesturesPlay && legHoldOut.engaged &&
-                        (legStickOwns || kickHoldsStick || (legHoldOut.engagedNow && legBaseLast));
+                        (legStickOwns || kickHoldsStick || airState != 0 || (legHoldOut.engagedNow && legBaseLast));
                     legStickOwns = false;
                     rig.legStick(legStickActive);
                     if (legStickActive)
@@ -5097,6 +5151,41 @@ DWORD WINAPI run(void*) {
                                                      swing_kick::refusalName(
                                                          static_cast<swing_kick::Refusal>(kl->refusal)),
                                                      who, kl->cone, kl->speed, kl->distance);
+                            }
+                        }
+                        // AIR KICKS: the swing's account of it (AirKickLive): its events in the log, and the
+                        // kick under way for the legs (their top layer). The blow's feedback is the strikes'.
+                        if (const volatile game_swing::AirKickLive* al = airKickLive) {
+                            const uint32_t events = al->events;
+                            airState = al->state;
+                            const uint32_t gestureRaw = al->gesture, zoneRaw = al->zone;
+                            airGesture = static_cast<air_kick::Gesture>(std::min<uint32_t>(gestureRaw, 4));
+                            airSide = al->side;
+                            airAngle = al->angle;
+                            airSeconds = al->progress * air_kick::totalOf(airGesture);
+                            if (events != airEventsSeen) {
+                                airEventsSeen = events;
+                                const uint32_t what = al->lastEvent;
+                                const unsigned long long who = al->target;
+                                const auto zone = static_cast<air_kick::Zone>(std::min<uint32_t>(zoneRaw, 2));
+                                const auto gesture = airGesture;
+                                if (what == 1)
+                                    diag_log::writef("kick: %s start zone=%s target=%llu",
+                                                     air_kick::gestureName(gesture), air_kick::zoneName(zone), who);
+                                else if (what == 2)
+                                    diag_log::writef("kick: %s hit foot=%.1f zone=%s strength=%.2f target=%llu "
+                                                     "(started %u, hits %u, flies %u, misses %u)",
+                                                     air_kick::gestureName(gesture), al->foot,
+                                                     air_kick::zoneName(zone), al->strength, who, al->started,
+                                                     al->hits, al->flies, al->misses);
+                                else if (what == 3)
+                                    diag_log::writef("kick: %s miss (started %u, hits %u, misses %u)",
+                                                     air_kick::gestureName(gesture), al->started, al->hits,
+                                                     al->misses);
+                                else if (what == 4)
+                                    diag_log::writef("kick: refused (%s)",
+                                                     air_kick::refusalName(
+                                                         static_cast<air_kick::Refusal>(al->refusal)));
                             }
                         }
                         // GRIP ACROSS THE GAME: the swing's account of it. The wall brake's grain in the
@@ -8717,6 +8806,13 @@ DWORD WINAPI run(void*) {
                             layerIn.crouch.webbed = swingState.webs[0].attached || swingState.webs[1].attached;
                             layerIn.handBetween[0] = reachHand[0];
                             layerIn.handBetween[1] = reachHand[1];
+                            // AIR KICKS: a kick under way is the legs' top layer (its pose, the spin reaction at
+                            // KICK SPIN).
+                            if (airState != 0 && airGesture != air_kick::Gesture::none && values.kicks) {
+                                layerIn.kick = true;
+                                layerIn.kickPose = air_kick::legPose(airGesture, airSide, airAngle, airSeconds);
+                                layerIn.kickSpin = static_cast<float>(values.kickSpinPct) / 100.f;
+                            }
                             leg_layers::Settings layerSet;
                             layerSet.passivePct = values.passiveLegsPct;
                             layerSet.passiveCouplingPct = values.passiveCouplingPct;
@@ -8745,6 +8841,8 @@ DWORD WINAPI run(void*) {
                             auto params = leg_control::fromPercent(values.legStiffnessPct, values.legDampingPct,
                                                                    values.legCouplingPct);
                             params.coupling *= layered.couplingScale;
+                            if (layered.layer == leg_layers::Layer::kick)
+                                params.stickSeconds = std::min(params.stickSeconds, .04f); // a kick is quick
                             if (layered.easing) {
                                 params.frequencyHz = std::max(params.frequencyHz, 2.5f);
                                 params.dampingRatio = 1.f;
@@ -10710,6 +10808,12 @@ extern "C" __declspec(dllexport) DWORD WINAPI SpidyXrStart(void* input) {
         (swingKickLive->magic != expected.magic || swingKickLive->version != expected.version ||
          swingKickLive->bytes != expected.bytes))
         swingKickLive = nullptr;
+    airKick = reinterpret_cast<BridgeCall>(GetProcAddress(rays, "SpidyAirKick"));
+    airKickLive = reinterpret_cast<const game_swing::AirKickLive*>(GetProcAddress(rays, "SpidyAirKickLive"));
+    if (const game_swing::AirKickLive expected;
+        airKickLive && (airKickLive->magic != expected.magic || airKickLive->version != expected.version ||
+                        airKickLive->bytes != expected.bytes))
+        airKickLive = nullptr;
     swingGrip = reinterpret_cast<BridgeCall>(GetProcAddress(rays, "SpidySwingGrip"));
     swingGripLive = reinterpret_cast<const game_swing::GripLive*>(GetProcAddress(rays, "SpidySwingGripLive"));
     if (const game_swing::GripLive expected; swingGripLive && (swingGripLive->magic != expected.magic ||

@@ -24100,8 +24100,8 @@ int main() {
         // November 14: STEADY's three rows, HORIZON LEVEL and VR STABILIZATION after them.
         // November 14: the swing kick's two switches after those.
         // November 14: WALL BRAKE and GRIP FLING (launcher rows) after those, then HAND GRAB and the handstand's eight,
-        // then (still November 14) HAND GRAB STRENGTH and HOLD COST.
-        constexpr size_t rowsAfter = 22;
+        // then (still November 14) HAND GRAB STRENGTH and HOLD COST, then AIR KICKS, AIM and SPIN.
+        constexpr size_t rowsAfter = 25;
         check(all.size() == firstRealistic + std::size(realistic) + rowsAfter,
               "the realistic flips' rows are not the last but the appended ones");
         for (size_t i = 0; i < std::size(realistic); ++i)
@@ -24668,7 +24668,7 @@ int main() {
                   "camera_stabilization=0\ncamera_vertical_ms=0\ncamera_horizontal_ms=0\ncamera_angle_ms=0\n"
                   "camera_light_vertical_ms=75\ncamera_light_horizontal_ms=50\ncamera_light_angle_ms=75\n"
                   "camera_heavy_vertical_ms=200\ncamera_heavy_horizontal_ms=150\ncamera_heavy_angle_ms=200\n"
-                  "spherical_aim=1\nleg_control=0\nleg_stiffness_pct=100\nleg_damping_pct=100\nleg_coupling_pct=50\nleg_double_tap_ms=300\npunch_view_ease_ms=250\nmove_haptics_pct=100\nview_yaw_source=1\nsound_trace=1\njump_handoff_ms=500\nair_view_ease_ms=250\nanim_yaw_sway_pct=20\nturn_in_place_deg=35\npassive_legs_pct=60\npassive_coupling_pct=15\nmovement_mode=0\nrear_snap_turn_ms=200\nanimated_torso_twist=80\nanim_forearm_fallback_deg=60\ncamera_steady_vertical_ms=350\ncamera_steady_horizontal_ms=300\ncamera_steady_angle_ms=450\ncamera_horizon_level_pct=0\ncamera_vr_stabilization=1\nswing_kick_manual=0\nswing_kick_auto=1\nwall_brake=0\ngrip_fling=0\nwall_brake_mu_pct=90\ngrip_fling_gain_pct=130\ngrip_fling_max=9\nhand_grab=0\nhand_grab_force=1200\nenemy_hold_cost=1\nleg_air_crouch=1\nleg_reach_spread=1\nair_fists=1\n"
+                  "spherical_aim=1\nleg_control=0\nleg_stiffness_pct=100\nleg_damping_pct=100\nleg_coupling_pct=50\nleg_double_tap_ms=300\npunch_view_ease_ms=250\nmove_haptics_pct=100\nview_yaw_source=1\nsound_trace=1\njump_handoff_ms=500\nair_view_ease_ms=250\nanim_yaw_sway_pct=20\nturn_in_place_deg=35\npassive_legs_pct=60\npassive_coupling_pct=15\nmovement_mode=0\nrear_snap_turn_ms=200\nanimated_torso_twist=80\nanim_forearm_fallback_deg=60\ncamera_steady_vertical_ms=350\ncamera_steady_horizontal_ms=300\ncamera_steady_angle_ms=450\ncamera_horizon_level_pct=0\ncamera_vr_stabilization=1\nswing_kick_manual=0\nswing_kick_auto=1\nwall_brake=0\ngrip_fling=0\nwall_brake_mu_pct=90\ngrip_fling_gain_pct=130\ngrip_fling_max=9\nhand_grab=0\nhand_grab_force=1200\nenemy_hold_cost=1\nkicks=0\nkick_gaze_cone_deg=25\nkick_spin_pct=30\nleg_air_crouch=1\nleg_reach_spread=1\nair_fists=1\n"
                   "camera_pitch_pct=100\ncamera_roll_pct=100\ncamera_bob_vertical_pct=100\ncamera_bob_side_pct=100\n"
                   "camera_head_angle_deg=0\n"
                   "sidestep=1\nsidestep_distance_cm=200\nsidestep_ms=180\nsidestep_cooldown_ms=300\n"
@@ -31603,6 +31603,84 @@ int main() {
         check(game_swing::Settings{}.version == 40 && sizeof(game_swing::Settings) == 188,
               "Settings stays v40, 188 bytes");
     });
+    test("air kicks settings: the switch, aim and spin rows on the legs page, steps, notes and ini keys", [] {
+        using namespace vr_settings;
+        const auto legsItems = screens()[static_cast<size_t>(Category::legs)].items;
+        const auto onLegs = [&](Item item) {
+            return std::find(legsItems.begin(), legsItems.end(), item) != legsItems.end();
+        };
+        const Row* row = rowFor(Item::kicks);
+        check(row && row->choices.empty() && row->place == Place::launcher && row->help &&
+                  std::strlen(row->help) <= 80 && std::strstr(row->title, "AIR KICKS") &&
+                  std::strstr(row->title, "EXPERIMENTAL"),
+              "the air kicks row, labelled experimental");
+        Values defaults;
+        check(!defaults.kicks && defaults.kickGazeConeDeg == 25 && defaults.kickSpinPct == 30 &&
+                  choice(Item::kicks, defaults) == 0 && defaultChoice(Item::kicks) == 0,
+              "air kicks are off by default, aim 25 degrees, spin 30%");
+        Values v;
+        check(choose(Item::kicks, 1, v) && v.kicks && choose(Item::kicks, 0, v) && !v.kicks,
+              "the switch sets the value");
+        const auto read = withTabOnly({}, "kicks=1\nkick_gaze_cone_deg=40\nkick_spin_pct=60\n");
+        check(read.kicks && read.kickGazeConeDeg == 40 && read.kickSpinPct == 60, "the ini keys read");
+        const auto wild = withTabOnly({}, "kick_gaze_cone_deg=999\nkick_spin_pct=-5\n");
+        check(wild.kickGazeConeDeg == 50 && wild.kickSpinPct == 0, "the ini ranges clamp");
+        const auto low = withTabOnly({}, "kick_gaze_cone_deg=1\nkick_spin_pct=500\n");
+        check(low.kickGazeConeDeg == 10 && low.kickSpinPct == 100, "and clamp the other way");
+        Values on;
+        on.kicks = true;
+        on.kickGazeConeDeg = 40;
+        on.kickSpinPct = 0;
+        const std::string text = tabOnlyText(on);
+        check(text.find("kicks=1\nkick_gaze_cone_deg=40\nkick_spin_pct=0\n") != std::string::npos,
+              "the ini keys write");
+        struct Entry {
+            Item item;
+            const char* key;
+            int low, high, def;
+            int Values::* number;
+        };
+        const Entry numbers[] = {
+            {Item::kickGazeCone, "kick_gaze_cone_deg", 10, 50, 25, &Values::kickGazeConeDeg},
+            {Item::kickSpin, "kick_spin_pct", 0, 100, 30, &Values::kickSpinPct},
+        };
+        check(onLegs(Item::kicks), "the switch is on the legs page");
+        for (const Entry& e : numbers) {
+            check(onLegs(e.item), "an air kick row is on the legs page");
+            const Row* r = rowFor(e.item);
+            check(r && r->place == Place::launcher && r->help && std::strlen(r->help) <= 80 &&
+                      std::strstr(r->title, "AIR KICK"),
+                  "an air kick row's text");
+            const auto list = steps(e.item);
+            check(!list.empty() && list.size() == r->choices.size() && list.size() <= maxChoices, "the choices");
+            check(list.front() == e.low && list.back() == e.high, "the list spans the ini's range");
+            check(std::is_sorted(list.begin(), list.end()) &&
+                      std::find(list.begin(), list.end(), e.def) != list.end(),
+                  "sorted, with the default on a step");
+            check(defaultChoice(e.item) ==
+                      static_cast<int>(std::find(list.begin(), list.end(), e.def) - list.begin()),
+                  "the default's choice");
+            for (size_t i = 0; i < list.size(); ++i) {
+                Values w;
+                const bool changed = choose(e.item, static_cast<int>(i), w);
+                check(changed == (list[i] != e.def) && w.*(e.number) == list[i], "choose sets the value");
+                check(choice(e.item, w) == static_cast<int>(i), "choice reads it back");
+                const auto back = withTabOnly({}, std::string(e.key) + "=" + std::to_string(list[i]) + "\n");
+                check(back.*(e.number) == list[i], "the ini key reads the step");
+                check(tabOnlyText(w).find(std::string(e.key) + "=" + std::to_string(list[i]) + "\n") !=
+                          std::string::npos,
+                      "the ini key writes the step");
+            }
+            Values past;
+            check(!choose(e.item, static_cast<int>(list.size()), past), "a choice past the end");
+            Values off;
+            check(inactiveReason(e.item, off) && std::strstr(inactiveReason(e.item, off), "AIR KICKS") &&
+                      shownWhenInactive(e.item),
+                  "the tuning waits for the switch");
+            off.kicks = true;
+            check(inactiveReason(e.item, off) == nullptr, "available with the switch on");
+        }
+    });
     test("hand grab settings: strength and hold cost rows, steps, notes and ini keys", [] {
         using namespace vr_settings;
         const auto movementItems = screens()[static_cast<size_t>(Category::movement)].items;
@@ -31761,7 +31839,7 @@ int main() {
     test("Native Animation: combined menu inventory and upstream-compatible v39 settings packet", [] {
         using namespace vr_settings;
         const auto& all = rows();
-        check(all.size() == 177 && static_cast<unsigned>(lastItem) < 256, "row/Item bounds");
+        check(all.size() == 180 && static_cast<unsigned>(lastItem) < 256, "row/Item bounds");
         std::array<unsigned, 256> seen{};
         size_t start = all.size();
         for (size_t i = 0; i < all.size(); ++i) {

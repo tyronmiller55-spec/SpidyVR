@@ -163,6 +163,19 @@ KickTarget kickTarget();
 // (world, real m/s). `feet` and `grounded`: the player's, as fly() has them. False when nothing was sent.
 bool kickBlow(uint64_t target, Vec3 point, Vec3 direction, float playerSpeed, Vec3 enemyVelocity, Vec3 feet,
               bool grounded);
+// AIR KICKS (air_kick.hpp): every enemy in the fight, where he stands now (at most `max`, nearest the
+// player's `feet` first); the count.
+struct KickCandidate {
+    uint64_t id{};
+    Vec3 feet{};
+    float height = 1.8f, radius = .3f;
+};
+size_t kickCandidates(KickCandidate* out, size_t max, Vec3 feet);
+// An air kick's foot met `target`: a blow of `strength` (0..1; the web strike's blows' scale). `fly`: a
+// kinetic blow sending him at `enemyVelocity` (world, real m/s), as every dive does; otherwise a plain hit.
+// False when nothing was sent.
+bool kickHit(uint64_t target, Vec3 point, Vec3 direction, float strength, bool fly, Vec3 enemyVelocity, Vec3 feet,
+             bool grounded);
 // The strike in progress ends with no blow (play stopped, the player changed).
 void cancelStrike();
 // A thug the web pulled to a player in the air has arrived beside him: the

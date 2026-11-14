@@ -565,6 +565,13 @@ struct Values {
     // newtons (1200; 90 kg lifted). enemy_hold_cost: how fast holding an enemy tires the hand (1; 0 never).
     bool handGrab = false;
     int handGrabForce = 1200, enemyHoldCost = 1;
+    // AIR KICKS (K2, air_kick.hpp; November 14), EXPERIMENTAL: off until set. kicks: off the ground with the
+    // legs engaged (Y + X), a quick flick of the right stick kicks: up a two-leg dive, up-left or up-right a
+    // one-leg dive, a quarter circle from a side to up a roundhouse, any other flick a freeform blow.
+    // kick_gaze_cone_deg: how far from your gaze a zone point can be and still be aimed at (25).
+    // kick_spin_pct: how much of the kick's spin reaction the legs' coupling keeps (30).
+    bool kicks = false;
+    int kickGazeConeDeg = 25, kickSpinPct = 30;
     // PASSIVE LEGS (leg_layers.hpp; November 12 06:18): in SpidyVR's air with
     // LEG CONTROL not engaged, the legs' spring runs with no stick, so momentum
     // moves them; this share of it shown (0 OFF). 60 by default. passive_legs_pct.
@@ -838,8 +845,11 @@ enum class Item : uint8_t {
     handstandEyeDrop,
     handGrabForce,
     enemyHoldCost,
+    kicks,
+    kickGazeCone,
+    kickSpin,
 };
-inline constexpr Item lastItem = Item::enemyHoldCost;
+inline constexpr Item lastItem = Item::kickSpin;
 // SLOW-MO LENGTH's last step: no time limit (until L3 toggles it off).
 inline constexpr int slowMotionEndless = 91;
 // Real seconds a full meter lasts for a SLOW-MO LENGTH value; 0 = endless.
@@ -869,7 +879,7 @@ struct Row {
     Place place{};
 };
 // Stable row/setting numbers; categories below determine presentation order.
-const std::array<Row, 177>& rows();
+const std::array<Row, 180>& rows();
 const Row* rowFor(Item);
 // camera, shooters and legs (November 11, the user: "I can't find legs or
 // camera settings in any of the menus. Make sure it's clearly labeled"): tabs

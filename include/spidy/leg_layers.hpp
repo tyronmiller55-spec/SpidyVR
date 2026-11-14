@@ -1,6 +1,7 @@
 // The legs' layers in SpidyVR's air (the user, November 12 06:18): one spring
 // simulation (leg_control::Simulation) driven toward whichever pose wins,
 // highest first:
+//   0. KICK - an air kick under way (air_kick.hpp, K2): its pose, the spin reaction at KICK SPIN.
 //   1. ACTIVE - LEG CONTROL's right stick (Y+X held, or the stick still moved
 //      after); the stick's pose, full LEG COUPLING.
 //   2. FLAIL - in the air, Y+X physically held and B held: a run / flail
@@ -30,7 +31,7 @@ namespace spidy::leg_layers {
 using leg_control::Angles;
 using leg_control::Legs;
 
-enum class Layer : uint8_t { off, passive, autoPose, flail, active, easing };
+enum class Layer : uint8_t { off, passive, autoPose, flail, active, easing, kick };
 inline const char* layerName(Layer l) {
     switch (l) {
     case Layer::passive: return "passive";
@@ -38,6 +39,7 @@ inline const char* layerName(Layer l) {
     case Layer::flail: return "flail";
     case Layer::active: return "active (right stick)";
     case Layer::easing: return "easing to straight";
+    case Layer::kick: return "kick";
     default: return "off";
     }
 }
@@ -145,6 +147,11 @@ struct Input {
     bool flail = false;        // in the air, Y+X and B physically held (the caller's gate)
     CrouchInput crouch{};
     bool handBetween[2]{};     // already with hysteresis (handBetween)
+    // AIR KICKS (air_kick.hpp): a kick is under way; its pose, and the share of the legs' spin reaction
+    // it keeps (KICK SPIN).
+    bool kick = false;
+    Legs kickPose = leg_control::centrePose;
+    float kickSpin = .3f;
 };
 struct Output {
     Layer layer = Layer::off;
@@ -197,7 +204,9 @@ class Mixer {
         // The layer, highest first.
         Layer layer = Layer::off;
         if (in.air) {
-            if (in.active && !(in.flail && stick < flailStickZone))
+            if (in.kick)
+                layer = Layer::kick;
+            else if (in.active && !(in.flail && stick < flailStickZone))
                 layer = Layer::active;
             else if (in.flail)
                 layer = Layer::flail;
@@ -214,6 +223,11 @@ class Mixer {
         out.run = layer != Layer::off;
         float want = 0;
         switch (layer) {
+        case Layer::kick:
+            out.pose = in.kickPose;
+            out.couplingScale = std::clamp(leg_control::finiteOr(in.kickSpin, .3f), 0.f, 1.f);
+            want = 1;
+            break;
         case Layer::active:
             out.useStick = true;
             out.couplingScale = 1;

@@ -75,6 +75,11 @@ add_executable(spidy_vr_stabilize_tests tests/vr_stabilize_tests.cpp)
 target_link_libraries(spidy_vr_stabilize_tests PRIVATE spidy_core)
 add_test(NAME vr_stabilize COMMAND spidy_vr_stabilize_tests)
 
+# AIR KICKS (air_kick.hpp): gestures, zone and gaze, the foot's bend, strength, timeline, leg poses and the kick
+# against enemies (portable).
+add_executable(spidy_air_kick_tests tests/air_kick_tests.cpp)
+target_link_libraries(spidy_air_kick_tests PRIVATE spidy_core)
+add_test(NAME air_kick COMMAND spidy_air_kick_tests)
 # MANUAL SWING KICK (swing_kick.hpp): the arm gate, cone, flick, assist clamps, foot sweep (portable).
 add_executable(spidy_swing_kick_tests tests/swing_kick_tests.cpp)
 target_link_libraries(spidy_swing_kick_tests PRIVATE spidy_core)

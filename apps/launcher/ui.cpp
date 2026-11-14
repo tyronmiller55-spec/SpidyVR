@@ -2718,6 +2718,27 @@ void App::options(ImVec2 origin, ImVec2 size) {
                 "can be on; the dive waits while a hand kick is under way. On by default.",
                 S(42), [&] { tabToggle("##swingkickauto", Item::swingKickAuto); });
         });
+        group(legsPage, 1, "Air kicks (experimental)", [&] {
+            settingOption(
+                Item::kicks, "Air kicks",
+                "Off the ground with the legs engaged (Y+X), flick the right stick (a quick, firm push; a slow "
+                "push still poses the legs): up is a two-leg dive, up-left or up-right a one-leg dive, a quarter "
+                "circle from a side up to the top a spinning roundhouse, and any other flick a lighter freeform "
+                "kick. Look at a head, chest or legs to aim at it; a fast foot that meets an enemy lands a "
+                "blow, harder the faster it goes. The swing kick keeps its own flick while swinging. Off by "
+                "default.",
+                S(42), [&] { tabToggle("##airkicks", Item::kicks); });
+            settingOption(
+                Item::kickGazeCone, "Air kick aim",
+                "How far from where you look a head, chest or legs can be and still be aimed at (10 to 50 "
+                "degrees). The foot bends toward it a little, never more than 25 cm. Needs Air kicks on.",
+                S(150), [&] { tabCombo("##kickaim", Item::kickGazeCone); });
+            settingOption(
+                Item::kickSpin, "Air kick spin",
+                "How much of a kick's turn on your body the legs keep (none to 100%). 30% by default: a "
+                "roundhouse turns you a little, not around. Needs Air kicks on.",
+                S(150), [&] { tabCombo("##kickspin", Item::kickSpin); });
+        });
         group(legsPage, 1, "Handstand (experimental)", [&] {
             settingOption(
                 Item::handstand, "Handstand",

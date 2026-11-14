@@ -20,6 +20,7 @@
 #include "spidy/native_rays.hpp"
 #include "spidy/web_aim.hpp"
 #include "spidy/sidestep.hpp"
+#include "spidy/air_kick.hpp"
 #include "spidy/swing_kick.hpp"
 #include <atomic>
 #include <cstring>
@@ -37,6 +38,8 @@ __declspec(dllexport) ClimbData SpidyClimbData;
 __declspec(dllexport) SidestepLive SpidySidestepLive;
 // MANUAL SWING KICK's account (SwingKickLive), for XR's log and its legs.
 __declspec(dllexport) SwingKickLive SpidySwingKickLive;
+// AIR KICKS' account (AirKickLive), for XR's log, legs and feel.
+__declspec(dllexport) AirKickLive SpidyAirKickLive;
 // GRIP's account (GripLive), for XR's feel and log.
 __declspec(dllexport) GripLive SpidySwingGripLive;
 // HAND GRAB's account (HandGrabLive), for XR's log and feel.
@@ -238,6 +241,16 @@ uint32_t kickSerial{};
 bool kickWaiting{};
 constexpr uint64_t kickMaxAgeMs = 150;
 swing_kick::Kick kickState;
+// AIR KICKS (SpidyAirKick, air_kick.hpp): the latest ask and settings, a flick waiting for the next step and
+// when it came (one older than airKickMaxAgeMs is dropped), and the last serial taken; the kick's state (the
+// swing's thread alone).
+SRWLOCK airKickLock = SRWLOCK_INIT;
+AirKickAsk airKickAsk{}, airKickFlick{}; // the latest settings; the latest gesture's ask
+uint64_t airKickAt{};
+uint32_t airKickSerial{};
+bool airKickWaiting{};
+constexpr uint64_t airKickMaxAgeMs = 150;
+air_kick::Kick airKickState;
 // GRIP ACROSS THE GAME (SpidySwingGrip, grip.hpp): the latest settings (the swing's step applies them).
 SRWLOCK gripLock = SRWLOCK_INIT;
 GripAsk gripAsk{};
@@ -332,6 +345,15 @@ void endKick() {
     kickState.reset();
     kickBusy = false;
 }
+// An air kick's end with the swing or the play: nothing left of it.
+void endAirKick() {
+    if (airKickState.busy()) {
+        volatile AirKickLive& live = SpidyAirKickLive;
+        live.state = 0;
+    }
+    airKickState.reset();
+    kickBusy = false;
+}
 // The swing alone: a perched player's webs are let go, a grab keeps its target.
 // keepWall: the player stays on the wall it is on (a paused game goes on from
 // there); otherwise the body may be anywhere by the next step.
@@ -345,6 +367,7 @@ void cancelSwing(bool keepWall = false) {
     strikeQpc = 0;
     endSidestep(sidestep::Stop::cancelled, Vec3{NAN, NAN, NAN}, 0);
     endKick();
+    endAirKick();
     coasting = false;
     takeoffTransition.reset();
     mountTakeoff.reset();
@@ -1395,6 +1418,101 @@ void visit(const native_rays::QueryContext& world) {
         live.state = static_cast<uint32_t>(kickState.phase());
         live.autoOff = autoDiveOff.load(std::memory_order_relaxed) ? 1u : 0u;
     }
+    // AIR KICKS (air_kick.hpp; the settings and flicks XR sent: SpidyAirKick). A gesture off the ground with the
+    // legs engaged sends the legs out: the foot's swept sphere against every fighting enemy, the blow's strength
+    // from its speed. The swing kick (above) keeps the flick it armed on; this one is every other.
+    {
+        AcquireSRWLockExclusive(&airKickLock);
+        const AirKickAsk ask = airKickAsk, flickAsk = airKickFlick;
+        const bool waiting = airKickWaiting;
+        const uint64_t askedAt = airKickAt;
+        airKickWaiting = false;
+        ReleaseSRWLockExclusive(&airKickLock);
+        volatile AirKickLive& live = SpidyAirKickLive;
+        air_kick::Config ac;
+        ac.gazeCone = ask.gazeCone;
+        airKickState.configure(ac);
+        const float scale = game_punch::worldScale();
+        air_kick::Kick::Frame af;
+        af.seconds = std::clamp(motion.dt / std::max(scale, .05f), 0.f, .1f);
+        af.focused = focused;
+        af.enabled = (ask.flags & 1u) != 0;
+        af.legs = (ask.flags & 2u) != 0;
+        af.grounded = body.grounded != 0;
+        af.wall = solver.wall().on;
+        af.feet = at;
+        af.eyeOffset = {flickAsk.eyeOffset.x, flickAsk.eyeOffset.y, flickAsk.eyeOffset.z};
+        af.gaze = {flickAsk.gaze.x, flickAsk.gaze.y, flickAsk.gaze.z};
+        std::array<game_punch::KickCandidate, 12> candidates{};
+        std::array<air_kick::Kick::Target, 12> targets{};
+        size_t count = 0;
+        if (af.enabled || airKickState.busy()) {
+            count = game_punch::kickCandidates(candidates.data(), candidates.size(), at);
+            for (size_t i = 0; i < count; ++i)
+                targets[i] = {candidates[i].id, candidates[i].feet, candidates[i].height, candidates[i].radius};
+        }
+        af.targets = {targets.data(), count};
+        using Event = air_kick::Kick::Event;
+        air_kick::Kick::Output ao;
+        const bool flicked = waiting && flickAsk.gesture != 0 && GetTickCount64() - askedAt <= airKickMaxAgeMs;
+        if (flicked) {
+            live.asked = live.asked + 1;
+            // The swing kick armed (this step or before) keeps the flick.
+            if (!kickState.busy())
+                ao = airKickState.ask(af, {static_cast<air_kick::Gesture>(flickAsk.gesture), flickAsk.side, flickAsk.angle, 1.f});
+        } else {
+            ao = airKickState.update(af);
+        }
+        const auto account = [&] {
+            live.gesture = static_cast<uint32_t>(ao.gesture);
+            live.side = ao.side;
+            live.zone = static_cast<uint32_t>(ao.zone);
+            live.target = ao.target;
+            live.foot = ao.foot;
+            live.strength = ao.strength;
+            live.point.x = ao.point.x;
+            live.point.y = ao.point.y;
+            live.point.z = ao.point.z;
+        };
+        if (ao.event == Event::started) {
+            live.started = live.started + 1;
+            account();
+            live.lastEvent = 1;
+            MemoryBarrier();
+            live.events = live.events + 1;
+        } else if (ao.event == Event::refused) {
+            live.refused = live.refused + 1;
+            account();
+            live.refusal = static_cast<uint32_t>(ao.refusal);
+            live.lastEvent = 4;
+            MemoryBarrier();
+            live.events = live.events + 1;
+        } else if (ao.event == Event::hit || ao.event == Event::miss) {
+            bool blow = false;
+            if (ao.event == Event::hit)
+                blow = game_punch::kickHit(ao.target, ao.point, ao.way, ao.strength, ao.fly, ao.enemy, at,
+                                           body.grounded != 0);
+            account();
+            if (blow) {
+                live.hits = live.hits + 1;
+                if (ao.fly)
+                    live.flies = live.flies + 1;
+            } else {
+                live.misses = live.misses + 1;
+            }
+            live.lastEvent = blow ? 2u : 3u;
+            MemoryBarrier();
+            live.events = live.events + 1;
+        }
+        live.state = static_cast<uint32_t>(airKickState.phase());
+        live.progress = airKickState.progress();
+        live.angle = airKickState.angle();
+        if (airKickState.busy()) {
+            live.gesture = static_cast<uint32_t>(airKickState.gesture());
+            live.side = airKickState.side();
+        }
+        kickBusy.store(kickState.busy() || airKickState.busy(), std::memory_order_relaxed);
+    }
     // A press aimed at something a web can catch belongs to the grab: the
     // swing gets the input without that hand's grip.
     auto swingInput = focused ? game_grab::forSwing(in) : in;
@@ -1998,8 +2116,15 @@ extern "C" __declspec(dllexport) DWORD WINAPI SpidySwingStart(void* input) {
         kickAt = 0;
         kickWaiting = false;
         ReleaseSRWLockExclusive(&kickLock);
+        AcquireSRWLockExclusive(&airKickLock);
+        airKickAsk = {};
+        airKickFlick = {};
+        airKickAt = 0;
+        airKickWaiting = false;
+        ReleaseSRWLockExclusive(&airKickLock);
         autoDiveOff = false;
         endKick();
+        endAirKick();
         AcquireSRWLockExclusive(&sidestepLock);
         sidestepAsk = {};
         sidestepAt = 0;
@@ -2157,6 +2282,30 @@ extern "C" __declspec(dllexport) DWORD WINAPI SpidySwingKick(void* input) {
     }
     ReleaseSRWLockExclusive(&kickLock);
     autoDiveOff.store((a.flags & 2u) != 0, std::memory_order_relaxed);
+    return 0;
+}
+// AIR KICKS (air_kick.hpp): the VR worker's settings, and a gesture when `serial` is new. 2001: not an
+// AirKickAsk; 1004: the swing has not started; 0 taken (or the same serial again: the flags are still taken,
+// the gesture is not). What it did: SpidyAirKickLive.
+extern "C" __declspec(dllexport) DWORD WINAPI SpidyAirKick(void* input) {
+    AirKickAsk a;
+    if (!input || !copy(&a, input, sizeof(a)) || !validAirKick(a))
+        return 2001;
+    AcquireSRWLockShared(&lifecycle);
+    const bool running = started;
+    ReleaseSRWLockShared(&lifecycle);
+    if (!running)
+        return 1004;
+    AcquireSRWLockExclusive(&airKickLock);
+    const bool flick = a.serial != airKickSerial;
+    airKickSerial = a.serial;
+    airKickAsk = a;
+    if (flick) {
+        airKickFlick = a;
+        airKickAt = GetTickCount64();
+        airKickWaiting = true;
+    }
+    ReleaseSRWLockExclusive(&airKickLock);
     return 0;
 }
 // GRIP ACROSS THE GAME (grip.hpp): the VR worker's settings. 2001: not a GripAsk; 1004: the swing has not

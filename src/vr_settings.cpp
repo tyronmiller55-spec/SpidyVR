@@ -299,6 +299,14 @@ static_assert(std::size(handGrabForceChoices) == std::size(handGrabForceSteps));
 constexpr int enemyHoldCostSteps[] = {0, 1, 2, 3, 5};
 constexpr const char* enemyHoldCostChoices[] = {"NONE", "1 (DEFAULT)", "2", "3", "5"};
 static_assert(std::size(enemyHoldCostChoices) == std::size(enemyHoldCostSteps));
+// AIR KICKS (air_kick.hpp): how far from the gaze a zone point can be aimed at, and the share of the kick's spin
+// reaction the legs keep.
+constexpr int kickGazeConeSteps[] = {10, 15, 20, 25, 30, 40, 50};
+constexpr const char* kickGazeConeChoices[] = {"10 DEG", "15 DEG", "20 DEG", "25 DEG (DEFAULT)", "30 DEG", "40 DEG", "50 DEG"};
+static_assert(std::size(kickGazeConeChoices) == std::size(kickGazeConeSteps));
+constexpr int kickSpinSteps[] = {0, 10, 20, 30, 40, 60, 80, 100};
+constexpr const char* kickSpinChoices[] = {"NONE", "10%", "20%", "30% (DEFAULT)", "40%", "60%", "80%", "100%"};
+static_assert(std::size(kickSpinChoices) == std::size(kickSpinSteps));
 constexpr int cameraVrStabilizationSteps[] = {0, 1};
 constexpr const char* cameraVrStabilizationChoices[] = {"OFF", "ON"};
 static_assert(std::size(cameraVrStabilizationChoices) == std::size(cameraVrStabilizationSteps));
@@ -426,6 +434,10 @@ std::span<const int> steps(Item item) {
         return handGrabForceSteps;
     case Item::enemyHoldCost:
         return enemyHoldCostSteps;
+    case Item::kickGazeCone:
+        return kickGazeConeSteps;
+    case Item::kickSpin:
+        return kickSpinSteps;
     case Item::steadyAngle:
         return steadySmoothSteps;
     case Item::steadyHorizontal:
@@ -627,6 +639,10 @@ float numberOf(Item item, const Values& v) {
         return static_cast<float>(v.handGrabForce);
     case Item::enemyHoldCost:
         return static_cast<float>(v.enemyHoldCost);
+    case Item::kickGazeCone:
+        return static_cast<float>(v.kickGazeConeDeg);
+    case Item::kickSpin:
+        return static_cast<float>(v.kickSpinPct);
     case Item::steadyAngle:
         return static_cast<float>(v.steadyAngleMs);
     case Item::steadyHorizontal:
@@ -806,6 +822,8 @@ template <class V> auto switchOf(Item item, V& v) -> decltype(&v.aimMarkers) {
         return &v.gripFling;
     case Item::handGrab:
         return &v.handGrab;
+    case Item::kicks:
+        return &v.kicks;
     case Item::legAirCrouch:
         return &v.legAirCrouch;
     case Item::legReachSpread:
@@ -957,6 +975,8 @@ Values sanitized(Values v) {
     v.gripFlingMax = std::clamp(v.gripFlingMax, 3, 20);
     v.handGrabForce = std::clamp(v.handGrabForce, 400, 4000);
     v.enemyHoldCost = std::clamp(v.enemyHoldCost, 0, 5);
+    v.kickGazeConeDeg = std::clamp(v.kickGazeConeDeg, 10, 50);
+    v.kickSpinPct = std::clamp(v.kickSpinPct, 0, 100);
     v.handstandFallDegrees = std::clamp(v.handstandFallDegrees, 15, 60);
     v.handstandHeightCm = std::clamp(v.handstandHeightCm, 60, 140);
     v.handstandGainPct = std::clamp(v.handstandGainPct, 50, 600);
@@ -966,9 +986,9 @@ Values sanitized(Values v) {
     v.automaticHandThreshold = std::clamp(v.automaticHandThreshold, 50, 300);
     return v;
 }
-const std::array<Row, 177>& rows() {
+const std::array<Row, 180>& rows() {
     // The help fits the game's description column beside the rows.
-    static const std::array<Row, 177> all{{
+    static const std::array<Row, 180> all{{
         {Item::none, "WEBS", nullptr, {}},
         {Item::webStyle, "WEB STYLE",
          "Arcade: webs pass lamp posts, signs and cars, and swings stay above the street.", webStyleChoices},
@@ -1431,6 +1451,17 @@ const std::array<Row, 177>& rows() {
          "A fast flight at the ringed enemy dives in feet first. Off: kick by hand only.",
          {},
          Place::launcher},
+        {Item::kicks,
+         "AIR KICKS (EXPERIMENTAL)",
+         "In the air, Y+X, flick the right stick: dive, double dive, roundhouse or a kick.",
+         {},
+         Place::launcher},
+        {Item::kickGazeCone, "AIR KICK AIM",
+         "How far from your gaze a head, chest or leg can be and still be kicked at.",
+         kickGazeConeChoices, Place::launcher},
+        {Item::kickSpin, "AIR KICK SPIN",
+         "How much of a kick's spin the legs pass to your body. NONE: no spin.",
+         kickSpinChoices, Place::launcher},
         {Item::wallBrake,
          "WALL BRAKE (EXPERIMENTAL)",
          "On a wall, squeeze a grip with your palm on it to brake a slide, then hold on.",
@@ -1568,7 +1599,7 @@ const std::array<Screen, categoryCount>& screens() {
     static constexpr Item legs[] = {
         Item::legControl,      Item::legStiffness,    Item::legDamping,   Item::legCoupling,
         Item::passiveLegs,     Item::passiveCoupling, Item::legAirCrouch, Item::legReachSpread,
-        Item::swingKickManual, Item::swingKickAuto,
+        Item::swingKickManual, Item::swingKickAuto, Item::kicks, Item::kickGazeCone, Item::kickSpin,
         Item::handstand, Item::handstandAssist, Item::handstandFall, Item::handstandPushGain,
         Item::handstandPushMax, Item::handstandHeight, Item::handstandGain, Item::handstandEyeDrop,
     };
@@ -1641,6 +1672,9 @@ const char* inactiveReason(Item item, const Values& v) {
     case Item::handGrabForce:
     case Item::enemyHoldCost:
         return !v.handGrab ? "Turn HAND GRAB on first." : nullptr;
+    case Item::kickGazeCone:
+    case Item::kickSpin:
+        return !v.kicks ? "Turn AIR KICKS on first." : nullptr;
     case Item::legControl:
         return !v.controlledFlips && !v.realisticFlips
                    ? "Needs CONTROLLED or REALISTIC FLIPS. ON here turns CONTROLLED FLIPS on."
@@ -1704,6 +1738,8 @@ bool shownWhenInactive(Item item) {
     case Item::handstandEyeDrop:
     case Item::handGrabForce:
     case Item::enemyHoldCost:
+    case Item::kickGazeCone:
+    case Item::kickSpin:
     case Item::legControl:
     case Item::legStiffness:
     case Item::legDamping:
@@ -1975,6 +2011,12 @@ bool choose(Item item, int index, Values& v) {
     case Item::enemyHoldCost:
         v.enemyHoldCost = s[index];
         break;
+    case Item::kickGazeCone:
+        v.kickGazeConeDeg = s[index];
+        break;
+    case Item::kickSpin:
+        v.kickSpinPct = s[index];
+        break;
     case Item::steadyAngle:
         v.steadyAngleMs = s[index];
         break;
@@ -2233,6 +2275,9 @@ constexpr TabOnly tabOnly[] = {
     {"hand_grab", &Values::handGrab, nullptr},
     {"hand_grab_force", nullptr, &Values::handGrabForce},
     {"enemy_hold_cost", nullptr, &Values::enemyHoldCost},
+    {"kicks", &Values::kicks, nullptr},
+    {"kick_gaze_cone_deg", nullptr, &Values::kickGazeConeDeg},
+    {"kick_spin_pct", nullptr, &Values::kickSpinPct},
     {"leg_air_crouch", &Values::legAirCrouch, nullptr},
     {"leg_reach_spread", &Values::legReachSpread, nullptr},
     {"air_fists", &Values::airFists, nullptr},

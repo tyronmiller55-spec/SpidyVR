@@ -824,6 +824,57 @@ bool game_punch::kickBlow(uint64_t target, Vec3 point, Vec3 direction, float pla
     kickFlight.reset();
     return true;
 }
+size_t game_punch::kickCandidates(KickCandidate* out, size_t max, Vec3 feet) {
+    size_t count = 0;
+    if (!out || !max || !enabled.load(std::memory_order_relaxed) || !TryAcquireSRWLockShared(&updating))
+        return 0;
+    if (enabled && !fighter.contactOnly) {
+        for (const auto& e : enemies) {
+            if (!e.id || !finite(e.feet))
+                continue;
+            const KickCandidate c{e.id, e.feet, e.height, e.radius};
+            // Nearest first, the list kept at `max`.
+            size_t at = count;
+            while (at > 0 && length(out[at - 1].feet - feet) > length(c.feet - feet))
+                --at;
+            if (at >= max)
+                continue;
+            if (count < max)
+                ++count;
+            for (size_t i = count - 1; i > at; --i)
+                out[i] = out[i - 1];
+            out[at] = c;
+        }
+    }
+    ReleaseSRWLockShared(&updating);
+    return count;
+}
+bool game_punch::kickHit(uint64_t target, Vec3 point, Vec3 direction, float strength, bool fly, Vec3 enemyVelocity,
+                         Vec3 feet, bool grounded) {
+    if (!enabled.load(std::memory_order_relaxed) || !TryAcquireSRWLockShared(&updating))
+        return false;
+    struct Release {
+        ~Release() {
+            ReleaseSRWLockShared(&updating);
+        }
+    } release;
+    if (!enabled || fighter.contactOnly || !target || !finite(point) || !finite(direction) ||
+        !std::isfinite(strength) || (fly && !finite(enemyVelocity)))
+        return false;
+    const Vec3 way = length(direction) > .5f ? normalized(direction) : Vec3{0, 0, -1};
+    const float s = std::max(std::clamp(strength, 0.f, 1.f), strike.config().minStrength);
+    auto e = punches.blow(way, speedOf(punches.config(), s));
+    e.hand = WebStrike::diveHand;
+    e.target = target;
+    e.point = point;
+    fighter.feet = feet;
+    fighter.grounded = grounded;
+    if (fly)
+        kickFlight = enemyVelocity;
+    land(e, false);
+    kickFlight.reset();
+    return true;
+}
 bool game_punch::lifting(Vec3 feet) {
     if (!enabled.load(std::memory_order_relaxed) || !TryAcquireSRWLockShared(&updating))
         return false;

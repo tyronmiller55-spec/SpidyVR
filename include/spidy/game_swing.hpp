@@ -661,6 +661,45 @@ struct SwingKickLive {
     uint32_t autoOff{}, reserved{};
 };
 static_assert(sizeof(SwingKickLive) == 104);
+// Side channel from XR (AIR KICKS, air_kick.hpp, K2): the settings, sent whenever they change and again every
+// second, and on a flick the ask (`serial` new): `gesture` (air_kick::Gesture, 1 dive, 2 double, 3 roundhouse,
+// 4 freeform), `side` (-1 left, +1 right) and `angle` (degrees from up) of the flick, the eyes' offset from the
+// feet and the gaze (both in the world's axes). `flags` bit 0: kicks is on; bit 1: the legs are engaged.
+// gazeCone is kick_gaze_cone_deg (25). Not a Command or Settings field and not versioned with them (an older
+// swing module has no SpidyAirKick export; XR then sends none and no air kick happens).
+struct AirKickAsk {
+    uint32_t magic = 0x5357414b, version = 1, bytes = sizeof(AirKickAsk), serial{};
+    uint32_t flags{}, gesture{};
+    int32_t side{};
+    float gazeCone = 25.f;
+    Vec3 eyeOffset{0, 1.6f, 0}, gaze{0, 0, -1};
+    float angle{};
+    uint32_t reserved{};
+};
+static_assert(sizeof(AirKickAsk) == 64);
+inline bool validAirKick(const AirKickAsk& a) {
+    return a.magic == 0x5357414b && a.version == 1 && a.bytes == sizeof(AirKickAsk) && !(a.flags & ~3u) &&
+           a.gesture <= 4 && a.side >= -1 && a.side <= 1 && std::isfinite(a.gazeCone) && a.gazeCone >= 8.f &&
+           a.gazeCone <= 60.f && std::isfinite(a.angle) && std::isfinite(a.eyeOffset.x) &&
+           std::isfinite(a.eyeOffset.y) && std::isfinite(a.eyeOffset.z) && std::isfinite(a.gaze.x) &&
+           std::isfinite(a.gaze.y) && std::isfinite(a.gaze.z) && a.eyeOffset.y > 0.f && a.eyeOffset.y < 3.f &&
+           a.gaze.x * a.gaze.x + a.gaze.y * a.gaze.y + a.gaze.z * a.gaze.z > .25f;
+}
+// SpidyAirKickLive: the kick's account for XR's log, legs and feel. `events` counts up last; for the latest
+// event (1 started, 2 hit, 3 miss, 4 refused): its gesture, side, zone (air_kick::Zone), target (an actor
+// record), the foot's speed (real m/s) and the blow's strength (0..1), and for a refusal air_kick::Refusal.
+// `state` is the kick's Phase now (0 idle, 1 kicking, 2 recovering); `progress` 0..1 through the kick.
+struct AirKickLive {
+    uint32_t magic = 0x53574b4c, version = 1, bytes = sizeof(AirKickLive), state{};
+    uint32_t gesture{}, zone{}, refusal{}, lastEvent{};
+    int32_t side{};
+    uint32_t asked{}, started{}, hits{}, misses{}, refused{}, flies{}, events{};
+    uint64_t target{};
+    Vec3 point{};
+    float foot{}, strength{}, progress{}, angle{};
+    uint32_t reserved{};
+};
+static_assert(sizeof(AirKickLive) % 8 == 0);
 // Side channel from XR (GRIP ACROSS THE GAME, grip.hpp): the settings, sent whenever they change and again
 // every second (a swing module started anew starts from none). `flags` bit 0: wall_brake, bit 1:
 // grip_fling. mu: the brake's friction (0.9); gain and vMax: the fling's (1.3, 9 m/s). Not a Command or
