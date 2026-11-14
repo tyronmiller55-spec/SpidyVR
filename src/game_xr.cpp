@@ -1203,6 +1203,10 @@ DWORD WINAPI run(void*) {
         hybrid_steer::YawFilter hybridViewYaw{};
         // HANDSTAND (H1): the state last logged.
         handstand::State handstandStateLogged{};
+        // The gates the touchdown catch was handed this frame (for the log of a landing it did not judge).
+        struct HandstandGates {
+            bool vrOwns{}, flipAir{}, onLine{}, ground{}, landing{};
+        } handstandGates;
         float handstandLogAge{};
         int64_t hybridSteerDiagAt{};
         // VIEW YAW SOURCE: STABLE's heading (stable_yaw.hpp), the hero-vs-steer
@@ -3083,8 +3087,24 @@ DWORD WINAPI run(void*) {
                     rig.animatedYawOwner(
                         hybrid_steer::ownsYaw(hybridInputLocked, values.animatedModelYaw, hybridInputCrawl));
                     // HANDSTAND (H1): a catch only in SpidyVR's air (hybrid: VR owns him).
+                    // TORSO UPDATE's neighbour, the landing catch (Nov 13): the landing's
+                    // hand-off to the animation (EnterAnim::land) leaves the catch its first
+                    // frames (hybrid_owner::handstandLandNs) in the animation's domain too, so
+                    // a touchdown judged a frame late is still judged, and a catch there takes
+                    // SpidyVR back (hybrid_owner, EnterVr::handstand).
+                    const bool handstandLanding =
+                        values.animatedHybrid && values.animatedMoves &&
+                        hybridOwner.domain == hybrid_owner::Domain::anim && hybridOwner.landNs >= 0 &&
+                        (frame.predictedDisplayTime > 0
+                             ? frame.predictedDisplayTime
+                             : static_cast<int64_t>(GetTickCount64()) * 1'000'000ll) -
+                                hybridOwner.landNs <=
+                            hybrid_owner::handstandLandNs;
                     const bool handstandVrOwns = !(values.animatedHybrid && values.animatedMoves) ||
-                                                 hybridOwner.domain == hybrid_owner::Domain::vr;
+                                                 hybridOwner.domain == hybrid_owner::Domain::vr ||
+                                                 handstandLanding;
+                    handstandGates = {handstandVrOwns, flipAir, onLine, swingState.grounded != 0,
+                                      handstandLanding};
                     rig.handstandVrAir(flipAir && handstandVrOwns);
                     // THE TOUCHDOWN CATCH (Nov 13): the game's ground under SpidyVR's
                     // body this frame (before the landing hands him to the animation).
@@ -3103,14 +3123,20 @@ DWORD WINAPI run(void*) {
                     {
                         const auto& hs = motion.handstand;
                         if (hs.caughtNow)
-                            diag_log::writef("handstand: catch%s (inverted %.0f deg, eyes down %.2f m)",
+                            diag_log::writef("handstand: catch%s (inverted %.0f deg, eyes down %.2f m%s%s)",
                                              hs.touchdownCatch ? " at the touchdown" : "",
                                              handstand::invertedDegrees(motion.flipTilt.rotate({0, 1, 0})),
-                                             motion.handstandDrop);
-                        else if (hs.touchdownNow && hs.refused != handstand::Refusal::none)
-                            diag_log::writef("handstand: no catch at the touchdown: %s (inverted %.0f deg, "
-                                             "spin %.1f rad/s, palms %.2f m over the floor)",
-                                             handstand::refusalName(hs.refused), hs.inverted, hs.spin, hs.palmGap);
+                                             motion.handstandDrop, hs.gripCarried ? ", grip carried" : "",
+                                             handstandGates.landing ? ", on the landing handoff" : "");
+                        else if (hs.touchdownNow && hs.refused != handstand::Refusal::none) {
+                            // Every gate that failed (the first is the reason), not only the first.
+                            char failed[200];
+                            handstand::refusalList(hs.failed, failed, sizeof failed);
+                            diag_log::writef(
+                                "handstand: no catch at the touchdown: %s (inverted %.0f deg, "
+                                "spin %.1f rad/s, palms %.2f m over the floor; every failing gate: %s)",
+                                handstand::refusalName(hs.refused), hs.inverted, hs.spin, hs.palmGap, failed);
+                        }
                         handstandLogAge += std::isfinite(frame.seconds) ? std::clamp(frame.seconds, 0.f, .1f) : 0.f;
                         if (hs.state != handstandStateLogged ||
                             (hs.state == handstand::State::balance && handstandLogAge >= .5f)) {
@@ -7600,6 +7626,20 @@ DWORD WINAPI run(void*) {
                         if (hybridOn) {
                             hybridOwner.update(hybridFrame, handoffNs);
                             if (hybridOwner.enterAnim) {
+                                // HANDSTAND: a landing handed to the animation with no touchdown judged
+                                // (22:24 playtest: 28 judged of 63) says which input kept it out.
+                                if (hybridOwner.lastEnterAnim == hybrid_owner::EnterAnim::land &&
+                                    values.handstand && values.realisticFlips &&
+                                    !motion.handstand.touchdownNow && !motion.handstand.caughtNow &&
+                                    motion.handstand.state == handstand::State::off)
+                                    diag_log::writef(
+                                        "handstand: landing handoff without a touchdown judged (touchdown "
+                                        "input %d, SpidyVR air %d, aloft %d, air age %.2f s; ground %d, "
+                                        "flip air %d, on a line %d, SpidyVR owns %d)",
+                                        motion.handstand.touchdownSeen, motion.handstand.vrAirSeen,
+                                        motion.handstand.aloftSeen, motion.handstand.airAge,
+                                        handstandGates.ground, handstandGates.flipAir, handstandGates.onLine,
+                                        handstandGates.vrOwns);
                                 rideAnimAge = 0;
                                 rideAnimLanding = hybridOwner.lastEnterAnim == hybrid_owner::EnterAnim::land ||
                                                   hybridOwner.lastEnterAnim == hybrid_owner::EnterAnim::zip;

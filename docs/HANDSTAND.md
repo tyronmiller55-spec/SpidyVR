@@ -61,6 +61,16 @@ legs shifting ξref (H2), handsprings (H2).
 - The eye drop also applies to inverted flips in VR air with handstand on.
 - A pressed while supported still reaches the game (H1 does nothing with it).
 
+## The landing catch, second pass (Nov 13 22:24 playtest)
+
+28 touchdowns judged of 63 SpidyVR landings (18 "not inverted enough", 8 "a grip held", 1 palms high, 1 untracked); the one catch, 161 degrees inverted, fell after 63 ms (lean 43.7 degrees) because the balance started from the landing's 9.3 m/s. Changes (handstand.hpp, hybrid_owner.hpp, game_xr.cpp; no offsets involved):
+
+- The balance starts from the landing's speed and spin damped (`entryKeep` .12, `entrySpinKeep` .2, at most `entryMaxSpeed` .5 m/s: the palms' support is ~0.15 m wide, the pendulum's divergence 3.2/s).
+- A grip squeezed at the touchdown no longer refuses a catch with both palms down, and is carried: it lets go only once released and squeezed again.
+- `touchdownReach` 1.0 to 1.6 m (the eyes' drop .9 plus an arm .7): the playtest's refusal had the palms 1.54 m over the floor at 121 degrees.
+- The landing's hand-off to the animation leaves the catch its first 0.25 s (`hybrid_owner::handstandLandNs`): the touchdown is judged in the animation's domain too, and a catch there takes SpidyVR back (`EnterVr::handstand`).
+- diag: every failing gate on each refusal ("every failing gate: ..."), and a line for a landing handed over with no touchdown judged, with the inputs that kept it out.
+
 ## TODO
 
 - `TODO(handstand sound)`: the push-off sound and grunt; no sound IDs yet (SOUND TRACE, 1008510).

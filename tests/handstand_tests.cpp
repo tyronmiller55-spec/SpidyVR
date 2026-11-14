@@ -97,7 +97,13 @@ int main() {
         Handstand grip;
         auto gr = inverted();
         gr.grip = true;
-        check(!grip.update(gr, on()).caughtNow, "a grip held: no catch");
+        check(grip.update(gr, on()).caughtNow,
+              "a grip held with both palms down: still a catch (the landing pass)");
+        Handstand gripHigh;
+        auto gh = inverted();
+        gh.grip = true;
+        gh.floorPalms = 1;
+        check(!gripHigh.update(gh, on()).caughtNow, "a grip with one palm up: no catch");
     }
     // Balance: a small lean settles over the palms; held, no exit; the catch turns to balance.
     {
@@ -192,6 +198,20 @@ int main() {
         grip.update(gr, on());
         gr.grip = true;
         check(grip.update(gr, on()).exitNow == Exit::grip, "a grip lets go");
+        // A grip squeezed at the catch is carried: no exit until it is released once and squeezed again.
+        Handstand carried;
+        auto ca = inverted();
+        ca.grip = true;
+        const auto caught = carried.update(ca, on());
+        check(caught.caughtNow && caught.gripCarried, "the catch takes the grip in");
+        Exit seen = Exit::none;
+        for (int i = 0; i < 20; ++i)
+            seen = carried.update(ca, on()).exitNow != Exit::none ? Exit::grip : seen;
+        check(seen == Exit::none, "a carried grip does not let go");
+        ca.grip = false;
+        carried.update(ca, on());
+        ca.grip = true;
+        check(carried.update(ca, on()).exitNow == Exit::grip, "released and squeezed again: it lets go");
         Handstand lost;
         auto lo = inverted();
         lost.update(lo, on());
@@ -272,6 +292,44 @@ int main() {
         f.handSupport = false;
         owner.update(f, now += 11'000'000);
         check(owner.domain == Domain::anim && owner.lastEnterAnim == EnterAnim::land, "let go: the landing");
+        // The landing's first frames: a catch judged after the hand-off takes him back to VR.
+        {
+            HybridOwner late;
+            Frame l;
+            l.state.playing = l.state.fresh = true;
+            l.cancelGrip = true;
+            int64_t t = 1'000'000'000;
+            late.update(l, t += 11'000'000);
+            l.cancelGrip = false;
+            l.state.grounded = true;
+            late.update(l, t += 11'000'000);
+            check(late.domain == Domain::anim && late.lastEnterAnim == EnterAnim::land, "landed: ANIM");
+            for (int i = 0; i < 4; ++i)
+                late.update(l, t += 11'000'000);
+            l.handSupport = true;
+            late.update(l, t += 11'000'000);
+            check(late.domain == Domain::vr && late.lastEnterVr == EnterVr::handstand &&
+                      std::strcmp(enterVrName(EnterVr::handstand), "handstand") == 0,
+                  "a catch 55 ms after the landing: back to VR (handstand)");
+            for (int i = 0; i < 20; ++i)
+                late.update(l, t += 11'000'000);
+            check(late.domain == Domain::vr, "and held there");
+            // Too late: the grace (0.25 s) has passed.
+            HybridOwner slow;
+            Frame s2;
+            s2.state.playing = s2.state.fresh = true;
+            s2.cancelGrip = true;
+            int64_t u = 1'000'000'000;
+            slow.update(s2, u += 11'000'000);
+            s2.cancelGrip = false;
+            s2.state.grounded = true;
+            slow.update(s2, u += 11'000'000);
+            for (int i = 0; i < 30; ++i)
+                slow.update(s2, u += 11'000'000);
+            s2.handSupport = true;
+            slow.update(s2, u += 11'000'000);
+            check(slow.domain == Domain::anim, "a catch 0.35 s after the landing: the animation keeps him");
+        }
         HybridOwner anim;
         Frame g;
         g.state.playing = g.state.fresh = g.state.grounded = true;
@@ -377,10 +435,49 @@ int main() {
         Handstand far;
         fly(far);
         auto fa = touchdown();
-        fa.palms[0].y = fa.palms[1].y = 1.4f;
+        fa.palms[0].y = fa.palms[1].y = 1.8f;
         const auto ar = far.update(fa, on());
-        check(!ar.caughtNow && ar.refused == Refusal::palmsHigh && ar.palmGap > 1.3f,
-              "palms over a metre up at the touchdown: refused");
+        check(!ar.caughtNow && ar.refused == Refusal::palmsHigh && ar.palmGap > 1.7f,
+              "palms 1.8 m up at the touchdown: refused");
+        // The 22:24 playtest's refusal, palms 1.54 m over the floor at 121 degrees: reachable now.
+        Handstand reach;
+        fly(reach);
+        auto rc = touchdown();
+        rc.palms[0].y = rc.palms[1].y = 1.54f;
+        check(reach.update(rc, on()).caughtNow, "palms 1.54 m up (eyes' drop and an arm): a catch");
+        // Every failing gate is listed, the first being the reason.
+        Handstand many;
+        fly(many);
+        auto mu = touchdown();
+        mu.bodyUp = normalized(Vec3{1, .3f, 0});
+        mu.angular = {7, 0, 0};
+        mu.palms[0].y = mu.palms[1].y = 1.8f;
+        const auto mo = many.update(mu, on());
+        check(mo.refused == Refusal::spin || mo.refused == Refusal::upright,
+              "first failing gate is the reason");
+        check((mo.failed & refusalBit(Refusal::upright)) && (mo.failed & refusalBit(Refusal::spin)) &&
+                  (mo.failed & refusalBit(Refusal::palmsHigh)),
+              "all three failed gates are reported");
+        char list[200];
+        refusalList(mo.failed, list, sizeof list);
+        check(std::strstr(list, "not inverted enough") && std::strstr(list, "spinning too fast") &&
+                  std::strstr(list, "palms too far"),
+              "the refusal list names every failed gate");
+        // Seeded damped: a landing at 9.3 m/s and 4 rad/s no longer falls inside 100 ms.
+        Handstand damped;
+        fly(damped);
+        auto fast9 = touchdown();
+        fast9.velocity = {9.3f, 0, 0};
+        fast9.angular = {0, 0, 4};
+        fast9.palms[0].y = fast9.palms[1].y = .08f;
+        const auto dm = damped.update(fast9, on());
+        check(dm.caughtNow, "a fast landing is caught");
+        bool fell = false;
+        for (int i = 0; i < 10; ++i) // 111 ms
+            fell = fell || damped.update(fast9, on()).exitNow == Exit::fall;
+        check(!fell, "the damped start does not fall inside 100 ms (it did at 9.3 m/s: the 63 ms fall)");
+        check(length(damped.update(fast9, on()).balance.v) < 3.f,
+              "the balance's speed is nowhere near the landing's");
         Handstand dis;
         fly(dis);
         const auto dr = dis.update(touchdown(), Params{});

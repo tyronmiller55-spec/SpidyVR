@@ -79,8 +79,15 @@ enum class EnterVr : uint8_t {
     flip,    // a flip's pitch or tilt input from either stick in a midair animation (breakForFlip)
     pointJump, // POINT JUMP fired off a surface (Frame::pointJump; the ground exception)
     timed,     // JUMP TO SPIDYVR (November 12): a midair animation's timer ran out (Frame::jumpHandoffNs)
-    sidestep,  // QUICK SIDESTEP (November 12, sidestep.hpp): a ground burst (Frame::sidestep; a ground exception)
+    sidestep,  // QUICK SIDESTEP (November 12, sidestep.hpp): a ground burst (Frame::sidestep; a ground
+               // exception)
+    handstand, // HANDSTAND (November 13): the hands caught him in the landing's first frames
+               // (Frame::handSupport)
 };
+// A landing's hand-off to the animation still takes a handstand catch back to SpidyVR this long
+// after it (handstand::Params::touchdownGrace is the same 0.25 s): the catch is judged on the
+// handoff's own frame, but the palms often come down a few frames later.
+constexpr int64_t handstandLandNs = 250'000'000;
 
 // JUMP TO SPIDYVR (the user, November 12 04:56 / 05:07 / 05:41: "All jumps
 // should switch to Spidy VR after about a half of a second"; plain jumps, zip
@@ -137,6 +144,8 @@ inline const char* enterVrName(EnterVr e) {
         return "jump-timer";
     case EnterVr::sidestep:
         return "sidestep";
+    case EnterVr::handstand:
+        return "handstand";
     default:
         return "none";
     }
@@ -456,6 +465,9 @@ class StrikeHold {
 struct HybridOwner {
     Domain domain = Domain::anim;
     int64_t sinceNs{};
+    // When the last landing handed him to the animation (EnterAnim::land), until he is VR again (-1: none);
+    // lastEnterAnim is only set on the switch's own frame.
+    int64_t landNs = -1;
     bool combatSticky{};
     int64_t combatIdleNs{-1};
     bool webIntentWas{};
@@ -611,6 +623,16 @@ struct HybridOwner {
             clearZip();
         const bool cancelHeldAir = f.cancelGripHeld && domain == Domain::vr && !supported(f.state);
 
+        // HANDSTAND, the landing's first frames: the hands caught him after the landing handed him to the
+        // animation (EnterAnim::land): SpidyVR takes him back, as the catch on the handoff's own frame keeps
+        // him.
+        if (f.handSupport && domain == Domain::anim && landNs >= 0 && supported(f.state) &&
+            nowNs - landNs <= handstandLandNs) {
+            airAnimNs = fallNs = -1;
+            clearZip();
+            goVr(EnterVr::handstand, nowNs);
+            return domain;
+        }
         // HANDSTAND: the hands hold him on the ground; the landing waits.
         if (f.handSupport && domain == Domain::vr && supported(f.state)) {
             airAnimNs = fallNs = -1;
@@ -850,6 +872,7 @@ struct HybridOwner {
         sinceNs = nowNs;
         enterVr = true;
         lastEnterVr = why;
+        landNs = -1;
         vrBy = why;
         airAnimNs = fallNs = -1;
         runStint = false;
@@ -862,6 +885,7 @@ struct HybridOwner {
         sinceNs = nowNs;
         enterAnim = true;
         lastEnterAnim = why;
+        landNs = why == EnterAnim::land ? nowNs : -1;
         vrBy = EnterVr::none;
         airAnimNs = fallNs = -1;
         runStint = false;

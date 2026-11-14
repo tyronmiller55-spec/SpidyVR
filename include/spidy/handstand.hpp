@@ -32,6 +32,17 @@
 // body on the ground (holdVr: hybrid_owner::Frame::handSupport), so the
 // landing rule does not hand him to the animation mid-handstand.
 //
+// THE LANDING CATCH, THE SECOND PASS (Nov 13, 22:24 playtest: 28 touchdowns
+// judged out of 63 SpidyVR landings, the one catch fell after 63 ms with a 43.7
+// degree lean): the balance starts from the landing's speed and spin DAMPED
+// (entryKeep, entrySpinKeep, at most entryMaxSpeed: the floor takes the rest, and
+// the palms' support is ~0.15 m wide, a divergent 0.5 m/s at the pendulum's 3.2/s)
+// instead of the full ~9 m/s; a grip squeezed at the touchdown (it is how a web is
+// aimed, 8 of the 28 refusals) no longer refuses a catch with both palms down, and
+// does not let go of it until it has been released once; palms within touchdownReach
+// count at the touchdown as far as the eyes' drop and an arm reach them; and a
+// refusal lists every gate that failed (Out::failed), not just the first.
+//
 // Leg control (Y+X) stays usable: the legs move the drawn body; the balance
 // reads only the hands and the head.
 //
@@ -41,6 +52,7 @@
 #include <algorithm>
 #include <cmath>
 #include <cstdint>
+#include <cstdio>
 
 namespace spidy::handstand {
 
@@ -58,7 +70,12 @@ struct Params {
     float catchGrace = .15f, leavingSeconds = .3f;
     // THE TOUCHDOWN CATCH (above).
     float touchdownGrace = .25f;  // s after SpidyVR's air a touchdown can still catch
-    float touchdownReach = 1.f;   // m: palms this far over the floor at the touchdown count
+    float touchdownReach = 1.6f;  // m: palms this far over the floor at the touchdown count (the
+                                  // eyes' drop, .9, and an arm, .7: where the palms come to rest)
+    // THE LANDING CATCH, THE SECOND PASS (above).
+    float entryKeep = .12f;       // share of the landing's horizontal speed the balance starts with
+    float entrySpinKeep = .2f;    // share of the flip's spin it starts with
+    float entryMaxSpeed = .5f;    // m/s: the balance's start never exceeds this
     float floorReach = .12f;      // m: palms this close to the floor count as on it
     float touchdownSettle = .6f;  // s a touchdown catch has to bring the palms down
     float eyeDrop = .9f;    // the inverted eyes' drop toward the floor, m
@@ -101,6 +118,26 @@ inline const char* refusalName(Refusal r) {
     default:
         return "none";
     }
+}
+// The failed gates of a touchdown, one bit per Refusal (1 << value): "a, b, c".
+inline unsigned refusalBit(Refusal r) {
+    return r == Refusal::none ? 0u : 1u << static_cast<unsigned>(r);
+}
+inline int refusalList(unsigned failed, char* out, size_t size) {
+    if (!out || size == 0)
+        return 0;
+    out[0] = 0;
+    size_t used = 0;
+    for (unsigned r = 1; r <= static_cast<unsigned>(Refusal::palmsHigh); ++r) {
+        if (!(failed & (1u << r)))
+            continue;
+        const char* name = refusalName(static_cast<Refusal>(r));
+        const int n = std::snprintf(out + used, size - used, "%s%s", used ? "; " : "", name);
+        if (n < 0 || static_cast<size_t>(n) >= size - used)
+            break;
+        used += static_cast<size_t>(n);
+    }
+    return static_cast<int>(used);
 }
 inline const char* stateName(State s) {
     switch (s) {
@@ -303,6 +340,11 @@ class Handstand {
         bool touchdownCatch{}; // this frame's catch was the touchdown's
         Refusal refused{};
         float inverted{}, spin{}, palmGap{}; // at the touchdown: degrees, rad/s, m (the higher palm)
+        unsigned failed{};  // every gate that failed at the touchdown (refusalBit); 0: none or no touchdown
+        bool gripCarried{}; // the catch took a squeezed grip: it lets go only after a release
+        // The touchdown's inputs as judged (for the log of a landing that was not judged).
+        bool touchdownSeen{}, aloftSeen{}, vrAirSeen{};
+        float airAge{};
     };
     Out update(const Input& in, const Params& p) {
         Out out;
@@ -338,22 +380,33 @@ class Handstand {
             armed_ = true;
         const float spinNow = finite(in.angular) ? length(in.angular) : 0.f;
         out.touchdownNow = touchdownNow && state_ == State::off;
+        out.touchdownSeen = in.touchdown;
+        out.aloftSeen = in.aloft;
+        out.vrAirSeen = in.vrAir;
+        out.airAge = airAge_;
         if (out.touchdownNow) {
             out.inverted = invertedDegrees(in.bodyUp);
             out.spin = spinNow;
             out.palmGap = palmGap;
-            out.refused = !p.enabled                        ? Refusal::disabled
-                          : !in.tracked                     ? Refusal::untracked
-                          : in.grip                         ? Refusal::grip
-                          : !armed_                         ? Refusal::notArmed
-                          : out.inverted < p.catchDegrees   ? Refusal::upright
-                          : spinNow > p.catchSpin           ? Refusal::spin
-                          : !both                           ? Refusal::palmsHigh
-                                                            : Refusal::none;
+            // A grip squeezed with both palms down is no gate (the catch keeps it, below).
+            const bool gripGate = in.grip && !both;
+            out.failed = refusalBit(!p.enabled ? Refusal::disabled : Refusal::none) |
+                         refusalBit(!in.tracked ? Refusal::untracked : Refusal::none) |
+                         refusalBit(gripGate ? Refusal::grip : Refusal::none) |
+                         refusalBit(!armed_ ? Refusal::notArmed : Refusal::none) |
+                         refusalBit(out.inverted < p.catchDegrees ? Refusal::upright : Refusal::none) |
+                         refusalBit(spinNow > p.catchSpin ? Refusal::spin : Refusal::none) |
+                         refusalBit(!both ? Refusal::palmsHigh : Refusal::none);
+            out.refused = Refusal::none;
+            for (unsigned r = 1; r <= static_cast<unsigned>(Refusal::palmsHigh); ++r)
+                if (out.failed & (1u << r)) {
+                    out.refused = static_cast<Refusal>(r);
+                    break;
+                }
         }
         switch (state_) {
         case State::off: {
-            if (!p.enabled || !(in.vrAir || touchdown) || !in.tracked || in.grip || !both || !armed_)
+            if (!p.enabled || !(in.vrAir || touchdown) || !in.tracked || !both || !armed_)
                 break;
             const float spin = spinNow;
             if (invertedDegrees(in.bodyUp) < p.catchDegrees || spin > p.catchSpin)
@@ -364,9 +417,14 @@ class Handstand {
             const Vec3 feetWay = finite(in.bodyUp) ? -normalized(in.bodyUp) : Vec3{0, 1, 0};
             const Vec3 c = support_.centre();
             const Vec3 x0 = c + Vec3{feetWay.x, 0, feetWay.z} * p.comHeight;
-            const Vec3 v0 = finite(in.velocity) ? Vec3{in.velocity.x, 0, in.velocity.z} : Vec3{};
-            balance_.start(
-                x0, v0 + horizontal(cross(finite(in.angular) ? in.angular : Vec3{}, feetWay * p.comHeight)));
+            // Damped: the floor takes most of the landing's speed and spin.
+            const Vec3 v0 =
+                finite(in.velocity) ? Vec3{in.velocity.x, 0, in.velocity.z} * p.entryKeep : Vec3{};
+            const Vec3 spinSpeed = horizontal(
+                cross((finite(in.angular) ? in.angular : Vec3{}) * p.entrySpinKeep, feetWay * p.comHeight));
+            balance_.start(x0, limited(v0 + spinSpeed, p.entryMaxSpeed));
+            gripCarried_ = in.grip;
+            out.gripCarried = gripCarried_;
             state_ = State::catching;
             age_ = 0;
             push_.reset();
@@ -376,12 +434,14 @@ class Handstand {
         case State::catching:
         case State::balance: {
             age_ += dt;
+            if (!in.grip)
+                gripCarried_ = false; // released once: a new squeeze lets go
             Exit why = Exit::none;
             if (!p.enabled)
                 why = Exit::disabled;
             else if (!in.tracked)
                 why = Exit::tracking;
-            else if (in.grip)
+            else if (in.grip && !gripCarried_)
                 why = Exit::grip;
             else if (pushed > p.pushSpeed && palmsDown)
                 why = Exit::push;
@@ -413,6 +473,7 @@ class Handstand {
                 age_ = 0;
                 armed_ = false;
                 touchdownCaught_ = false;
+                gripCarried_ = false;
             }
             break;
         }
@@ -447,7 +508,7 @@ class Handstand {
     State state_{};
     Exit exit_{};
     bool armed_ = true;
-    bool touchdownBefore_{}, touchdownCaught_{};
+    bool touchdownBefore_{}, touchdownCaught_{}, gripCarried_{};
     float age_{};
     float airAge_ = 10.f;
     Balance balance_{};
