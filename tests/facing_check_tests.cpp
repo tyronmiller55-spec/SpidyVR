@@ -167,9 +167,18 @@ int main() {
     {
         Check c;
         c.arm(Event::animReentry, 30 * deg);
-        const auto o = c.update(dt, anim(60 * deg, 110 * deg));
+        const auto o = c.update(dt, anim(60 * deg, 70 * deg));
         check(o.view.verdict == Verdict::ok && o.hero.verdict == Verdict::ok && !o.heroTurn,
-              "re-entry: 30 deg view, 80 deg hero are within tolerance");
+              "re-entry: 30 deg view, 40 deg hero are within tolerance");
+        // The hero's tolerance is 45 deg (90 until the G1 playtest: half of the landings 45 to 90 off were "ok").
+        Check t45;
+        t45.arm(Event::landing, 30 * deg);
+        const auto edge = t45.update(dt, anim(30 * deg, 110 * deg)); // 80 deg off
+        check(edge.hero.verdict == Verdict::corrected && edge.heroTurn && near(edge.heroYaw, 30 * deg, .5f * deg),
+              "landing: a hero 80 deg off is turned now (was ok under 90)");
+        Check t44;
+        t44.arm(Event::landing, 30 * deg);
+        check(t44.update(dt, anim(30 * deg, 73 * deg)).hero.verdict == Verdict::ok, "landing: 43 deg off is ok");
         Check m;
         m.arm(Event::landing, 0);
         Out last;
@@ -220,16 +229,67 @@ int main() {
         t.resetLook();
         check(t.turning, "forced: a lock relatch keeps it");
         t.reset();
-        // Dropped after 0.4 s without a frame to push.
+        // Kept pending (G1 playtest): a fight for 1.5 s does not drop it; it starts at the first legal frame.
         TIP d;
         in.force = true;
         in.forceAllowed = false;
+        in.forceBlock = view_yaw_lock::Block::fight;
         o = d.update(in);
         in.force = false;
         bool dropped = false;
-        for (int i = 0; i < 60; ++i)
+        for (int i = 0; i < 135; ++i) // 1.5 s
             dropped |= d.update(in).dropped;
-        check(dropped && !d.turning, "forced: dropped after 0.4 s, said so");
+        check(!dropped && !d.turning, "forced: still pending after 1.5 s of a fight");
+        in.forceAllowed = true;
+        in.forceBlock = view_yaw_lock::Block::none;
+        check(d.update(in).started, "forced: starts at the first legal frame after the fight");
+        // Dropped after 2.5 s without a frame to push, naming what blocked it longest.
+        TIP e;
+        in.force = true;
+        in.forceAllowed = false;
+        in.forceBlock = view_yaw_lock::Block::dodge;
+        e.update(in);
+        in.force = false;
+        TIP::Out dropOut;
+        for (int i = 0; i < 90 * 3 && !dropOut.dropped; ++i) {
+            in.forceBlock = i < 20 ? view_yaw_lock::Block::airborne : view_yaw_lock::Block::fight;
+            dropOut = e.update(in);
+        }
+        check(dropOut.dropped && !e.turning, "forced: dropped after 2.5 s, said so");
+        check(dropOut.dropWaited > 2.4f && dropOut.dropWaited < 2.6f, "forced: waited 2.5 s");
+        check(dropOut.dropWhy == view_yaw_lock::Block::fight && dropOut.dropBlocked > 2.2f,
+              "forced: dropped for the fight, the longest blocker");
+        // The player's own left stick wins: held for 0.25 s it drops the turn (he is walking where he wants).
+        TIP w;
+        in.force = true;
+        in.forceAllowed = false;
+        in.forceBlock = view_yaw_lock::Block::stick;
+        w.update(in);
+        in.force = false;
+        dropOut = {};
+        int frames = 0;
+        for (; frames < 90 && !dropOut.dropped; ++frames)
+            dropOut = w.update(in);
+        check(dropOut.dropped && dropOut.dropWhy == view_yaw_lock::Block::stick && dropOut.dropWaited < .4f,
+              "forced: the left stick held drops it within 0.4 s, and says it won");
+        // A tap of the stick (0.1 s) does not.
+        TIP tap;
+        in.force = true;
+        in.forceBlock = view_yaw_lock::Block::stick;
+        tap.update(in);
+        in.force = false;
+        bool tapDropped = false;
+        for (int i = 0; i < 9; ++i)
+            tapDropped |= tap.update(in).dropped;
+        in.forceBlock = view_yaw_lock::Block::fight;
+        for (int i = 0; i < 9; ++i)
+            tapDropped |= tap.update(in).dropped;
+        in.forceBlock = view_yaw_lock::Block::stick;
+        for (int i = 0; i < 9; ++i)
+            tapDropped |= tap.update(in).dropped;
+        in.forceAllowed = true;
+        in.forceBlock = view_yaw_lock::Block::none;
+        check(!tapDropped && tap.update(in).started, "forced: two stick taps (0.1 s each) do not drop it");
         // Already facing: nothing to do.
         TIP f;
         in.force = true;

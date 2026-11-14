@@ -7191,12 +7191,28 @@ DWORD WINAPI run(void*) {
                                 tin.forceAllowed = yieldingPose && heroOk && swingFresh && swingState.grounded &&
                                                    hybridInputL < stable_yaw::steerZone && !fightLately &&
                                                    !dodging && !zipping && !legStickActive;
+                                // The first gate that fails, for the drop's log (and the player's stick, which wins).
+                                using Block = view_yaw_lock::Block;
+                                tin.forceBlock = !yieldingPose                          ? Block::owner
+                                                 : !heroOk                              ? Block::noHero
+                                                 : !swingFresh                          ? Block::stale
+                                                 : !swingState.grounded                 ? Block::airborne
+                                                 : hybridInputL >= stable_yaw::steerZone ? Block::stick
+                                                 : fightLately                          ? Block::fight
+                                                 : dodging                              ? Block::dodge
+                                                 : zipping                              ? Block::zip
+                                                 : legStickActive                       ? Block::legs
+                                                                                        : Block::none;
                                 facingHeroPending = false;
                                 const auto turned = turnInPlace.update(tin);
                                 if (turned.dropped)
-                                    diag_log::writef("facing check: %s hero turn dropped (no standing frame within "
-                                                     "400 ms: moving, fighting or the left stick held)",
-                                                     facing_check::eventName(facingTurnEvent));
+                                    diag_log::writef(
+                                        "facing check: %s hero turn dropped after %d ms (%s%s, %d ms of it)",
+                                        facing_check::eventName(facingTurnEvent),
+                                        static_cast<int>(turned.dropWaited * 1000 + .5f),
+                                        turned.dropWhy == Block::stick ? "the player's left stick won: " : "blocked by ",
+                                        view_yaw_lock::blockName(turned.dropWhy),
+                                        static_cast<int>(turned.dropBlocked * 1000 + .5f));
                                 if (turned.push) {
                                     const auto stick = animated_model_yaw::worldToStick(
                                         hybrid_steer::viewForward(turned.pushYaw), motion.walkForwardAxis,

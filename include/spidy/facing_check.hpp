@@ -11,7 +11,7 @@
 // are compared against it:
 //  - the view more than 45 degrees off what was shown is a turn the player did not make:
 //    it is put back (the anim view's yaw lock, or the tracking rig's yaw in SpidyVR);
-//  - the hero more than 90 degrees off is the game's facing (the actor's own, stale or
+//  - the hero more than 45 degrees off (90 until the G1 playtest) is the game's facing (the actor's own, stale or
 //    the move's), not the player's: the walk stick turns him to it (TURN-IN-PLACE's
 //    closed loop, forced, no facing write).
 // Each logs 'facing check: <event> <view|hero> expected X got Y (ok|corrected|...)'.
@@ -43,7 +43,7 @@ inline const char* eventName(Event e) {
 }
 
 inline constexpr float viewTolerance = 45.f * degrees; // past this the view turned without the player
-inline constexpr float heroTolerance = 90.f * degrees; // past this the hero faces the game's way
+inline constexpr float heroTolerance = 45.f * degrees; // past this the hero faces the game's way (was 90: G1 playtest)
 inline constexpr float launchCone = 90.f * degrees;    // launch direction counts within this of the view
 inline constexpr float windowSeconds = .3f;            // the check's reach after the event
 

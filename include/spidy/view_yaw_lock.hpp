@@ -246,7 +246,26 @@ inline constexpr float followAngle = 20.f * degrees; // while the right stick tu
 inline constexpr float stopAngle = 12.f * degrees;
 inline constexpr float giveUpSeconds = 2.5f, cooldownSeconds = 1.f;
 inline constexpr float pushTilt = .35f, pushTiltHard = .5f; // harder after 0.3 s without 5 degrees
-inline constexpr float forceWaitSeconds = .4f, forcePauseSeconds = .25f; // facing check turns
+// Facing check turns: the turn waits for a legal frame this long (G1 playtest: at 0.4 s, 65 to 100% of a landing's
+// turns were dropped; the heading hold gives up at 2.5 s anyway), unless the player's own left stick has been held
+// for forceStickSeconds (he is walking where he wants: his stick wins).
+inline constexpr float forceWaitSeconds = giveUpSeconds, forcePauseSeconds = .25f, forceStickSeconds = .25f;
+// Why a forced turn could not start this frame (the first failing gate; game_xr.cpp sets it).
+enum class Block : uint8_t { none, owner, noHero, stale, airborne, stick, fight, dodge, zip, legs, count };
+inline const char* blockName(Block b) {
+    switch (b) {
+    case Block::owner: return "the animation does not own him yet";
+    case Block::noHero: return "no hero facing";
+    case Block::stale: return "stale swing sample";
+    case Block::airborne: return "not grounded";
+    case Block::stick: return "the left stick held";
+    case Block::fight: return "fighting";
+    case Block::dodge: return "dodging";
+    case Block::zip: return "zipping";
+    case Block::legs: return "the leg stick";
+    default: return "no legal frame";
+    }
+}
 inline float angleOf(int setting) {
     return setting > 0 ? static_cast<float>(std::clamp(setting, 1, 180)) * degrees : 0.f;
 }
@@ -265,6 +284,7 @@ struct TurnInPlace {
         bool force = false;
         float forceYaw = 0;
         bool forceAllowed = false;
+        Block forceBlock = Block::none; // when !forceAllowed: why (for the drop's log, and the stick's win)
     };
     struct Out {
         bool push = false;
@@ -279,13 +299,17 @@ struct TurnInPlace {
         bool wrongWay = false; // on ended: he went more than 20 degrees the other way at some point
         bool byStick = false;  // started by the right stick (not the headset / drift)
         bool forced = false;   // on started / ended: a facing check's turn
-        bool dropped = false;  // a facing check's turn that never got to start (0.4 s)
+        bool dropped = false;  // a facing check's turn that never got to start (2.5 s, or the stick won)
+        Block dropWhy = Block::none; // on dropped: what blocked it longest (the stick: the left stick won)
+        float dropWaited = 0;        // on dropped: how long it waited
+        float dropBlocked = 0;       // on dropped: for how long that blocker held
     };
     bool turning = false;
     float elapsed = 0, swept = 0, startGap = 0, lastHero = 0, cooldown = 0, worst = 0;
     bool byStick = false;
     bool forced = false, forcePending = false;
-    float forcedYaw = 0, forceWait = 0, paused = 0;
+    float forcedYaw = 0, forceWait = 0, paused = 0, stickRun = 0;
+    float blocked[static_cast<size_t>(Block::count)]{};
     uint32_t starts = 0, done = 0, gaveUp = 0, interrupted = 0, wrongWays = 0, forcedStarts = 0;
 
     Out update(const In& in) {
@@ -293,6 +317,10 @@ struct TurnInPlace {
         const float dt = std::isfinite(in.dt) ? std::clamp(in.dt, 0.f, .1f) : 0.f;
         cooldown = std::max(0.f, cooldown - dt);
         if (in.force && std::isfinite(in.forceYaw)) {
+            if (!forcePending) {
+                stickRun = 0;
+                std::fill(std::begin(blocked), std::end(blocked), 0.f);
+            }
             forcePending = true;
             forcedYaw = wrap(in.forceYaw);
             forceWait = 0;
@@ -309,9 +337,19 @@ struct TurnInPlace {
         if (!ok) {
             if (forcePending && !turning) {
                 forceWait += dt;
-                if (forceWait > forceWaitSeconds) {
+                blocked[static_cast<size_t>(in.forceBlock)] += dt;
+                stickRun = in.forceBlock == Block::stick ? stickRun + dt : 0.f;
+                const bool stickWon = stickRun > forceStickSeconds;
+                if (stickWon || forceWait > forceWaitSeconds) {
                     forcePending = false;
                     out.dropped = true;
+                    out.dropWaited = forceWait;
+                    out.dropWhy = stickWon ? Block::stick : Block::none;
+                    if (!stickWon)
+                        for (size_t i = 0; i < static_cast<size_t>(Block::count); ++i)
+                            if (blocked[i] > blocked[static_cast<size_t>(out.dropWhy)])
+                                out.dropWhy = static_cast<Block>(i);
+                    out.dropBlocked = blocked[static_cast<size_t>(out.dropWhy)];
                 }
                 return out;
             }
@@ -371,7 +409,7 @@ struct TurnInPlace {
     }
     void reset() {
         turning = forced = forcePending = false;
-        cooldown = paused = forceWait = 0;
+        cooldown = paused = forceWait = stickRun = 0;
     }
     // A relatch of the lock resets the look's turn, never a facing check's.
     void resetLook() {
