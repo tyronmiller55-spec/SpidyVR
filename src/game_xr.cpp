@@ -1269,6 +1269,7 @@ DWORD WINAPI run(void*) {
         // HEADSET FIRST: the left stick's basis (hybrid_steer::Basis) and last frame's headset turn.
         hybrid_steer::Basis hsBasis{};
         float hsLastHmd = NAN;
+        float hsViewNow = NAN; // where the player looks this frame (headset first), NAN when not known
         int64_t hsPressLogAt = 0;
         // DIRECTION REPORT (direction_report.hpp): the headset's heading and what answers to it.
         direction_report::Reporter dirReport{};
@@ -3595,6 +3596,7 @@ DWORD WINAPI run(void*) {
                                               ? stable_yaw::wrap(lastViewYaw + stable_yaw::wrap(hmdRel - hsLastHmd))
                                               : stable_yaw::wrap(hybridHeading.yaw + hmdRel);
                             }
+                            hsViewNow = viewNow;
                             const bool wasHeld = hsBasis.held;
                             const float basisYaw = hsBasis.update(hybridInputL >= hybrid_steer::deadzone, viewNow, hmdRel,
                                                                   viewLockSnapped ? 0.f : viewLockDelta);
@@ -3619,6 +3621,7 @@ DWORD WINAPI run(void*) {
                             }
                         } else {
                             hsBasis.reset();
+                            hsViewNow = NAN;
                         }
                         // HYBRID's left stick: front half along the heading, the rear
                         // half one snap of the heading (and the view) to the stick.
@@ -4292,6 +4295,7 @@ DWORD WINAPI run(void*) {
                         hin.heroOk = heroOk;
                         hin.hero = heroOk ? hybrid_handoff::actorLookYaw({body[8], body[9], body[10]}) : 0.f;
                         hin.driving = hybridStick.drives;
+                        hin.view = values.headsetFirst ? hsViewNow : NAN; // HEADSET FIRST: arrive at the view
                         hin.steerable = hybridOwner.domain != hybrid_owner::Domain::vr && swingFresh &&
                                         swingState.grounded && !motion.onSurface;
                         hybridSteerable = hin.steerable;
@@ -7280,10 +7284,16 @@ DWORD WINAPI run(void*) {
                                 tin.forceYaw = facingHeroYaw;
                                 if (hybridHeroTurn) { // HYBRID: bring him onto the heading (any angle)
                                     tin.force = true;
-                                    tin.forceYaw = hybridHeading.yaw;
+                                    // HEADSET FIRST: onto where the player looks now, not the heading's own yaw.
+                                    tin.forceYaw = values.headsetFirst && std::isfinite(hsViewNow) ? hsViewNow
+                                                                                                   : hybridHeading.yaw;
                                 }
+                                // HEADSET FIRST: a landing's turn onto the view is not held off by a fight's
+                                // tail (the 4d58169 landings: the body faced the momentum, not the view).
+                                const bool fightHoldsOff =
+                                    fightBlocks && !(values.headsetFirst && facingTurnEvent == facing_check::Event::landing);
                                 tin.forceAllowed = yieldingPose && heroOk && swingFresh && swingState.grounded &&
-                                                   hybridInputL < stable_yaw::steerZone && !fightBlocks &&
+                                                   hybridInputL < stable_yaw::steerZone && !fightHoldsOff &&
                                                    !dodging && !zipping && !legStickActive;
                                 // The first gate that fails, for the drop's log (and the player's stick, which wins).
                                 using Block = view_yaw_lock::Block;
@@ -7292,14 +7302,20 @@ DWORD WINAPI run(void*) {
                                                  : !swingFresh                          ? Block::stale
                                                  : !swingState.grounded                 ? Block::airborne
                                                  : hybridInputL >= stable_yaw::steerZone ? Block::stick
-                                                 : fightBlocks                          ? Block::fight
+                                                 : fightHoldsOff                        ? Block::fight
                                                  : dodging                              ? Block::dodge
                                                  : zipping                              ? Block::zip
                                                  : legStickActive                       ? Block::legs
                                                                                         : Block::none;
                                 facingHeroPending = false;
                                 const auto turned = turnInPlace.update(tin);
-                                if (turned.dropped)
+                                if (turned.dropped && values.headsetFirst && turned.dropWhy == Block::stick)
+                                    diag_log::writef(
+                                        "facing check: %s hero turn handed to the left stick after %d ms (it runs along "
+                                        "your view)",
+                                        facing_check::eventName(facingTurnEvent),
+                                        static_cast<int>(turned.dropWaited * 1000 + .5f));
+                                else if (turned.dropped)
                                     diag_log::writef(
                                         "facing check: %s hero turn dropped after %d ms (%s%s, %d ms of it)",
                                         facing_check::eventName(facingTurnEvent),

@@ -274,6 +274,9 @@ struct Heading {
         float hero = 0;
         bool driving = false; // the left stick runs him along it
         bool steerable = false; // the walk stick can turn him (grounded, the animation's)
+        // HEADSET FIRST: where the player looks (shown + hmd). When finite, a hold arrives when the hero
+        // faces THIS (within arriveAngle), not the heading's own yaw: the hero comes round to the view.
+        float view = NAN;
     };
     struct Out {
         bool heroTurn = false; // TURN-IN-PLACE forced to `yaw` (standing)
@@ -334,7 +337,7 @@ struct Heading {
             swayWeight = hold == Hold::none ? std::min(1.f, swayWeight + dt / swayInSeconds) : 0.f;
             return out;
         }
-        const float gap = wrap(yaw - in.hero);
+        const float gap = wrap((std::isfinite(in.view) ? in.view : yaw) - in.hero);
         if (hold != Hold::none) {
             age += dt;
             if (std::abs(gap) < arriveAngle && snapT >= 1) {
@@ -381,7 +384,7 @@ struct Heading {
                 // What was left when that began fades (0.12 s); his own turns are followed
                 // at once, never lagged.
                 if (!following) {
-                    rest = gap;
+                    rest = wrap(yaw - in.hero);
                     following = true;
                 }
                 rest *= std::exp(-dt / followTau);

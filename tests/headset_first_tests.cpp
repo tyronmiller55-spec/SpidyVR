@@ -93,6 +93,41 @@ int main() {
         const auto expect = hybrid_steer::viewForward(basis - 90 * deg);
         check(near(world.x, expect.x) && near(world.z, expect.z), "stick right runs 90 deg right of the basis");
     }
+    // LANDINGS FACE THE VIEW: a hold arrives when the hero faces the VIEW, not the heading's own yaw.
+    {
+        using namespace hybrid_movement;
+        Heading h;
+        h.latch(0);
+        h.begin(Heading::Hold::facing, 0.f); // the heading the view holds on the landing
+        Heading::In in;
+        in.dt = 1.f / 90.f;
+        in.heroOk = true;
+        in.steerable = true;
+        in.hero = 120 * deg; // the game faces its momentum
+        in.view = NAN;
+        auto out = h.update(in);
+        check(out.heroTurn && h.hold == Heading::Hold::facing, "a landing 120 deg off the heading: the hero is turned");
+        // The player looked 112 deg to the left meanwhile: the hero is at 120, the view at 112: he has arrived
+        // (within 12 deg of the view), though he is 120 off the heading.
+        in.view = 112 * deg;
+        out = h.update(in);
+        check(!out.heroTurn && h.hold == Heading::Hold::none && h.arrived == 1, "arrived at the view, not at the heading");
+        // Not arrived while the view is elsewhere.
+        Heading g;
+        g.latch(0);
+        g.begin(Heading::Hold::facing, 0.f);
+        in.view = -90 * deg;
+        out = g.update(in);
+        check(out.heroTurn && g.hold == Heading::Hold::facing, "still turning toward a view 210 deg away");
+        // The heading never follows the view into the hero's facing (no rest drift from the view's gap).
+        Heading k;
+        k.latch(30 * deg);
+        Heading::In idle = in;
+        idle.view = 100 * deg;
+        idle.hero = 30 * deg;
+        k.update(idle);
+        check(near(k.yaw, 30 * deg, 1e-3f), "the heading follows the hero as before when nothing holds it");
+    }
     // The setting: on by default, saved and read.
     {
         vr_settings::Values v;
