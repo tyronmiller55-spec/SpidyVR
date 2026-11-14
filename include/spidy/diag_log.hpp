@@ -95,6 +95,102 @@ class ChangeOnly {
     int reason_{};
     float turn_{}, since_{};
 };
+// QUIET LOG (the 4d58169 playtest: six lines made up about 40% of 2.6 million - "head probe: cutscene" 36k,
+// "forearm sign:" 62k, "shooter lock:" 51k, "spherical aim:" 36k, "animated hand:" 42k, "tracking lock:" 22k -
+// and a game stuck at 8.7 fps for 104 minutes wrote 50+ MB). A line of one of those kinds is kept when its
+// SHAPE (the line with its numbers taken out) changed, or `heartbeat` seconds passed since the last kept
+// one of its kind; while the game is not stepping (slow mode), those kinds are kept only on a change and
+// the rest of the lines at most once per slowHeartbeat seconds per shape. Pure; the clock is the caller's.
+class Throttle {
+  public:
+    static constexpr double heartbeat = 2.0, slowHeartbeat = 10.0;
+    static constexpr unsigned kinds = 8, shapeChars = 48;
+    static constexpr const char* noisy[kinds] = {"head probe: cutscene", "forearm sign:",  "shooter lock:",
+                                                 "spherical aim:",       "animated hand:", "animated hand points:",
+                                                 "tracking lock:",       "vr stabilization: tilt"};
+    // Is `text` (without the time stamp) one of the noisy kinds? Its index, or -1.
+    static int kindOf(std::string_view text) {
+        for (unsigned i = 0; i < kinds; ++i) {
+            const std::string_view k = noisy[i];
+            if (text.substr(0, k.size()) == k)
+                return static_cast<int>(i);
+        }
+        return -1;
+    }
+    // The line with digits and number signs taken out (first shapeChars characters).
+    static void shapeOf(std::string_view text, char (&out)[shapeChars]) {
+        unsigned n = 0;
+        for (const char c : text) {
+            if ((c >= '0' && c <= '9') || c == '.' || c == '+' || c == '-')
+                continue;
+            if (n + 1 >= shapeChars)
+                break;
+            out[n++] = c;
+        }
+        out[n] = 0;
+    }
+    // The number of lines kept and dropped, per everything.
+    uint64_t kept = 0, dropped = 0;
+    void slow(bool on) {
+        slow_ = on;
+    }
+    bool isSlow() const {
+        return slow_;
+    }
+    bool allow(std::string_view text, double seconds) {
+        const int kind = kindOf(text);
+        char shape[shapeChars];
+        shapeOf(text, shape);
+        if (kind >= 0) {
+            auto& e = entry_[kind];
+            const bool same = e.set && std::strncmp(e.shape, shape, shapeChars) == 0;
+            const bool due = !e.set || seconds - e.at >= heartbeat || seconds < e.at;
+            if (same && (slow_ || !due)) {
+                ++dropped;
+                return false;
+            }
+            std::snprintf(e.shape, shapeChars, "%s", shape);
+            e.set = true;
+            e.at = seconds;
+            ++kept;
+            return true;
+        }
+        if (!slow_) {
+            ++kept;
+            return true;
+        }
+        // Slow mode: the other lines once per shape per slowHeartbeat seconds (a small table, oldest replaced).
+        for (auto& e : other_)
+            if (e.set && std::strncmp(e.shape, shape, shapeChars) == 0) {
+                if (seconds - e.at < slowHeartbeat && seconds >= e.at) {
+                    ++dropped;
+                    return false;
+                }
+                e.at = seconds;
+                ++kept;
+                return true;
+            }
+        auto* oldest = &other_[0];
+        for (auto& e : other_)
+            if (!e.set || e.at < oldest->at)
+                oldest = &e;
+        std::snprintf(oldest->shape, shapeChars, "%s", shape);
+        oldest->set = true;
+        oldest->at = seconds;
+        ++kept;
+        return true;
+    }
+
+  private:
+    struct Entry {
+        bool set = false;
+        double at = 0;
+        char shape[shapeChars]{};
+    };
+    Entry entry_[kinds]{};
+    Entry other_[32]{};
+    bool slow_ = false;
+};
 // STARTUP STAGES and the VR worker's WATCHDOG. The November 3 sessions froze
 // the headset at start, and the diagnostics said nothing of how far VR had got:
 // now each stage is a "stage:" line (headset active, the eye views started, the
@@ -185,6 +281,10 @@ class Stages {
 // Off by default: write() keeps nothing.
 void enable(bool on);
 bool enabled();
+// The game is not stepping (stuck under about 15 fps): the diagnostics write only what changed (Throttle).
+void setSlow(bool on);
+// Lines the Throttle kept and dropped since the session began.
+uint64_t droppedLines();
 // A line for the diagnostics (and only there: the report's timeline is
 // game_prompts::note's, which calls this too), while enabled. Stamped with the
 // seconds since the session's first line. Thread-safe. In the stereo module

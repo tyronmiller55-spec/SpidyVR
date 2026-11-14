@@ -679,6 +679,7 @@ void solveHero(float* out, uintptr_t job, uintptr_t instance) {
                     lock.heroYaw = view.lockHero;
                     lock.ride = view.lockRide;
                     lock.limit = view.lockLimit;
+                    view_yaw_lock::noteUse(2, lock);
                     view_yaw_lock::turnModel(anchor, toWorld, lock);
                 }
                 if (valid) {

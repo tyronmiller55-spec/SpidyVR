@@ -98,6 +98,7 @@
 #include "spidy/seated.hpp"
 #include "spidy/slow_motion.hpp"
 #include "spidy/steady_hud.hpp"
+#include "spidy/direction_report.hpp"
 #include "spidy/throw_aim.hpp"
 #include "spidy/vr_settings.hpp"
 #include "spidy/web_pull.hpp"
@@ -1265,6 +1266,13 @@ DWORD WINAPI run(void*) {
         hybrid_movement::Gate hybridGate{};
         hybrid_movement::Heading hybridHeading{};
         hybrid_movement::Gate::Out hybridStick{};
+        // DIRECTION REPORT (direction_report.hpp): the headset's heading and what answers to it.
+        direction_report::Reporter dirReport{};
+        float dirBasis = NAN;                  // the left stick's world basis this frame
+        float dirFeetX = 0, dirFeetZ = 0;      // the actor's feet last frame (the momentum)
+        bool dirFeetSet = false, dirWasGrounded = true, dirWasDodging = false, dirTurnWas = false;
+        int dirWasDomain = -1;
+        uint32_t dirActionBits = 0;            // action edges seen since the last report frame
         bool hybridHeroTurn = false, hybridSteerable = false, hybridAirSyncOn = false;
         // PARKOUR RT diagnostic (t86u): frames with the stick at the run on the ground.
         uint32_t parkourRtFrames = 0, parkourRtHeld = 0, parkourRtRising = 0;
@@ -3616,6 +3624,7 @@ DWORD WINAPI run(void*) {
                             hybridGate.reset();
                             hybridStick = {};
                         }
+                        dirBasis = hybridInputViewOk ? (hybridGround ? hybridHeading.yaw : hybridInputViewYaw) : NAN;
                         if (hybridInputViewOk) {
                             const Vec3 walk =
                                 hybridGround
@@ -4258,6 +4267,7 @@ DWORD WINAPI run(void*) {
                         hybridHeading.begin(hybrid_movement::Heading::Hold::snap, realignTo, 0.f);
                         viewLock.yaw = hybridHeading.yaw;
                         snapRealignPending = true;
+                        dirActionBits |= 1u << static_cast<unsigned>(direction_report::Action::realign);
                         if (headRide.active())
                             rideWhy = camera_mode::RideWhy::none;
                         headRide.reset();
@@ -4323,7 +4333,11 @@ DWORD WINAPI run(void*) {
                                                    armView.anchor)) {
                             // FULL head lock on the stable heading: turned as the eyes are.
                             if (armFrameWas == animated_view::Frame::full)
-                                view_yaw_lock::turnHead(armView.anchor, view_yaw_lock::live());
+                            {
+                                const auto lock = view_yaw_lock::live();
+                                view_yaw_lock::noteUse(1, lock);
+                                view_yaw_lock::turnHead(armView.anchor, lock);
+                            }
                             // CAMERA MOTION: the hands map onto the head the eyes are on
                             // (its tilt, HEAD ANGLE, the bob's shift), so they stay where
                             // the player's hands are in the view.
@@ -5714,6 +5728,8 @@ DWORD WINAPI run(void*) {
                                 // With an older ray module: a landed punch knocks back
                                 // into the hand, as hard as it was; the web's rumble
                                 // waits for it.
+                                if (punch.hands[i].punches > punchesBefore[i])
+                                    dirActionBits |= 1u << static_cast<unsigned>(direction_report::Action::punch);
                                 if (!fighting && punch.hands[i].punches > punchesBefore[i] && input.focused) {
                                     runtime.haptic(i, .5f + .5f * punch.hands[i].lastStrength);
                                     pulseUntil[i] = frame.predictedDisplayTime + 40'000'000;
@@ -5726,6 +5742,8 @@ DWORD WINAPI run(void*) {
                             listed = shots;
                             for (unsigned i = 0; i < 2; ++i) {
                                 // A web ball leaving the wrist: a short, crisp tick.
+                                if (shots.hands[i].shots > shotsBefore[i])
+                                    dirActionBits |= 1u << static_cast<unsigned>(direction_report::Action::web);
                                 if (shots.hands[i].shots > shotsBefore[i] && input.focused) {
                                     runtime.haptic(i, .35f);
                                     pulseUntil[i] = frame.predictedDisplayTime + 25'000'000;
@@ -9710,6 +9728,69 @@ DWORD WINAPI run(void*) {
                                 const float shown = view_yaw_lock::shownYaw(lock, boneYaw);
                                 const float viewYaw = stable_yaw::wrap(shown + hmd);
                                 viewDivergence.add(frame.seconds, viewYaw - heroYawNow, shown - boneYaw);
+                                // DIRECTION REPORT: the edges since the last frame, then the line and the audit.
+                                {
+                                    using direction_report::Action;
+                                    const auto edge = [&](Action a) {
+                                        dirActionBits |= 1u << static_cast<unsigned>(a);
+                                    };
+                                    const bool groundedNow = swingFresh && swingState.grounded;
+                                    if (swingFresh && groundedNow != dirWasGrounded)
+                                        edge(groundedNow ? Action::land : Action::jump);
+                                    if (swingFresh)
+                                        dirWasGrounded = groundedNow;
+                                    if (dodging && !dirWasDodging)
+                                        edge(Action::dodge);
+                                    dirWasDodging = dodging;
+                                    const int domainNow = static_cast<int>(hybridOwner.domain);
+                                    if (dirWasDomain >= 0 && domainNow != dirWasDomain)
+                                        edge(Action::handoff);
+                                    dirWasDomain = domainNow;
+                                    const bool turning = viewLockDelta != 0.f || viewLockSnapped;
+                                    if (turning && !dirTurnWas)
+                                        edge(Action::turn);
+                                    dirTurnWas = turning;
+                                    for (unsigned a = 1; a < static_cast<unsigned>(Action::count); ++a)
+                                        if (dirActionBits & (1u << a))
+                                            dirReport.action(static_cast<Action>(a));
+                                    const bool bigEdge = dirActionBits & ((1u << static_cast<unsigned>(Action::realign)) |
+                                                                          (1u << static_cast<unsigned>(Action::handoff)));
+                                    dirActionBits = 0;
+                                    direction_report::Frame df;
+                                    df.seconds = frame.seconds;
+                                    df.ok = true;
+                                    df.hmd = hmd;
+                                    df.shown = shown;
+                                    df.view = viewYaw;
+                                    df.basis = dirBasis;
+                                    df.hero = heroYawNow;
+                                    df.bone = boneYaw;
+                                    df.playerTurn = viewLockSnapped ? 0.f : viewLockDelta;
+                                    df.discontinuity = viewLockSnapped || bigEdge || viewLockRelatch || !dirFeetSet;
+                                    const float fx = body[12], fz = body[14];
+                                    if (dirFeetSet && frame.seconds > 0)
+                                        df.momentum = direction_report::momentumYaw(fx - dirFeetX, fz - dirFeetZ,
+                                                                                    frame.seconds, 1.f, &df.speed);
+                                    dirFeetX = fx;
+                                    dirFeetZ = fz;
+                                    dirFeetSet = true;
+                                    const auto lockLive = view_yaw_lock::live();
+                                    dirReport.skew(direction_report::Consumer::eyes, view_yaw_lock::usedYaw(0), lockLive.yaw);
+                                    dirReport.skew(direction_report::Consumer::hands, view_yaw_lock::usedYaw(1), lockLive.yaw);
+                                    dirReport.skew(direction_report::Consumer::arms, view_yaw_lock::usedYaw(2), lockLive.yaw);
+                                    if (std::isfinite(dirBasis))
+                                        dirReport.skew(direction_report::Consumer::stick, dirBasis, hybridHeading.yaw);
+                                    const auto step = dirReport.step(df);
+                                    char text[256];
+                                    if (step.line) {
+                                        dirReport.format(text, sizeof(text), df);
+                                        diag_log::write(text);
+                                    }
+                                    if (step.audit) {
+                                        dirReport.formatAudit(text, sizeof(text));
+                                        diag_log::write(text);
+                                    }
+                                }
                                 const float rX = frame.hands[1].valid ? frame.hands[1].stickX : 0.f;
                                 const auto watched =
                                     viewTurnWatch.update(frame.seconds, fullLockGate && viewLock.turning(rX, values.smoothTurn),

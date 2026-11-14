@@ -1965,8 +1965,11 @@ bool frame(Mat4& head) {
         return false;
     // FULL head lock on the stable heading: gameplay only (a first-person
     // scene, or the scene's own camera, is never turned).
-    if (!wanted.load() && followHeroOn.load(std::memory_order_relaxed))
-        view_yaw_lock::turnHead(head, view_yaw_lock::live());
+    if (!wanted.load() && followHeroOn.load(std::memory_order_relaxed)) {
+        const auto lock = view_yaw_lock::live();
+        view_yaw_lock::noteUse(0, lock);
+        view_yaw_lock::turnHead(head, lock);
+    }
     return true;
 }
 bool sceneYaw(bool level, float& yaw) {

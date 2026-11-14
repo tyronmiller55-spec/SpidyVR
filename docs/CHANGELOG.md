@@ -3,6 +3,12 @@
 Every build, newest first, with what changed, why, and what was measured.
 Per-check results are in [VALIDATION.md](VALIDATION.md).
 
+## Polish pass (Nov 14, branch `feat/polish-pass`, on 4d58169)
+
+The user, Nov 14 (t64u): "Landings, combat, and movement in general are having a problem with lag and immediacy ... Where the player looks takes full precedence, and everything else should be adjusting to it ... There should be a direction report from the headset that everything is answering to every moment." The plan, with the numbers from the 4d58169 logs, is `docs/POLISH_PASS.md`. One commit per slice.
+
+- **1. The direction report (no feel change).** `direction:` ten times a second and on every action edge (turn, realign, jump, land, dodge, handoff, web fire, punch): `hmd` (the headset's own turn off its latch), `shown` (the rig's turn), `view` (shown + hmd, where the player looks), `basis` (what the left stick is mapped from), `hero`, `bone`, `momentum` (the actor's travel direction from its position change) and the last action with its age. Once a second `direction audit:` gives the degrees the view turned that the player did not make (`imposed view turn`; today about 880 deg a minute, to be driven to 0 by slice 4) and, per consumer (eyes, hands, arms, stick), the worst skew from the published heading. The quiet log: the six noisy kinds (`head probe: cutscene`, `forearm sign:`, `shooter lock:`, `spherical aim:`, `animated hand:`/`points:`, `tracking lock:`, `vr stabilization: tilt`) are kept on a change of shape or every 2 s (about 40% of the 2.6 million lines of the last session).
+
 ## G1 playtest fixes (Nov 14, branch `feat/g1-playtest-fixes`, on bd68982)
 
 The user, Nov 14 (t63u): "Last test was Grip1 ... I saw an incredible amount of hitching, look into that ... Body/head orientation still aren't aligned during dodges and landings ... Handstands still don't activate" and, asked which fixes to build, "Build all of these fixes". The analysis is in the playtest notes (G1 logs, 20 minutes: the XR loop ran at about 69 fps with the scene at 67%; the game thread stalled over 100 ms about 1,100 times). One commit per fix, in this order.

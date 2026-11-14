@@ -187,6 +187,17 @@ inline State live() {
     return s;
 }
 
+// DIRECTION REPORT: the yaw each consumer last used (0 the render thread's eyes, 1 the XR hand and marker
+// map, 2 the arm IK), so the audit can tell when one answered to an older heading than the published one.
+inline std::atomic<float> liveUsed[3]{};
+inline void noteUse(unsigned consumer, const State& used) {
+    if (consumer < 3)
+        liveUsed[consumer].store(used.on ? used.yaw : 0.f, std::memory_order_relaxed);
+}
+inline float usedYaw(unsigned consumer) {
+    return consumer < 3 ? liveUsed[consumer].load(std::memory_order_relaxed) : 0.f;
+}
+
 // The lock's heading. Right stick: smooth turning at the SMOOTH TURN rate, or
 // SNAP TURN flicks (hysteresis as Level's: on past 0.7, re-armed under 0.4).
 inline constexpr float turnZone = .15f, flickOn = .7f, flickOff = .4f;
