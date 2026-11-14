@@ -55,6 +55,8 @@ Swing solver;
 CrawlHands crawlHands;
 VentCrawlMode ventCrawlMode;
 InputSampleClock inputClock, grabInputClock;
+// WEBS SURVIVE HITCHES (hitch_guard.hpp): the mover's measured velocity, believed only off a normal step.
+hitch_guard::VelocityGuard velocityGuard;
 // The web tie's gesture (web_tie.hpp): a web on a surface in one hand, a
 // webbed-up enemy on the other's, hands together, the right stick's click.
 TieGesture tieGesture;
@@ -316,6 +318,7 @@ void cancelSwing(bool keepWall = false) {
     if (!keepWall)
         solver.leaveWall();
     inputClock.reset();
+    velocityGuard.reset();
     inFlight.reset();
     predictedDt = 0;
     AcquireSRWLockExclusive(&output);
@@ -588,6 +591,17 @@ void visit(const native_rays::QueryContext& world) {
     const bool fresh = idle < .05;
     if (fresh)
         stepRunMs = runMs;
+    // The step's measured velocity (a position change over the previous step's dt) is wrong
+    // over a hitch: one long frame read as 268 m/s while the body moved at 12, and the swing let
+    // go of both webs on it. Believed only off a normal step (hitch_guard::VelocityGuard); else
+    // the last believed one stands. Every use below (the body the swing predicts from, the
+    // sample's velocity, the takeoff and mount reads) sees the guarded value.
+    if (motion.status == 1 || motion.status == 2)
+        motion.achievedVelocity =
+            velocityGuard
+                .sample(motion.steps, motion.achievedVelocity, motion.dt,
+                        std::isfinite(idle) ? static_cast<float>(idle) : 1.f, solver.speedLimit() * 2)
+                .velocity;
     if (worldIdentity && worldIdentity != world.identity()) {
         cancel();
         worldIdentity = world.identity();

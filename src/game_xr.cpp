@@ -88,6 +88,7 @@
 #include "spidy/hybrid_movement.hpp"
 #include "spidy/animated_arms.hpp"
 #include "spidy/frame_stats.hpp"
+#include "spidy/hitch_guard.hpp"
 #include "spidy/seated.hpp"
 #include "spidy/slow_motion.hpp"
 #include "spidy/steady_hud.hpp"
@@ -1150,6 +1151,9 @@ DWORD WINAPI run(void*) {
         ground_state::StateLog stateLog;
         // perf: lines (frame_stats.hpp).
         frame_stats::FrameStats frameStats;
+        // game frame: lines (hitch_guard.hpp): the game thread's own step times, spikes with their length.
+        hitch_guard::GameFrameClock gameFrameClock;
+        hitch_guard::GameFrameClock::Lines gameFrameLines;
         // HEAD PROBE (off by default; head_probe.hpp): read only. Its numbers
         // (some 15 KB) on the heap once, its lines in a buffer reused each frame.
         const auto headProbe = std::make_unique<head_probe::Probe>();
@@ -4608,6 +4612,12 @@ DWORD WINAPI run(void*) {
                         pointJumpLook = input.look;
                         check(submitSwing(&input), "Tracked swing input");
                         check(sampleSwing(&swingState), "Native swing feedback");
+                        // The swing sample's stamp moves once per game step it processed: a gap
+                        // over 50 ms is a game-thread hitch (WEBS SURVIVE HITCHES).
+                        gameFrameClock.update(swingState.status ? swingState.qpc : 0, frequency.QuadPart,
+                                              frame.seconds, gameFrameLines);
+                        for (unsigned i = 0; i < gameFrameLines.count; ++i)
+                            diag_log::write(gameFrameLines.text[i]);
                         game_swing::SlingshotData slingshot;
                         slingshotPulseSeconds += frame.seconds;
                         if ((values.webSlingshot || values.airSlingshot) && input.focused &&

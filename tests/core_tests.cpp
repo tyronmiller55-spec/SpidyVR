@@ -71,6 +71,7 @@
 #include "spidy/run_update.hpp"
 #include "spidy/game_dodge.hpp"
 #include "spidy/web_aim.hpp"
+#include "spidy/hitch_guard.hpp"
 #include <algorithm>
 #include <bitset>
 #include <cstring>
@@ -31375,6 +31376,101 @@ int main() {
             s.bytes = 148 + (version - 31) * 4;
             check(!game_swing::validSettings(s), "ambiguous old community wire packet accepted");
         }
+    });
+    // WEBS SURVIVE HITCHES (hitch_guard.hpp): the 22:24 session's 268 m/s read off one long frame.
+    test("hitch: one over-limit speed read does not let go of the webs", [&] {
+        Sling f;
+        const uint32_t before = f.solver.hitchIgnored();
+        f.body.velocity = {0, 0, -300};
+        f.tick();
+        check(f.solver.webs()[0].attached && f.solver.webs()[1].attached,
+              "one 300 m/s read let go of the webs");
+        check(f.solver.hitchIgnored() == before + 1, "the ignored read was not counted");
+        f.body.velocity = {};
+        for (int i = 0; i < 4; ++i)
+            f.tick();
+        f.body.velocity = {0, 0, -300};
+        f.tick();
+        f.body.velocity = {};
+        f.tick();
+        f.body.velocity = {0, 0, -300};
+        f.tick();
+        check(f.solver.webs()[0].attached && f.solver.webs()[1].attached,
+              "over-limit reads with a good one between them let go of the webs");
+    });
+    test("hitch: a sustained over-limit speed still lets go, after three valid frames", [&] {
+        Sling f;
+        f.body.velocity = {0, 0, -300};
+        f.tick();
+        f.tick();
+        check(f.solver.webs()[0].attached, "two reads were already enough to let go");
+        f.last = f.solver.predictNativeStep(.01f, f.in, f.world, f.body, .01f);
+        check(!f.last.valid && !f.solver.webs()[0].attached && !f.solver.webs()[1].attached,
+              "three valid over-limit frames did not let go of the webs");
+    });
+    test("hitch: a long frame's speed is never counted toward the let-go", [&] {
+        Sling f;
+        f.body.velocity = {0, 0, -300};
+        for (int i = 0; i < 6; ++i) {
+            f.last = f.solver.predictNativeStep(.08f, f.in, f.world, f.body, .01f);
+            check(f.last.valid, "a long step was refused");
+        }
+        check(f.solver.webs()[0].attached && f.solver.webs()[1].attached,
+              "long frames' speeds let go of the webs");
+        f.body.velocity = {};
+        f.tick();
+        check(f.solver.webs()[0].attached, "a normal speed after the hitch let go");
+    });
+    test("hitch: the measured velocity is held through a long or stale step", [&] {
+        using hitch_guard::VelocityGuard;
+        using hitch_guard::Why;
+        VelocityGuard g;
+        auto r = g.sample(1, {0, 0, -12}, .016f, .004f, 130);
+        check(!r.rejected && std::abs(r.velocity.z + 12) < .001f, "a normal step was refused");
+        r = g.sample(2, {0, 0, -268}, .016f, .004f, 130);
+        check(r.rejected && r.why == Why::tooFast && std::abs(r.velocity.z + 12) < .001f,
+              "a 268 m/s step was believed");
+        r = g.sample(3, {0, 0, -40}, .231f, .004f, 130);
+        check(r.rejected && r.why == Why::longStep && std::abs(r.velocity.z + 12) < .001f,
+              "a 231 ms step was believed");
+        r = g.sample(4, {0, 0, -40}, .016f, .08f, 130);
+        check(r.rejected && r.why == Why::stale, "a stale sample was believed");
+        r = g.sample(4, {0, 0, -99}, .016f, .004f, 130);
+        check(r.rejected, "the same step gave a new answer");
+        r = g.sample(5, {0, 0, -13}, .016f, .004f, 130);
+        check(!r.rejected && std::abs(r.velocity.z + 13) < .001f, "the next normal step was not believed");
+        r = g.sample(6, {0, 0, std::nanf("")}, .016f, .004f, 130);
+        check(r.rejected && std::abs(r.velocity.z + 13) < .001f, "a NaN velocity was believed");
+        // A slow game: every step is a long one. The hold ends and the game's word stands.
+        VelocityGuard slow;
+        slow.sample(1, {0, 0, -10}, .016f, .004f, 130);
+        bool believed = false;
+        for (uint64_t i = 2; i < 40 && !believed; ++i)
+            believed = !slow.sample(i, {0, 0, -30}, .06f, .004f, 130).rejected;
+        check(believed, "a game under 17 fps was held at its first velocity forever");
+    });
+    test("hitch: game frame lines log each spike with its length", [&] {
+        hitch_guard::GameFrameClock clock;
+        hitch_guard::GameFrameClock::Lines lines;
+        const int64_t hz = 10'000'000;
+        uint64_t t = 1'000'000'000;
+        unsigned spikes = 0, summaries = 0;
+        for (int i = 0; i < 700; ++i) {
+            t += i == 300 ? hz * 231 / 1000 : hz / 36;
+            clock.update(t, hz, .0139f, lines);
+            for (unsigned k = 0; k < lines.count; ++k) {
+                const std::string line = lines.text[k];
+                if (line.find("spike 231 ms") != std::string::npos)
+                    ++spikes;
+                if (line.find("game steps") != std::string::npos)
+                    ++summaries;
+            }
+        }
+        check(spikes == 1 && clock.spikesTotal() == 1, "the 231 ms step was not logged once");
+        check(summaries >= 1, "no game frame summary was written");
+        clock.update(t + hz * 10, hz, .0139f, lines);
+        check(lines.count == 0 || std::string(lines.text[0]).find("spike") == std::string::npos,
+              "a pause was logged as a spike");
     });
     std::cout << total - failed << '/' << total << " tests passed\n";
     return failed ? 1 : 0;

@@ -762,6 +762,7 @@ void Swing::reset(Body b) {
         throw std::invalid_argument("Invalid body");
     clearSlingshot();
     body_ = b;
+    overLimit_.reset();
     endLandCarry();
     webs_ = {};
     hands_ = {};
@@ -1824,9 +1825,21 @@ MotionIntent Swing::predictNativeStep(float seconds, const Input& input, const W
                                       Body actual, float inputSeconds) {
     events_.clear();
     accumulator_ = 0;
-    if (!std::isfinite(seconds) || seconds <= 0 || !input.focused ||
-        !std::isfinite(inputSeconds) || inputSeconds < 0 || !finite(actual.position) ||
-        !finite(actual.velocity) || length(actual.velocity) > speedLimit() * 2) {
+    // WEBS SURVIVE HITCHES: a speed over twice the limit lets go of everything only when it
+    // holds over several valid frames (hitch_guard::OverLimit); one read off a long frame is no
+    // speed (the 22:24 session's 268 m/s while the body moved at 12) and the swing goes on from
+    // the velocity it had.
+    bool overLimit = finite(actual.velocity) && length(actual.velocity) > speedLimit() * 2;
+    bool sustainedOver = false;
+    if (std::isfinite(seconds) && seconds > 0 && input.focused) {
+        bool ignored = false;
+        sustainedOver = overLimit_.update(overLimit, seconds, ignored);
+        if (ignored && finite(body_.velocity))
+            actual.velocity = body_.velocity;
+    }
+    if (!std::isfinite(seconds) || seconds <= 0 || !input.focused || !std::isfinite(inputSeconds) ||
+        inputSeconds < 0 || !finite(actual.position) || !finite(actual.velocity) || sustainedOver) {
+        overLimit_.reset();
         releaseAll();
         endGroundRun();
         endLandCarry();

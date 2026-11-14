@@ -3,6 +3,12 @@
 Every build, newest first, with what changed, why, and what was measured.
 Per-check results are in [VALIDATION.md](VALIDATION.md).
 
+## STABILITY, ARMS, HANDSTAND pass from the c6a8279 session (46195f7, Nov 13 22:24 PT)
+
+The user, Nov 13 (pt55u): "the game is hitching heavily every few minutes, which drops my web lines ... handstands still don't work ... the arms are deforming terribly and preventing aiming the webshooters ... stronger stabilization and leveling across the board." Session `game-vr-20261113-222447` (46195f7, 20 min; diag 1196.9 s). One commit per fix on `feat/stability-arms-handstand`; notes in `playtest-c6a8279/NOTES.md`.
+
+- **Webs survive hitches (fix 1):** the XR loop was healthy (0.16% of frames over 33 ms; `wait_frame` max 155 ms, no session-state changes after the first 0.5 s); the game thread hitched (diag t 44.5 s: mod prepare 231 ms, then a 268 m/s swing velocity and web 1->0 at 44.703; t 643-647 s: 3 failed web shots). The mover's measured velocity (a position change over the previous step's dt) is now believed only off a normal step (no longer than 50 ms, not stale, under twice the swing's speed limit) - otherwise the last believed velocity stands for up to 0.5 s (`hitch_guard::VelocityGuard`, in `game_swing.cpp` where every use sees it). `Swing::predictNativeStep` lets go of the webs on a speed over twice the limit only after 3 valid over-limit frames or 50 ms (`hitch_guard::OverLimit`); one read, or any frame over 50 ms, never counts and the swing goes on from its own velocity. New diag lines `game frame: spike N ms between game steps ...` (each step over 50 ms with its length) and a `game frame:` summary every 10 s (the swing sample's stamp moves once per game step). Tests: 5 `hitch:` checks in `core_tests`.
+
 ## PLAYTEST FIXES from the 5061b4a session, ported onto c6a8279 (Nov 13)
 
 The user, Nov 13 (t54u): last night's fixes, re-checked against the camera-modes build (c6a8279) and ported one at a time, branch `feat/c6a8279-ports`. Left out: PUNCH LUNGE (punches stay as they are) and LANDING VIEW HOLD (HYBRID v2's kept heading and ANIM HEAD RIDE already removed the 56 degree snap). The landing hard turn is not ported: ANIM HEAD RIDE brings the view to his head instead of turning him to the view. Not headset-tested.

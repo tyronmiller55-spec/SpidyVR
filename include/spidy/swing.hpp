@@ -1,4 +1,5 @@
 #pragma once
+#include "hitch_guard.hpp"
 #include "math.hpp"
 #include "web_landing.hpp"
 #include <algorithm>
@@ -763,6 +764,11 @@ class Swing {
     bool boostedFlight() const {
         return slingshotFlight_ && slingshotSpeed_ > 65;
     }
+    // Speeds over twice the limit that were not believed (one frame, or a long one): WEBS SURVIVE
+    // HITCHES, hitch_guard.hpp.
+    uint32_t hitchIgnored() const {
+        return overLimit_.ignoredFrames();
+    }
     float speedLimit() const {
         return slingshotFlight_ ? std::max(config_.maxSpeed, slingshotSpeed_) : config_.maxSpeed;
     }
@@ -944,6 +950,7 @@ class Swing {
     float sinceZip_ = 100, sinceLanding_ = 100, zipSpeed_{};
     Vec3 zipDirection_{};
     bool jumpHeld_{}, jumpQueued_{};
+    hitch_guard::OverLimit overLimit_;
     std::uint32_t jumpCancels_{}, runJumps_{};
     float runJump_{};
     Vec3 runJumpVelocity_{};
