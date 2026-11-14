@@ -377,6 +377,26 @@ int main() {
         ViewLimit n;
         check(n.correction(NAN, 0) == 0.f && n.correction(0, NAN) == 0.f && !n.primed, "unknown: none");
     }
+    // AFTER A DODGE: open from 0.4 s after the dodge is let go until 2.5 s.
+    {
+        DodgeTail t;
+        check(!t.open(), "no dodge yet: closed (the fight's tail still blocks)");
+        for (int i = 0; i < 30; ++i)
+            t.update(1.f / 90, true);
+        check(!t.open(), "during the dodge: closed");
+        for (int i = 0; i < 20; ++i)
+            t.update(1.f / 90, false); // 0.22 s
+        check(!t.open(), "0.22 s after: still settling");
+        for (int i = 0; i < 20; ++i)
+            t.update(1.f / 90, false); // 0.44 s
+        check(t.open(), "0.44 s after: open");
+        for (int i = 0; i < 90 * 2 + 20; ++i)
+            t.update(1.f / 90, false); // 2.7 s
+        check(!t.open(), "2.7 s after: closed again");
+        t.update(1.f / 90, true);
+        t.update(NAN, false);
+        check(!t.open(), "a new dodge restarts it; a NaN step is no time");
+    }
     std::printf("view yaw lock: %d checks passed\n", passed);
     return 0;
 }

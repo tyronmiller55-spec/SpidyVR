@@ -113,20 +113,33 @@ inline RideWhy rideWanted(const RideIn& in) {
 // linear in time, shown eased (smoothstep).
 struct HeadRide {
     static constexpr float enterSeconds = .25f, exitSeconds = .2f;
+    // EASED BY GAP (G1 playtest: 37-52% of the landing rides started over 45 degrees between the view and the
+    // head bone, 23-37% over 90: a 250 ms slew of up to ~130 degrees). The blend takes as long as the slew needs
+    // at easeRate degrees a second of the smoothstep's peak (1.5 x the gap / the rate), never under the usual
+    // 250 ms (a gap under 40 degrees: as it was) and never over easeMaxSeconds.
+    static constexpr float easeRate = 240.f * (3.14159265f / 180.f), easeMaxSeconds = 1.2f;
+    static float enterSecondsFor(float gap) {
+        if (!std::isfinite(gap))
+            return enterSeconds;
+        return std::clamp(1.5f * std::abs(gap) / easeRate, enterSeconds, easeMaxSeconds);
+    }
     Mode mode = Mode::locomotion;
     float weight = 0;
     float age = 0; // seconds in the current mode
+    float enterTime = enterSeconds; // this ride's blend (enterSecondsFor the gap at its start)
     uint32_t enters = 0, exits = 0;
     struct Step {
         bool entered = false, exited = false;
     };
-    Step update(float dt, bool wanted) {
+    // gap: view minus head bone, radians (any wrap), read when the ride starts.
+    Step update(float dt, bool wanted, float gap = 0.f) {
         Step s;
         const float d = std::isfinite(dt) ? std::clamp(dt, 0.f, .1f) : 0.f;
         age += d;
         if (wanted && mode != Mode::animHeadRide) {
             mode = Mode::animHeadRide;
             age = 0;
+            enterTime = enterSecondsFor(wrap(gap));
             ++enters;
             s.entered = true;
         } else if (!wanted && mode == Mode::animHeadRide) {
@@ -136,7 +149,7 @@ struct HeadRide {
             s.exited = true;
         }
         if (mode == Mode::animHeadRide)
-            weight = std::min(1.f, weight + d / enterSeconds);
+            weight = std::min(1.f, weight + d / enterTime);
         else
             weight = std::max(0.f, weight - d / exitSeconds);
         return s;

@@ -90,6 +90,13 @@ In the air, the R stick turns the camera as in the main game. The player's own L
 
 Every ownership event (landing, point launch, jump handoff, anim re-entry, takeover) checks the facing within 0.3 s against the view shown before it: a view more than 45 deg off is turned back (yaw lock or rig), a hero more than 45 deg off (90 until the G1 playtest) on the animation's side is turned to it by the walk stick (forced TURN-IN-PLACE, kept pending up to 2.5 s for a standing frame; the player's left stick wins). Details: [FACING_CHECK.md](FACING_CHECK.md).
 
+### Dodges and the head ride (G1 playtest fixes)
+
+The G1 logs (Nov 14): after a dodge the view and the body were more than 45 deg apart 37-40% of the time, and 37-52% of the landing head rides started more than 45 deg between the view and the head bone.
+
+- **The turn after a dodge.** The hero turn (TURN-IN-PLACE, the look's and the facing check's) is blocked while the fight lasts, and a fight lasts 3 s past the last enemy in reach, so a dodge's turn was never made up. From 0.4 s after the dodge button is let go until 2.5 s, the fight's tail no longer blocks it (`view_yaw_lock::DodgeTail`). A dodge itself still blocks it, and so does the left stick (the player's own movement wins), and the other gates (grounded, the animation owns him, no zip, no leg stick) stand.
+- **The head ride is eased by the gap.** ANIM HEAD RIDE blends the view's yaw to the head bone in 250 ms. With the view 130 deg from the bone that was a 130 deg slew in a quarter of a second. The blend now takes as long as the slew needs at a peak of 240 deg/s (1.5 x the gap / 240 deg/s), never under 250 ms and never over 1.2 s: a gap under 40 deg is as before, 90 deg takes about 560 ms, 130 deg about 810 ms. The gap is read when the ride starts (`camera_mode::HeadRide::enterSecondsFor`). The `camera mode:` log line's blend is the ride's own.
+
 ## MOVEMENT MODE HYBRID (Nov 12, t75u)
 
 In HYBRID the walk stick is the mod's on the ground (front half: along the right-stick heading; rear half: one snap) and, in SpidyVR's air, a light stick toward the view keeps the game's facing with it; a landing holds the heading on the shown view while the walk stick turns him. STABLE and OLD keep the rules above. Details: [HYBRID_MOVEMENT.md](HYBRID_MOVEMENT.md).

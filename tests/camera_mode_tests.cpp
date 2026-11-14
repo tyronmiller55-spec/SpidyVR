@@ -260,6 +260,33 @@ int main() {
         w.update(f, 1'000'000'000);
         check(w.domain == hybrid_owner::Domain::vr, "Spidy's wall: never a perch");
     }
+    // ---- EASED BY GAP (G1 playtest): a big view-to-bone gap slews over longer, never faster than 250 ms.
+    {
+        const float d = 3.14159265f / 180.f;
+        check(HeadRide::enterSecondsFor(0) == HeadRide::enterSeconds &&
+                  HeadRide::enterSecondsFor(30 * d) == HeadRide::enterSeconds,
+              "gap under 40 degrees: the usual 250 ms");
+        const float t90 = HeadRide::enterSecondsFor(90 * d), t130 = HeadRide::enterSecondsFor(130 * d);
+        check(t90 > .5f && t90 < .6f && t130 > .8f && t130 < .85f, "90 degrees about 560 ms, 130 about 810 ms");
+        check(HeadRide::enterSecondsFor(180 * d) <= HeadRide::easeMaxSeconds &&
+                  HeadRide::enterSecondsFor(-130 * d) == t130 && HeadRide::enterSecondsFor(NAN) == HeadRide::enterSeconds,
+              "capped, either way round, unknown: usual");
+        // A 130 degree gap: the largest step of the yaw is the blend's peak rate (at most ~240 deg/s).
+        HeadRide r;
+        r.update(1.f / 90, true, 130 * d);
+        check(near(r.enterTime, t130), "the ride latched its blend at the start");
+        float prev = r.eased(), biggest = 0;
+        for (int i = 0; i < 100; ++i) {
+            r.update(1.f / 90, true, 10 * d); // the gap read later does not change the blend
+            biggest = std::max(biggest, r.eased() - prev);
+            prev = r.eased();
+        }
+        check(r.eased() == 1.f && biggest * 130.f * 90.f <= 240.f * 1.02f, "130 degrees: no faster than 240 deg/s");
+        // The same ride at a small gap is as it was.
+        HeadRide q;
+        q.update(1.f / 90, true, 20 * d);
+        check(near(q.enterTime, HeadRide::enterSeconds), "a 20 degree gap: 250 ms");
+    }
     // ---- Settings ----
     {
         vr_settings::Values v;

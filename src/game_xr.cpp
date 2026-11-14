@@ -1183,6 +1183,7 @@ DWORD WINAPI run(void*) {
         // game frame: lines (hitch_guard.hpp): the game thread's own step times, spikes with their length.
         hitch_guard::FreshHold swingFreshHold; // swingFresh with hysteresis (hitch_guard.hpp)
         float swingFreshLogAge{};
+        view_yaw_lock::DodgeTail dodgeTail; // the turn after a dodge, whatever the fight's tail says
         uint32_t swingCostWindow = 0; // the last SpidySwingCostLive window logged
         hitch_guard::GameFrameClock gameFrameClock;
         hitch_guard::GameFrameClock::Lines gameFrameLines;
@@ -7168,12 +7169,15 @@ DWORD WINAPI run(void*) {
                                 const bool heroOk =
                                     finite(actorAhead) && std::hypot(actorAhead.x, actorAhead.z) > .2f;
                                 const float heroYaw = heroOk ? hybrid_handoff::actorLookYaw(actorAhead) : NAN;
+                                // AFTER A DODGE the fight's 3 s tail no longer blocks the turn (the left stick
+                                // still does): the body a dodge turned is brought back to the view.
+                                const bool fightBlocks = fightLately && !dodgeTail.open();
                                 view_yaw_lock::TurnInPlace::In tin;
                                 tin.dt = frame.seconds;
                                 tin.allowed = viewLockSteer && viewLockHeadingOk && yieldingPose && hybridViewOk &&
                                               heroOk && swingFresh && swingState.grounded &&
                                               hybridInputL < stable_yaw::steerZone && !midairAnimation &&
-                                              !fightLately && !dodging && !zipping && !legStickActive &&
+                                              !fightBlocks && !dodging && !zipping && !legStickActive &&
                                               !motion.onSurface && !motion.basicFlipControls;
                                 tin.heading = viewLockHeading;
                                 tin.heroYaw = heroYaw;
@@ -7189,7 +7193,7 @@ DWORD WINAPI run(void*) {
                                     tin.forceYaw = hybridHeading.yaw;
                                 }
                                 tin.forceAllowed = yieldingPose && heroOk && swingFresh && swingState.grounded &&
-                                                   hybridInputL < stable_yaw::steerZone && !fightLately &&
+                                                   hybridInputL < stable_yaw::steerZone && !fightBlocks &&
                                                    !dodging && !zipping && !legStickActive;
                                 // The first gate that fails, for the drop's log (and the player's stick, which wins).
                                 using Block = view_yaw_lock::Block;
@@ -7198,7 +7202,7 @@ DWORD WINAPI run(void*) {
                                                  : !swingFresh                          ? Block::stale
                                                  : !swingState.grounded                 ? Block::airborne
                                                  : hybridInputL >= stable_yaw::steerZone ? Block::stick
-                                                 : fightLately                          ? Block::fight
+                                                 : fightBlocks                          ? Block::fight
                                                  : dodging                              ? Block::dodge
                                                  : zipping                              ? Block::zip
                                                  : legStickActive                       ? Block::legs
@@ -7420,6 +7424,7 @@ DWORD WINAPI run(void*) {
                         }
                         dodges += walk.dodge && !dodging;
                         dodging = walk.dodge;
+                        dodgeTail.update(frame.seconds, dodging);
                         heals += walk.heal && !healing;
                         healing = walk.heal;
                         zips += walk.zip && !zipping;
@@ -9605,7 +9610,11 @@ DWORD WINAPI run(void*) {
                                 rin.speed = rideSpeed;
                                 const auto why = camera_mode::rideWanted(rin);
                                 const float ageWas = headRide.age;
-                                const auto rs = headRide.update(frame.seconds, why != camera_mode::RideWhy::none);
+                                // EASED BY GAP: the blend takes as long as the view's slew to the head bone needs.
+                                const float rideGap = stable_yaw::wrap(
+                                    view_yaw_lock::shownYaw(lock, boneYaw) + hmdNow - boneYaw);
+                                const auto rs = headRide.update(frame.seconds, why != camera_mode::RideWhy::none,
+                                                                std::isfinite(rideGap) ? rideGap : 0.f);
                                 if (rs.entered || rs.exited) {
                                     const float viewNow =
                                         stable_yaw::wrap(view_yaw_lock::shownYaw(lock, boneYaw) + hmdNow);
@@ -9624,8 +9633,8 @@ DWORD WINAPI run(void*) {
                                         "%+.0f), hero %.0f, #%u",
                                         camera_mode::modeName(headRide.mode), reason,
                                         rs.exited ? "" : " - the view rides his head", 
-                                        (rs.entered ? camera_mode::HeadRide::enterSeconds
-                                                    : camera_mode::HeadRide::exitSeconds) * 1000.f,
+                                        (rs.entered ? headRide.enterTime : camera_mode::HeadRide::exitSeconds) *
+                                            1000.f,
                                         boneYaw * toDeg, viewNow * toDeg, stable_yaw::wrap(viewNow - boneYaw) * toDeg,
                                         std::isfinite(heroYawNow) ? heroYawNow * toDeg : -999.f,
                                         rs.entered ? headRide.enters : headRide.exits);

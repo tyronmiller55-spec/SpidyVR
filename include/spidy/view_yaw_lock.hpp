@@ -269,6 +269,24 @@ inline const char* blockName(Block b) {
 inline float angleOf(int setting) {
     return setting > 0 ? static_cast<float>(std::clamp(setting, 1, 180)) * degrees : 0.f;
 }
+// AFTER A DODGE (G1 playtest: a fight's 3 s tail kept the hero turn off for good, and dodges are where the
+// body and the view part): from `settleSeconds` after the dodge button is let go until `windowSeconds` have passed,
+// the fight's tail no longer blocks the turn (a dodge itself still does, and so does the left stick).
+struct DodgeTail {
+    static constexpr float settleSeconds = .4f, windowSeconds = 2.5f;
+    float since = 1e9f;
+    bool dodging = false;
+    void update(float dt, bool dodgeNow) {
+        dodging = dodgeNow;
+        if (dodgeNow)
+            since = 0;
+        else if (std::isfinite(dt))
+            since += std::clamp(dt, 0.f, .1f);
+    }
+    bool open() const {
+        return !dodging && since >= settleSeconds && since < windowSeconds;
+    }
+};
 struct TurnInPlace {
     enum class End : uint8_t { none, done, gaveUp, interrupted };
     struct In {
