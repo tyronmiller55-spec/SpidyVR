@@ -70,6 +70,11 @@ target_link_libraries(spidy_point_jump_tests PRIVATE spidy_core)
 target_compile_definitions(spidy_point_jump_tests PRIVATE SPIDY_SOURCE_DIR="${CMAKE_SOURCE_DIR}")
 add_test(NAME point_jump COMMAND spidy_point_jump_tests)
 
+# VR STABILIZATION (vr_stabilize.hpp), STEADY and HORIZON LEVEL (portable).
+add_executable(spidy_vr_stabilize_tests tests/vr_stabilize_tests.cpp)
+target_link_libraries(spidy_vr_stabilize_tests PRIVATE spidy_core)
+add_test(NAME vr_stabilize COMMAND spidy_vr_stabilize_tests)
+
 add_executable(spidy_handstand_tests tests/handstand_tests.cpp)
 target_link_libraries(spidy_handstand_tests PRIVATE spidy_core)
 add_test(NAME handstand COMMAND spidy_handstand_tests)

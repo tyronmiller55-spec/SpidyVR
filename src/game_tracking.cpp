@@ -929,6 +929,21 @@ GameMotionFrame GameTrackingRig::update(const XrFrame& f, Vec3 feet, Vec3 gameFo
         placed.tilt = unit(yaw.conjugate() * roll * yaw * placed.tilt);
         placed.origin += unbankedHead.position - placed.toWorld(f.head).position;
     }
+    // VR STABILIZATION (vr_stabilize.hpp): the view tilt levelled by PITCH, ROLL and HORIZON LEVEL and eased
+    // by the bank's ANGLE, about the player's head: the headset's own look, the yaw and where he is are
+    // untouched. A surface's tilt (a wall, a vent) is deliberate: eased, never levelled.
+    {
+        const Pose beforeStabilize = placed.toWorld(f.head);
+        const bool surfaceTilt = onSurface || ventCrawl || rollView || turned;
+        const auto stable =
+            vrTilt_.apply(Quat::yaw(placed.yaw), placed.tilt, f.seconds, vrStab_, surfaceTilt);
+        if (stable.changed) {
+            placed.tilt = stable.tilt;
+            placed.origin += beforeStabilize.position - placed.toWorld(f.head).position;
+        }
+        out.vrTiltRaw = stable.rawDegrees;
+        out.vrTiltShown = stable.shownDegrees;
+    }
     const bool pressing = handClimb_ && holds && !standing_ && !wallRun &&
                           (ventCrawl || std::abs(held.y) < .5f) && !f.jump &&
                           (surface.speed < 3.f || f.hands[0].squeeze > .35f || f.hands[1].squeeze > .35f);

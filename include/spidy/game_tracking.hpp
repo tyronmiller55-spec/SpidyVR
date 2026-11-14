@@ -8,6 +8,7 @@
 #include "swing.hpp"
 #include "tracking.hpp"
 #include "view_ease.hpp"
+#include "vr_stabilize.hpp"
 #include "wall_roll.hpp"
 #include <algorithm>
 #include <cmath>
@@ -90,6 +91,9 @@ struct GameMotionFrame {
     // and how far the inverted eyes came down toward the floor (m).
     handstand::Handstand::Out handstand{};
     float handstandDrop{};
+    // VR STABILIZATION (vr_stabilize.hpp): the view tilt off upright, degrees: as the rig wanted it, as
+    // shown.
+    float vrTiltRaw{}, vrTiltShown{};
     Quat bodyTilt(bool runningPose = false) const {
         // The travel-driven wall-run gait stays in the wall frame. The camera
         // may stand on that wall, but it must not select a different body pose.
@@ -472,6 +476,10 @@ class GameTrackingRig {
         handstandAloft_ = aloft;
         handstandFloorY_ = floorY;
     }
+    // VR STABILIZATION: the CAMERA rows, HORIZON LEVEL and the bank's ANGLE on the rig's view tilt.
+    void vrStabilization(const vr_stabilize::Settings& s) {
+        vrStab_ = s;
+    }
     void handstandVrAir(bool vrAir) {
         handstandVrAir_ = vrAir;
     }
@@ -599,6 +607,8 @@ class GameTrackingRig {
     handstand::Handstand::Out handstandOut_{};
     Quat handstandCatchTilt_{};
     float handstandDrop_{};
+    vr_stabilize::Settings vrStab_{};
+    vr_stabilize::TiltFilter vrTilt_{};
     bool handstandVrAir_{}, handstandSampled_{}, handstandGround_{}, handstandAloft_{};
     float handstandFloorY_ = NAN;
     std::array<Vec3, 2> handstandRel_{};

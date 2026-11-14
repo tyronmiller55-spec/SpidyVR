@@ -374,7 +374,7 @@ struct Values {
     // headset's own look and lean stay 1:1 (headset_smoothing.hpp). Response
     // times in milliseconds, 0 off. STABILIZATION picks the bank: OFF the
     // three CAMERA rows, LIGHT the three LIGHT rows, HEAVY the three HEAVY
-    // rows (heavier speed damping too). Off and 0 by default: as before.
+    // rows (heavier speed damping too), STEADY (3) the three STEADY rows. Off and 0 by default: as before.
     int cameraStabilization = 0;
     int cameraVerticalMs = 0, cameraHorizontalMs = 0, cameraAngleMs = 0;
     int lightVerticalMs = 75, lightHorizontalMs = 50, lightAngleMs = 75;
@@ -540,6 +540,14 @@ struct Values {
     // TORSO UPDATE (Nov 13): in the animation the web line falls back to the controller's once the forearm
     // is this many degrees off it (0 off). anim_forearm_fallback_deg.
     int animForearmFallbackDeg = 60;
+    // STEADY (November 14): STABILIZATION's fourth bank, above HEAVY (heavier speed damping again), ms.
+    int steadyVerticalMs = 350, steadyHorizontalMs = 300, steadyAngleMs = 450;
+    // HORIZON LEVEL (November 14): this share of the view's roll and pitch tilt removed, in the animation and
+    // in SpidyVR; flips pass whole. camera_horizon_level_pct.
+    int cameraHorizonLevelPct = 0;
+    // VR STABILIZATION (November 14): 1 applies the CAMERA rows, HORIZON LEVEL and the bank's ANGLE to
+    // SpidyVR's own view tilt (swing, air, combat, wall); 0 leaves it as before. camera_vr_stabilization.
+    int cameraVrStabilization = 1;
     // PASSIVE LEGS (leg_layers.hpp; November 12 06:18): in SpidyVR's air with
     // LEG CONTROL not engaged, the legs' spring runs with no stick, so momentum
     // moves them; this share of it shown (0 OFF). 60 by default. passive_legs_pct.
@@ -793,8 +801,13 @@ enum class Item : uint8_t {
     rearSnap,
     animatedTorsoTwist,
     animForearmFallback,
+    steadyVertical,
+    steadyHorizontal,
+    steadyAngle,
+    cameraHorizonLevel,
+    cameraVrStabilization,
 };
-inline constexpr Item lastItem = Item::animForearmFallback;
+inline constexpr Item lastItem = Item::cameraVrStabilization;
 // SLOW-MO LENGTH's last step: no time limit (until L3 toggles it off).
 inline constexpr int slowMotionEndless = 91;
 // Real seconds a full meter lasts for a SLOW-MO LENGTH value; 0 = endless.
@@ -824,7 +837,7 @@ struct Row {
     Place place{};
 };
 // Stable row/setting numbers; categories below determine presentation order.
-const std::array<Row, 157>& rows();
+const std::array<Row, 162>& rows();
 const Row* rowFor(Item);
 // camera, shooters and legs (November 11, the user: "I can't find legs or
 // camera settings in any of the menus. Make sure it's clearly labeled"): tabs
@@ -851,7 +864,7 @@ bool shownWhenInactive(Item);
 Values resetCategory(Category, Values);
 // The most choices a row shows (game_menu's buffers): a row with more would
 // lose its last ones.
-inline constexpr size_t maxChoices = 9;
+inline constexpr size_t maxChoices = 11; // 9 until November 14 (the camera rows' 750 and 1000 ms)
 // The values a list setting's choices stand for, in their order; none for a
 // switch.
 std::span<const int> steps(Item);

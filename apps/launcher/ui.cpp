@@ -2521,12 +2521,28 @@ void App::options(ImVec2 origin, ImVec2 size) {
                    "Tilts the animated view below (Down) or above (Up) the horizon, up to 30 degrees. Level "
                    "is as before. Your own head still moves the view 1:1 on top.",
                    S(150), [&] { tabCombo("##cameraheadangle", Item::cameraHeadAngle); });
+            settingOption(
+                Item::cameraHorizonLevel, "Horizon level",
+                "Removes this share of the view's roll and pitch tilt, in Native Animation and in SpidyVR "
+                "(swing, air, combat, wall). 100% keeps the horizon level. Flips still turn fully and your "
+                "own head always moves the view 1:1. Off by default.",
+                S(150), [&] { tabCombo("##camerahorizon", Item::cameraHorizonLevel); });
         });
         group(cameraPage, 1, "Camera smoothing (how smoothly)", [&] {
-            settingOption(Item::cameraStabilization, "Stabilization",
-                   "Off uses the Camera rows below; Light and Heavy use their own rows, with heavier speed "
-                   "damping. Smooths only what the animation adds; your head stays 1:1.",
-                   S(150), [&] { tabCombo("##camerastab", Item::cameraStabilization); });
+            settingOption(
+                Item::cameraStabilization, "Stabilization",
+                "Off uses the Camera rows below; Light, Heavy and Steady use their own rows, with heavier "
+                "speed damping (Steady the most: 350/300/450 ms to start). Smooths only what the view adds; "
+                "your head stays 1:1.",
+                S(150), [&] { tabCombo("##camerastab", Item::cameraStabilization); });
+            settingOption(
+                Item::cameraVrStabilization, "VR stabilization",
+                "Also applies the Camera rows, Horizon level and the chosen bank's turn smoothing to the "
+                "view "
+                "tilt in SpidyVR (swinging, air, combat, walls), not only in Native Animation. It never "
+                "touches your headset's own look, the turn or where you are. On by default (nothing changes "
+                "until Stabilization or the amounts are set).",
+                S(150), [&] { tabCombo("##cameravrstab", Item::cameraVrStabilization); });
             settingOption(Item::punchViewEase, "Punch view ease",
                    "When a punch hands you from the animation back to VR, the view stays where the animation "
                    "showed it and eases onto your feet over this time (fast at first, settling last; sooner "
@@ -2578,6 +2594,14 @@ void App::options(ImVec2 origin, ImVec2 size) {
                    S(150), [&] { tabCombo("##heavyhorizontal", Item::heavyHorizontal); });
             settingOption(Item::heavyAngle, "Heavy angle", "Turn smoothing with Stabilization Heavy.",
                    S(150), [&] { tabCombo("##heavyangle", Item::heavyAngle); });
+            settingOption(Item::steadyVertical, "Steady vertical",
+                          "Up/down smoothing with Stabilization Steady.", S(150),
+                          [&] { tabCombo("##steadyvertical", Item::steadyVertical); });
+            settingOption(Item::steadyHorizontal, "Steady horizontal",
+                          "Side/forward smoothing with Stabilization Steady.", S(150),
+                          [&] { tabCombo("##steadyhorizontal", Item::steadyHorizontal); });
+            settingOption(Item::steadyAngle, "Steady angle", "Turn smoothing with Stabilization Steady.",
+                          S(150), [&] { tabCombo("##steadyangle", Item::steadyAngle); });
         });
         group(shootersPage, 0, "Web shooters", [&] {
             settingOption(Item::shooterMode, "Shooters",

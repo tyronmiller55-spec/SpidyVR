@@ -126,12 +126,17 @@ constexpr int animatedHeadsetSmooths[] = {0, 1, 2, 3, 4};
 constexpr const char* animatedHeadsetSmoothChoices[] = {"OFF", "LOW", "MEDIUM", "HIGH", "MAX"};
 static_assert(std::size(animatedHeadsetSmoothChoices) == std::size(animatedHeadsetSmooths));
 // CAMERA SMOOTHING's response times (ms) and STABILIZATION's banks.
-constexpr int cameraSmoothSteps[] = {0, 25, 50, 75, 100, 150, 200, 300, 500};
-constexpr const char* cameraSmoothChoices[] = {"OFF",    "25 MS",  "50 MS",  "75 MS", "100 MS",
-                                               "150 MS", "200 MS", "300 MS", "500 MS"};
+constexpr int cameraSmoothSteps[] = {0, 25, 50, 75, 100, 150, 200, 300, 500, 750, 1000};
+constexpr const char* cameraSmoothChoices[] = {"OFF",    "25 MS",  "50 MS",  "75 MS",  "100 MS", "150 MS",
+                                               "200 MS", "300 MS", "500 MS", "750 MS", "1000 MS"};
 static_assert(std::size(cameraSmoothChoices) == std::size(cameraSmoothSteps));
-constexpr int cameraStabilizations[] = {0, 1, 2};
-constexpr const char* cameraStabilizationChoices[] = {"OFF", "LIGHT", "HEAVY"};
+// STEADY's rows: the same range with STEADY's own 350/300/450 ms starting points on a step.
+constexpr int steadySmoothSteps[] = {0, 50, 100, 200, 300, 350, 450, 600, 750, 900, 1000};
+constexpr const char* steadySmoothChoices[] = {"OFF",    "50 MS",  "100 MS", "200 MS", "300 MS", "350 MS",
+                                               "450 MS", "600 MS", "750 MS", "900 MS", "1000 MS"};
+static_assert(std::size(steadySmoothChoices) == std::size(steadySmoothSteps));
+constexpr int cameraStabilizations[] = {0, 1, 2, 3};
+constexpr const char* cameraStabilizationChoices[] = {"OFF", "LIGHT", "HEAVY", "STEADY"};
 static_assert(std::size(cameraStabilizationChoices) == std::size(cameraStabilizations));
 // SHOOTERS (shooter_lock::Mode) and LOCK STRENGTH, percent.
 constexpr int shooterModes[] = {0, 1, 2};
@@ -260,6 +265,12 @@ static_assert(std::size(animatedTorsoTwistChoices) == std::size(animatedTorsoTwi
 constexpr int animForearmFallbackSteps[] = {0, 45, 60, 75, 90};
 constexpr const char* animForearmFallbackChoices[] = {"OFF", "45 DEG", "60 DEG", "75 DEG", "90 DEG"};
 static_assert(std::size(animForearmFallbackChoices) == std::size(animForearmFallbackSteps));
+constexpr int cameraHorizonLevelSteps[] = {0, 25, 50, 75, 100};
+constexpr const char* cameraHorizonLevelChoices[] = {"OFF", "25%", "50%", "75%", "100%"};
+static_assert(std::size(cameraHorizonLevelChoices) == std::size(cameraHorizonLevelSteps));
+constexpr int cameraVrStabilizationSteps[] = {0, 1};
+constexpr const char* cameraVrStabilizationChoices[] = {"OFF", "ON"};
+static_assert(std::size(cameraVrStabilizationChoices) == std::size(cameraVrStabilizationSteps));
 constexpr int rearSnaps[] = {0, 100, 150, 200, 300};
 constexpr const char* rearSnapChoices[] = {"INSTANT", "100 MS", "150 MS", "200 MS", "300 MS"};
 static_assert(std::size(rearSnapChoices) == std::size(rearSnaps));
@@ -364,6 +375,16 @@ std::span<const int> steps(Item item) {
         return movementModes;
     case Item::rearSnap:
         return rearSnaps;
+    case Item::cameraVrStabilization:
+        return cameraVrStabilizationSteps;
+    case Item::cameraHorizonLevel:
+        return cameraHorizonLevelSteps;
+    case Item::steadyAngle:
+        return steadySmoothSteps;
+    case Item::steadyHorizontal:
+        return steadySmoothSteps;
+    case Item::steadyVertical:
+        return steadySmoothSteps;
     case Item::animForearmFallback:
         return animForearmFallbackSteps;
     case Item::animatedTorsoTwist:
@@ -539,6 +560,16 @@ float numberOf(Item item, const Values& v) {
         return static_cast<float>(v.movementMode);
     case Item::rearSnap:
         return static_cast<float>(v.rearSnapMs);
+    case Item::cameraVrStabilization:
+        return static_cast<float>(v.cameraVrStabilization);
+    case Item::cameraHorizonLevel:
+        return static_cast<float>(v.cameraHorizonLevelPct);
+    case Item::steadyAngle:
+        return static_cast<float>(v.steadyAngleMs);
+    case Item::steadyHorizontal:
+        return static_cast<float>(v.steadyHorizontalMs);
+    case Item::steadyVertical:
+        return static_cast<float>(v.steadyVerticalMs);
     case Item::animForearmFallback:
         return static_cast<float>(v.animForearmFallbackDeg);
     case Item::animatedTorsoTwist:
@@ -762,11 +793,11 @@ Values sanitized(Values v) {
     v.dodgeTumble = std::clamp(v.dodgeTumble, 0, 2);
     v.animatedHead = std::clamp(v.animatedHead, 0, 2);
     v.animatedHeadsetSmooth = std::clamp(v.animatedHeadsetSmooth, 0, 4);
-    v.cameraStabilization = std::clamp(v.cameraStabilization, 0, 2);
+    v.cameraStabilization = std::clamp(v.cameraStabilization, 0, 3);
     for (int Values::*ms : {&Values::cameraVerticalMs, &Values::cameraHorizontalMs, &Values::cameraAngleMs,
                             &Values::lightVerticalMs, &Values::lightHorizontalMs, &Values::lightAngleMs,
                             &Values::heavyVerticalMs, &Values::heavyHorizontalMs, &Values::heavyAngleMs})
-        v.*ms = std::clamp(v.*ms, 0, 500);
+        v.*ms = std::clamp(v.*ms, 0, 1000);
     v.legStiffnessPct = std::clamp(v.legStiffnessPct, 25, 200);
     v.legDampingPct = std::clamp(v.legDampingPct, 25, 200);
     v.legCouplingPct = std::clamp(v.legCouplingPct, 0, 100);
@@ -787,6 +818,11 @@ Values sanitized(Values v) {
     v.passiveCouplingPct = std::clamp(v.passiveCouplingPct, 0, 100);
     v.movementMode = std::clamp(v.movementMode, 0, 2);
     v.rearSnapMs = std::clamp(v.rearSnapMs, 0, 1000);
+    v.cameraVrStabilization = std::clamp(v.cameraVrStabilization, 0, 1);
+    v.cameraHorizonLevelPct = std::clamp(v.cameraHorizonLevelPct, 0, 100);
+    v.steadyAngleMs = std::clamp(v.steadyAngleMs, 0, 1000);
+    v.steadyHorizontalMs = std::clamp(v.steadyHorizontalMs, 0, 1000);
+    v.steadyVerticalMs = std::clamp(v.steadyVerticalMs, 0, 1000);
     v.animForearmFallbackDeg = std::clamp(v.animForearmFallbackDeg, 0, 180);
     v.animatedTorsoTwist = std::clamp(v.animatedTorsoTwist, 0, 90);
     v.pointJumpChordMs = std::clamp(v.pointJumpChordMs, 20, 150);
@@ -848,9 +884,9 @@ Values sanitized(Values v) {
     v.automaticHandThreshold = std::clamp(v.automaticHandThreshold, 50, 300);
     return v;
 }
-const std::array<Row, 157>& rows() {
+const std::array<Row, 162>& rows() {
     // The help fits the game's description column beside the rows.
-    static const std::array<Row, 157> all{{
+    static const std::array<Row, 162> all{{
         {Item::none, "WEBS", nullptr, {}},
         {Item::webStyle, "WEB STYLE",
          "Arcade: webs pass lamp posts, signs and cars, and swings stay above the street.", webStyleChoices},
@@ -1144,7 +1180,7 @@ const std::array<Row, 157>& rows() {
         {Item::softLock, "SOFT LOCK", "Grip webs snap to an enemy or prop this near your aim. Closer wins.",
          softLockChoices},
         {Item::cameraStabilization, "STABILIZATION",
-         "Steadies the animated camera. LIGHT/HEAVY use their rows; OFF the CAMERA rows.",
+         "Steadies the camera. LIGHT/HEAVY/STEADY use their rows; OFF the CAMERA rows.",
          cameraStabilizationChoices},
         {Item::cameraVertical, "CAMERA VERTICAL",
          "Animated head up/down bob smoothing (STABILIZATION OFF). Headset stays 1:1.",
@@ -1291,6 +1327,18 @@ const std::array<Row, 157>& rows() {
         {Item::animForearmFallback, "ARM AIM FALLBACK",
          "Webs aim along your controller past this forearm angle. OFF: forearm only.",
          animForearmFallbackChoices, Place::launcher},
+        {Item::steadyVertical, "STEADY VERTICAL", "Up/down smoothing used by STABILIZATION STEADY.",
+         steadySmoothChoices, Place::launcher},
+        {Item::steadyHorizontal, "STEADY HORIZONTAL", "Side/forward smoothing used by STABILIZATION STEADY.",
+         steadySmoothChoices, Place::launcher},
+        {Item::steadyAngle, "STEADY ANGLE", "Turn smoothing used by STABILIZATION STEADY.",
+         steadySmoothChoices, Place::launcher},
+        {Item::cameraHorizonLevel, "HORIZON LEVEL",
+         "Removes this share of roll and pitch tilt, in SpidyVR too. Flips pass whole.",
+         cameraHorizonLevelChoices, Place::launcher},
+        {Item::cameraVrStabilization, "VR STABILIZATION",
+         "Applies CAMERA and STABILIZATION to SpidyVR (swing, air, combat, wall) too.",
+         cameraVrStabilizationChoices, Place::launcher},
     }};
     return all;
 }
@@ -1352,11 +1400,19 @@ const std::array<Screen, categoryCount>& screens() {
     // CAMERA & STABILIZATION (November 11): how much the animation moves the
     // view (amounts, HEAD ANGLE), then how smoothly (the response times).
     static constexpr Item camera[] = {
-        Item::cameraMotion, Item::cameraPitch, Item::cameraRoll, Item::cameraBobVertical,
-        Item::cameraBobSide, Item::cameraHeadAngle,
-        Item::cameraStabilization, Item::punchViewEase, Item::airViewEase, Item::rearSnap, Item::animYawSway, Item::turnInPlace, Item::cameraVertical, Item::cameraHorizontal, Item::cameraAngle,
-        Item::lightVertical, Item::lightHorizontal, Item::lightAngle,
-        Item::heavyVertical, Item::heavyHorizontal, Item::heavyAngle,
+        Item::cameraMotion,        Item::cameraPitch,
+        Item::cameraRoll,          Item::cameraBobVertical,
+        Item::cameraBobSide,       Item::cameraHeadAngle,
+        Item::cameraStabilization, Item::punchViewEase,
+        Item::airViewEase,         Item::rearSnap,
+        Item::animYawSway,         Item::turnInPlace,
+        Item::cameraVertical,      Item::cameraHorizontal,
+        Item::cameraAngle,         Item::lightVertical,
+        Item::lightHorizontal,     Item::lightAngle,
+        Item::heavyVertical,       Item::heavyHorizontal,
+        Item::heavyAngle,          Item::steadyVertical,
+        Item::steadyHorizontal,    Item::steadyAngle,
+        Item::cameraHorizonLevel,  Item::cameraVrStabilization,
     };
     // WEB SHOOTERS (November 11): one choice and its strength, WEB ANGLE on
     // top; the old rows they replace stay in the launcher's file only.
@@ -1719,6 +1775,21 @@ bool choose(Item item, int index, Values& v) {
     case Item::rearSnap:
         v.rearSnapMs = s[index];
         break;
+    case Item::cameraVrStabilization:
+        v.cameraVrStabilization = s[index];
+        break;
+    case Item::cameraHorizonLevel:
+        v.cameraHorizonLevelPct = s[index];
+        break;
+    case Item::steadyAngle:
+        v.steadyAngleMs = s[index];
+        break;
+    case Item::steadyHorizontal:
+        v.steadyHorizontalMs = s[index];
+        break;
+    case Item::steadyVertical:
+        v.steadyVerticalMs = s[index];
+        break;
     case Item::animForearmFallback:
         v.animForearmFallbackDeg = s[index];
         break;
@@ -1953,6 +2024,11 @@ constexpr TabOnly tabOnly[] = {
     {"rear_snap_turn_ms", nullptr, &Values::rearSnapMs},
     {"animated_torso_twist", nullptr, &Values::animatedTorsoTwist},
     {"anim_forearm_fallback_deg", nullptr, &Values::animForearmFallbackDeg},
+    {"camera_steady_vertical_ms", nullptr, &Values::steadyVerticalMs},
+    {"camera_steady_horizontal_ms", nullptr, &Values::steadyHorizontalMs},
+    {"camera_steady_angle_ms", nullptr, &Values::steadyAngleMs},
+    {"camera_horizon_level_pct", nullptr, &Values::cameraHorizonLevelPct},
+    {"camera_vr_stabilization", nullptr, &Values::cameraVrStabilization},
     {"leg_air_crouch", &Values::legAirCrouch, nullptr},
     {"leg_reach_spread", &Values::legReachSpread, nullptr},
     {"air_fists", &Values::airFists, nullptr},

@@ -769,7 +769,13 @@ void resolveScene(native_eyes::Command& c) {
         // HEAD ANGLE (camera_motion::live; the identity unless set).
         static camera_motion::Bob parentBob;
         head = camera_motion::stabilize(head, camera_motion::live(), &parentBob, haveFeet ? &feet : nullptr, dt);
-        head = parentSmooth.update(head, dt, headset_smoothing::live(), haveFeet ? &feet : nullptr);
+        // ANIM HEAD RIDE: the yaw of the bone's head held on harder (headset_smoothing::withRide).
+        const auto smoothing = headset_smoothing::live();
+        head = parentSmooth.update(head, dt,
+                                   headset_smoothing::liveRide.load(std::memory_order_relaxed)
+                                       ? headset_smoothing::withRide(smoothing)
+                                       : smoothing,
+                                   haveFeet ? &feet : nullptr);
         c = native_eyes::resolvedOnHead(c, head);
     } else
         c.enabled = 0;

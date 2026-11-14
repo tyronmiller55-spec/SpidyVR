@@ -76,6 +76,7 @@
 #include "spidy/hybrid_owner.hpp"
 #include "spidy/camera_mode.hpp"
 #include "spidy/handstand.hpp"
+#include "spidy/vr_stabilize.hpp"
 #include "spidy/aim_steady.hpp"
 #include "spidy/hybrid_handoff.hpp"
 #include "spidy/hybrid_steer.hpp"
@@ -1208,6 +1209,7 @@ DWORD WINAPI run(void*) {
             bool vrOwns{}, flipAir{}, onLine{}, ground{}, landing{};
         } handstandGates;
         float handstandLogAge{};
+        float vrStabilizeLogAge{}; // VR STABILIZATION's diag line, twice a second
         int64_t hybridSteerDiagAt{};
         // VIEW YAW SOURCE: STABLE's heading (stable_yaw.hpp), the hero-vs-steer
         // watch and the runaway-turn detector.
@@ -2969,6 +2971,9 @@ DWORD WINAPI run(void*) {
                         flight.poseDrag = pose.angDrag;
                     }
                     rig.flight(flight);
+                    // VR STABILIZATION: the CAMERA rows, HORIZON LEVEL and the bank's ANGLE on SpidyVR's view
+                    // tilt.
+                    rig.vrStabilization(vr_stabilize::fromValues(values));
                     rig.wallHands(climbState.status ? climbState.hands : 0u);
                     rig.outwardCrawl(values.body && !flatScreen ? native_body::crawlOutwardWeight() : 0.f);
                     const bool runPalm = game_swing::outdoorClimbGrip(climbState,
@@ -3115,6 +3120,22 @@ DWORD WINAPI run(void*) {
                                         {camera[8], camera[9], camera[10]}, gameplay,
                                         swingState.owned ? Vec3{0, 1, 0} : heroUp, flipAir, hold,
                                         {camera[4], camera[5], camera[6]});
+                    // VR STABILIZATION: how much tilt the rig wanted and what is shown, twice a second
+                    // while it is doing anything (tilt over 2 degrees), with the bank in force.
+                    {
+                        vrStabilizeLogAge +=
+                            std::isfinite(frame.seconds) ? std::clamp(frame.seconds, 0.f, .1f) : 0.f;
+                        const auto vs = vr_stabilize::fromValues(values);
+                        if (vs.any() && vrStabilizeLogAge >= .5f && motion.vrTiltRaw > 2.f) {
+                            vrStabilizeLogAge = 0;
+                            diag_log::writef(
+                                "vr stabilization: tilt wanted %.1f deg, shown %.1f deg (levelled to "
+                                "pitch %.0f%% roll %.0f%%, angle %.0f ms, bank %d, owner %s)",
+                                motion.vrTiltRaw, motion.vrTiltShown, vs.pitch * 100.f, vs.roll * 100.f,
+                                vs.angleSec * 1000.f, values.cameraStabilization,
+                                hybridOwner.domain == hybrid_owner::Domain::vr ? "vr" : "anim");
+                        }
+                    }
                     // HANDSTAND (H1): its log lines, and the push-off: a launch off the
                     // hands through the swing's point-jump path (SpidySwingPointJump: its
                     // own event, no smoke), held for the owner as a point jump's takeoff.
@@ -7343,6 +7364,7 @@ DWORD WINAPI run(void*) {
                     if ((!vrPlay || fpPlayBlip) && fpScene) {
                         headset_smoothing::liveLevel.store(0, std::memory_order_relaxed);
                         headset_smoothing::publish({});
+                        headset_smoothing::liveRide.store(false, std::memory_order_relaxed);
                         camera_motion::publish({});
                         // A first-person scene: the headset's own two eyes, inside the head of the character
                         // the scene plays. The eyes are sent relative to that head (anchored 2); the native
@@ -8828,6 +8850,8 @@ DWORD WINAPI run(void*) {
                     headset_smoothing::liveLevel.store(
                         headFollowEyes ? values.animatedHeadsetSmooth : 0, std::memory_order_relaxed);
                     headset_smoothing::publish(cameraSmooth);
+                    headset_smoothing::liveRide.store(headFollowEyes && headRide.active(),
+                                                      std::memory_order_relaxed);
                     // CAMERA MOTION (camera_motion.hpp): the amounts in force, on the
                     // render thread's eyes and on this thread's head and hands alike.
                     const camera_motion::Amounts cameraAmounts =

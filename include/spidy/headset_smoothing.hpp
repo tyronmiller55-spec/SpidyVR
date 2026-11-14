@@ -41,15 +41,20 @@ inline std::atomic<int> liveLevel{0};
 struct Params {
     float verticalSec{}, horizontalSec{}, angleSec{};
     float angleBeta = .5f;    // per radian/second of turn (one-euro speed term)
+    float snapRad = 45.f * 3.14159265f / 180.f; // a turn this far in one step is a cut, not eased
     float positionBeta = 1.f; // per metre/second of the offset's change
     bool any() const {
         return verticalSec > 0 || horizontalSec > 0 || angleSec > 0;
     }
 };
-constexpr float maxVerticalLag = .25f, maxHorizontalLag = .35f;
+// November 14 (STEADY): raised from .25 and .35 so the longer response times can hold the bob back.
+constexpr float maxVerticalLag = .4f, maxHorizontalLag = .5f;
 // Speed damping per bank: OFF's CAMERA rows, LIGHT, HEAVY (heavier holds on
 // through faster motion before letting it through).
-constexpr float bankAngleBeta[] = {.5f, .45f, .25f}, bankPositionBeta[] = {1.f, .6f, .25f};
+// STEADY (the fourth bank, November 14) holds on longest.
+constexpr float bankAngleBeta[] = {.5f, .45f, .25f, .12f}, bankPositionBeta[] = {1.f, .6f, .25f, .12f};
+constexpr int bankCount = 4;
+constexpr int maxResponseMs = 1000;
 // The old SMOOTHING level alone: angle only, as before.
 inline Params fromLevel(int level) {
     level = std::clamp(level, 0, maxLevel);
@@ -63,11 +68,12 @@ inline Params fromLevel(int level) {
 // `V` is vr_settings::Values (kept generic so this header stays pure).
 template <class V>
 inline Params fromValues(const V& v) {
-    const int bank = std::clamp(v.cameraStabilization, 0, 2);
-    const int ms[3][3] = {{v.cameraVerticalMs, v.cameraHorizontalMs, v.cameraAngleMs},
-                          {v.lightVerticalMs, v.lightHorizontalMs, v.lightAngleMs},
-                          {v.heavyVerticalMs, v.heavyHorizontalMs, v.heavyAngleMs}};
-    const auto sec = [](int m) { return static_cast<float>(std::clamp(m, 0, 500)) * .001f; };
+    const int bank = std::clamp(v.cameraStabilization, 0, bankCount - 1);
+    const int ms[bankCount][3] = {{v.cameraVerticalMs, v.cameraHorizontalMs, v.cameraAngleMs},
+                                  {v.lightVerticalMs, v.lightHorizontalMs, v.lightAngleMs},
+                                  {v.heavyVerticalMs, v.heavyHorizontalMs, v.heavyAngleMs},
+                                  {v.steadyVerticalMs, v.steadyHorizontalMs, v.steadyAngleMs}};
+    const auto sec = [](int m) { return static_cast<float>(std::clamp(m, 0, maxResponseMs)) * .001f; };
     Params p;
     p.verticalSec = sec(ms[bank][0]);
     p.horizontalSec = sec(ms[bank][1]);
@@ -79,6 +85,15 @@ inline Params fromValues(const V& v) {
         p.angleSec = level.angleSec;
         p.angleBeta = level.angleBeta;
     }
+    return p;
+}
+// ANIM HEAD RIDE (camera_mode.hpp): while the view rides the animation's head its yaw is the bone's, so
+// the angle holds on harder (a quarter of the speed term, a cut only past 90 degrees). The XR worker sets
+// this; the render thread reads it with the params.
+inline std::atomic<bool> liveRide{false};
+inline Params withRide(Params p) {
+    p.angleBeta *= .4f;
+    p.snapRad = 90.f * 3.14159265f / 180.f;
     return p;
 }
 // The XR worker publishes the params in force (zero: none) beside liveLevel;
@@ -236,7 +251,7 @@ class Filter {
         }
         Vec3 axis{};
         const float angle = turn(previous_, target, axis);
-        if (angle > snapRad) {
+        if (angle > p.snapRad) {
             restart(target, root);
             return target;
         }

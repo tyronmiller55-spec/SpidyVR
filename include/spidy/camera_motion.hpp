@@ -47,7 +47,8 @@ constexpr float pi = 3.14159265f, degree = pi / 180;
 constexpr float flipStartDegrees = 100, flipFullDegrees = 170;
 constexpr float bobBaselineSeconds = .5f;
 // The most the bob scaling may move the eyes from the real head, metres.
-constexpr float maxBobRemovedVertical = .15f, maxBobRemovedSide = .2f;
+// November 14 (STEADY): raised from .15 and .2.
+constexpr float maxBobRemovedVertical = .3f, maxBobRemovedSide = .35f;
 // A jump of the head this far from its baseline is a cut, not a bob.
 constexpr float cutMeters = 1.5f;
 constexpr int maxHeadAngle = 30;
@@ -80,6 +81,10 @@ template <class V> inline Amounts fromValues(const V& v) {
     a.bobVertical = share(v.cameraBobVerticalPct);
     a.bobSide = share(v.cameraBobSidePct);
     a.headAngle = static_cast<float>(std::clamp(v.cameraHeadAngleDeg, -maxHeadAngle, maxHeadAngle)) * degree;
+    // HORIZON LEVEL (November 14): that share of the roll and pitch tilt removed on top of the amounts.
+    const float keep = 1.f - share(v.cameraHorizonLevelPct);
+    a.pitch *= keep;
+    a.roll *= keep;
     return a;
 }
 
