@@ -86,7 +86,7 @@ A second hand squeezed on the same body joins the first and doubles the force; t
 
 An enemy is knocked into the game's own flight by a light kinetic blow (0.25, the web tie's) and the Follow law then writes the flight's velocity every step; once the game ends the flight he is knocked again **0.8 s after the last blow**, a punch's included. One the game will not fling (a heavy, a scripted scene) is steered on his mover, as the web tie's. An enemy who goes down in the hold (knocked out) is let go of after 1.5 s. A body carried more than 1.5 m from its place, or shaken off, is lost. While held he is not struck against what the hand holds him by (only a thrown body is).
 
-Hold cost (`enemy_hold_cost`, 1; 0 never tires): holding an enemy tires the hand a little, the force fading from 100% toward 75% over 60 s x (80 kg / his mass)^2 / cost. A standard enemy costs next to nothing (75% of 1200 N still lifts his 80 kg); a heavy tires it fast, and a tired grip that no longer beats his weight lets him sag away. Props cost nothing. `hand_grab_force` (1200, 400 to 4000 N) sets one hand's force; what one hand lifts follows it (90 kg at 1200 N).
+Hold cost (`enemy_hold_cost`, 1; 0 never tires): holding an enemy tires the hand a little, the force fading from 100% toward 75% over 60 s x (80 kg / his mass)^2 / cost. A standard enemy costs next to nothing (75% of 1200 N still lifts his 80 kg); a heavy tires it fast, and a tired grip that no longer beats his weight lets him sag away. Props cost nothing. `hand_grab_force` (1200, 400 to 4000 N) sets one hand's force; what one hand lifts follows it (90 kg at 1200 N). Both are on the launcher's Walls page under the switch (**Hand grab strength**, **Hand grab hold cost**).
 
 ## Punching while held
 

@@ -24099,8 +24099,9 @@ int main() {
         // November 13: TORSO TWIST and ARM AIM FALLBACK (launcher rows), appended after them.
         // November 14: STEADY's three rows, HORIZON LEVEL and VR STABILIZATION after them.
         // November 14: the swing kick's two switches after those.
-        // November 14: WALL BRAKE and GRIP FLING (launcher rows) after those, then HAND GRAB and the handstand's eight.
-        constexpr size_t rowsAfter = 20;
+        // November 14: WALL BRAKE and GRIP FLING (launcher rows) after those, then HAND GRAB and the handstand's eight,
+        // then (still November 14) HAND GRAB STRENGTH and HOLD COST.
+        constexpr size_t rowsAfter = 22;
         check(all.size() == firstRealistic + std::size(realistic) + rowsAfter,
               "the realistic flips' rows are not the last but the appended ones");
         for (size_t i = 0; i < std::size(realistic); ++i)
@@ -31602,6 +31603,61 @@ int main() {
         check(game_swing::Settings{}.version == 40 && sizeof(game_swing::Settings) == 188,
               "Settings stays v40, 188 bytes");
     });
+    test("hand grab settings: strength and hold cost rows, steps, notes and ini keys", [] {
+        using namespace vr_settings;
+        const auto movementItems = screens()[static_cast<size_t>(Category::movement)].items;
+        const auto onMovement = [&](Item item) {
+            return std::find(movementItems.begin(), movementItems.end(), item) != movementItems.end();
+        };
+        struct Entry {
+            Item item;
+            const char* key;
+            int low, high, def;
+            int Values::* number;
+        };
+        const Entry numbers[] = {
+            {Item::handGrabForce, "hand_grab_force", 400, 4000, 1200, &Values::handGrabForce},
+            {Item::enemyHoldCost, "enemy_hold_cost", 0, 5, 1, &Values::enemyHoldCost},
+        };
+        check(onMovement(Item::handGrab), "the hand grab switch is on the movement page");
+        for (const Entry& e : numbers) {
+            check(onMovement(e.item), "a hand grab row is on the movement page");
+            const Row* row = rowFor(e.item);
+            check(row && row->place == Place::launcher && row->help && std::strlen(row->help) <= 80 &&
+                      std::strstr(row->title, "HAND GRAB"),
+                  "a hand grab row's text");
+            const auto list = steps(e.item);
+            check(!list.empty() && list.size() == row->choices.size() && list.size() <= maxChoices,
+                  "the choices");
+            check(list.front() == e.low && list.back() == e.high, "the list spans the ini's range");
+            check(std::is_sorted(list.begin(), list.end()) &&
+                      std::find(list.begin(), list.end(), e.def) != list.end(),
+                  "sorted, with the default on a step");
+            check(defaultChoice(e.item) ==
+                      static_cast<int>(std::find(list.begin(), list.end(), e.def) - list.begin()),
+                  "the default's choice");
+            for (size_t i = 0; i < list.size(); ++i) {
+                Values v;
+                const bool changed = choose(e.item, static_cast<int>(i), v);
+                check(changed == (list[i] != e.def) && v.*(e.number) == list[i], "choose sets the value");
+                check(choice(e.item, v) == static_cast<int>(i), "choice reads it back");
+                const auto read = withTabOnly({}, std::string(e.key) + "=" + std::to_string(list[i]) + "\n");
+                check(read.*(e.number) == list[i], "the ini key reads the step");
+                check(tabOnlyText(v).find(std::string(e.key) + "=" + std::to_string(list[i]) + "\n") !=
+                          std::string::npos,
+                      "the ini key writes the step");
+            }
+            Values past;
+            check(!choose(e.item, static_cast<int>(list.size()), past), "a choice past the end");
+            // They wait for the switch, and the row stays shown.
+            Values v;
+            check(inactiveReason(e.item, v) && std::strstr(inactiveReason(e.item, v), "HAND GRAB") &&
+                      shownWhenInactive(e.item),
+                  "the tuning waits for the switch");
+            v.handGrab = true;
+            check(inactiveReason(e.item, v) == nullptr, "available with the switch on");
+        }
+    });
     test("handstand settings: launcher rows on the legs page, ranges, notes and ini keys", [] {
         using namespace vr_settings;
         struct Entry {
@@ -31705,7 +31761,7 @@ int main() {
     test("Native Animation: combined menu inventory and upstream-compatible v39 settings packet", [] {
         using namespace vr_settings;
         const auto& all = rows();
-        check(all.size() == 175 && static_cast<unsigned>(lastItem) < 256, "row/Item bounds");
+        check(all.size() == 177 && static_cast<unsigned>(lastItem) < 256, "row/Item bounds");
         std::array<unsigned, 256> seen{};
         size_t start = all.size();
         for (size_t i = 0; i < all.size(); ++i) {

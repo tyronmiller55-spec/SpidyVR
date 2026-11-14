@@ -291,6 +291,14 @@ static_assert(std::size(handstandGainChoices) == std::size(handstandGainSteps));
 constexpr int handstandEyeDropSteps[] = {0, 30, 60, 90, 120};
 constexpr const char* handstandEyeDropChoices[] = {"0 CM", "30 CM", "60 CM", "90 CM", "120 CM"};
 static_assert(std::size(handstandEyeDropChoices) == std::size(handstandEyeDropSteps));
+// HAND GRAB (hand_grab.hpp): one hand's force in newtons (what it lifts: 7.5% of it in kg), and the hold cost.
+constexpr int handGrabForceSteps[] = {400, 600, 800, 1000, 1200, 1600, 2000, 2400, 3000, 4000};
+constexpr const char* handGrabForceChoices[] = {"400 N",  "600 N",  "800 N",  "1000 N", "1200 N",
+                                                "1600 N", "2000 N", "2400 N", "3000 N", "4000 N"};
+static_assert(std::size(handGrabForceChoices) == std::size(handGrabForceSteps));
+constexpr int enemyHoldCostSteps[] = {0, 1, 2, 3, 5};
+constexpr const char* enemyHoldCostChoices[] = {"NONE", "1 (DEFAULT)", "2", "3", "5"};
+static_assert(std::size(enemyHoldCostChoices) == std::size(enemyHoldCostSteps));
 constexpr int cameraVrStabilizationSteps[] = {0, 1};
 constexpr const char* cameraVrStabilizationChoices[] = {"OFF", "ON"};
 static_assert(std::size(cameraVrStabilizationChoices) == std::size(cameraVrStabilizationSteps));
@@ -414,6 +422,10 @@ std::span<const int> steps(Item item) {
         return handstandGainSteps;
     case Item::handstandEyeDrop:
         return handstandEyeDropSteps;
+    case Item::handGrabForce:
+        return handGrabForceSteps;
+    case Item::enemyHoldCost:
+        return enemyHoldCostSteps;
     case Item::steadyAngle:
         return steadySmoothSteps;
     case Item::steadyHorizontal:
@@ -611,6 +623,10 @@ float numberOf(Item item, const Values& v) {
         return static_cast<float>(v.handstandGainPct);
     case Item::handstandEyeDrop:
         return static_cast<float>(v.handstandEyeDropCm);
+    case Item::handGrabForce:
+        return static_cast<float>(v.handGrabForce);
+    case Item::enemyHoldCost:
+        return static_cast<float>(v.enemyHoldCost);
     case Item::steadyAngle:
         return static_cast<float>(v.steadyAngleMs);
     case Item::steadyHorizontal:
@@ -950,9 +966,9 @@ Values sanitized(Values v) {
     v.automaticHandThreshold = std::clamp(v.automaticHandThreshold, 50, 300);
     return v;
 }
-const std::array<Row, 175>& rows() {
+const std::array<Row, 177>& rows() {
     // The help fits the game's description column beside the rows.
-    static const std::array<Row, 175> all{{
+    static const std::array<Row, 177> all{{
         {Item::none, "WEBS", nullptr, {}},
         {Item::webStyle, "WEB STYLE",
          "Arcade: webs pass lamp posts, signs and cars, and swings stay above the street.", webStyleChoices},
@@ -1430,6 +1446,12 @@ const std::array<Row, 175>& rows() {
          "Squeeze a grip with your palm on an enemy or prop: hold, punch, throw, slam.",
          {},
          Place::launcher},
+        {Item::handGrabForce, "HAND GRAB STRENGTH",
+         "One hand's force: 7.5% of it in kg is lifted (90 kg at 1200 N, the default).",
+         handGrabForceChoices, Place::launcher},
+        {Item::enemyHoldCost, "HAND GRAB HOLD COST",
+         "How fast holding an enemy tires your hand; a heavy one much faster.",
+         enemyHoldCostChoices, Place::launcher},
         {Item::handstand,
          "HANDSTAND (EXPERIMENTAL)",
          "Catch a handstand: land inverted, both palms on a floor. Needs REALISTIC FLIPS.",
@@ -1490,7 +1512,7 @@ const std::array<Screen, categoryCount>& screens() {
         Item::earlyJump, Item::softLanding, Item::webLandingSmooth, Item::webLandingImpact,
         Item::handClimb, Item::joystickRunCamera, Item::wallRunCameraTilt, Item::combatResponsive,
         Item::combatVisuals, Item::halfPunchDamage, Item::airFists, Item::runLogs,
-        Item::wallBrake, Item::gripFling, Item::handGrab,
+        Item::wallBrake, Item::gripFling, Item::handGrab, Item::handGrabForce, Item::enemyHoldCost,
     };
     static constexpr Item flips[] = {
         Item::realisticFlips, Item::flips, Item::controlledFlips, Item::flipSpeed,
@@ -1616,6 +1638,9 @@ const char* inactiveReason(Item item, const Values& v) {
         return !v.realisticFlips ? "Handstands need REALISTIC FLIPS on."
                : !v.handstand    ? "Turn HANDSTAND on first."
                                  : nullptr;
+    case Item::handGrabForce:
+    case Item::enemyHoldCost:
+        return !v.handGrab ? "Turn HAND GRAB on first." : nullptr;
     case Item::legControl:
         return !v.controlledFlips && !v.realisticFlips
                    ? "Needs CONTROLLED or REALISTIC FLIPS. ON here turns CONTROLLED FLIPS on."
@@ -1677,6 +1702,8 @@ bool shownWhenInactive(Item item) {
     case Item::handstandHeight:
     case Item::handstandGain:
     case Item::handstandEyeDrop:
+    case Item::handGrabForce:
+    case Item::enemyHoldCost:
     case Item::legControl:
     case Item::legStiffness:
     case Item::legDamping:
@@ -1941,6 +1968,12 @@ bool choose(Item item, int index, Values& v) {
         break;
     case Item::handstandEyeDrop:
         v.handstandEyeDropCm = s[index];
+        break;
+    case Item::handGrabForce:
+        v.handGrabForce = s[index];
+        break;
+    case Item::enemyHoldCost:
+        v.enemyHoldCost = s[index];
         break;
     case Item::steadyAngle:
         v.steadyAngleMs = s[index];

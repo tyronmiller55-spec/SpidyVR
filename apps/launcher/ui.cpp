@@ -2280,6 +2280,17 @@ void App::options(ImVec2 origin, ImVec2 size) {
             "normal enemy; bigger ones need two hands or only drag. Holding costs a normal enemy almost "
             "nothing. Off by default.",
             S(42), [&] { tabToggle("##handgrab", Item::handGrab); });
+        settingOption(
+            Item::handGrabForce, "Hand grab strength",
+            "One hand's force in newtons (400 to 4000). A hand lifts 7.5% of it in kilograms: 90 kg at "
+            "1200 N, the default, which holds a normal enemy; bigger ones need more, or two hands. "
+            "Needs Hand grab on.",
+            S(150), [&] { tabCombo("##handgrabforce", Item::handGrabForce); });
+        settingOption(
+            Item::enemyHoldCost, "Hand grab hold cost",
+            "How fast holding an enemy tires your grip (none, 1, 2, 3 or 5): a normal enemy costs "
+            "almost nothing at 1, a heavy one much more. None: it never tires. Needs Hand grab on.",
+            S(150), [&] { tabCombo("##holdcost", Item::enemyHoldCost); });
         settingOption(Item::joystickRunCamera, "Joystick wall run camera",
                "On: a joystick run turns your view onto the wall, as before. Off: the left stick drives the "
                "momentum wall run's view and gait.",

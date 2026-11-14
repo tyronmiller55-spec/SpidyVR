@@ -836,8 +836,10 @@ enum class Item : uint8_t {
     handstandHeight,
     handstandGain,
     handstandEyeDrop,
+    handGrabForce,
+    enemyHoldCost,
 };
-inline constexpr Item lastItem = Item::handstandEyeDrop;
+inline constexpr Item lastItem = Item::enemyHoldCost;
 // SLOW-MO LENGTH's last step: no time limit (until L3 toggles it off).
 inline constexpr int slowMotionEndless = 91;
 // Real seconds a full meter lasts for a SLOW-MO LENGTH value; 0 = endless.
@@ -867,7 +869,7 @@ struct Row {
     Place place{};
 };
 // Stable row/setting numbers; categories below determine presentation order.
-const std::array<Row, 175>& rows();
+const std::array<Row, 177>& rows();
 const Row* rowFor(Item);
 // camera, shooters and legs (November 11, the user: "I can't find legs or
 // camera settings in any of the menus. Make sure it's clearly labeled"): tabs
