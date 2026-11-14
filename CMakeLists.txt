@@ -128,6 +128,12 @@ add_executable(spidy_direction_report_tests tests/direction_report_tests.cpp)
 target_link_libraries(spidy_direction_report_tests PRIVATE spidy_core)
 add_test(NAME direction_report COMMAND spidy_direction_report_tests)
 
+# HEADSET FIRST (hybrid_steer::Basis, hybrid_movement::viewRunDirection, Gate::updateView): the stick's basis, the whole circle runs him,
+# the setting (portable).
+add_executable(spidy_headset_first_tests tests/headset_first_tests.cpp)
+target_link_libraries(spidy_headset_first_tests PRIVATE spidy_core)
+add_test(NAME headset_first COMMAND spidy_headset_first_tests)
+
 # PUNCH VIEW EASE (view_ease.hpp): hold and ease at a punch's switch, cancels, rig offset, setting (portable).
 add_executable(spidy_view_ease_tests tests/view_ease_tests.cpp)
 target_link_libraries(spidy_view_ease_tests PRIVATE spidy_core)

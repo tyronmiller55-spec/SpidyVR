@@ -1266,6 +1266,10 @@ DWORD WINAPI run(void*) {
         hybrid_movement::Gate hybridGate{};
         hybrid_movement::Heading hybridHeading{};
         hybrid_movement::Gate::Out hybridStick{};
+        // HEADSET FIRST: the left stick's basis (hybrid_steer::Basis) and last frame's headset turn.
+        hybrid_steer::Basis hsBasis{};
+        float hsLastHmd = NAN;
+        int64_t hsPressLogAt = 0;
         // DIRECTION REPORT (direction_report.hpp): the headset's heading and what answers to it.
         direction_report::Reporter dirReport{};
         float dirBasis = NAN;                  // the left stick's world basis this frame
@@ -3571,6 +3575,51 @@ DWORD WINAPI run(void*) {
                             hybridInputViewYaw = hybridViewYaw.yaw;
                             hybridInputViewOk = true;
                         }
+                        // HEADSET FIRST (hybrid_steer::Basis): the stick is mapped from where the player
+                        // looks - latched at the press, then only the player's own head and right-stick
+                        // turns - never from the heading the body is brought onto or a turn in progress.
+                        // Resting, it is the live view (also in the air).
+                        const bool headsetFirstNow = values.headsetFirst && hybridMode && viewLockActive &&
+                                                     hybridHeading.set &&
+                                                     animated_moves::headFollow(values.animatedHead) !=
+                                                         animated_moves::HeadFollow::level;
+                        if (headsetFirstNow) {
+                            float hmdRel = NAN;
+                            if (animHeadRefSet && validTrackedPose(frame.head))
+                                hmdRel = stable_yaw::wrap(
+                                    hybrid_handoff::lookYaw(screenAhead(frame.head, 0).orientation.rotate({0, 0, -1})) -
+                                    hybrid_handoff::lookYaw(animHeadRef.orientation.rotate({0, 0, -1})));
+                            float viewNow = NAN;
+                            if (std::isfinite(hmdRel)) {
+                                viewNow = std::isfinite(lastViewYaw) && std::isfinite(hsLastHmd)
+                                              ? stable_yaw::wrap(lastViewYaw + stable_yaw::wrap(hmdRel - hsLastHmd))
+                                              : stable_yaw::wrap(hybridHeading.yaw + hmdRel);
+                            }
+                            const bool wasHeld = hsBasis.held;
+                            const float basisYaw = hsBasis.update(hybridInputL >= hybrid_steer::deadzone, viewNow, hmdRel,
+                                                                  viewLockSnapped ? 0.f : viewLockDelta);
+                            if (hsBasis.held && !wasHeld && frame.predictedDisplayTime - hsPressLogAt > 100'000'000) {
+                                hsPressLogAt = frame.predictedDisplayTime;
+                                constexpr float toDeg = 180.f / 3.14159265f;
+                                diag_log::writef("stick basis: press #%u latched at the view %.0f (heading %.0f, hero %.0f, "
+                                                 "stick %+.0f deg)",
+                                                 hsBasis.presses, basisYaw * toDeg, hybridHeading.yaw * toDeg,
+                                                 std::hypot(body[8], body[10]) > .2f
+                                                     ? hybrid_handoff::actorLookYaw({body[8], body[9], body[10]}) * toDeg
+                                                     : -999.f,
+                                                 hybrid_movement::stickAngle(frame.hands[0].stickX,
+                                                                             frame.hands[0].stickY) * toDeg);
+                            }
+                            if (std::isfinite(hmdRel))
+                                hsLastHmd = hmdRel;
+                            if (hsBasis.set) {
+                                hybridInputIntentYaw = basisYaw;
+                                hybridInputViewYaw = basisYaw;
+                                hybridInputViewOk = true;
+                            }
+                        } else {
+                            hsBasis.reset();
+                        }
                         // HYBRID's left stick: front half along the heading, the rear
                         // half one snap of the heading (and the view) to the stick.
                         const bool hybridGround = hybridMode && viewLockActive && hybridHeading.set &&
@@ -3590,8 +3639,10 @@ DWORD WINAPI run(void*) {
                                     hybridGaze = -stable_yaw::wrap(tracked - ref);
                             }
                             const auto zoneWas = hybridStick.zone;
-                            hybridStick =
-                                hybridGate.update(frame.seconds, frame.hands[0].stickX, frame.hands[0].stickY, hybridGaze);
+                            hybridStick = headsetFirstNow && hsBasis.set
+                                              ? hybridGate.updateView(frame.hands[0].stickX, frame.hands[0].stickY)
+                                              : hybridGate.update(frame.seconds, frame.hands[0].stickX,
+                                                                  frame.hands[0].stickY, hybridGaze);
                             if (hybridStick.zone != zoneWas && hybridStick.zone != hybrid_movement::Zone::none) {
                                 constexpr float toDeg = 180.f / 3.14159265f;
                                 diag_log::writef("hybrid stick: %s (stick %+.0f deg, gaze %+.0f, run %+.0f off the "
@@ -3624,11 +3675,16 @@ DWORD WINAPI run(void*) {
                             hybridGate.reset();
                             hybridStick = {};
                         }
-                        dirBasis = hybridInputViewOk ? (hybridGround ? hybridHeading.yaw : hybridInputViewYaw) : NAN;
+                        dirBasis = hybridInputViewOk ? (hybridGround && !(headsetFirstNow && hsBasis.set)
+                                                            ? hybridHeading.yaw
+                                                            : hybridInputViewYaw)
+                                                     : NAN;
                         if (hybridInputViewOk) {
                             const Vec3 walk =
                                 hybridGround
-                                    ? hybrid_steer::viewForward(stable_yaw::wrap(hybridHeading.yaw - hybridStick.dir)) *
+                                    ? hybrid_steer::viewForward(stable_yaw::wrap(
+                                          (headsetFirstNow && hsBasis.set ? hsBasis.yaw : hybridHeading.yaw) -
+                                          hybridStick.dir)) *
                                           hybridStick.y
                                 : frame.hands[0].valid
                                     ? hybrid_steer::viewMove(frame.hands[0].stickX, frame.hands[0].stickY,
@@ -7003,7 +7059,8 @@ DWORD WINAPI run(void*) {
                                         hybridWalk
                                             ? hybrid_steer::viewRelativeStick(
                                                   std::sin(hybridStick.dir), std::cos(hybridStick.dir),
-                                                  hybridHeading.yaw, motion.walkForwardAxis, motion.walkRightAxis,
+                                                  std::isfinite(dirBasis) ? dirBasis : hybridHeading.yaw,
+                                                  motion.walkForwardAxis, motion.walkRightAxis,
                                                   std::min(walkMag, 1.f) * std::clamp(hybridStick.y / tiltNow, 0.f, 1.f))
                                             : hybrid_steer::viewRelativeStick(
                                                   moveHand.stickX, moveHand.stickY, hybridViewYawNow,

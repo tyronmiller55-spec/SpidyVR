@@ -108,6 +108,19 @@ inline float runDirection(float a, float gaze) {
     return std::clamp(a, -freeAngle, freeAngle);
 }
 
+// HEADSET FIRST: the run direction (basis-relative, radians, + right) for a stick at `a`, with the basis
+// already the view: straight on within 15 degrees (the cone), a blend to the stick's own angle by 25, then
+// the stick's angle all the way round - the rear half runs BACKWARD (the body turns round, the view stays;
+// there is no rear snap).
+inline float viewRunDirection(float a) {
+    const float abs = std::abs(a);
+    if (abs <= coneAngle)
+        return 0.f;
+    if (abs < blendAngle)
+        return a * ((abs - coneAngle) / (blendAngle - coneAngle));
+    return wrap(a);
+}
+
 struct Gate {
     bool armed = true, holding = false, settling = false;
     float settle = 0, lastAngle = 0;
@@ -204,6 +217,28 @@ struct Gate {
             out.rear = true; // the back half below the snap's tilt, or not armed
             out.zone = Zone::rear;
         }
+        return out;
+    }
+    // HEADSET FIRST: every direction of the stick runs him (no rear snap, no dead band), basis-relative.
+    Out updateView(float x, float y) {
+        Out out;
+        if (!std::isfinite(x) || !std::isfinite(y))
+            x = y = 0;
+        const float tilt = std::min(std::hypot(x, y), 1.f);
+        armed = true;
+        holding = settling = false;
+        if (tilt < deadzone)
+            return out;
+        const float a = stickAngle(x, y);
+        const float abs = std::abs(a);
+        out.y = tilt;
+        out.dir = viewRunDirection(a);
+        out.drives = true;
+        out.zone = abs <= coneAngle  ? Zone::cone
+                   : abs < blendAngle ? Zone::blend
+                   : abs <= freeAngle ? Zone::free
+                   : abs <= snapAngle ? Zone::edge
+                                      : Zone::rear;
         return out;
     }
     void reset() {

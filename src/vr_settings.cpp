@@ -839,6 +839,8 @@ template <class V> auto switchOf(Item item, V& v) -> decltype(&v.aimMarkers) {
         return &v.handGrab;
     case Item::kicks:
         return &v.kicks;
+    case Item::headsetFirst:
+        return &v.headsetFirst;
     case Item::groundKicks:
         return &v.groundKicks;
     case Item::enemyJoints:
@@ -1011,9 +1013,9 @@ Values sanitized(Values v) {
     v.automaticHandThreshold = std::clamp(v.automaticHandThreshold, 50, 300);
     return v;
 }
-const std::array<Row, 186>& rows() {
+const std::array<Row, 187>& rows() {
     // The help fits the game's description column beside the rows.
-    static const std::array<Row, 186> all{{
+    static const std::array<Row, 187> all{{
         {Item::none, "WEBS", nullptr, {}},
         {Item::webStyle, "WEB STYLE",
          "Arcade: webs pass lamp posts, signs and cars, and swings stay above the street.", webStyleChoices},
@@ -1534,6 +1536,11 @@ const std::array<Row, 186>& rows() {
         {Item::tetherSubsteps, "TETHER STEPS",
          "How many steps a frame the rope takes. More is stiffer and costs more.",
          tetherSubstepChoices, Place::launcher},
+        {Item::headsetFirst,
+         "HEADSET FIRST",
+         "The left stick runs where your headset looks when you press it. Off: the old heading.",
+         {},
+         Place::launcher},
         {Item::handstand,
          "HANDSTAND (EXPERIMENTAL)",
          "Catch a handstand: land inverted, both palms on a floor. Needs REALISTIC FLIPS.",
@@ -1629,7 +1636,7 @@ const std::array<Screen, categoryCount>& screens() {
         Item::cameraRoll,          Item::cameraBobVertical,
         Item::cameraBobSide,       Item::cameraHeadAngle,
         Item::cameraStabilization, Item::punchViewEase,
-        Item::airViewEase,         Item::rearSnap,
+        Item::airViewEase,         Item::rearSnap, Item::headsetFirst,
         Item::animYawSway,         Item::turnInPlace,
         Item::cameraVertical,      Item::cameraHorizontal,
         Item::cameraAngle,         Item::lightVertical,
@@ -2344,6 +2351,7 @@ constexpr TabOnly tabOnly[] = {
     {"hand_grab_force", nullptr, &Values::handGrabForce},
     {"enemy_hold_cost", nullptr, &Values::enemyHoldCost},
     {"kicks", &Values::kicks, nullptr},
+    {"headset_first", &Values::headsetFirst, nullptr},
     {"kick_gaze_cone_deg", nullptr, &Values::kickGazeConeDeg},
     {"kick_spin_pct", nullptr, &Values::kickSpinPct},
     {"ground_kicks", &Values::groundKicks, nullptr},

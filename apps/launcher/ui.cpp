@@ -2619,6 +2619,12 @@ void App::options(ImVec2 origin, ImVec2 size) {
                    "back under 80 or to neutral re-arms). 200 ms by default, like a head turn; Instant is a frame "
                    "switch. The hero turns at the game's pace.",
                    S(150), [&] { tabCombo("##rearsnap", Item::rearSnap); });
+            settingOption(Item::headsetFirst, "Headset first",
+                   "On (default): the left stick runs relative to where your headset looks at the moment you press "
+                   "it (afterwards it follows only your own head and right-stick turns), never relative to the body "
+                   "that is still turning, and pushing it back runs you backward: the body turns round, your view "
+                   "stays. Off: the old HYBRID heading.",
+                   S(42), [&] { tabToggle("##headsetfirst", Item::headsetFirst); });
             settingOption(Item::animYawSway, "Anim yaw sway",
                    "With Head lock Full and View yaw source Stable: the view's left-right turn comes from your "
                    "steady heading, not the hero's head; this much of the animation's head sway is added back. "

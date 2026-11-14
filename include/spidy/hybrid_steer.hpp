@@ -10,6 +10,7 @@
 #include "spidy/math.hpp"
 #include <algorithm>
 #include <cmath>
+#include <cstdint>
 
 namespace spidy::hybrid_steer {
 
@@ -123,5 +124,54 @@ inline bool suppressLook(bool recheckMove, bool blendHold, float stickTilt, floa
 inline bool doneRecheck(bool blendHold, float stickTilt, float zone = deadzone) {
     return !blendHold && (!std::isfinite(stickTilt) || stickTilt < zone);
 }
+
+// HEADSET FIRST (the polish pass, November 14; the user, t64u: "Pressing the stick diagonally left doesn't
+// always do what you expect. Sometimes Spiderman starts running another direction because the model was in
+// the process of turning ... Where the player looks takes full precedence"): the left stick's world BASIS.
+// Resting, it is the view the player looks along, live. At the press it latches that view; while held it
+// follows only what the PLAYER does - the headset's own turn since the last frame and the right stick's turn -
+// never the hero's facing, the heading the body is brought onto, or a turn the animation made. An action edge
+// (resync) takes the view again (it is the player's heading by then: slice "the view is yours").
+// Yaw is the rig's convention (0 facing -z, + to the left), radians.
+struct Basis {
+    bool held = false;
+    float yaw = 0, lastHmd = 0;
+    bool set = false;
+    uint32_t presses = 0, resyncs = 0;
+    // `view`: where the player looks now (shown + hmd; NAN: unknown, the basis keeps its last value).
+    // `hmd`: the headset's own turn off its latch. `playerTurn`: the right stick's turn this frame.
+    float update(bool pressed, float view, float hmd, float playerTurn, bool resync = false) {
+        const bool viewOk = std::isfinite(view);
+        const bool hmdOk = std::isfinite(hmd);
+        const float turn = std::isfinite(playerTurn) ? playerTurn : 0.f;
+        if (!pressed) {
+            if (viewOk) {
+                yaw = std::remainder(view, 6.2831853f);
+                set = true;
+            }
+            held = false;
+        } else if (!held) {
+            // The press: the view as it is now.
+            if (viewOk) {
+                yaw = std::remainder(view, 6.2831853f);
+                set = true;
+            }
+            held = true;
+            ++presses;
+        } else if (resync && viewOk) {
+            yaw = std::remainder(view, 6.2831853f);
+            ++resyncs;
+        } else if (set) {
+            const float head = hmdOk ? std::remainder(hmd - lastHmd, 6.2831853f) : 0.f;
+            yaw = std::remainder(yaw + head + turn, 6.2831853f);
+        }
+        if (hmdOk)
+            lastHmd = hmd;
+        return yaw;
+    }
+    void reset() {
+        *this = Basis{};
+    }
+};
 
 } // namespace spidy::hybrid_steer
