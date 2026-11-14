@@ -43,6 +43,8 @@ __declspec(dllexport) SwingKickLive SpidySwingKickLive;
 __declspec(dllexport) AirKickLive SpidyAirKickLive;
 // The swing module's cost to the game thread, per 10 s window (SwingCostLive), for XR's diag.
 __declspec(dllexport) SwingCostLive SpidySwingCostLive;
+// JUMP PULL's account (JumpPullLive), for XR's log.
+__declspec(dllexport) JumpPullLive SpidyJumpPullLive;
 // Where the window's longest visit went (SwingCostSections), beside it.
 __declspec(dllexport) SwingCostSections SpidySwingCostSections;
 // GRIP's account (GripLive), for XR's feel and log.
@@ -341,6 +343,12 @@ uint32_t airKickSerial{};
 bool airKickWaiting{};
 constexpr uint64_t airKickMaxAgeMs = 150;
 air_kick::Kick airKickState;
+// JUMP PULL (SpidyJumpPull, jump_pull.hpp): XR's latest ask (every frame) and when it came.
+SRWLOCK pullLock = SRWLOCK_INIT;
+JumpPullAsk pullAsk{};
+ULONGLONG pullAt{};
+uint64_t pullTarget{};
+float pullPeak{};
 // GRIP ACROSS THE GAME (SpidySwingGrip, grip.hpp): the latest settings (the swing's step applies them).
 SRWLOCK gripLock = SRWLOCK_INIT;
 GripAsk gripAsk{};
@@ -1710,6 +1718,57 @@ void visit(const native_rays::QueryContext& world) {
         live.reserved = (live.reserved & ~1u) | (airKickState.busy() && airKickState.onGround() ? 1u : 0u);
         kickBusy.store(kickState.busy() || airKickState.busy(), std::memory_order_relaxed);
     }
+    // JUMP PULL (jump_pull.hpp; off until XR sends jump_pull): off the ground, the enemy the jump is aimed at (the gaze's
+    // cone, or the stick's while it is held) pulls a little; the swing's own air applies it, with no web out and a cap per
+    // jump, and the animation's air is never touched (the solver steps only SpidyVR's).
+    {
+        AcquireSRWLockShared(&pullLock);
+        const JumpPullAsk ask = pullAsk;
+        const bool fresh = GetTickCount64() - pullAt <= 500;
+        ReleaseSRWLockShared(&pullLock);
+        jump_pull::Config pc;
+        pc.on = fresh && (ask.flags & 1u) != 0 && focused && body.grounded == 0;
+        pc.gazeDeg = ask.gazeDeg;
+        pc.stickDeg = ask.stickDeg;
+        pc.rangeM = ask.rangeM;
+        pc.capMps = ask.capMps;
+        jump_pull::Pick pick;
+        if (pc.on && finite(Vec3{ask.gaze[0], ask.gaze[1], ask.gaze[2]})) {
+            std::array<game_punch::KickCandidate, 12> found{};
+            std::array<jump_pull::Candidate, 12> list{};
+            const size_t count = game_punch::kickCandidates(found.data(), found.size(), at);
+            for (size_t i = 0; i < count; ++i)
+                list[i] = {found[i].id, found[i].feet + Vec3{0, found[i].height * .5f, 0}};
+            pick = jump_pull::choose(pc, at + Vec3{0, 1.6f, 0}, {ask.gaze[0], ask.gaze[1], ask.gaze[2]},
+                                     {ask.stick[0], ask.stick[1], ask.stick[2]}, list.data(), count);
+        }
+        solver.jumpPull(pick.valid, pc, pick.aim, pick.weight);
+        volatile JumpPullLive& live = SpidyJumpPullLive;
+        const uint64_t target = pick.valid ? pick.id : 0;
+        const float added = solver.jumpPullAdded();
+        if (target != pullTarget) {
+            if (pullTarget && pullPeak > 0)
+                live.pulls = live.pulls + 1;
+            pullPeak = 0;
+            pullTarget = target;
+            if (target)
+                live.picks = live.picks + 1;
+            live.target = target;
+            live.active = target ? 1u : 0u;
+            live.byStick = pick.byStick ? 1u : 0u;
+            live.weight = pick.weight;
+            live.angleDeg = pick.angleDeg;
+            live.distance = pick.valid ? length(pick.aim - at) : 0.f;
+            live.added = added;
+            MemoryBarrier();
+            live.events = live.events + 1;
+        } else {
+            live.weight = pick.weight;
+            live.angleDeg = pick.angleDeg;
+            live.added = added;
+        }
+        pullPeak = std::max(pullPeak, added);
+    }
     // A press aimed at something a web can catch belongs to the grab: the
     // swing gets the input without that hand's grip.
     auto swingInput = focused ? game_grab::forSwing(in) : in;
@@ -2307,6 +2366,10 @@ extern "C" __declspec(dllexport) DWORD WINAPI SpidySwingStart(void* input) {
         AcquireSRWLockExclusive(&gripLock);
         gripAsk = {};
         ReleaseSRWLockExclusive(&gripLock);
+        AcquireSRWLockExclusive(&pullLock);
+        pullAsk = {};
+        pullAt = 0;
+        ReleaseSRWLockExclusive(&pullLock);
         AcquireSRWLockExclusive(&handGrabLock);
         handGrabAsk = {};
         ReleaseSRWLockExclusive(&handGrabLock);
@@ -2508,6 +2571,26 @@ extern "C" __declspec(dllexport) DWORD WINAPI SpidyAirKick(void* input) {
         airKickWaiting = true;
     }
     ReleaseSRWLockExclusive(&airKickLock);
+    return 0;
+}
+// JUMP PULL (jump_pull.hpp): XR's ask, every frame. 2001: not a JumpPullAsk; 1004: the swing has not started; 0 taken.
+// What it did: SpidyJumpPullLive.
+extern "C" __declspec(dllexport) DWORD WINAPI SpidyJumpPull(void* input) {
+    JumpPullAsk a;
+    if (!input || !copy(&a, input, sizeof(a)) || a.magic != 0x5357504c || a.version != 1 || a.bytes != sizeof(a) ||
+        (a.flags & ~1u) || !std::isfinite(a.gazeDeg) || a.gazeDeg < 5.f || a.gazeDeg > 90.f || !std::isfinite(a.stickDeg) ||
+        a.stickDeg < 5.f || a.stickDeg > 90.f || !std::isfinite(a.rangeM) || a.rangeM < 3.f || a.rangeM > 30.f ||
+        !std::isfinite(a.capMps) || a.capMps < .25f || a.capMps > 5.f)
+        return 2001;
+    AcquireSRWLockShared(&lifecycle);
+    const bool running = started;
+    ReleaseSRWLockShared(&lifecycle);
+    if (!running)
+        return 1004;
+    AcquireSRWLockExclusive(&pullLock);
+    pullAsk = a;
+    pullAt = GetTickCount64();
+    ReleaseSRWLockExclusive(&pullLock);
     return 0;
 }
 // GRIP ACROSS THE GAME (grip.hpp): the VR worker's settings. 2001: not a GripAsk; 1004: the swing has not

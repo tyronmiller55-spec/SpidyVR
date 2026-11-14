@@ -135,6 +135,9 @@ add_test(NAME polish_runtime COMMAND spidy_polish_runtime_tests)
 add_executable(spidy_punch_track_tests tests/punch_track_tests.cpp)
 target_link_libraries(spidy_punch_track_tests PRIVATE spidy_core)
 add_test(NAME punch_track COMMAND spidy_punch_track_tests)
+add_executable(spidy_jump_pull_tests tests/jump_pull_tests.cpp)
+target_link_libraries(spidy_jump_pull_tests PRIVATE spidy_core)
+add_test(NAME jump_pull COMMAND spidy_jump_pull_tests)
 
 # HEADSET FIRST (hybrid_steer::Basis, hybrid_movement::viewRunDirection, Gate::updateView): the stick's basis, the whole circle runs him,
 # the setting (portable).

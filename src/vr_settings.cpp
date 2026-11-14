@@ -314,6 +314,19 @@ static_assert(std::size(punchTrackConeChoices) == std::size(punchTrackConeSteps)
 constexpr int punchTrackRangeSteps[] = {3, 4, 6, 8, 10};
 constexpr const char* punchTrackRangeChoices[] = {"3 M", "4 M", "6 M (DEFAULT)", "8 M", "10 M"};
 static_assert(std::size(punchTrackRangeChoices) == std::size(punchTrackRangeSteps));
+// JUMP PULL (jump_pull.hpp): the gaze's cone, the stick's cone, the range, and the most a jump adds (tenths of a m/s).
+constexpr int jumpPullGazeSteps[] = {10, 15, 20, 30, 45};
+constexpr const char* jumpPullGazeChoices[] = {"10 DEG", "15 DEG", "20 DEG (DEFAULT)", "30 DEG", "45 DEG"};
+static_assert(std::size(jumpPullGazeChoices) == std::size(jumpPullGazeSteps));
+constexpr int jumpPullStickSteps[] = {15, 25, 35, 45};
+constexpr const char* jumpPullStickChoices[] = {"15 DEG", "25 DEG (DEFAULT)", "35 DEG", "45 DEG"};
+static_assert(std::size(jumpPullStickChoices) == std::size(jumpPullStickSteps));
+constexpr int jumpPullRangeSteps[] = {6, 9, 12, 16, 20};
+constexpr const char* jumpPullRangeChoices[] = {"6 M", "9 M", "12 M (DEFAULT)", "16 M", "20 M"};
+static_assert(std::size(jumpPullRangeChoices) == std::size(jumpPullRangeSteps));
+constexpr int jumpPullCapSteps[] = {5, 10, 15, 20, 30};
+constexpr const char* jumpPullCapChoices[] = {"0.5 M/S", "1 M/S", "1.5 M/S (DEFAULT)", "2 M/S", "3 M/S"};
+static_assert(std::size(jumpPullCapChoices) == std::size(jumpPullCapSteps));
 // PHYSICAL WEB TETHERS (tether.hpp): the rope's points and its steps a frame.
 constexpr int tetherParticleSteps[] = {12, 16, 20, 24, 28, 32};
 constexpr const char* tetherParticleChoices[] = {"12", "16", "20", "24 (DEFAULT)", "28", "32"};
@@ -454,6 +467,14 @@ std::span<const int> steps(Item item) {
         return punchTrackConeSteps;
     case Item::punchTrackRange:
         return punchTrackRangeSteps;
+    case Item::jumpPullGaze:
+        return jumpPullGazeSteps;
+    case Item::jumpPullStick:
+        return jumpPullStickSteps;
+    case Item::jumpPullRange:
+        return jumpPullRangeSteps;
+    case Item::jumpPullCap:
+        return jumpPullCapSteps;
     case Item::kickSpin:
         return kickSpinSteps;
     case Item::tetherParticles:
@@ -667,6 +688,14 @@ float numberOf(Item item, const Values& v) {
         return static_cast<float>(v.punchTrackConeDeg);
     case Item::punchTrackRange:
         return static_cast<float>(v.punchTrackRangeM);
+    case Item::jumpPullGaze:
+        return static_cast<float>(v.jumpPullGazeDeg);
+    case Item::jumpPullStick:
+        return static_cast<float>(v.jumpPullStickDeg);
+    case Item::jumpPullRange:
+        return static_cast<float>(v.jumpPullRangeM);
+    case Item::jumpPullCap:
+        return static_cast<float>(v.jumpPullCapDmps);
     case Item::kickSpin:
         return static_cast<float>(v.kickSpinPct);
     case Item::tetherParticles:
@@ -864,6 +893,8 @@ template <class V> auto switchOf(Item item, V& v) -> decltype(&v.aimMarkers) {
         return &v.punchAutotarget;
     case Item::punchViewSnap:
         return &v.punchViewSnap;
+    case Item::jumpPull:
+        return &v.jumpPull;
     case Item::groundKicks:
         return &v.groundKicks;
     case Item::enemyJoints:
@@ -1026,6 +1057,10 @@ Values sanitized(Values v) {
     v.kickGazeConeDeg = std::clamp(v.kickGazeConeDeg, 10, 50);
     v.punchTrackConeDeg = std::clamp(v.punchTrackConeDeg, 15, 90);
     v.punchTrackRangeM = std::clamp(v.punchTrackRangeM, 3, 10);
+    v.jumpPullGazeDeg = std::clamp(v.jumpPullGazeDeg, 10, 45);
+    v.jumpPullStickDeg = std::clamp(v.jumpPullStickDeg, 15, 45);
+    v.jumpPullRangeM = std::clamp(v.jumpPullRangeM, 6, 20);
+    v.jumpPullCapDmps = std::clamp(v.jumpPullCapDmps, 5, 30);
     v.kickSpinPct = std::clamp(v.kickSpinPct, 0, 100);
     v.tetherParticles = std::clamp(v.tetherParticles, 8, 32);
     v.tetherSubsteps = std::clamp(v.tetherSubsteps, 2, 16);
@@ -1038,9 +1073,9 @@ Values sanitized(Values v) {
     v.automaticHandThreshold = std::clamp(v.automaticHandThreshold, 50, 300);
     return v;
 }
-const std::array<Row, 193>& rows() {
+const std::array<Row, 198>& rows() {
     // The help fits the game's description column beside the rows.
-    static const std::array<Row, 193> all{{
+    static const std::array<Row, 198> all{{
         {Item::none, "WEBS", nullptr, {}},
         {Item::webStyle, "WEB STYLE",
          "Arcade: webs pass lamp posts, signs and cars, and swings stay above the street.", webStyleChoices},
@@ -1594,6 +1629,27 @@ const std::array<Row, 193>& rows() {
          "A tracked punch turns your view onto him too. Off: your view stays where you look.",
          {},
          Place::launcher},
+        {Item::jumpPull,
+         "JUMP PULL",
+         "In your own air a jump toward an enemy is pulled toward him a little. Off: not.",
+         {},
+         Place::launcher},
+        {Item::jumpPullGaze,
+         "JUMP PULL GAZE",
+         "How far off the enemy you look and still be pulled toward him.",
+         jumpPullGazeChoices, Place::launcher},
+        {Item::jumpPullStick,
+         "JUMP PULL STICK",
+         "How far off the enemy the left stick can point and still pull you toward him.",
+         jumpPullStickChoices, Place::launcher},
+        {Item::jumpPullRange,
+         "JUMP PULL RANGE",
+         "How far away an enemy can be and still pull you.",
+         jumpPullRangeChoices, Place::launcher},
+        {Item::jumpPullCap,
+         "JUMP PULL LIMIT",
+         "The most speed a jump's pull adds in all.",
+         jumpPullCapChoices, Place::launcher},
         {Item::handstand,
          "HANDSTAND (EXPERIMENTAL)",
          "Catch a handstand: land inverted, both palms on a floor. Needs REALISTIC FLIPS.",
@@ -1654,7 +1710,8 @@ const std::array<Screen, categoryCount>& screens() {
         Item::earlyJump, Item::softLanding, Item::webLandingSmooth, Item::webLandingImpact,
         Item::handClimb, Item::joystickRunCamera, Item::wallRunCameraTilt, Item::combatResponsive,
         Item::combatVisuals, Item::halfPunchDamage, Item::airFists, Item::punchAutotarget, Item::punchTrackCone,
-        Item::punchTrackRange, Item::punchViewSnap, Item::runLogs,
+        Item::punchTrackRange, Item::punchViewSnap, Item::jumpPull, Item::jumpPullGaze, Item::jumpPullStick,
+        Item::jumpPullRange, Item::jumpPullCap, Item::runLogs,
         Item::wallBrake, Item::gripFling, Item::handGrab, Item::handGrabForce, Item::enemyHoldCost,
         Item::physicalTethers, Item::tetherParticles, Item::tetherSubsteps,
     };
@@ -1792,6 +1849,11 @@ const char* inactiveReason(Item item, const Values& v) {
     case Item::punchTrackRange:
     case Item::punchViewSnap:
         return !v.punchAutotarget ? "Turn PUNCH AUTO-TARGET on first." : nullptr;
+    case Item::jumpPullGaze:
+    case Item::jumpPullStick:
+    case Item::jumpPullRange:
+    case Item::jumpPullCap:
+        return !v.jumpPull ? "Turn JUMP PULL on first." : nullptr;
     case Item::kickSpin:
         return !v.kicks ? "Turn AIR KICKS on first." : nullptr;
     case Item::enemyLimbZones:
@@ -1867,6 +1929,10 @@ bool shownWhenInactive(Item item) {
     case Item::punchTrackCone:
     case Item::punchTrackRange:
     case Item::punchViewSnap:
+    case Item::jumpPullGaze:
+    case Item::jumpPullStick:
+    case Item::jumpPullRange:
+    case Item::jumpPullCap:
     case Item::enemyLimbZones:
     case Item::tetherParticles:
     case Item::tetherSubsteps:
@@ -2149,6 +2215,18 @@ bool choose(Item item, int index, Values& v) {
         break;
     case Item::punchTrackRange:
         v.punchTrackRangeM = s[index];
+        break;
+    case Item::jumpPullGaze:
+        v.jumpPullGazeDeg = s[index];
+        break;
+    case Item::jumpPullStick:
+        v.jumpPullStickDeg = s[index];
+        break;
+    case Item::jumpPullRange:
+        v.jumpPullRangeM = s[index];
+        break;
+    case Item::jumpPullCap:
+        v.jumpPullCapDmps = s[index];
         break;
     case Item::kickSpin:
         v.kickSpinPct = s[index];
@@ -2471,6 +2549,12 @@ constexpr TabOnly tabOnly[] = {
     {"punch_track_cone_deg", nullptr, &Values::punchTrackConeDeg},
     {"punch_track_range_m", nullptr, &Values::punchTrackRangeM},
     {"punch_view_snap", &Values::punchViewSnap, nullptr},
+    // JUMP PULL (jump_pull.hpp; polish pass, slice 8).
+    {"jump_pull", &Values::jumpPull, nullptr},
+    {"jump_pull_gaze_deg", nullptr, &Values::jumpPullGazeDeg},
+    {"jump_pull_stick_deg", nullptr, &Values::jumpPullStickDeg},
+    {"jump_pull_range_m", nullptr, &Values::jumpPullRangeM},
+    {"jump_pull_cap_dmps", nullptr, &Values::jumpPullCapDmps},
     {"anim_head_ride", &Values::animHeadRide, nullptr},
     {"shoulder_limit", &Values::shoulderLimit, nullptr},
     {"snap_realign", &Values::snapRealign, nullptr},

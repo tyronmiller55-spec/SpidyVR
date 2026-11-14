@@ -608,6 +608,10 @@ const game_swing::SwingKickLive* swingKickLive{};
 const game_swing::SwingCostLive* swingCostLive{};
 // Where that window's longest visit went (SpidySwingCostSections): the "game thread sections:" line.
 const game_swing::SwingCostSections* swingCostSections{};
+// JUMP PULL (jump_pull.hpp): the ask the swing gets every frame (SpidyJumpPull: the gaze and the stick move) and what it did
+// (SpidyJumpPullLive); none in an older module (no pull).
+BridgeCall jumpPullCall{};
+const game_swing::JumpPullLive* jumpPullLive{};
 // AIR KICKS' settings and gestures for the swing (SpidyAirKick), and its account (SpidyAirKickLive); none in an
 // older module (no air kicks).
 BridgeCall airKick{};
@@ -1217,6 +1221,9 @@ DWORD WINAPI run(void*) {
         // PUNCH AUTO-TARGET: the last throw read, the settings sent, and the hero's turn onto the enemy (a hold of 0.6 s).
         uint32_t punchTrackEvents = 0, punchTrackSentKey = 0xffffffffu, punchTracks = 0;
         float punchTrackSentAge = 0, punchTrackYaw = 0, punchTrackHold = 0;
+        // JUMP PULL: the ask's serial and when the last was sent while off, the last event read.
+        uint32_t jumpPullSerial = 0, jumpPullEvents = 0, jumpPullWasOn = 0;
+        float jumpPullIdle = 0;
         // game frame: lines (hitch_guard.hpp): the game thread's own step times, spikes with their length.
         hitch_guard::FreshHold swingFreshHold; // swingFresh with hysteresis (hitch_guard.hpp)
         float swingFreshLogAge{};
@@ -2745,6 +2752,62 @@ DWORD WINAPI run(void*) {
                                 punchTrackSentKey = key;
                                 punchTrackSentAge = 0;
                             }
+                        }
+                    }
+                    // JUMP PULL (jump_pull.hpp): where the player looks (the headset's view heading, the one
+                    // authority, with the head's own pitch) and where the left stick points from that view go to the
+                    // swing every frame while it is on; the swing picks the enemy and pulls in its own air.
+                    if (jumpPullCall) {
+                        game_swing::JumpPullAsk ask;
+                        const float viewNow = hsViewNow;
+                        const bool known = values.jumpPull && !flatScreen && !calibrationInput && std::isfinite(viewNow) &&
+                                           validTrackedPose(frame.head);
+                        jumpPullIdle += std::isfinite(frame.seconds) ? std::max(frame.seconds, 0.f) : 0.f;
+                        if (known) {
+                            const float pitch = std::asin(std::clamp(
+                                screenAhead(frame.head, 0).orientation.rotate({0, 0, -1}).y, -1.f, 1.f));
+                            const Vec3 flat = hybrid_steer::viewForward(viewNow);
+                            const Vec3 stick = frame.hands[0].valid ? hybrid_steer::viewMove(frame.hands[0].stickX,
+                                                                                           frame.hands[0].stickY, viewNow)
+                                                                    : Vec3{};
+                            ask.flags = 1u;
+                            ask.gazeDeg = static_cast<float>(values.jumpPullGazeDeg);
+                            ask.stickDeg = static_cast<float>(values.jumpPullStickDeg);
+                            ask.rangeM = static_cast<float>(values.jumpPullRangeM);
+                            ask.capMps = static_cast<float>(values.jumpPullCapDmps) * .1f;
+                            ask.gaze[0] = flat.x * std::cos(pitch);
+                            ask.gaze[1] = std::sin(pitch);
+                            ask.gaze[2] = flat.z * std::cos(pitch);
+                            ask.stick[0] = stick.x;
+                            ask.stick[2] = stick.z;
+                        }
+                        // While on it goes every frame; off, once on the change and then every second.
+                        if (known || jumpPullWasOn || jumpPullIdle > 1.f) {
+                            ask.serial = ++jumpPullSerial;
+                            if (jumpPullCall(&ask) == 0) {
+                                if (known != (jumpPullWasOn != 0))
+                                    diag_log::writef("jump pull: %s (gaze %d deg, stick %d deg, range %d m, limit %.1f m/s)",
+                                                     known ? "on" : "off", values.jumpPullGazeDeg, values.jumpPullStickDeg,
+                                                     values.jumpPullRangeM, values.jumpPullCapDmps * .1);
+                                jumpPullWasOn = known ? 1u : 0u;
+                                jumpPullIdle = 0;
+                            }
+                        }
+                    }
+                    if (const volatile game_swing::JumpPullLive* jl = jumpPullLive) {
+                        const uint32_t events = jl->events;
+                        if (events != jumpPullEvents) {
+                            const uint32_t active = jl->active, byStick = jl->byStick;
+                            const float weight = jl->weight, angle = jl->angleDeg, distance = jl->distance, added = jl->added;
+                            const uint32_t picks = jl->picks, pulls = jl->pulls;
+                            jumpPullEvents = events;
+                            if (active)
+                                diag_log::writef("jump pull: toward an enemy %.1f m away, %.0f deg off %s (pull weight %.2f; "
+                                                 "%u picked, %u jumps pulled so far)",
+                                                 distance, angle, byStick ? "the stick" : "your gaze", weight, picks, pulls);
+                            else
+                                diag_log::writef("jump pull: let go (added %.2f m/s this jump; %u picked, %u jumps pulled so far)",
+                                                 added, picks, pulls);
                         }
                     }
                     // HAND GRAB (hand_grab.hpp; off until set): the settings go to the swing whenever they
@@ -11433,6 +11496,12 @@ extern "C" __declspec(dllexport) DWORD WINAPI SpidyXrStart(void* input) {
         swingCostSections && (swingCostSections->magic != expected.magic ||
                               swingCostSections->version != expected.version || swingCostSections->bytes != expected.bytes))
         swingCostSections = nullptr;
+    jumpPullCall = reinterpret_cast<BridgeCall>(GetProcAddress(rays, "SpidyJumpPull"));
+    jumpPullLive = reinterpret_cast<const game_swing::JumpPullLive*>(GetProcAddress(rays, "SpidyJumpPullLive"));
+    if (const game_swing::JumpPullLive expected;
+        jumpPullLive && (jumpPullLive->magic != expected.magic || jumpPullLive->version != expected.version ||
+                         jumpPullLive->bytes != expected.bytes))
+        jumpPullLive = nullptr;
     airKick = reinterpret_cast<BridgeCall>(GetProcAddress(rays, "SpidyAirKick"));
     airKickLive = reinterpret_cast<const game_swing::AirKickLive*>(GetProcAddress(rays, "SpidyAirKickLive"));
     if (const game_swing::AirKickLive expected;

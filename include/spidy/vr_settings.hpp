@@ -651,6 +651,13 @@ struct Values {
     // same damage with all of it off. punch_autotarget, punch_track_cone_deg, punch_track_range_m, punch_view_snap.
     bool punchAutotarget = true, punchViewSnap = false;
     int punchTrackConeDeg = 45, punchTrackRangeM = 6;
+    // JUMP PULL (the polish pass, slice 8; the user, t65u: "a soft pull that gently pulls you toward enemies you jump toward"):
+    // in SpidyVR's own air, with no web out, an enemy within jumpPullGazeDeg of where you look (or within jumpPullStickDeg of
+    // the left stick's way while it is held) and jumpPullRangeM pulls a little (4 m/s^2, fading at the cone's edge and the
+    // range's, off inside 1.5 m) until the jump has added jumpPullCapDmps of speed: the cap is in tenths of a
+    // m/s (15 = 1.5 m/s). jump_pull, jump_pull_gaze_deg, jump_pull_stick_deg, jump_pull_range_m, jump_pull_cap_dmps.
+    bool jumpPull = true;
+    int jumpPullGazeDeg = 20, jumpPullStickDeg = 25, jumpPullRangeM = 12, jumpPullCapDmps = 15;
     bool operator==(const Values&) const = default;
 };
 inline constexpr int eyeAimShots = 1, eyeAimZips = 2;
@@ -896,8 +903,13 @@ enum class Item : uint8_t {
     punchTrackCone,
     punchTrackRange,
     punchViewSnap,
+    jumpPull,
+    jumpPullGaze,
+    jumpPullStick,
+    jumpPullRange,
+    jumpPullCap,
 };
-inline constexpr Item lastItem = Item::punchViewSnap;
+inline constexpr Item lastItem = Item::jumpPullCap;
 // SLOW-MO LENGTH's last step: no time limit (until L3 toggles it off).
 inline constexpr int slowMotionEndless = 91;
 // Real seconds a full meter lasts for a SLOW-MO LENGTH value; 0 = endless.
@@ -927,7 +939,7 @@ struct Row {
     Place place{};
 };
 // Stable row/setting numbers; categories below determine presentation order.
-const std::array<Row, 193>& rows();
+const std::array<Row, 198>& rows();
 const Row* rowFor(Item);
 // camera, shooters and legs (November 11, the user: "I can't find legs or
 // camera settings in any of the menus. Make sure it's clearly labeled"): tabs

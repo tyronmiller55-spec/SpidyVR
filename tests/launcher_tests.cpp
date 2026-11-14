@@ -776,7 +776,7 @@ int main() {
                 continue;
             // CAMERA MODES (November 13): the player's own comfort, not in shared profiles.
             if (key == "anim_head_ride" || key == "shoulder_limit" || key == "snap_realign" || key == "headset_first" ||
-                key.rfind("punch_", 0) == 0)
+                key.rfind("punch_", 0) == 0 || key.rfind("jump_pull", 0) == 0)
                 continue;
             ++lines;
             check(at(key) < std::size(profileSettings) &&

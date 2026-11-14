@@ -2365,6 +2365,24 @@ void App::options(ImVec2 origin, ImVec2 size) {
                "A tracked punch turns your view onto the enemy too. Off by default: your view stays where you "
                "look and only your body and aim turn.",
                S(42), [&] { tabToggle("##punchviewsnap", Item::punchViewSnap); });
+        settingOption(Item::jumpPull, "Jump pull",
+               "Jump toward an enemy and, in your own air with no web out, he pulls you a little: the enemy "
+               "within the cone of where you look (or where the left stick points while you hold it) and the "
+               "range below, until the jump has added the limit. Never in the game's own jump animation.",
+               S(42), [&] { tabToggle("##jumppull", Item::jumpPull); });
+        settingOption(Item::jumpPullGaze, "Jump pull gaze",
+               "How far off an enemy you can look and still be pulled toward him (20 degrees by default).",
+               S(150), [&] { tabCombo("##jumppullgaze", Item::jumpPullGaze); });
+        settingOption(Item::jumpPullStick, "Jump pull stick",
+               "How far off an enemy the left stick can point and still pull you toward him (25 degrees by "
+               "default).",
+               S(150), [&] { tabCombo("##jumppullstick", Item::jumpPullStick); });
+        settingOption(Item::jumpPullRange, "Jump pull range",
+               "How far away an enemy can be and still pull you (12 m by default).",
+               S(150), [&] { tabCombo("##jumppullrange", Item::jumpPullRange); });
+        settingOption(Item::jumpPullCap, "Jump pull limit",
+               "The most speed a jump's pull adds in all (1.5 m/s by default).",
+               S(150), [&] { tabCombo("##jumppullcap", Item::jumpPullCap); });
     });
     group(4, 0, "Flip controls", [&] {
         settingOption(Item::realisticFlips, "Realistic flips (experimental)",

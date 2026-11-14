@@ -901,6 +901,8 @@ void Swing::reset(Body b) {
     leapHeld_ = false;
     kick_ = {};
     kickKeep_ = -1;
+    pullOn_ = false;
+    pulled_ = pullAir_ = 0;
     pointJumpQueued_ = false;
     pointJumpVelocity_ = {};
     flingQueued_ = false;
@@ -1754,6 +1756,11 @@ void Swing::step(float dt, const Input& in, const WorldQueries& world, const Wor
         }
         jumpQueued_ = false;
     }
+    // JUMP PULL: what a jump has had added and how long it has been up are per jump: the ground and a wall end it.
+    if (body_.grounded || wall_.on)
+        pulled_ = pullAir_ = 0;
+    else if (std::isfinite(dt) && dt > 0)
+        pullAir_ += dt;
     const float wallBefore = wall_.on ? dot(body_.position - wall_.point, wall_.normal) : 0.f;
     const Vec3 before = body_.position;
     if (wall_.on) {
@@ -1776,6 +1783,14 @@ void Swing::step(float dt, const Input& in, const WorldQueries& world, const Wor
             body_.velocity = swing_kick::steered(body_.velocity, kick_.aim - body_.position, kick_.weight, dt,
                                                  kickConfig_, &used);
             kickReport_.steer = std::max(kickReport_.steer, used);
+        }
+        // JUMP PULL: a nudge toward the enemy the jump is aimed at, in this simulated air only, with no web out.
+        if (pullOn_ && !body_.grounded && !webs_[0].attached && !webs_[1].attached) {
+            const auto pull = jump_pull::step(pullConfig_, body_.position, pullAim_, pullWeight_, dt, pullAir_, pulled_);
+            if (pull.added > 0 && finite(pull.dv)) {
+                body_.velocity += pull.dv;
+                pulled_ += pull.added;
+            }
         }
         Vec3 steering = finite(in.move) ? limited(Vec3{in.move.x, 0, in.move.z}, 1) : Vec3{};
         body_.velocity +=

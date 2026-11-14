@@ -679,6 +679,29 @@ struct SwingCostSections {
     float worst[8]{}, peak[8]{};
 };
 static_assert(sizeof(SwingCostSections) == 88);
+// Side channel from XR (JUMP PULL, jump_pull.hpp, polish pass slice 8): sent every frame (the gaze and the stick move) to
+// SpidyJumpPull; an ask older than half a second is none. `flags` bit 0: jump_pull. `gaze`: where the view looks (world),
+// `stick`: the walk stick's world direction (zero when it is not held). Not a Command or Settings field (game_swing::Settings
+// stays v40): an older module has no export and XR then sends none.
+struct JumpPullAsk {
+    uint32_t magic = 0x5357504c, version = 1, bytes = sizeof(JumpPullAsk), serial{};
+    uint32_t flags{};
+    float gazeDeg = 20.f, stickDeg = 25.f, rangeM = 12.f, capMps = 1.5f;
+    float gaze[3]{}, stick[3]{};
+    uint32_t reserved{};
+};
+static_assert(sizeof(JumpPullAsk) == 64);
+// SpidyJumpPullLive: what the pull did. `events` counts up LAST (a pick began, changed or ended); `active` is 1 while a
+// pick is in force; `target` his record, `weight` 0..1, `angleDeg` off the picking line, `distance` to him (m), `added` what
+// this jump has had added (m/s), `byStick` whether the stick's cone picked him. `pulls` counts jumps that were pulled.
+struct JumpPullLive {
+    uint32_t magic = 0x5357504d, version = 1, bytes = sizeof(JumpPullLive), events{};
+    uint32_t pulls{}, picks{}, active{}, byStick{};
+    uint64_t target{};
+    float weight{}, angleDeg{}, distance{}, added{};
+    uint32_t reserved[2]{};
+};
+static_assert(sizeof(JumpPullLive) == 64);
 // Side channel from XR (AIR KICKS, air_kick.hpp, K2): the settings, sent whenever they change and again every
 // second, and on a flick the ask (`serial` new): `gesture` (air_kick::Gesture, 1 dive, 2 double, 3 roundhouse,
 // 4 freeform, 5 sweep: GROUND KICKS, K3), `side` (-1 left, +1 right) and `angle` (degrees from up) of the flick, the eyes' offset from the
