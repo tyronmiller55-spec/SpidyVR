@@ -57,13 +57,14 @@ inline float launchExpected(float viewBefore, float launchYaw) {
     return std::abs(wrap(launchYaw - viewBefore)) <= launchCone ? launchYaw : viewBefore;
 }
 
-enum class Verdict : uint8_t { none, ok, corrected, unfixable, missed };
+enum class Verdict : uint8_t { none, ok, corrected, unfixable, missed, kept };
 inline const char* verdictName(Verdict v) {
     switch (v) {
     case Verdict::ok: return "ok";
     case Verdict::corrected: return "corrected";
     case Verdict::unfixable: return "off, not fixable here";
     case Verdict::missed: return "not sampled";
+    case Verdict::kept: return "off, kept (the view is yours)";
     default: return "none";
     }
 }
@@ -72,6 +73,7 @@ struct Sample {
     bool viewOk = false;     // the view this frame is known (after the new owner's first frame)
     float view = 0;          // its yaw (world, rig convention: 0 facing -z)
     bool viewFixable = false; // the view can be turned back (yaw lock on, or SpidyVR's rig)
+    bool viewOwned = false;   // HEADSET FIRST: the view is the player's; it is measured and logged, never put back
     bool heroMatters = false; // the animation owns the hero (his facing shows)
     bool heroOk = false;
     float hero = 0;          // the actor's facing
@@ -120,6 +122,8 @@ struct Check {
             out.view.got = wrap(s.view);
             if (std::abs(err) <= viewTolerance) {
                 out.view.verdict = Verdict::ok;
+            } else if (s.viewOwned) {
+                out.view.verdict = Verdict::kept;
             } else if (s.viewFixable) {
                 out.view.verdict = Verdict::corrected;
                 out.viewFix = err;

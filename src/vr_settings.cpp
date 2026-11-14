@@ -839,6 +839,10 @@ template <class V> auto switchOf(Item item, V& v) -> decltype(&v.aimMarkers) {
         return &v.handGrab;
     case Item::kicks:
         return &v.kicks;
+    case Item::shoulderLimit:
+        return &v.shoulderLimit;
+    case Item::animHeadRide:
+        return &v.animHeadRide;
     case Item::headsetFirst:
         return &v.headsetFirst;
     case Item::groundKicks:
@@ -1013,9 +1017,9 @@ Values sanitized(Values v) {
     v.automaticHandThreshold = std::clamp(v.automaticHandThreshold, 50, 300);
     return v;
 }
-const std::array<Row, 187>& rows() {
+const std::array<Row, 189>& rows() {
     // The help fits the game's description column beside the rows.
-    static const std::array<Row, 187> all{{
+    static const std::array<Row, 189> all{{
         {Item::none, "WEBS", nullptr, {}},
         {Item::webStyle, "WEB STYLE",
          "Arcade: webs pass lamp posts, signs and cars, and swings stay above the street.", webStyleChoices},
@@ -1541,6 +1545,16 @@ const std::array<Row, 187>& rows() {
          "The left stick runs where your headset looks when you press it. Off: the old heading.",
          {},
          Place::launcher},
+        {Item::animHeadRide,
+         "ANIM HEAD RIDE",
+         "In a landing or perch the view rides his head, its turn included. Off by default.",
+         {},
+         Place::launcher},
+        {Item::shoulderLimit,
+         "SHOULDER LIMIT",
+         "Turns the view back when your head is turned past his shoulders. Off by default.",
+         {},
+         Place::launcher},
         {Item::handstand,
          "HANDSTAND (EXPERIMENTAL)",
          "Catch a handstand: land inverted, both palms on a floor. Needs REALISTIC FLIPS.",
@@ -1636,7 +1650,7 @@ const std::array<Screen, categoryCount>& screens() {
         Item::cameraRoll,          Item::cameraBobVertical,
         Item::cameraBobSide,       Item::cameraHeadAngle,
         Item::cameraStabilization, Item::punchViewEase,
-        Item::airViewEase,         Item::rearSnap, Item::headsetFirst,
+        Item::airViewEase,         Item::rearSnap, Item::headsetFirst, Item::animHeadRide, Item::shoulderLimit,
         Item::animYawSway,         Item::turnInPlace,
         Item::cameraVertical,      Item::cameraHorizontal,
         Item::cameraAngle,         Item::lightVertical,

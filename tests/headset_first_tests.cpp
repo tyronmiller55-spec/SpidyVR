@@ -1,7 +1,10 @@
 // HEADSET FIRST (hybrid_steer::Basis, hybrid_movement::viewRunDirection / Gate::updateView, the setting):
 // the stick's basis is where the player looks at the press and follows only the player's own turns after;
 // the whole stick circle runs him, the rear half backward; no NaN. Portable.
+#include "spidy/direction_report.hpp"
+#include "spidy/facing_check.hpp"
 #include "spidy/hybrid_movement.hpp"
+#include "spidy/view_yaw_lock.hpp"
 #include "spidy/hybrid_steer.hpp"
 #include "spidy/vr_settings.hpp"
 #include <cmath>
@@ -127,6 +130,83 @@ int main() {
         idle.hero = 30 * deg;
         k.update(idle);
         check(near(k.yaw, 30 * deg, 1e-3f), "the heading follows the hero as before when nothing holds it");
+    }
+    // THE VIEW IS YOURS: the heading does not follow the hero, the head's sway is not shown.
+    {
+        using namespace hybrid_movement;
+        Heading h;
+        h.latch(10 * deg);
+        Heading::In in;
+        in.dt = 1.f / 90.f;
+        in.heroOk = true;
+        in.steerable = true;
+        in.viewOwn = true;
+        for (int i = 0; i < 200; ++i) {
+            in.hero = (i * 2) * deg; // the hero turns away, 400 deg over the run
+            h.update(in);
+        }
+        check(near(h.yaw, 10 * deg, 1e-4f) && h.swayWeight == 0 && !h.following, "the heading stays where the player has it");
+        // Without it (the old HYBRID) the heading follows him.
+        Heading o;
+        o.latch(10 * deg);
+        Heading::In old = in;
+        old.viewOwn = false;
+        old.hero = 90 * deg;
+        for (int i = 0; i < 90; ++i)
+            o.update(old);
+        check(near(o.yaw, 90 * deg, 1e-2f) && o.swayWeight > 0, "the old heading follows the hero");
+        // The right stick still turns it, and holds still arrive.
+        h.turn(20 * deg);
+        check(near(h.yaw, 30 * deg, 1e-4f), "the player's turn moves it");
+        // A shown yaw with sway 0, no ride, no limit is exactly the lock.
+        view_yaw_lock::State st;
+        st.on = true;
+        st.yaw = 1.f;
+        st.sway = 0;
+        st.heroYaw = -2.f;
+        check(near(view_yaw_lock::shownYaw(st, 2.5f), 1.f), "shown yaw is the lock whatever the head bone does");
+    }
+    // The facing check measures and logs the view but never puts it back when it is the player's.
+    {
+        facing_check::Check c;
+        c.arm(facing_check::Event::landing, 0.f);
+        facing_check::Sample smp;
+        smp.viewOk = true;
+        smp.view = 120 * deg;
+        smp.viewFixable = true;
+        smp.viewOwned = true;
+        const auto out = c.update(.01f, smp);
+        check(out.view.verdict == facing_check::Verdict::kept && out.viewFix == 0.f && c.viewFixes == 0,
+              "a turned view is kept, not corrected");
+        facing_check::Check d;
+        d.arm(facing_check::Event::landing, 0.f);
+        smp.viewOwned = false;
+        const auto fixed = d.update(.01f, smp);
+        check(fixed.view.verdict == facing_check::Verdict::corrected && near(fixed.viewFix, -120 * deg), "off: corrected as before");
+    }
+    // The view guard takes back an imposed turn and nothing else.
+    {
+        direction_report::ViewGuard g;
+        check(g.correct(1 * deg, .01f) == 0.f && g.correct(NAN, .01f) == 0.f && g.corrections == 0, "small or bad: nothing");
+        check(near(g.correct(20 * deg, .01f), -20 * deg) && g.corrections == 1, "a 20 degree imposed turn is taken back");
+        check(near(g.correct(-35 * deg, .01f), 35 * deg) && near(g.worst, 35 * deg), "either way");
+        check(g.logDue() && !g.logDue(), "logged once a second");
+        // End to end with the reporter: the animation turns the view by 25 deg on a frame; the guard puts it back
+        // and the next frame is clean.
+        direction_report::Reporter r;
+        direction_report::Frame f;
+        f.ok = true;
+        f.seconds = .011f;
+        f.view = 0;
+        r.step(f);
+        f.view = 25 * deg;
+        r.step(f);
+        const float fix = g.correct(r.lastImposed(), f.seconds);
+        check(near(fix, -25 * deg), "the reporter hands the guard the signed turn");
+        r.rebase(25 * deg + fix);
+        f.view = 25 * deg + fix;
+        r.step(f);
+        check(near(r.lastImposed(), 0.f, 1e-3f), "after the rebase the corrected frame is clean: the guard acts once");
     }
     // The setting: on by default, saved and read.
     {

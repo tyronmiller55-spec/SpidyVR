@@ -290,10 +290,14 @@ int main() {
     // ---- Settings ----
     {
         vr_settings::Values v;
-        check(v.animHeadRide && v.shoulderLimit && v.snapRealign, "on by default");
+        // THE VIEW IS YOURS (polish pass, November 14): head ride and shoulder limit turn the view without
+        // the player, so they are off by default (still in the launcher); the snap realign is the player's.
+        check(!v.animHeadRide && !v.shoulderLimit && v.snapRealign, "head ride and shoulder limit off by default");
         vr_settings::Values p =
-            vr_settings::withTabOnly(vr_settings::Values{}, "anim_head_ride=0\nshoulder_limit=0\nsnap_realign=0\n");
-        check(!p.animHeadRide && !p.shoulderLimit && !p.snapRealign, "each turns off");
+            vr_settings::withTabOnly(vr_settings::Values{}, "anim_head_ride=1\nshoulder_limit=1\nsnap_realign=0\n");
+        check(p.animHeadRide && p.shoulderLimit && !p.snapRealign, "each can be switched");
+        check(vr_settings::rowFor(vr_settings::Item::animHeadRide) && vr_settings::rowFor(vr_settings::Item::shoulderLimit),
+              "both have launcher rows");
     }
     std::printf("camera mode: %d checks passed\n", passed);
     return 0;

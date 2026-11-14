@@ -634,7 +634,7 @@ struct Values {
     // (it replaced the 90-degree rule). SNAP REALIGN: the right stick's tap is
     // a snap round the full 360 and a realign of the heading, the model and the
     // headset. spidy_vr.ini only, on by default; 0 turns each off.
-    bool animHeadRide = true, shoulderLimit = true, snapRealign = true;
+    bool animHeadRide = false, shoulderLimit = false, snapRealign = true;
     // HEADSET FIRST (the polish pass, November 14; the user, t64u: "Where the player looks takes full precedence, and everything else
     // should be adjusting to it"). On (default): the left stick runs relative to your headset - where you look when you press it,
     // following only your own head and right stick turns after - never relative to the body that is still turning,
@@ -879,8 +879,10 @@ enum class Item : uint8_t {
     tetherParticles,
     tetherSubsteps,
     headsetFirst,
+    animHeadRide,
+    shoulderLimit,
 };
-inline constexpr Item lastItem = Item::headsetFirst;
+inline constexpr Item lastItem = Item::shoulderLimit;
 // SLOW-MO LENGTH's last step: no time limit (until L3 toggles it off).
 inline constexpr int slowMotionEndless = 91;
 // Real seconds a full meter lasts for a SLOW-MO LENGTH value; 0 = endless.
@@ -910,7 +912,7 @@ struct Row {
     Place place{};
 };
 // Stable row/setting numbers; categories below determine presentation order.
-const std::array<Row, 187>& rows();
+const std::array<Row, 189>& rows();
 const Row* rowFor(Item);
 // camera, shooters and legs (November 11, the user: "I can't find legs or
 // camera settings in any of the menus. Make sure it's clearly labeled"): tabs

@@ -2617,7 +2617,8 @@ void App::options(ImVec2 origin, ImVec2 size) {
             settingOption(Item::rearSnap, "Rear snap turn",
                    "HYBRID: how fast the view turns for the left stick's rear snap (over 100 degrees back snaps, "
                    "back under 80 or to neutral re-arms). 200 ms by default, like a head turn; Instant is a frame "
-                   "switch. The hero turns at the game's pace.",
+                   "switch. The hero turns at the game's pace. Used only with Headset first off (on, the back stick "
+                   "runs you backward and the view stays).",
                    S(150), [&] { tabCombo("##rearsnap", Item::rearSnap); });
             settingOption(Item::headsetFirst, "Headset first",
                    "On (default): the left stick runs relative to where your headset looks at the moment you press "
@@ -2625,10 +2626,20 @@ void App::options(ImVec2 origin, ImVec2 size) {
                    "that is still turning, and pushing it back runs you backward: the body turns round, your view "
                    "stays. Off: the old HYBRID heading.",
                    S(42), [&] { tabToggle("##headsetfirst", Item::headsetFirst); });
+            settingOption(Item::animHeadRide, "Head ride",
+                   "In a landing, a perch or standing still, the view's turn rides Spider-Man's head bone (eased "
+                   "in and out). It turns your view without you, so it is off by default; with Headset first on, "
+                   "the animation otherwise never turns your view.",
+                   S(42), [&] { tabToggle("##animheadride", Item::animHeadRide); });
+            settingOption(Item::shoulderLimit, "Shoulder limit",
+                   "Turns the view back when your head is turned more than 90 degrees past his shoulders. It "
+                   "turns your view without you, so it is off by default.",
+                   S(42), [&] { tabToggle("##shoulderlimit", Item::shoulderLimit); });
             settingOption(Item::animYawSway, "Anim yaw sway",
                    "With Head lock Full and View yaw source Stable: the view's left-right turn comes from your "
                    "steady heading, not the hero's head; this much of the animation's head sway is added back. "
-                   "100% is the old feel (the view on the head). 20% by default.",
+                   "100% is the old feel (the view on the head). 20% by default. With Headset first on, the head's "
+                   "sway is never shown.",
                    S(150), [&] { tabCombo("##animyawsway", Item::animYawSway); });
             settingOption(Item::turnInPlace, "Turn-in-place angle",
                    "Standing still with the steady heading: once you look (or turn with the right stick) this far "

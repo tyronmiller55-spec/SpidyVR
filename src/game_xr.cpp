@@ -1271,6 +1271,10 @@ DWORD WINAPI run(void*) {
         float hsLastHmd = NAN;
         float hsViewNow = NAN; // where the player looks this frame (headset first), NAN when not known
         int64_t hsPressLogAt = 0;
+        direction_report::ViewGuard viewGuard{};
+        float hsRelatchHmd = 0;         // the headset's turn off the head reference just replaced
+        bool hsHeadingWritten = false;  // the heading was written this frame (a realign, a handoff): no relatch absorb
+        bool dirResync = false; // an action edge last frame: the stick's basis takes the view again
         // DIRECTION REPORT (direction_report.hpp): the headset's heading and what answers to it.
         direction_report::Reporter dirReport{};
         float dirBasis = NAN;                  // the left stick's world basis this frame
@@ -3599,7 +3603,8 @@ DWORD WINAPI run(void*) {
                             hsViewNow = viewNow;
                             const bool wasHeld = hsBasis.held;
                             const float basisYaw = hsBasis.update(hybridInputL >= hybrid_steer::deadzone, viewNow, hmdRel,
-                                                                  viewLockSnapped ? 0.f : viewLockDelta);
+                                                                  viewLockSnapped ? 0.f : viewLockDelta, dirResync);
+                            dirResync = false;
                             if (hsBasis.held && !wasHeld && frame.predictedDisplayTime - hsPressLogAt > 100'000'000) {
                                 hsPressLogAt = frame.predictedDisplayTime;
                                 constexpr float toDeg = 180.f / 3.14159265f;
@@ -4296,6 +4301,7 @@ DWORD WINAPI run(void*) {
                         hin.hero = heroOk ? hybrid_handoff::actorLookYaw({body[8], body[9], body[10]}) : 0.f;
                         hin.driving = hybridStick.drives;
                         hin.view = values.headsetFirst ? hsViewNow : NAN; // HEADSET FIRST: arrive at the view
+                        hin.viewOwn = values.headsetFirst;                // and the heading is the player's
                         hin.steerable = hybridOwner.domain != hybrid_owner::Domain::vr && swingFresh &&
                                         swingState.grounded && !motion.onSurface;
                         hybridSteerable = hin.steerable;
@@ -4326,6 +4332,7 @@ DWORD WINAPI run(void*) {
                         const float viewWas = lastViewYaw;
                         hybridHeading.begin(hybrid_movement::Heading::Hold::snap, realignTo, 0.f);
                         viewLock.yaw = hybridHeading.yaw;
+                        hsHeadingWritten = true;
                         snapRealignPending = true;
                         dirActionBits |= 1u << static_cast<unsigned>(direction_report::Action::realign);
                         if (headRide.active())
@@ -4352,7 +4359,8 @@ DWORD WINAPI run(void*) {
                         view_yaw_lock::State lock;
                         lock.on = viewLockActive && viewLock.set;
                         lock.yaw = viewLock.yaw;
-                        lock.sway = hybridNow ? hybridHeading.swayWeight : view_yaw_lock::swayOf(values.animYawSwayPct);
+                        lock.sway = hybridNow ? (values.headsetFirst ? 0.f : hybridHeading.swayWeight)
+                                              : view_yaw_lock::swayOf(values.animYawSwayPct);
                         lock.heroYaw = std::hypot(body[8], body[10]) > .2f
                                            ? hybrid_handoff::actorLookYaw({body[8], body[9], body[10]})
                                            : NAN; // no facing: no sway term
@@ -8678,6 +8686,7 @@ DWORD WINAPI run(void*) {
                                         constexpr float toDeg = 180.f / 3.14159265f;
                                         const float actorNow = hybrid_handoff::actorLookYaw({body[8], body[9], body[10]});
                                         hybridHeading.begin(hybrid_movement::Heading::Hold::facing, before);
+                                        hsHeadingWritten = true;
                                         viewLock.set = true;
                                         viewLock.yaw = hybridHeading.yaw;
                                         diag_log::writef(
@@ -9520,6 +9529,14 @@ DWORD WINAPI run(void*) {
                     bool viewLockRelatch = false;
                     if (headFollowEyes) {
                         // An owner switch or a recenter: the lock starts afresh, on the neck.
+                        // HEADSET FIRST: the headset's turn off the reference about to be replaced, so the
+                        // heading can take it over and the view does not jump (the new reference is zero).
+                        hsRelatchHmd = 0;
+                        if (animHeadRefSet && validTrackedPose(frame.head) &&
+                            (seatWhy == head_seat::Why::owner || seatWhy == head_seat::Why::recenter))
+                            hsRelatchHmd = stable_yaw::wrap(
+                                hybrid_handoff::lookYaw(screenAhead(frame.head, 0).orientation.rotate({0, 0, -1})) -
+                                hybrid_handoff::lookYaw(animHeadRef.orientation.rotate({0, 0, -1})));
                         if (seatWhy == head_seat::Why::owner || seatWhy == head_seat::Why::recenter)
                             animHeadRefSet = false;
                         if (!animHeadRefSet) {
@@ -9587,7 +9604,8 @@ DWORD WINAPI run(void*) {
                                                             animated_moves::HeadFollow::full,
                                                         true, values.animYawSwayPct))) &&
                                 (followFull || followSoftlock) && animHeadRefSet;
-                            const float sway = hybridLock ? hybridHeading.swayWeight
+                            // HEADSET FIRST: the head bone's yaw sway is never shown (the view is the player's).
+                            const float sway = hybridLock ? (values.headsetFirst ? 0.f : hybridHeading.swayWeight)
                                                           : view_yaw_lock::swayOf(values.animYawSwayPct);
                             const float heroYawNow = std::hypot(body[8], body[10]) > .2f
                                                          ? hybrid_handoff::actorLookYaw({body[8], body[9], body[10]})
@@ -9600,8 +9618,15 @@ DWORD WINAPI run(void*) {
                                 if ((!viewLock.set || viewLockRelatch) && boneOk && hybridLock) {
                                     // HYBRID: a facing hold (a landing) keeps its heading; else
                                     // the heading is his facing and the view the head bone.
-                                    if (hybridHeading.hold == hybrid_movement::Heading::Hold::none ||
-                                        !hybridHeading.set)
+                                    // HEADSET FIRST: the view is the player's. An owner switch or a recenter
+                                    // starts the head reference afresh (the headset's turn off it is zero
+                                    // again): the heading takes the turn over, so the view stays where it
+                                    // was; only a first latch (no heading yet) takes the hero's facing.
+                                    if (values.headsetFirst && hybridHeading.set && viewLock.set) {
+                                        if (!hsHeadingWritten && std::isfinite(hsRelatchHmd))
+                                            hybridHeading.yaw = stable_yaw::wrap(hybridHeading.yaw + hsRelatchHmd);
+                                    } else if (hybridHeading.hold == hybrid_movement::Heading::Hold::none ||
+                                               !hybridHeading.set)
                                         hybridHeading.latch(std::isfinite(heroYawNow) ? heroYawNow : boneYaw);
                                     viewLock.set = true;
                                     viewLock.yaw = hybridHeading.yaw;
@@ -9656,6 +9681,7 @@ DWORD WINAPI run(void*) {
                                 fs.viewOk = checkBoneOk && (!lockWanted || viewLockActive);
                                 fs.view = stable_yaw::wrap(view_yaw_lock::shownYaw(probeLock, checkBone) + hmdNow);
                                 fs.viewFixable = viewLockActive;
+                                fs.viewOwned = values.headsetFirst && hybridLock;
                                 fs.heroMatters = true;
                                 fs.heroOk = std::isfinite(heroYawNow);
                                 fs.hero = heroYawNow;
@@ -9673,7 +9699,10 @@ DWORD WINAPI run(void*) {
                                 if (fc.heroTurn && hybridLock) {
                                     // HYBRID: the heading holds the view on what was shown while
                                     // the walk stick brings him round (the forced turn).
-                                    hybridHeading.begin(hybrid_movement::Heading::Hold::facing, fc.heroYaw);
+                                    // HEADSET FIRST: the hero is turned onto the view; the view itself is not
+                                    // written (the heading stays where the player has it).
+                                    hybridHeading.begin(hybrid_movement::Heading::Hold::facing,
+                                                        values.headsetFirst ? hybridHeading.yaw : fc.heroYaw);
                                     viewLock.yaw = hybridHeading.yaw;
                                     facingTurnEvent = facingCheck.event;
                                 } else if (fc.heroTurn) {
@@ -9829,6 +9858,12 @@ DWORD WINAPI run(void*) {
                                             dirReport.action(static_cast<Action>(a));
                                     const bool bigEdge = dirActionBits & ((1u << static_cast<unsigned>(Action::realign)) |
                                                                           (1u << static_cast<unsigned>(Action::handoff)));
+                                    // The next frame's stick basis takes the view again after these edges.
+                                    const bool bigResync =
+                                        dirActionBits & ((1u << static_cast<unsigned>(Action::jump)) |
+                                                         (1u << static_cast<unsigned>(Action::land)) |
+                                                         (1u << static_cast<unsigned>(Action::dodge)) |
+                                                         (1u << static_cast<unsigned>(Action::handoff)));
                                     const bool edges = dirActionBits != 0;
                                     dirActionBits = 0;
                                     direction_report::Frame df;
@@ -9869,6 +9904,29 @@ DWORD WINAPI run(void*) {
                                         dirReport.skew(direction_report::Consumer::stick, dirBasis, hybridHeading.yaw);
                                     const auto step = dirReport.step(df);
                                     char text[256];
+                                    // THE VIEW GUARD: with Headset first, a turn of the view the player did not
+                                    // make (his head, the right stick, a snap or a realign) is taken back on the
+                                    // rig's turn and the heading, and published again. A safety net, logged.
+                                    if (values.headsetFirst && hybridLock && viewLockActive && !df.discontinuity) {
+                                        const float fix = viewGuard.correct(dirReport.lastImposed(), frame.seconds);
+                                        if (fix != 0.f) {
+                                            viewLock.yaw = stable_yaw::wrap(viewLock.yaw + fix);
+                                            hybridHeading.yaw = stable_yaw::wrap(hybridHeading.yaw + fix);
+                                            lock.yaw = viewLock.yaw;
+                                            view_yaw_lock::publish(lock);
+                                            lastViewYaw = stable_yaw::wrap(viewYaw + fix);
+                                            dirReport.rebase(lastViewYaw);
+                                        }
+                                        if (viewGuard.logDue())
+                                            diag_log::writef("view guard: put back %u turns of the view you did not make "
+                                                             "(%.0f deg in all, the largest %.0f deg); last action %s %d ms ago",
+                                                             viewGuard.corrections, viewGuard.total / stable_yaw::degrees,
+                                                             viewGuard.worst / stable_yaw::degrees,
+                                                             direction_report::actionName(dirReport.last()),
+                                                             static_cast<int>(dirReport.age() * 1000.f + .5f));
+                                    }
+                                    dirResync = bigResync;
+                                    hsHeadingWritten = false;
                                     if (step.line) {
                                         dirReport.format(text, sizeof(text), df);
                                         diag_log::write(text);

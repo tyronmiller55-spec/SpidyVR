@@ -112,6 +112,7 @@ class Reporter {
     };
     Out step(const Frame& f) {
         Out out;
+        lastImposed_ = 0;
         const float dt = std::isfinite(f.seconds) ? std::clamp(f.seconds, 0.f, .1f) : 0.f;
         age_ += dt;
         lineClock_ += dt;
@@ -120,7 +121,9 @@ class Reporter {
             if (prevOk_ && !f.discontinuity) {
                 const float moved = wrap(f.view - prevView_);
                 const float own = wrap(f.hmd - prevHmd_) + f.playerTurn;
-                const float imposed = std::abs(wrap(moved - own));
+                const float signedImposed = wrap(moved - own);
+                const float imposed = std::abs(signedImposed);
+                lastImposed_ = signedImposed;
                 ++audit_.frames;
                 if (imposed >= imposedFloor) {
                     audit_.imposedDeg += imposed / degrees;
@@ -174,6 +177,17 @@ class Reporter {
     const Audit& window() const {
         return audit_;
     }
+    // The last step's imposed turn, signed (radians; 0 on a discontinuity or without a view): what the VIEW
+    // GUARD takes back.
+    float lastImposed() const {
+        return lastImposed_;
+    }
+    // The VIEW GUARD turned the view back: the chain continues from the corrected view (the next frame is
+    // not a second imposed step the other way).
+    void rebase(float view) {
+        if (std::isfinite(view))
+            prevView_ = view;
+    }
     float imposedTotal() const {
         return imposedTotal_;
     }
@@ -192,10 +206,38 @@ class Reporter {
 
   private:
     Action last_ = Action::none;
-    float age_ = 0, lineClock_ = 0, auditClock_ = 0, prevView_ = 0, prevHmd_ = 0, imposedTotal_ = 0;
+    float age_ = 0, lineClock_ = 0, auditClock_ = 0, prevView_ = 0, prevHmd_ = 0, imposedTotal_ = 0, lastImposed_ = 0;
     bool prevOk_ = false, edge_ = false;
     Audit audit_{};
     uint32_t total_[static_cast<int>(Action::count)]{};
+};
+
+// THE VIEW GUARD (slice "the view is yours"): the view may change only by the player's own head, right
+// stick, snap or realign. A step of `imposed` radians (signed) over the floor on a frame that was not a
+// discontinuity is taken back: the correction (to add to the rig's turn) is -imposed. Counted, rate-limited
+// for the log. Pure.
+struct ViewGuard {
+    uint32_t corrections = 0;
+    float total = 0, worst = 0;
+    float sinceLog = 1e9f;
+    // The correction in radians (0: none) for this frame's imposed turn.
+    float correct(float imposed, float dt) {
+        sinceLog += std::isfinite(dt) ? std::clamp(dt, 0.f, .1f) : 0.f;
+        if (!std::isfinite(imposed) || std::abs(imposed) < imposedFloor)
+            return 0.f;
+        ++corrections;
+        total += std::abs(imposed);
+        worst = std::max(worst, std::abs(imposed));
+        return -imposed;
+    }
+    // A log line is due (once a second at most, and only after a correction).
+    bool logDue() {
+        if (corrections && sinceLog >= 1.f) {
+            sinceLog = 0;
+            return true;
+        }
+        return false;
+    }
 };
 
 // The actor's travel direction from its position change (radians in the rig's convention), NAN under

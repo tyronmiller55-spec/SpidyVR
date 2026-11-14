@@ -277,6 +277,10 @@ struct Heading {
         // HEADSET FIRST: where the player looks (shown + hmd). When finite, a hold arrives when the hero
         // faces THIS (within arriveAngle), not the heading's own yaw: the hero comes round to the view.
         float view = NAN;
+        // HEADSET FIRST, the view is the player's: the heading never follows the hero's facing and the
+        // head's yaw sway is never shown (sway weight 0); only the player's turns, a realign, a handoff's
+        // continuity write and the punch snap move it.
+        bool viewOwn = false;
     };
     struct Out {
         bool heroTurn = false; // TURN-IN-PLACE forced to `yaw` (standing)
@@ -334,7 +338,7 @@ struct Heading {
             yaw = wrap(snapFrom + wrap(snapTo - snapFrom) * s);
         }
         if (!in.heroOk || !std::isfinite(in.hero)) {
-            swayWeight = hold == Hold::none ? std::min(1.f, swayWeight + dt / swayInSeconds) : 0.f;
+            swayWeight = hold == Hold::none && !in.viewOwn ? std::min(1.f, swayWeight + dt / swayInSeconds) : 0.f;
             return out;
         }
         const float gap = wrap((std::isfinite(in.view) ? in.view : yaw) - in.hero);
@@ -360,7 +364,13 @@ struct Heading {
                 }
             }
         }
-        if (hold == Hold::none) {
+        if (hold == Hold::none && in.viewOwn) {
+            // The view is the player's: the heading stays where the player has it.
+            following = false;
+            drivingOff = 0;
+            rest = 0;
+            swayWeight = 0;
+        } else if (hold == Hold::none) {
             if (in.driving && in.steerable) {
                 // He runs where the stick says, the heading stays the player's.
                 anchored = true;

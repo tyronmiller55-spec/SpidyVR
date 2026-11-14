@@ -36,3 +36,13 @@ Look for: `stick basis: press #N latched at the view V (heading H, hero R, stick
 `hybrid_movement::Heading::In::view` carries where the player looks (shown + hmd, `hsViewNow` in `game_xr.cpp`). A facing hold (a landing's) now arrives when the hero faces the view, and the forced turn (`view_yaw_lock::TurnInPlace` `forceYaw`) is retargeted every frame onto the live view, from the landing frame, any angle. The fight tail does not hold a landing's turn off. A stick held through the landing hands the turn to the stick (log line above); its basis is the view.
 
 Look for: after `hybrid: vr->anim (land ...)`, `facing check: landing hero turn start ...` on the landing frame, `hero turn done` with `left` under 12 deg, and in `direction:` that `hero` approaches `view` (not `momentum`) within a few hundred ms of `action land`.
+
+## The view is yours (slice 4; with `headset_first`)
+
+`shown = lock + hmd` where `lock` (= `hybridHeading.yaw`) changes only from: the right stick (`viewLock.turn`), the snap realign, a handoff's continuity write (`hybrid landing: ...` sets the heading to the view SpidyVR showed so the head-locked view starts on it), the relatch absorb (below), the view guard's correction, and the punch snap. What was removed, per the options table in the plan: sway weight (0), the heading following the hero (`viewOwn`), the facing check's `viewFix` (kept: logged only), the rear snap (the stick runs backward instead), and the defaults of head ride and shoulder limit (off, still rows in the launcher).
+
+**Relatch absorb.** An owner switch or a recenter re-references the head (the headset's turn off the reference becomes zero). The heading absorbs the old turn (`hsRelatchHmd`) so the view does not move; a realign or a handoff has already written the heading that frame, so no absorb then.
+
+**Pitch and roll.** Not touched: they follow the animated head as before, with `camera_pitch_pct` 50 and `camera_roll_pct` 25 (the user: "Keep animation pitch/roll tilt on the view, just no yaw turning").
+
+Look for: `imposed view turn` at or near 0 in `direction audit:` outside your own turns (it was about 880 deg a minute); `view guard:` lines rare (each is a hole to find: it names the last action); `facing check: ... view ... off, kept (the view is yours)` instead of `corrected`; in `direction:` `view` equal to `shown + hmd` and `hmd`, `shown` moving only when you turn.
