@@ -2271,6 +2271,15 @@ void App::options(ImVec2 origin, ImVec2 size) {
             "Slow pulls do nothing. Letting go with the other hand still holding does nothing. Works from "
             "the ground too, and a palm on a surface will not shoot a web. Off by default.",
             S(42), [&] { tabToggle("##gripfling", Item::gripFling); });
+        settingOption(
+            Item::handGrab, "Hand grab (experimental)",
+            "Squeeze a grip with your palm within 35 cm of an enemy (first) or a prop: you take hold of it "
+            "by hand instead of shooting a web. It rides 45 cm ahead of your palm; punch it with your "
+            "other fist; let go with your hand moving to throw it (up to 1.6 times your hand speed, at "
+            "most 18 m/s), or swing your hand down fast to slam it into the ground. One hand lifts a "
+            "normal enemy; bigger ones need two hands or only drag. Holding costs a normal enemy almost "
+            "nothing. Off by default.",
+            S(42), [&] { tabToggle("##handgrab", Item::handGrab); });
         settingOption(Item::joystickRunCamera, "Joystick wall run camera",
                "On: a joystick run turns your view onto the wall, as before. Off: the left stick drives the "
                "momentum wall run's view and gait.",

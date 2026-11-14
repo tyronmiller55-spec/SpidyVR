@@ -39,6 +39,8 @@ __declspec(dllexport) SidestepLive SpidySidestepLive;
 __declspec(dllexport) SwingKickLive SpidySwingKickLive;
 // GRIP's account (GripLive), for XR's feel and log.
 __declspec(dllexport) GripLive SpidySwingGripLive;
+// HAND GRAB's account (HandGrabLive), for XR's log and feel.
+__declspec(dllexport) HandGrabLive SpidySwingHandGrabLive;
 }
 namespace {
 // Each hand's web's edges (Bends, SpidySwingBends), written with Data.
@@ -239,6 +241,9 @@ swing_kick::Kick kickState;
 // GRIP ACROSS THE GAME (SpidySwingGrip, grip.hpp): the latest settings (the swing's step applies them).
 SRWLOCK gripLock = SRWLOCK_INIT;
 GripAsk gripAsk{};
+// HAND GRAB (SpidySwingHandGrab, hand_grab.hpp): the latest settings (the sample callback applies them).
+SRWLOCK handGrabLock = SRWLOCK_INIT;
+HandGrabAsk handGrabAsk{};
 std::atomic<bool> autoDiveOff{}, kickBusy{};
 // QUICK SIDESTEP (SpidySwingSidestep, sidestep.hpp): a burst waiting for the
 // next step, as the point jump's; and the burst under way (the swing's
@@ -748,11 +753,25 @@ void visit(const native_rays::QueryContext& world) {
         if (crawlHands.contacts() & (1u << i)) ++SpidyClimbData.contacts[i];
     InterlockedIncrement64(&SpidyClimbData.sequence);
     ReleaseSRWLockExclusive(&output);
+    // HAND GRAB (hand_grab.hpp; off until XR sends hand_grab): the settings, and the hands whose squeeze
+    // belongs to a body in reach (an enemy or a prop before a wall): they grip no wall this sample.
+    {
+        AcquireSRWLockExclusive(&handGrabLock);
+        const HandGrabAsk ask = handGrabAsk;
+        ReleaseSRWLockExclusive(&handGrabLock);
+        game_grab::handGrab((ask.flags & 1u) != 0, ask.force, ask.holdCost);
+    }
+    Input wallView = in;
+    if (focused)
+        for (unsigned i = 0; i < 2; ++i)
+            if (game_grab::handClaims(i, in))
+                wallView.hands[i].wallGrip = 0;
     unsigned wallHands{};
     for (unsigned i = 0; i < 2; ++i)
-        if (focused && (in.wallRotate || (handCrawl ? (crawlHands.hands() & (1u << i))
-                                                    : (solver.wallHand(i, controllerAims(in), world) ||
-                                                       solver.gripHand(i, controllerAims(in), world))))) {
+        if (focused &&
+            (in.wallRotate || (handCrawl ? (crawlHands.hands() & (1u << i))
+                                         : (solver.wallHand(i, controllerAims(wallView), world) ||
+                                            solver.gripHand(i, controllerAims(wallView), world))))) {
             wallHands |= 1u << i;
             in.hands[i].grip = in.hands[i].trigger = 0;
         }
@@ -772,6 +791,26 @@ void visit(const native_rays::QueryContext& world) {
         // web, whatever the hand points at.
         const unsigned onStrand = (solver.onStrand(0) ? 1u : 0u) | (solver.onStrand(1) ? 2u : 0u);
         game_grab::claim(sampleSeconds, in, world, player, onStrand | noNewWebs);
+        {
+            // HAND GRAB's account for XR.
+            const auto hg = game_grab::handData();
+            volatile HandGrabLive& live = SpidySwingHandGrabLive;
+            live.holding = hg.holding;
+            live.grabs = hg.grabs;
+            live.enemies = hg.enemies;
+            live.props = hg.props;
+            live.throws = hg.throws;
+            live.slams = hg.slams;
+            live.drops = hg.drops;
+            live.lost = hg.lost;
+            live.knocks = hg.knocks;
+            live.lastAction = hg.lastAction;
+            live.lastKind = hg.lastKind;
+            live.lastMass = hg.lastMass;
+            live.lastSpeed = hg.lastSpeed;
+            MemoryBarrier();
+            live.serial = hg.serial;
+        }
         // The web tie: the click (Command::asks bit 1) with the hands together,
         // one on a web stuck to a surface, the other on a webbed-up enemy.
         // Both webs go to the tie, which draws him over to the surface and
@@ -1951,6 +1990,9 @@ extern "C" __declspec(dllexport) DWORD WINAPI SpidySwingStart(void* input) {
         AcquireSRWLockExclusive(&gripLock);
         gripAsk = {};
         ReleaseSRWLockExclusive(&gripLock);
+        AcquireSRWLockExclusive(&handGrabLock);
+        handGrabAsk = {};
+        ReleaseSRWLockExclusive(&handGrabLock);
         AcquireSRWLockExclusive(&kickLock);
         kickAsk = {};
         kickAt = 0;
@@ -2131,6 +2173,22 @@ extern "C" __declspec(dllexport) DWORD WINAPI SpidySwingGrip(void* input) {
     AcquireSRWLockExclusive(&gripLock);
     gripAsk = a;
     ReleaseSRWLockExclusive(&gripLock);
+    return 0;
+}
+// HAND GRAB (hand_grab.hpp): the VR worker's settings. 2001: not a HandGrabAsk; 1004: the swing has not
+// started; 0 taken. What it did: SpidySwingHandGrabLive.
+extern "C" __declspec(dllexport) DWORD WINAPI SpidySwingHandGrab(void* input) {
+    HandGrabAsk a;
+    if (!input || !copy(&a, input, sizeof(a)) || !validHandGrab(a))
+        return 2001;
+    AcquireSRWLockShared(&lifecycle);
+    const bool running = started;
+    ReleaseSRWLockShared(&lifecycle);
+    if (!running)
+        return 1004;
+    AcquireSRWLockExclusive(&handGrabLock);
+    handGrabAsk = a;
+    ReleaseSRWLockExclusive(&handGrabLock);
     return 0;
 }
 // QUICK SIDESTEP (sidestep.hpp): the VR worker's burst for the next step.

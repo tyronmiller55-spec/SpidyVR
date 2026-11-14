@@ -85,6 +85,11 @@ add_executable(spidy_grip_tests tests/grip_tests.cpp)
 target_link_libraries(spidy_grip_tests PRIVATE spidy_core)
 add_test(NAME grip COMMAND spidy_grip_tests)
 
+# HAND GRAB (hand_grab.hpp): the reach, hold, cost, release and slam math, and WebGrab holding bodies by hand.
+add_executable(spidy_hand_grab_tests tests/hand_grab_tests.cpp)
+target_link_libraries(spidy_hand_grab_tests PRIVATE spidy_core)
+add_test(NAME hand_grab COMMAND spidy_hand_grab_tests)
+
 add_executable(spidy_handstand_tests tests/handstand_tests.cpp)
 target_link_libraries(spidy_handstand_tests PRIVATE spidy_core)
 add_test(NAME handstand COMMAND spidy_handstand_tests)

@@ -760,6 +760,9 @@ int main() {
             // WALL BRAKE and GRIP FLING (G1, November 14): experimental, the player's own.
             if (key.rfind("wall_brake", 0) == 0 || key.rfind("grip_fling", 0) == 0)
                 continue;
+            // HAND GRAB (G2, November 14): experimental, the player's own.
+            if (key.rfind("hand_grab", 0) == 0 || key == "enemy_hold_cost")
+                continue;
             // CAMERA MODES (November 13): the player's own comfort, not in shared profiles.
             if (key == "anim_head_ride" || key == "shoulder_limit" || key == "snap_realign")
                 continue;

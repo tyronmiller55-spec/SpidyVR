@@ -42,6 +42,7 @@ struct Hand {
     // The web this hand just let go of (thrown, released or lost) still
     // hangs from `target`, at `end`, for trailSeconds: it is drawn falling
     // away with it rather than left where the target was. phase is 0.
+    // reserved: 1 for a body held by the palm (HAND GRAB), where no web is drawn.
     uint32_t trailing{}, reserved{};
 };
 // How long a web let go of is reported trailing its target.
@@ -186,6 +187,20 @@ void tieArmed(bool);
 void allowTies(bool on);
 // SOFT LOCK distance in metres (GrabConfig::softLock; 0 off).
 void softLock(float metres);
+// HAND GRAB (G2, hand_grab.hpp; hand_grab, hand_grab_force, enemy_hold_cost), EXPERIMENTAL: a grip squeezed
+// with the palm on a prop or an enemy takes it by hand. `on`; `force` N per hand (400 to 4000); `holdCost` (0
+// to 5). Off (as at a start): the hands let go of what they hold and every squeeze is as it was.
+void handGrab(bool on, float force, float holdCost);
+// Its account (WebGrab::handReport) and the hands holding by palm now (bits), for the swing's HandGrabLive.
+struct HandData {
+    uint32_t grabs{}, enemies{}, props{}, throws{}, slams{}, drops{}, lost{}, knocks{}, holding{};
+    uint32_t lastAction{}, lastKind{}, serial{};
+    float lastMass{}, lastSpeed{};
+};
+HandData handData();
+// Whether this hand's squeeze belongs to the hand grab in this sample (WebGrab::handClaims): the swing
+// gives such a hand no wall grip.
+bool handClaims(unsigned hand, const Input&);
 TieData tieData();
 // The kinds this build can move.
 constexpr uint32_t movableKinds = 1u << static_cast<unsigned>(game_targets::Kind::throwable) |

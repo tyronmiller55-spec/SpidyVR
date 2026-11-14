@@ -691,6 +691,34 @@ struct GripLive {
     uint32_t reserved{};
 };
 static_assert(sizeof(GripLive) == 80);
+// Side channel from XR (HAND GRAB, hand_grab.hpp, G2): the settings, sent whenever they change and again
+// every second. `flags` bit 0: hand_grab. force: hand_grab_force (N per hand, 1200); holdCost:
+// enemy_hold_cost (1). Not a Command or Settings field and not versioned with them (an older swing module has
+// no SpidySwingHandGrab export; XR then sends none and no hand takes anything).
+struct HandGrabAsk {
+    uint32_t magic = 0x53574847, version = 1, bytes = sizeof(HandGrabAsk), serial{};
+    uint32_t flags{};
+    float force = 1200.f, holdCost = 1.f;
+    uint32_t reserved{};
+};
+static_assert(sizeof(HandGrabAsk) == 32);
+inline bool validHandGrab(const HandGrabAsk& a) {
+    return a.magic == 0x53574847 && a.version == 1 && a.bytes == sizeof(HandGrabAsk) && !(a.flags & ~1u) &&
+           std::isfinite(a.force) && a.force >= 400.f && a.force <= 4000.f && std::isfinite(a.holdCost) &&
+           a.holdCost >= 0.f && a.holdCost <= 5.f;
+}
+// SpidySwingHandGrabLive: the hand grab's account for XR's log and feel. `holding` (bits) the hands holding
+// by palm now; the counts of bodies taken (`enemies`, `props`), thrown, slammed and only let go of, lost
+// (shaken off) and knocked into flight (`knocks`); the latest action (1 hold, 2 throw, 3 slam, 4 let go) on
+// what (1 enemy, 2 prop), with its mass (kg) and speed (m/s); `serial` counts up last.
+struct HandGrabLive {
+    uint32_t magic = 0x5357484c, version = 1, bytes = sizeof(HandGrabLive), holding{};
+    uint32_t grabs{}, enemies{}, props{}, throws{}, slams{}, drops{}, lost{}, knocks{};
+    uint32_t lastAction{}, lastKind{};
+    float lastMass{}, lastSpeed{};
+    uint32_t serial{};
+};
+static_assert(sizeof(HandGrabLive) == 68);
 // A web's edges as Bends hands them on: its anchor is the edge nearest the
 // hand, and each edge records the one before it, back to where it sticks.
 inline Bends::Hand edgesOf(const Web& w) {

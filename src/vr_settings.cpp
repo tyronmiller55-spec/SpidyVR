@@ -788,6 +788,8 @@ template <class V> auto switchOf(Item item, V& v) -> decltype(&v.aimMarkers) {
         return &v.wallBrake;
     case Item::gripFling:
         return &v.gripFling;
+    case Item::handGrab:
+        return &v.handGrab;
     case Item::legAirCrouch:
         return &v.legAirCrouch;
     case Item::legReachSpread:
@@ -937,6 +939,8 @@ Values sanitized(Values v) {
     v.wallBrakeMuPct = std::clamp(v.wallBrakeMuPct, 30, 150);
     v.gripFlingGainPct = std::clamp(v.gripFlingGainPct, 50, 300);
     v.gripFlingMax = std::clamp(v.gripFlingMax, 3, 20);
+    v.handGrabForce = std::clamp(v.handGrabForce, 400, 4000);
+    v.enemyHoldCost = std::clamp(v.enemyHoldCost, 0, 5);
     v.handstandFallDegrees = std::clamp(v.handstandFallDegrees, 15, 60);
     v.handstandHeightCm = std::clamp(v.handstandHeightCm, 60, 140);
     v.handstandGainPct = std::clamp(v.handstandGainPct, 50, 600);
@@ -946,9 +950,9 @@ Values sanitized(Values v) {
     v.automaticHandThreshold = std::clamp(v.automaticHandThreshold, 50, 300);
     return v;
 }
-const std::array<Row, 174>& rows() {
+const std::array<Row, 175>& rows() {
     // The help fits the game's description column beside the rows.
-    static const std::array<Row, 174> all{{
+    static const std::array<Row, 175> all{{
         {Item::none, "WEBS", nullptr, {}},
         {Item::webStyle, "WEB STYLE",
          "Arcade: webs pass lamp posts, signs and cars, and swings stay above the street.", webStyleChoices},
@@ -1421,6 +1425,11 @@ const std::array<Row, 174>& rows() {
          "Grip a surface, pull your hand and let go: you launch the other way (9 m/s max).",
          {},
          Place::launcher},
+        {Item::handGrab,
+         "HAND GRAB (EXPERIMENTAL)",
+         "Squeeze a grip with your palm on an enemy or prop: hold, punch, throw, slam.",
+         {},
+         Place::launcher},
         {Item::handstand,
          "HANDSTAND (EXPERIMENTAL)",
          "Catch a handstand: land inverted, both palms on a floor. Needs REALISTIC FLIPS.",
@@ -1481,7 +1490,7 @@ const std::array<Screen, categoryCount>& screens() {
         Item::earlyJump, Item::softLanding, Item::webLandingSmooth, Item::webLandingImpact,
         Item::handClimb, Item::joystickRunCamera, Item::wallRunCameraTilt, Item::combatResponsive,
         Item::combatVisuals, Item::halfPunchDamage, Item::airFists, Item::runLogs,
-        Item::wallBrake, Item::gripFling,
+        Item::wallBrake, Item::gripFling, Item::handGrab,
     };
     static constexpr Item flips[] = {
         Item::realisticFlips, Item::flips, Item::controlledFlips, Item::flipSpeed,
@@ -2188,6 +2197,9 @@ constexpr TabOnly tabOnly[] = {
     {"wall_brake_mu_pct", nullptr, &Values::wallBrakeMuPct},
     {"grip_fling_gain_pct", nullptr, &Values::gripFlingGainPct},
     {"grip_fling_max", nullptr, &Values::gripFlingMax},
+    {"hand_grab", &Values::handGrab, nullptr},
+    {"hand_grab_force", nullptr, &Values::handGrabForce},
+    {"enemy_hold_cost", nullptr, &Values::enemyHoldCost},
     {"leg_air_crouch", &Values::legAirCrouch, nullptr},
     {"leg_reach_spread", &Values::legReachSpread, nullptr},
     {"air_fists", &Values::airFists, nullptr},

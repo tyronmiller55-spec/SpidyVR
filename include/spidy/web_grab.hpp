@@ -1,4 +1,5 @@
 #pragma once
+#include "hand_grab.hpp"
 #include "swing.hpp"
 #include <vector>
 
@@ -13,6 +14,8 @@ struct GrabTarget {
     TargetKind kind = TargetKind::Object;
     Vec3 position{}, velocity{}; // centre, world metres and metres per second
     float mass = 20, radius = .4f;
+    // within() only: how far the query's point is from its surface, metres.
+    float away{};
 };
 class TargetQueries {
   public:
@@ -25,6 +28,10 @@ class TargetQueries {
     virtual std::optional<GrabTarget> find(std::uint64_t id) const = 0;
     // Characters a throw may be aimed at.
     virtual void characters(std::vector<GrabTarget>&) const {}
+    // The targets with a surface within `reach` metres of `point` (HAND GRAB, hand_grab.hpp), each with
+    // `away` set and its `mass` what one hand has to hold; only targets a hand may take. Nothing by
+    // default: a source of targets that offers none cannot be taken by hand.
+    virtual void within(Vec3 /*point*/, float /*reach*/, std::vector<GrabTarget>&) const {}
     // The target a surface of the world belongs to, if any. A prop's own
     // bodies are where a web strikes it, never a wall in front of it.
     virtual std::optional<std::uint64_t> owner(std::uint64_t /*surface*/) const {
@@ -115,6 +122,9 @@ struct GrabConfig {
     // past its length, lets go.
     float obstructionTime = .3f, breakStretch = 6;
     float gravity = 9.81f, fixedStep = 1.0f / 120.0f;
+    // HAND GRAB (G2, hand_grab.hpp): off until enabled. A grip closed with the palm on a target takes it by
+    // hand, held by a spring at the palm instead of hanging on a web.
+    hand_grab::Config hand{};
 };
 enum class GrabPhase : std::uint8_t { None, Tethered, Yanked, Held };
 struct Grab {
@@ -130,6 +140,10 @@ struct Grab {
     // (webForce): a hanging trash can about 0.12, one swung hard or a target
     // too heavy to lift 1. A yank's jerk is 1.
     float tension{};
+    // HAND GRAB: held by the palm (phase Held): `mass` kg, `age` seconds held, and the share of the grip's
+    // force left (`tired`).
+    bool hand{};
+    float mass{}, age{}, tired = 1;
 };
 enum class GrabEventKind { Grab, Yank, Catch, Throw, Release, Lost };
 struct GrabEvent {
@@ -161,6 +175,9 @@ struct TargetCommand {
     TargetKind kind{};
     Mode mode{};
     bool thrown{}; // the web let go: the last command for this target
+    // Follow, HAND GRAB: an enemy held by the hand; the game keeps him in its flight with a light kinetic
+    // blow now and again (game_grab) rather than a web's pull.
+    bool carried{};
     // Rope: a taut web takes up its stretch at `response` per second, and
     // the target's swing across it, relative to the hand, slows at `damping`
     // per second.
@@ -183,6 +200,13 @@ struct TargetCommand {
 Vec3 advance(const TargetCommand&, Vec3 position, Vec3 velocity, float dt, Vec3 gravity);
 // Its angular velocity after that step.
 Vec3 advanceSpin(const TargetCommand&, Vec3 spin, float dt);
+// HAND GRAB's account, for the log and the feel: what was taken, thrown and slammed, and the latest
+// action (1 holding, 2 throw, 3 slam, 4 let go of) on what (1 enemy, 2 prop), its mass and speed.
+struct HandReport {
+    std::uint32_t grabs{}, enemies{}, props{}, throws{}, slams{}, drops{}, lost{};
+    std::uint32_t lastAction{}, lastKind{}, serial{};
+    float lastMass{}, lastSpeed{};
+};
 class WebGrab {
   public:
     explicit WebGrab(GrabConfig config = {});
@@ -219,6 +243,16 @@ class WebGrab {
     const GrabConfig& config() const {
         return config_;
     }
+    // HAND GRAB, switched during play (an invalid one is refused). Turned off, the hands let go of what
+    // they hold, without a throw.
+    bool handGrab(const hand_grab::Config&);
+    const HandReport& handReport() const {
+        return report_;
+    }
+    // HAND GRAB: whether this hand's squeeze belongs to the hand grab in this sample: it holds a body by
+    // its palm, or its squeeze begins with a body within reach (what claim() would take). The swing leaves
+    // such a hand no wall grip: an enemy in reach is taken before a wall.
+    bool handClaims(int hand, const HandInput&, const TargetQueries&) const;
     // GrabConfig::yankOnlyCharacters, switched during play.
     void yankOnlyCharacters(bool on) {
         config_.yankOnlyCharacters = on;
@@ -239,7 +273,17 @@ class WebGrab {
         // A yanked target's nearest approach to its hold length, and time since.
         float closest{}, stalled{};
         bool launched{}; // the yank's jerk is sent
+        // HAND GRAB: the physical grip squeezed (with release hysteresis), the palm and its smoothed
+        // velocity, and the last palm samples.
+        bool squeezed{};
+        Vec3 palm{}, palmVelocity{};
+        hand_grab::Samples samples;
     };
+    std::optional<GrabTarget> pickHand(Vec3 palm, const TargetQueries&) const;
+    bool startHand(int hand, const TargetQueries&);
+    void stepHand(int hand, float dt, const GrabTarget& target, std::vector<TargetCommand>& out,
+                  std::size_t first);
+    void letGoHand(int hand, const TargetQueries&, bool otherReleasing);
     void end(int hand, GrabEventKind reason, Vec3 velocity = {});
     void letGo(int hand, const TargetQueries&, const Body& player, bool otherReleasing);
     float holdLength(int hand) const;
@@ -252,6 +296,7 @@ class WebGrab {
     std::array<HandState, 2> hands_{};
     std::vector<GrabEvent> events_;
     std::vector<TargetCommand> pending_; // throws, sent with the next step
+    HandReport report_;
     // The player's velocity at the latest sample: a yank's arc is aimed where
     // the hand is carried, not where the pulling gesture itself would take it.
     Vec3 playerVelocity_{};

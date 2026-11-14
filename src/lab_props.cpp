@@ -127,6 +127,13 @@ void LabProps::characters(std::vector<GrabTarget>& out) const {
         if (p.kind == TargetKind::Character)
             out.push_back({p.id, p.kind, p.position, p.velocity, p.mass, p.radius});
 }
+void LabProps::within(Vec3 point, float reach, std::vector<GrabTarget>& out) const {
+    for (const auto& p : props_) {
+        const float away = std::max(0.f, length(p.position - point) - p.radius);
+        if (away <= reach && (p.kind != TargetKind::Character || p.stance == LabProp::Stance::Standing))
+            out.push_back({p.id, p.kind, p.position, p.velocity, p.mass, p.radius, away});
+    }
+}
 void LabProps::knock(LabProp& p) {
     if (p.kind != TargetKind::Character || p.stance == LabProp::Stance::Tumbling)
         return;

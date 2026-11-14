@@ -602,6 +602,10 @@ const game_swing::SwingKickLive* swingKickLive{};
 // in an older module (the grip as before).
 BridgeCall swingGrip{};
 const game_swing::GripLive* swingGripLive{};
+// HAND GRAB's settings for the swing (SpidySwingHandGrab) and its account (SpidySwingHandGrabLive); none in
+// an older module (no hand takes anything).
+BridgeCall swingHandGrab{};
+const game_swing::HandGrabLive* handGrabLive{};
 const game_swing::SidestepLive* sidestepLive{};
 // Optional: the web tie's telemetry (game_grab::TieData; an older ray module has none).
 BridgeCall sampleTie{};
@@ -1420,6 +1424,9 @@ DWORD WINAPI run(void*) {
         uint32_t gripSerial{}, gripFlagsSent = ~0u, gripFlingsSeen{}, gripBrakesSeen{};
         float gripSentAge{};
         std::array<float, 2> brakeGrain{};
+        // HAND GRAB: settings sent (a key of them, ~0 none), seconds since, the account's serial seen.
+        uint32_t handGrabSerial{}, handGrabKeySent = ~0u, handGrabSeen{};
+        float handGrabSentAge{};
         // The kick is armed or fading (last frame's): the legs keep the right stick, whose push up would
         // otherwise be the game's zip.
         bool kickHoldsStick{};
@@ -2570,6 +2577,28 @@ DWORD WINAPI run(void*) {
                                         values.gripFlingMax);
                                 gripFlagsSent = key;
                                 gripSentAge = 0;
+                            }
+                        }
+                    }
+                    // HAND GRAB (hand_grab.hpp; off until set): the settings go to the swing whenever they
+                    // change and every second.
+                    if (swingHandGrab) {
+                        game_swing::HandGrabAsk ask;
+                        ask.serial = handGrabSerial;
+                        ask.flags = values.handGrab ? 1u : 0u;
+                        ask.force = static_cast<float>(values.handGrabForce);
+                        ask.holdCost = static_cast<float>(values.enemyHoldCost);
+                        handGrabSentAge += std::isfinite(frame.seconds) ? std::max(frame.seconds, 0.f) : 0.f;
+                        const uint32_t key = ask.flags | (static_cast<uint32_t>(values.handGrabForce) << 1) |
+                                             (static_cast<uint32_t>(values.enemyHoldCost) << 16);
+                        if (key != handGrabKeySent || handGrabSentAge > 1.f) {
+                            if (swingHandGrab(&ask) == 0) {
+                                if (key != handGrabKeySent)
+                                    diag_log::writef("hand grab: settings sent (%s, %d N, hold cost %d)",
+                                                     values.handGrab ? "on" : "off", values.handGrabForce,
+                                                     values.enemyHoldCost);
+                                handGrabKeySent = key;
+                                handGrabSentAge = 0;
                             }
                         }
                     }
@@ -4908,7 +4937,11 @@ DWORD WINAPI run(void*) {
                             const bool wasGrabbing = grabPhases[i] != 0;
                             const int64_t displayAt = frame.predictedDisplayTime;
                             if (grabbing) {
-                                swingState.webs[i] = {1, 0, held.end, held.length, held.taut ? 1.f : 0.f};
+                                // A body held by the palm (HAND GRAB) has no web to draw.
+                                if (held.reserved == 1)
+                                    swingState.webs[i] = {};
+                                else
+                                    swingState.webs[i] = {1, 0, held.end, held.length, held.taut ? 1.f : 0.f};
                                 // Caught, yanked, at the hand: each its own pulse.
                                 const auto phase = static_cast<GrabPhase>(held.phase);
                                 if (held.phase != grabPhases[i]) {
@@ -5122,6 +5155,37 @@ DWORD WINAPI run(void*) {
                                     pointJumpFired = pointJumpHold = true;
                                     pointJumpHoldAge = 0;
                                     pointJumpOffLogged = false;
+                                }
+                            }
+                        }
+                        // HAND GRAB: the swing's account. A body taken, thrown or slammed is logged as
+                        // `hand grab: <enemy|prop> mass=<kg> hold|throw|slam|drop v=<m/s>`, and a throw or a
+                        // slam thumps both hands, by its speed.
+                        if (const volatile game_swing::HandGrabLive* hl = handGrabLive) {
+                            if (const uint32_t serial = hl->serial; serial != handGrabSeen) {
+                                handGrabSeen = serial;
+                                const uint32_t action = hl->lastAction, kind = hl->lastKind;
+                                const float speed = hl->lastSpeed;
+                                diag_log::writef("hand grab: %s mass=%.0f kg %s v=%.1f m/s (taken %u: "
+                                                 "enemies %u, props %u; "
+                                                 "throws %u, slams %u, let go %u, lost %u, knocks %u)",
+                                                 kind == 1 ? "enemy" : "prop", hl->lastMass,
+                                                 action == 1   ? "hold"
+                                                 : action == 2 ? "throw"
+                                                 : action == 3 ? "slam"
+                                                               : "drop",
+                                                 speed, hl->grabs, hl->enemies, hl->props, hl->throws,
+                                                 hl->slams, hl->drops, hl->lost, hl->knocks);
+                                if (action == 2 || action == 3) {
+                                    const float scale = static_cast<float>(values.moveHapticsPct) / 100;
+                                    const auto thump = move_haptics::scaled(
+                                        {-1, action == 3 ? 1.f : std::clamp(speed / 18.f, .3f, 1.f),
+                                         action == 3 ? .15f : .08f},
+                                        scale);
+                                    if (thump.amplitude > 0) {
+                                        runtime.hapticUnscaled(0, thump.amplitude, thump.seconds);
+                                        runtime.hapticUnscaled(1, thump.amplitude, thump.seconds);
+                                    }
                                 }
                             }
                         }
@@ -10652,6 +10716,13 @@ extern "C" __declspec(dllexport) DWORD WINAPI SpidyXrStart(void* input) {
                                                                swingGripLive->version != expected.version ||
                                                                swingGripLive->bytes != expected.bytes))
         swingGripLive = nullptr;
+    swingHandGrab = reinterpret_cast<BridgeCall>(GetProcAddress(rays, "SpidySwingHandGrab"));
+    handGrabLive =
+        reinterpret_cast<const game_swing::HandGrabLive*>(GetProcAddress(rays, "SpidySwingHandGrabLive"));
+    if (const game_swing::HandGrabLive expected;
+        handGrabLive && (handGrabLive->magic != expected.magic || handGrabLive->version != expected.version ||
+                         handGrabLive->bytes != expected.bytes))
+        handGrabLive = nullptr;
     sidestepLive = reinterpret_cast<const game_swing::SidestepLive*>(GetProcAddress(rays, "SpidySidestepLive"));
     if (const game_swing::SidestepLive expected;
         sidestepLive && (sidestepLive->magic != expected.magic || sidestepLive->version != expected.version ||

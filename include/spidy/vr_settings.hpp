@@ -559,6 +559,12 @@ struct Values {
     // grip_fling_gain_pct, 130; at most grip_fling_max m/s, 9), the ground included.
     bool wallBrake = false, gripFling = false;
     int wallBrakeMuPct = 90, gripFlingGainPct = 130, gripFlingMax = 9;
+    // HAND GRAB (G2, hand_grab.hpp; November 14), EXPERIMENTAL: off until set. hand_grab: a grip squeezed
+    // with the palm within 35 cm of an enemy or a prop takes it by hand: held 45 cm ahead of the palm,
+    // punched with the free fist, thrown or slammed on letting go. hand_grab_force: one hand's force in
+    // newtons (1200; 90 kg lifted). enemy_hold_cost: how fast holding an enemy tires the hand (1; 0 never).
+    bool handGrab = false;
+    int handGrabForce = 1200, enemyHoldCost = 1;
     // PASSIVE LEGS (leg_layers.hpp; November 12 06:18): in SpidyVR's air with
     // LEG CONTROL not engaged, the legs' spring runs with no stick, so momentum
     // moves them; this share of it shown (0 OFF). 60 by default. passive_legs_pct.
@@ -821,6 +827,7 @@ enum class Item : uint8_t {
     swingKickAuto,
     wallBrake,
     gripFling,
+    handGrab,
     handstand,
     handstandAssist,
     handstandFall,
@@ -860,7 +867,7 @@ struct Row {
     Place place{};
 };
 // Stable row/setting numbers; categories below determine presentation order.
-const std::array<Row, 174>& rows();
+const std::array<Row, 175>& rows();
 const Row* rowFor(Item);
 // camera, shooters and legs (November 11, the user: "I can't find legs or
 // camera settings in any of the menus. Make sure it's clearly labeled"): tabs

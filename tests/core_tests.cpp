@@ -24099,8 +24099,8 @@ int main() {
         // November 13: TORSO TWIST and ARM AIM FALLBACK (launcher rows), appended after them.
         // November 14: STEADY's three rows, HORIZON LEVEL and VR STABILIZATION after them.
         // November 14: the swing kick's two switches after those.
-        // November 14: WALL BRAKE and GRIP FLING (launcher rows) after those, then the handstand's eight.
-        constexpr size_t rowsAfter = 19;
+        // November 14: WALL BRAKE and GRIP FLING (launcher rows) after those, then HAND GRAB and the handstand's eight.
+        constexpr size_t rowsAfter = 20;
         check(all.size() == firstRealistic + std::size(realistic) + rowsAfter,
               "the realistic flips' rows are not the last but the appended ones");
         for (size_t i = 0; i < std::size(realistic); ++i)
@@ -24667,7 +24667,7 @@ int main() {
                   "camera_stabilization=0\ncamera_vertical_ms=0\ncamera_horizontal_ms=0\ncamera_angle_ms=0\n"
                   "camera_light_vertical_ms=75\ncamera_light_horizontal_ms=50\ncamera_light_angle_ms=75\n"
                   "camera_heavy_vertical_ms=200\ncamera_heavy_horizontal_ms=150\ncamera_heavy_angle_ms=200\n"
-                  "spherical_aim=1\nleg_control=0\nleg_stiffness_pct=100\nleg_damping_pct=100\nleg_coupling_pct=50\nleg_double_tap_ms=300\npunch_view_ease_ms=250\nmove_haptics_pct=100\nview_yaw_source=1\nsound_trace=1\njump_handoff_ms=500\nair_view_ease_ms=250\nanim_yaw_sway_pct=20\nturn_in_place_deg=35\npassive_legs_pct=60\npassive_coupling_pct=15\nmovement_mode=0\nrear_snap_turn_ms=200\nanimated_torso_twist=80\nanim_forearm_fallback_deg=60\ncamera_steady_vertical_ms=350\ncamera_steady_horizontal_ms=300\ncamera_steady_angle_ms=450\ncamera_horizon_level_pct=0\ncamera_vr_stabilization=1\nswing_kick_manual=0\nswing_kick_auto=1\nwall_brake=0\ngrip_fling=0\nwall_brake_mu_pct=90\ngrip_fling_gain_pct=130\ngrip_fling_max=9\nleg_air_crouch=1\nleg_reach_spread=1\nair_fists=1\n"
+                  "spherical_aim=1\nleg_control=0\nleg_stiffness_pct=100\nleg_damping_pct=100\nleg_coupling_pct=50\nleg_double_tap_ms=300\npunch_view_ease_ms=250\nmove_haptics_pct=100\nview_yaw_source=1\nsound_trace=1\njump_handoff_ms=500\nair_view_ease_ms=250\nanim_yaw_sway_pct=20\nturn_in_place_deg=35\npassive_legs_pct=60\npassive_coupling_pct=15\nmovement_mode=0\nrear_snap_turn_ms=200\nanimated_torso_twist=80\nanim_forearm_fallback_deg=60\ncamera_steady_vertical_ms=350\ncamera_steady_horizontal_ms=300\ncamera_steady_angle_ms=450\ncamera_horizon_level_pct=0\ncamera_vr_stabilization=1\nswing_kick_manual=0\nswing_kick_auto=1\nwall_brake=0\ngrip_fling=0\nwall_brake_mu_pct=90\ngrip_fling_gain_pct=130\ngrip_fling_max=9\nhand_grab=0\nhand_grab_force=1200\nenemy_hold_cost=1\nleg_air_crouch=1\nleg_reach_spread=1\nair_fists=1\n"
                   "camera_pitch_pct=100\ncamera_roll_pct=100\ncamera_bob_vertical_pct=100\ncamera_bob_side_pct=100\n"
                   "camera_head_angle_deg=0\n"
                   "sidestep=1\nsidestep_distance_cm=200\nsidestep_ms=180\nsidestep_cooldown_ms=300\n"
@@ -31540,6 +31540,68 @@ int main() {
         s.softLockMetres = 41;
         check(!game_swing::validSettings(s), "soft lock over 40 m accepted");
     });
+    test("hand grab: setting, ini keys, ranges and the side channel's validation and layout", [] {
+        using namespace vr_settings;
+        const Row* row = rowFor(Item::handGrab);
+        check(row && row->choices.empty() && row->place == Place::launcher && row->help &&
+                  std::strlen(row->help) <= 80 && std::strstr(row->title, "HAND GRAB") &&
+                  std::strstr(row->title, "EXPERIMENTAL"),
+              "the hand grab row, labelled experimental");
+        Values defaults;
+        check(!defaults.handGrab && defaults.handGrabForce == 1200 && defaults.enemyHoldCost == 1 &&
+                  choice(Item::handGrab, defaults) == 0 && defaultChoice(Item::handGrab) == 0,
+              "hand grab is off by default, 1200 N, hold cost 1");
+        Values v;
+        check(choose(Item::handGrab, 1, v) && v.handGrab && choose(Item::handGrab, 0, v) && !v.handGrab,
+              "the switch sets the value");
+        const auto read = withTabOnly({}, "hand_grab=1\nhand_grab_force=2400\nenemy_hold_cost=3\n");
+        check(read.handGrab && read.handGrabForce == 2400 && read.enemyHoldCost == 3, "the ini keys read");
+        Values on;
+        on.handGrab = true;
+        on.handGrabForce = 1800;
+        on.enemyHoldCost = 0;
+        const auto text = tabOnlyText(on);
+        check(text.find("hand_grab=1\nhand_grab_force=1800\nenemy_hold_cost=0\n") != std::string::npos,
+              "the ini keys write");
+        const auto wild = withTabOnly({}, "hand_grab_force=99999\nenemy_hold_cost=-4\n");
+        check(wild.handGrabForce == 4000 && wild.enemyHoldCost == 0, "the ini's range is clamped");
+        const auto low = withTabOnly({}, "hand_grab_force=3\nenemy_hold_cost=99\n");
+        check(low.handGrabForce == 400 && low.enemyHoldCost == 5, "and at the other end");
+        // The side channel: a valid ask passes, the wrong magic, version, size, flags or numbers do not.
+        game_swing::HandGrabAsk ask;
+        check(sizeof(ask) == 32 && sizeof(game_swing::HandGrabLive) == 68 && game_swing::validHandGrab(ask),
+              "a default ask is valid, its layout fixed");
+        auto bad = ask;
+        bad.magic ^= 1;
+        check(!game_swing::validHandGrab(bad), "wrong magic");
+        bad = ask;
+        bad.version = 2;
+        check(!game_swing::validHandGrab(bad), "wrong version");
+        bad = ask;
+        bad.bytes = 28;
+        check(!game_swing::validHandGrab(bad), "wrong size");
+        bad = ask;
+        bad.flags = 2;
+        check(!game_swing::validHandGrab(bad), "unknown flags");
+        for (const float force : {399.f, 4001.f, NAN, -1.f}) {
+            bad = ask;
+            bad.force = force;
+            check(!game_swing::validHandGrab(bad), "a force out of range");
+        }
+        for (const float cost : {-.1f, 5.1f, NAN}) {
+            bad = ask;
+            bad.holdCost = cost;
+            check(!game_swing::validHandGrab(bad), "a hold cost out of range");
+        }
+        bad = ask;
+        bad.flags = 1;
+        bad.force = 4000;
+        bad.holdCost = 5;
+        check(game_swing::validHandGrab(bad), "the ends of the range are valid");
+        // The settings struct is untouched: this is a side channel.
+        check(game_swing::Settings{}.version == 40 && sizeof(game_swing::Settings) == 188,
+              "Settings stays v40, 188 bytes");
+    });
     test("handstand settings: launcher rows on the legs page, ranges, notes and ini keys", [] {
         using namespace vr_settings;
         struct Entry {
@@ -31643,7 +31705,7 @@ int main() {
     test("Native Animation: combined menu inventory and upstream-compatible v39 settings packet", [] {
         using namespace vr_settings;
         const auto& all = rows();
-        check(all.size() == 174 && static_cast<unsigned>(lastItem) < 256, "row/Item bounds");
+        check(all.size() == 175 && static_cast<unsigned>(lastItem) < 256, "row/Item bounds");
         std::array<unsigned, 256> seen{};
         size_t start = all.size();
         for (size_t i = 0; i < all.size(); ++i) {
