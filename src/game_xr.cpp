@@ -3558,9 +3558,19 @@ DWORD WINAPI run(void*) {
                             hs.caughtNow)
                             diag_log::write("owner: kept vr (handSupport)");
                         if (hs.exitNow != handstand::Exit::none) {
-                            diag_log::writef("handstand: exit %s (lean %.1f deg)", handstand::exitName(hs.exitNow),
-                                             hs.balance.leanDegrees);
-                            if (hs.exitNow == handstand::Exit::push) {
+                            // THE BALANCE PASS: one line with the reason in a word (fell, leap or other: the rest) and what
+                            // the balance had been through: how long it held, the lean, how long the divergent component had
+                            // been out of the fall region, the centre of mass's offset from the palms.
+                            const bool fell = hs.exitNow == handstand::Exit::fall;
+                            const bool leapt = hs.exitNow == handstand::Exit::leap;
+                            diag_log::writef("handstand exit: %s%s%s%s after %.2f s held (lean %.1f deg, off balance %.0f ms, "
+                                             "com %.2f m off the palms, launch %.1f up %.1f forward)",
+                                             fell ? "fell" : leapt ? "leap" : "other", fell || leapt ? "" : " (",
+                                             fell || leapt ? "" : handstand::exitName(hs.exitNow), fell || leapt ? "" : ")",
+                                             hs.heldSeconds, hs.balance.leanDegrees, hs.offBalanceSeconds * 1000.f,
+                                             length(hs.lean), hs.launch.y,
+                                             std::hypot(hs.launch.x, hs.launch.z));
+                            if (hs.exitNow == handstand::Exit::push || hs.exitNow == handstand::Exit::leap) {
                                 game_swing::PointJumpAsk ask;
                                 ask.serial = ++pointJumpSerial;
                                 ask.velocity = hs.launch;
@@ -3572,10 +3582,12 @@ DWORD WINAPI run(void*) {
                                     pointJumpHold = true;
                                     pointJumpHoldAge = 0;
                                     pointJumpOffLogged = false;
-                                    diag_log::writef("handstand: push-off (%.1f, %.1f, %.1f) m/s", hs.launch.x,
-                                                     hs.launch.y, hs.launch.z);
+                                    diag_log::writef("handstand: %s (%.1f, %.1f, %.1f) m/s",
+                                                     hs.exitNow == handstand::Exit::leap ? "leap-off" : "push-off",
+                                                     hs.launch.x, hs.launch.y, hs.launch.z);
                                 } else {
-                                    diag_log::writef("handstand: push-off refused (%lu)",
+                                    diag_log::writef("handstand: %s refused (%lu)",
+                                                     hs.exitNow == handstand::Exit::leap ? "leap-off" : "push-off",
                                                      static_cast<unsigned long>(result));
                                 }
                             }

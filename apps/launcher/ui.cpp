@@ -2838,9 +2838,30 @@ void App::options(ImVec2 origin, ImVec2 size) {
                 S(42), [&] { tabToggle("##handstandassist", Item::handstandAssist); });
             settingOption(
                 Item::handstandFall, "Fall angle",
-                "How far you can lean before you drop to your feet (15 to 60 degrees). 35 by default. "
+                "How far you can lean before you drop to your feet (15 to 60 degrees). 50 by default. "
                 "Needs Realistic flips.",
                 S(150), [&] { tabCombo("##handstandfall", Item::handstandFall); });
+            settingOption(
+                Item::handstandSupport, "Balance support",
+                "How far around your palms you can sway and still hold the handstand (10 to 30 cm). 18 by "
+                "default (it was 12). Needs Realistic flips.",
+                S(150), [&] { tabCombo("##handstandsupport", Item::handstandSupport); });
+            settingOption(
+                Item::handstandGrace, "Sway time",
+                "How long you can be off balance before you fall (100 to 1500 ms). 500 by default (it was "
+                "120). Needs Realistic flips.",
+                S(150), [&] { tabCombo("##handstandgrace", Item::handstandGrace); });
+            settingOption(
+                Item::handstandDamping, "Sway damping",
+                "How quickly a sway dies down (none to 600%). 250% by default (it was none). Needs "
+                "Realistic flips.",
+                S(150), [&] { tabCombo("##handstanddamping", Item::handstandDamping); });
+            settingOption(
+                Item::handstandLeap, "Handstand leap",
+                "Press A, hold the left stick hard, or push off the palms to leap out at once, up and "
+                "forward along where you look. Off: only the push-off leaves. On by default. Needs "
+                "Realistic flips.",
+                S(42), [&] { tabToggle("##handstandleap", Item::handstandLeap); });
             settingOption(
                 Item::handstandPushGain, "Push-off strength",
                 "How hard a push of your palms into the floor launches you, as a share of the palms' speed "
@@ -2858,7 +2879,7 @@ void App::options(ImVec2 origin, ImVec2 size) {
                 S(150), [&] { tabCombo("##handstandheight", Item::handstandHeight); });
             settingOption(
                 Item::handstandGain, "Balance assist strength",
-                "How strongly the balance assist steers (50% to 600%). 300% by default. Needs Realistic "
+                "How strongly the balance assist steers (50% to 600%). 500% by default. Needs Realistic "
                 "flips.",
                 S(150), [&] { tabCombo("##handstandgain", Item::handstandGain); });
             settingOption(

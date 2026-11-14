@@ -271,7 +271,7 @@ static_assert(std::size(cameraHorizonLevelChoices) == std::size(cameraHorizonLev
 // HANDSTAND (handstand.hpp): each list holds the default and the ini's whole range's ends.
 constexpr int handstandFallSteps[] = {15, 20, 25, 30, 35, 40, 45, 50, 60};
 constexpr const char* handstandFallChoices[] = {"15 DEG", "20 DEG", "25 DEG", "30 DEG", "35 DEG",
-                                                "40 DEG", "45 DEG", "50 DEG", "60 DEG"};
+                                                "40 DEG", "45 DEG", "50 DEG (DEFAULT)", "60 DEG"};
 static_assert(std::size(handstandFallChoices) == std::size(handstandFallSteps));
 constexpr int handstandPushGainSteps[] = {100, 150, 200, 220, 250, 300, 400};
 constexpr const char* handstandPushGainChoices[] = {"100%", "150%", "200%", "220%", "250%", "300%", "400%"};
@@ -291,6 +291,16 @@ static_assert(std::size(handstandGainChoices) == std::size(handstandGainSteps));
 constexpr int handstandEyeDropSteps[] = {0, 30, 60, 90, 120};
 constexpr const char* handstandEyeDropChoices[] = {"0 CM", "30 CM", "60 CM", "90 CM", "120 CM"};
 static_assert(std::size(handstandEyeDropChoices) == std::size(handstandEyeDropSteps));
+// THE BALANCE PASS: the support's radius (cm), the off-balance time before a fall (ms), the sway's damping (percent).
+constexpr int handstandSupportSteps[] = {10, 12, 15, 18, 22, 26, 30};
+constexpr const char* handstandSupportChoices[] = {"10 CM", "12 CM (OLD)", "15 CM", "18 CM (DEFAULT)", "22 CM", "26 CM", "30 CM"};
+static_assert(std::size(handstandSupportChoices) == std::size(handstandSupportSteps));
+constexpr int handstandGraceSteps[] = {100, 120, 250, 500, 800, 1200, 1500};
+constexpr const char* handstandGraceChoices[] = {"100 MS", "120 MS (OLD)", "250 MS", "500 MS (DEFAULT)", "800 MS", "1200 MS", "1500 MS"};
+static_assert(std::size(handstandGraceChoices) == std::size(handstandGraceSteps));
+constexpr int handstandDampingSteps[] = {0, 100, 250, 400, 600};
+constexpr const char* handstandDampingChoices[] = {"NONE (OLD)", "100%", "250% (DEFAULT)", "400%", "600%"};
+static_assert(std::size(handstandDampingChoices) == std::size(handstandDampingSteps));
 // HAND GRAB (hand_grab.hpp): one hand's force in newtons (what it lifts: 7.5% of it in kg), and the hold cost.
 constexpr int handGrabForceSteps[] = {400, 600, 800, 1000, 1200, 1600, 2000, 2400, 3000, 4000};
 constexpr const char* handGrabForceChoices[] = {"400 N",  "600 N",  "800 N",  "1000 N", "1200 N",
@@ -457,6 +467,12 @@ std::span<const int> steps(Item item) {
         return handstandGainSteps;
     case Item::handstandEyeDrop:
         return handstandEyeDropSteps;
+    case Item::handstandSupport:
+        return handstandSupportSteps;
+    case Item::handstandGrace:
+        return handstandGraceSteps;
+    case Item::handstandDamping:
+        return handstandDampingSteps;
     case Item::handGrabForce:
         return handGrabForceSteps;
     case Item::enemyHoldCost:
@@ -678,6 +694,12 @@ float numberOf(Item item, const Values& v) {
         return static_cast<float>(v.handstandGainPct);
     case Item::handstandEyeDrop:
         return static_cast<float>(v.handstandEyeDropCm);
+    case Item::handstandSupport:
+        return static_cast<float>(v.handstandSupportCm);
+    case Item::handstandGrace:
+        return static_cast<float>(v.handstandGraceMs);
+    case Item::handstandDamping:
+        return static_cast<float>(v.handstandDampingPct);
     case Item::handGrabForce:
         return static_cast<float>(v.handGrabForce);
     case Item::enemyHoldCost:
@@ -875,6 +897,8 @@ template <class V> auto switchOf(Item item, V& v) -> decltype(&v.aimMarkers) {
         return &v.handstand;
     case Item::handstandAssist:
         return &v.handstandAssist;
+    case Item::handstandLeap:
+        return &v.handstandLeap;
     case Item::wallBrake:
         return &v.wallBrake;
     case Item::gripFling:
@@ -1068,14 +1092,17 @@ Values sanitized(Values v) {
     v.handstandHeightCm = std::clamp(v.handstandHeightCm, 60, 140);
     v.handstandGainPct = std::clamp(v.handstandGainPct, 50, 600);
     v.handstandEyeDropCm = std::clamp(v.handstandEyeDropCm, 0, 120);
+    v.handstandSupportCm = std::clamp(v.handstandSupportCm, 10, 30);
+    v.handstandGraceMs = std::clamp(v.handstandGraceMs, 100, 1500);
+    v.handstandDampingPct = std::clamp(v.handstandDampingPct, 0, 600);
     v.automaticHandStrength = std::clamp(v.automaticHandStrength, 0, 200);
     v.automaticFalloff = std::clamp(v.automaticFalloff, 500, 3000);
     v.automaticHandThreshold = std::clamp(v.automaticHandThreshold, 50, 300);
     return v;
 }
-const std::array<Row, 198>& rows() {
+const std::array<Row, 202>& rows() {
     // The help fits the game's description column beside the rows.
-    static const std::array<Row, 198> all{{
+    static const std::array<Row, 202> all{{
         {Item::none, "WEBS", nullptr, {}},
         {Item::webStyle, "WEB STYLE",
          "Arcade: webs pass lamp posts, signs and cars, and swings stay above the street.", webStyleChoices},
@@ -1613,7 +1640,7 @@ const std::array<Row, 198>& rows() {
          Place::launcher},
         {Item::punchAutotarget,
          "PUNCH AUTO-TARGET",
-         "A punch thrown toward the enemy you have targeted turns your body and aim onto him.",
+         "A punch at the enemy you have targeted turns your body and aim onto him.",
          {},
          Place::launcher},
         {Item::punchTrackCone,
@@ -1626,7 +1653,7 @@ const std::array<Row, 198>& rows() {
          punchTrackRangeChoices, Place::launcher},
         {Item::punchViewSnap,
          "PUNCH VIEW SNAP",
-         "A tracked punch turns your view onto him too. Off: your view stays where you look.",
+         "A tracked punch turns your view onto him too. Off: your view stays put.",
          {},
          Place::launcher},
         {Item::jumpPull,
@@ -1661,7 +1688,19 @@ const std::array<Row, 198>& rows() {
          {},
          Place::launcher},
         {Item::handstandFall, "HANDSTAND FALL ANGLE",
-         "Lean past this and you drop to your feet. 35 deg by default.", handstandFallChoices,
+         "Lean past this and you drop to your feet. 50 deg by default.", handstandFallChoices,
+         Place::launcher},
+        {Item::handstandSupport, "HANDSTAND SUPPORT",
+         "How far around your palms you can sway and still hold it. 18 cm by default.",
+         handstandSupportChoices, Place::launcher},
+        {Item::handstandGrace, "HANDSTAND SWAY TIME",
+         "How long you can be off balance before you fall. 500 ms by default.", handstandGraceChoices,
+         Place::launcher},
+        {Item::handstandDamping, "HANDSTAND DAMPING",
+         "How quickly a sway dies down. 250% by default.", handstandDampingChoices, Place::launcher},
+        {Item::handstandLeap, "HANDSTAND LEAP",
+         "A, a hard stick or a push leaps you out along your view. Off: only a push.",
+         {},
          Place::launcher},
         {Item::handstandPushGain, "HANDSTAND PUSH-OFF",
          "How hard a push off the palms launches you, against the palms' speed. 220%.",
@@ -1673,7 +1712,7 @@ const std::array<Row, 198>& rows() {
          "Your centre of mass over the palms, for the balance. 95 cm by default.", handstandHeightChoices,
          Place::launcher},
         {Item::handstandGain, "HANDSTAND BALANCE GAIN",
-         "How strongly the balance assist steers (percent). 300% by default.", handstandGainChoices,
+         "How strongly the balance assist steers (percent). 500% by default.", handstandGainChoices,
          Place::launcher},
         {Item::handstandEyeDrop, "HANDSTAND VIEW DROP",
          "How far your view comes down when you are inverted. 90 cm by default.", handstandEyeDropChoices,
@@ -1771,7 +1810,8 @@ const std::array<Screen, categoryCount>& screens() {
         Item::passiveLegs,     Item::passiveCoupling, Item::legAirCrouch, Item::legReachSpread,
         Item::swingKickManual, Item::swingKickAuto, Item::kicks, Item::kickGazeCone, Item::kickSpin, Item::groundKicks,
         Item::enemyJoints, Item::enemyLimbZones,
-        Item::handstand, Item::handstandAssist, Item::handstandFall, Item::handstandPushGain,
+        Item::handstand, Item::handstandAssist, Item::handstandFall, Item::handstandSupport,
+        Item::handstandGrace, Item::handstandDamping, Item::handstandLeap, Item::handstandPushGain,
         Item::handstandPushMax, Item::handstandHeight, Item::handstandGain, Item::handstandEyeDrop,
     };
     // POINT JUMP (November 11): its switch, trigger and feel.
@@ -1837,6 +1877,10 @@ const char* inactiveReason(Item item, const Values& v) {
     case Item::handstandHeight:
     case Item::handstandGain:
     case Item::handstandEyeDrop:
+    case Item::handstandSupport:
+    case Item::handstandGrace:
+    case Item::handstandDamping:
+    case Item::handstandLeap:
         return !v.realisticFlips ? "Handstands need REALISTIC FLIPS on."
                : !v.handstand    ? "Turn HANDSTAND on first."
                                  : nullptr;
@@ -1922,6 +1966,10 @@ bool shownWhenInactive(Item item) {
     case Item::handstandHeight:
     case Item::handstandGain:
     case Item::handstandEyeDrop:
+    case Item::handstandSupport:
+    case Item::handstandGrace:
+    case Item::handstandDamping:
+    case Item::handstandLeap:
     case Item::handGrabForce:
     case Item::enemyHoldCost:
     case Item::kickGazeCone:
@@ -2198,6 +2246,15 @@ bool choose(Item item, int index, Values& v) {
     case Item::handstandGain:
         v.handstandGainPct = s[index];
         break;
+    case Item::handstandSupport:
+        v.handstandSupportCm = s[index];
+        break;
+    case Item::handstandGrace:
+        v.handstandGraceMs = s[index];
+        break;
+    case Item::handstandDamping:
+        v.handstandDampingPct = s[index];
+        break;
     case Item::handstandEyeDrop:
         v.handstandEyeDropCm = s[index];
         break;
@@ -2370,6 +2427,10 @@ constexpr TabOnly tabOnly[] = {
     {"handstand_height_cm", nullptr, &Values::handstandHeightCm},
     {"handstand_gain_pct", nullptr, &Values::handstandGainPct},
     {"handstand_eye_drop_cm", nullptr, &Values::handstandEyeDropCm},
+    {"handstand_leap", &Values::handstandLeap, nullptr},
+    {"handstand_support_cm", nullptr, &Values::handstandSupportCm},
+    {"handstand_grace_ms", nullptr, &Values::handstandGraceMs},
+    {"handstand_damping_pct", nullptr, &Values::handstandDampingPct},
     {"rotation_strength", nullptr, &Values::automaticStrength},
     {"rotation_speed", nullptr, &Values::automaticSpeed},
     {"flight_speed_min", nullptr, &Values::automaticMinimumSpeed},
@@ -2625,6 +2686,15 @@ Values withMovementDefaults(Values v, std::string_view text) {
         v.steadyVerticalMs = fresh.steadyVerticalMs;
         v.steadyHorizontalMs = fresh.steadyHorizontalMs;
         v.steadyAngleMs = fresh.steadyAngleMs;
+    }
+    if (seen < 3) {
+        // Revision 3 (the handstand balance pass): a profile still on the old fall angle (35) and assist gain (300%)
+        // is untuned and gets the new ones; a value the player changed stays.
+        const Values fresh;
+        if (v.handstandFallDegrees == 35)
+            v.handstandFallDegrees = fresh.handstandFallDegrees;
+        if (v.handstandGainPct == 300)
+            v.handstandGainPct = fresh.handstandGainPct;
     }
     v.movementDefaults = movementDefaultsRevision;
     return sanitized(v);

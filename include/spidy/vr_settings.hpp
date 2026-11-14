@@ -137,9 +137,16 @@ struct Values {
     // that is a fall (degrees); and the centre of mass's height over the
     // palms (cm), the assist's gain (percent) and how far the inverted eyes
     // come down (cm).
-    bool handstand = true, handstandAssist = true;
-    int handstandPushGain = 220, handstandPushMax = 7, handstandFallDegrees = 35;
-    int handstandHeightCm = 95, handstandGainPct = 300, handstandEyeDropCm = 90;
+    //
+    // THE BALANCE PASS (Nov 14, t67u: "a lot more balance. Make it hard to fall out of it, but easy to leap out of."; the
+    // movement-defaults revision 3 moves a saved profile still on the old values): the fall angle 35 -> 50 degrees, the
+    // assist's gain 300% -> 500%, and four new ones: the support's radius around the palms (cm; was a fixed 12), how long
+    // you can be off balance before you fall (ms; was a fixed 120), the damping of the sway (percent of 1/s; was none) and
+    // the leap out (A, the stick held hard or a push leaves at once in a jump along your view).
+    bool handstand = true, handstandAssist = true, handstandLeap = true;
+    int handstandPushGain = 220, handstandPushMax = 7, handstandFallDegrees = 50;
+    int handstandHeightCm = 95, handstandGainPct = 500, handstandEyeDropCm = 90;
+    int handstandSupportCm = 18, handstandGraceMs = 500, handstandDampingPct = 250;
     // How strongly a bHaptics vest, sleeves and visor play (the tab's BODY
     // HAPTICS; body_haptics.hpp), percent; 0 off. And which of its groups
     // play (the tab's WEB, WIND, COMBAT and MOVEMENT HAPTICS switches;
@@ -289,7 +296,7 @@ struct Values {
     // from before it gets RUN CURVE on and EARLY JUMP QUICK TAP once (the
     // user: "movement fixes will be defaults"); after that the player's own
     // choice stands. Not a row. movement_defaults.
-    int movementDefaults = 2;
+    int movementDefaults = 3;
     // SOFT LANDING (the tab's SOFT LANDING; Swing::allowSoftLanding,
     // run_update::softLandVertical): a fall the swing flies, with no web
     // holding, eases to 9 m/s down over its last 3 m (or 0.35 s), its speed
@@ -908,8 +915,12 @@ enum class Item : uint8_t {
     jumpPullStick,
     jumpPullRange,
     jumpPullCap,
+    handstandSupport,
+    handstandGrace,
+    handstandDamping,
+    handstandLeap,
 };
-inline constexpr Item lastItem = Item::jumpPullCap;
+inline constexpr Item lastItem = Item::handstandLeap;
 // SLOW-MO LENGTH's last step: no time limit (until L3 toggles it off).
 inline constexpr int slowMotionEndless = 91;
 // Real seconds a full meter lasts for a SLOW-MO LENGTH value; 0 = endless.
@@ -939,7 +950,7 @@ struct Row {
     Place place{};
 };
 // Stable row/setting numbers; categories below determine presentation order.
-const std::array<Row, 198>& rows();
+const std::array<Row, 202>& rows();
 const Row* rowFor(Item);
 // camera, shooters and legs (November 11, the user: "I can't find legs or
 // camera settings in any of the menus. Make sure it's clearly labeled"): tabs
@@ -989,7 +1000,7 @@ std::string tabOnlyText(const Values&);
 // key, or whose value is no whole number, is passed over.
 Values withTabOnly(Values, std::string_view text);
 // The movement defaults' revision (Values::movementDefaults) this build has.
-inline constexpr int movementDefaultsRevision = 2;
+inline constexpr int movementDefaultsRevision = 3;
 // November 12 movement cleanup: a settings file (that text) older than
 // movementDefaultsRevision gets the new movement defaults once - RUN CURVE
 // on, EARLY JUMP at least QUICK TAP - and is marked as having seen them; a

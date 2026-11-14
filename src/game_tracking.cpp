@@ -1105,8 +1105,21 @@ GameMotionFrame GameTrackingRig::update(const XrFrame& f, Vec3 feet, Vec3 gameFo
             in.aim = (yaw.rotate({1, 0, 0}) * f.hands[0].stickX + yaw.rotate({0, 0, -1}) * f.hands[0].stickY) *
                      handstandParams_.stickLean;
         }
+        // LEAP OUT (handstand.hpp): A, the left stick held hard, and where the player looks (the head's level direction in
+        // the world; the rig's heading when it points up or down).
+        in.jump = f.jump;
+        in.stick = handValid(f.hands[0]) ? std::min(std::hypot(f.hands[0].stickX, f.hands[0].stickY), 1.f) : 0.f;
+        {
+            const Vec3 look = placed.toWorld(f.head).orientation.rotate({0, 0, -1});
+            const Vec3 level{look.x, 0.f, look.z};
+            in.viewForward = finite(level) && length(level) > .3f ? normalized(level)
+                                                                  : Quat::yaw(rig_.yaw).rotate({0, 0, -1});
+        }
         const bool wasSupporting = handstandOut_.supporting;
         handstandOut_ = handstand_.update(in, handstandParams_);
+        // The leap's A is the leap: the game and the swing do not also jump (a second, straight-up jump).
+        if (handstandOut_.exitNow == handstand::Exit::leap)
+            out.swing.jump = false;
         if (handstandOut_.caughtNow)
             handstandCatchTilt_ = automatic_.orientation();
         if (wasSupporting && !handstandOut_.supporting) {

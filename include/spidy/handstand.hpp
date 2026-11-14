@@ -59,13 +59,27 @@ namespace spidy::handstand {
 struct Params {
     bool enabled = false;
     float comHeight = .95f; // the centre of mass above the palms, m (h)
-    float gain = 3.f;       // kxi: how hard the DCM is steered back
+    float gain = 5.f;       // kxi: how hard the DCM is steered back (3 until the balance pass)
     bool assist = true;     // off: the centre of pressure stays mid-palms (no steering)
-    float palmRadius = .06f, margin = .06f;
+    // THE BALANCE PASS (the user, Nov 14 t67u: "Let's give handstands a lot more balance. Make it hard to fall out of it,
+    // but easy to leap out of."): the last session had 30 catches held a median 0.27 s, falling at a 6 degree lean with the
+    // centre of mass 0.11 m off. The support was palmRadius + margin = 0.12 m around the palms' segment and the divergent
+    // component only had to be outside it for 0.12 s. Now: 0.18 m (margin .12), a fall needs it outside the support grown by
+    // fallSlack (.06) for fallSeconds (.5), the steering is 5 (was 3) and the pendulum is damped (damping 2.5 /s), no fall
+    // test in the first fallGrace (.6 s) of a catch, and a palm re-placement of more than reposeJump in a frame keeps the
+    // centre of mass with the palms in either state (the catch log showed 0.17 to 0.22 m every other frame all the way).
+    float palmRadius = .06f, margin = .12f;
+    float fallSlack = .06f;  // m: the fall test's region is the support grown by this
+    float damping = 2.5f;    // 1/s: the centre of mass's speed bleeds off at this rate
+    float fallGrace = .6f;   // s from the catch: no fall test (the catch settle; catchGrace is the missed-palms wait)
+    // LEAP OUT: A pressed, the left stick held hard for leapStickSeconds, or a push off the palms (pushSpeed, lower than
+    // it was) leaves at once, in a jump along the view's direction: leapUp m/s up, leapForward m/s along it.
+    bool leap = true;
+    float leapStick = .9f, leapStickSeconds = .15f, leapUp = 5.5f, leapForward = 4.f;
     float catchDegrees = 100; // inverted at least this far to catch
     float catchSpin = 5.f;    // rad/s; faster is a handspring (H2): no catch (3 before Nov 13)
-    float fallSeconds = .12f, fallLeanDegrees = 35;
-    float pushSpeed = .6f, pushGain = 2.2f, pushWindow = .05f; // m/s into the floor
+    float fallSeconds = .5f, fallLeanDegrees = 50; // .12 s and 35 degrees until the balance pass
+    float pushSpeed = .45f, pushGain = 2.2f, pushWindow = .05f; // m/s into the floor
     float pushMaxNormal = 7.f, pushMaxAcross = 4.f;
     float catchGrace = .15f, leavingSeconds = .3f;
     // THE TOUCHDOWN CATCH (above).
@@ -96,6 +110,10 @@ template <class V> Params paramsOf(const V& v) {
     p.assist = v.handstandAssist;
     p.comHeight = std::clamp(v.handstandHeightCm, 60, 140) / 100.f;
     p.gain = std::clamp(v.handstandGainPct, 50, 600) / 100.f;
+    p.margin = std::clamp(v.handstandSupportCm, 10, 30) / 100.f - p.palmRadius;
+    p.fallSeconds = std::clamp(v.handstandGraceMs, 100, 1500) / 1000.f;
+    p.damping = std::clamp(v.handstandDampingPct, 0, 600) / 100.f;
+    p.leap = v.handstandLeap;
     p.pushGain = std::clamp(v.handstandPushGain, 100, 400) / 100.f;
     p.pushMaxNormal = static_cast<float>(std::clamp(v.handstandPushMax, 2, 12));
     p.fallLeanDegrees = static_cast<float>(std::clamp(v.handstandFallDegrees, 15, 60));
@@ -104,7 +122,7 @@ template <class V> Params paramsOf(const V& v) {
 }
 
 enum class State : uint8_t { off, catching, balance, leaving };
-enum class Exit : uint8_t { none, push, stepDown, fall, grip, tracking, disabled, missed };
+enum class Exit : uint8_t { none, push, stepDown, fall, grip, tracking, disabled, missed, leap };
 // Why a touchdown out of SpidyVR's air did not catch (the log's reason).
 enum class Refusal : uint8_t { none, disabled, untracked, grip, notArmed, upright, spin, palmsHigh };
 inline const char* refusalName(Refusal r) {
@@ -175,6 +193,8 @@ inline const char* exitName(Exit e) {
         return "disabled";
     case Exit::missed:
         return "missed (palms off before the catch held)";
+    case Exit::leap:
+        return "leap";
     default:
         return "none";
     }
@@ -267,14 +287,19 @@ class Balance {
             in = in && inside;
             const Vec3 acc = (x_ - u) * (w0 * w0);
             v_ += acc * sub;
+            if (p.damping > 0.f)
+                v_ = v_ * std::exp(-p.damping * sub);
             x_ += v_ * sub;
             out.u = u;
         }
         out.x = x_;
         out.v = v_;
         out.xi = x_ + v_ / w0;
+        // The fall test's region: the support grown by fallSlack (the steering still works within the support itself).
+        Support fallRegion = s;
+        fallRegion.radius += std::max(p.fallSlack, 0.f);
         bool xiInside = true;
-        s.clamp(out.xi, &xiInside);
+        fallRegion.clamp(out.xi, &xiInside);
         outside_ = xiInside ? 0.f : outside_ + dt;
         const Vec3 lean{x_.x - s.centre().x, 0, x_.z - s.centre().z};
         out.leanDegrees = std::atan2(std::hypot(lean.x, lean.z), h) * 180.f / 3.14159265f;
@@ -335,6 +360,14 @@ inline Vec3 launch(float pushSpeed, Vec3 normal, Vec3 across, const Params& p) {
     return normal * up + side;
 }
 
+// The leap out of a handstand: leapUp m/s up and leapForward m/s along the view's level direction (straight up when there is
+// none), the way a jump out of a run goes.
+inline Vec3 leapLaunch(Vec3 viewForward, const Params& p) {
+    Vec3 level{finite(viewForward) ? viewForward.x : 0.f, 0.f, finite(viewForward) ? viewForward.z : 0.f};
+    level = length(level) > .2f ? normalized(level) : Vec3{};
+    return Vec3{0, std::max(p.leapUp, 0.f), 0} + level * std::max(p.leapForward, 0.f);
+}
+
 // The state machine. One update a frame, after the hands are placed.
 class Handstand {
   public:
@@ -350,6 +383,9 @@ class Handstand {
         Vec3 angular{};       // the flip's spin, rad/s
         Vec3 velocity{};      // the body's, world m/s
         float pushInto{};     // palms' tracked speed into the floor, m/s (+ into)
+        bool jump{};          // A held (the leap is its press)
+        float stick{};        // the left stick's tilt, 0..1
+        Vec3 viewForward{0, 0, -1}; // where the player looks, level, unit (the leap's way)
         Vec3 aim{};           // the left stick's aim for the balance (level, m, from the support's centre)
         // THE TOUCHDOWN CATCH: SpidyVR owns him and the game reports ground
         // this frame; the floor's height under him (the actor's feet).
@@ -364,7 +400,9 @@ class Handstand {
         bool supporting{}; // the view holds the balance's lean (RealisticFlight::handSupport)
         bool caughtNow{};
         Exit exitNow{};     // this frame's exit (none: none)
-        Vec3 launch{};      // with Exit::push: the launch velocity
+        Vec3 launch{};      // with Exit::push or Exit::leap: the launch velocity
+        float heldSeconds{}; // with an exit: how long the catch lasted
+        float offBalanceSeconds{}; // with an exit: how long the divergent component had been out of the fall region
         Vec3 releaseSpin{}; // the spin the flip goes on with
         Balance::Out balance{};
         Vec3 lean{}; // the CoM's level offset from the support's centre
@@ -397,6 +435,10 @@ class Handstand {
         support_.b = in.palms[1];
         support_.radius = p.palmRadius + p.margin;
         const float pushed = push_.update(dt, in.pushInto, p.pushWindow);
+        // LEAP INPUT: A's press (not a held one), the left stick held hard for leapStickSeconds.
+        const bool jumpPress = in.jump && !jumpWas_;
+        jumpWas_ = in.jump;
+        stickHeld_ = std::isfinite(in.stick) && in.stick >= p.leapStick ? stickHeld_ + dt : 0.f;
         // THE TOUCHDOWN CATCH: how long since SpidyVR's air, the touchdown's
         // first frame, and the palms' heights over the floor.
         airAge_ = in.vrAir || in.aloft ? 0.f : std::min(airAge_ + dt, 10.f);
@@ -493,6 +535,8 @@ class Handstand {
                 why = Exit::disabled;
             else if (!in.tracked)
                 why = Exit::tracking;
+            else if (p.leap && (jumpPress || stickHeld_ >= p.leapStickSeconds))
+                why = Exit::leap;
             else if (in.grip && !gripCarried_)
                 why = Exit::grip;
             else if (pushed > p.pushSpeed && palmsDown)
@@ -511,7 +555,7 @@ class Handstand {
                 if (finite(c) && finite(centre_)) {
                     const Vec3 jump{c.x - centre_.x, 0, c.z - centre_.z};
                     out.centreJump = length(jump);
-                    if (reseedPending_ || (state_ == State::catching && out.centreJump > p.reposeJump)) {
+                    if (reseedPending_ || out.centreJump > p.reposeJump) {
                         balance_.shift(jump);
                         out.reseeded = true;
                         out.shift = out.centreJump;
@@ -522,8 +566,8 @@ class Handstand {
                 const Vec3 aim =
                     support_.centre() + (finite(in.aim) ? limited(horizontal(in.aim), p.stickLean) : Vec3{});
                 last_ = balance_.step(dt, support_, aim, p);
-                // Catching is a settle for its first catchGrace: no fall test, and its timer starts clean.
-                if (state_ == State::catching && age_ < p.catchGrace) {
+                // A catch is a settle for its first fallGrace: no fall test, and its timer starts clean.
+                if (age_ < std::max(p.fallGrace, p.catchGrace)) {
                     balance_.forgive();
                     last_.fell = false;
                 }
@@ -536,6 +580,10 @@ class Handstand {
                 if (why == Exit::push)
                     out.launch = launch(std::max(pushed, std::isfinite(in.pushInto) ? in.pushInto : 0.f),
                                         in.floorNormal, balance_.v(), p);
+                if (why == Exit::leap)
+                    out.launch = leapLaunch(in.viewForward, p);
+                out.heldSeconds = age_;
+                out.offBalanceSeconds = balance_.outside();
                 // The tip's spin about the palms (world), for the flip to go on with.
                 out.releaseSpin = why == Exit::fall
                                       ? cross(Vec3{0, 1, 0}, balance_.v()) / std::max(p.comHeight, .3f)
@@ -591,7 +639,8 @@ class Handstand {
     State state_{};
     Exit exit_{};
     bool armed_ = true;
-    bool touchdownBefore_{}, touchdownCaught_{}, gripCarried_{}, reseedPending_{};
+    bool touchdownBefore_{}, touchdownCaught_{}, gripCarried_{}, reseedPending_{}, jumpWas_{};
+    float stickHeld_{};
     Vec3 centre_{};
     unsigned frame_{};
     float age_{};

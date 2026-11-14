@@ -24103,7 +24103,7 @@ int main() {
         // then (still November 14) HAND GRAB STRENGTH and HOLD COST, then AIR KICKS, AIM and SPIN.
         // then (still November 14) WEB TETHERS, TETHER POINTS and TETHER STEPS, then GROUND KICKS, ENEMY JOINTS and ENEMY LIMB ZONES.
         // Polish pass: HEADSET FIRST, ANIM HEAD RIDE and SHOULDER LIMIT (launcher rows) after those.
-        constexpr size_t rowsAfter = 43; // + PUNCH AUTO-TARGET (4 rows) and JUMP PULL (5 rows)
+        constexpr size_t rowsAfter = 47; // + PUNCH AUTO-TARGET (4 rows), JUMP PULL (5 rows) and the handstand balance (4 rows)
         check(all.size() == firstRealistic + std::size(realistic) + rowsAfter,
               "the realistic flips' rows are not the last but the appended ones");
         for (size_t i = 0; i < std::size(realistic); ++i)
@@ -24268,18 +24268,18 @@ int main() {
             // a file that has seen them keeps the player's own choice.
             const std::string old = "run_curve=0\nearly_jump=0\n";
             const Values migrated = withMovementDefaults(withTabOnly({}, old), old);
-            check(migrated.runCurve && migrated.earlyJump == 1 && migrated.movementDefaults == 2,
+            check(migrated.runCurve && migrated.earlyJump == 1 && migrated.movementDefaults == vr_settings::movementDefaultsRevision,
                   "an old file did not get the movement defaults");
             const std::string running = "run_curve=0\nearly_jump=2\n";
             check(withMovementDefaults(withTabOnly({}, running), running).earlyJump == 2,
                   "the migration lowered EARLY JUMP RUNNING");
             const std::string chosen = "run_curve=0\nearly_jump=0\nmovement_defaults=2\n";
             const Values kept = withMovementDefaults(withTabOnly({}, chosen), chosen);
-            check(!kept.runCurve && kept.earlyJump == 0 && kept.movementDefaults == 2,
+            check(!kept.runCurve && kept.earlyJump == 0 && kept.movementDefaults == vr_settings::movementDefaultsRevision,
                   "the movement defaults overrode a choice made after them");
             check(withMovementDefaults(withTabOnly({}, ""), "").runCurve,
                   "no file: not the movement defaults");
-            check(tabOnlyText(migrated).find("movement_defaults=2\n") != std::string::npos,
+            check(tabOnlyText(migrated).find("movement_defaults=3\n") != std::string::npos,
                   "the migration is not remembered");
         }
         {
@@ -24653,7 +24653,8 @@ int main() {
                   "joystick_wall_run_camera=1\nwall_run_camera_tilt=1\nhalf_punch_damage=0\n"
                   "realistic_flips=0\n"
                   "handstand=1\nhandstand_assist=1\nhandstand_push_gain=220\nhandstand_push_max=7\n"
-                  "handstand_fall_degrees=35\nhandstand_height_cm=95\nhandstand_gain_pct=300\nhandstand_eye_drop_cm=90\n"
+                  "handstand_fall_degrees=50\nhandstand_height_cm=95\nhandstand_gain_pct=500\nhandstand_eye_drop_cm=90\n"
+                  "handstand_leap=1\nhandstand_support_cm=18\nhandstand_grace_ms=500\nhandstand_damping_pct=250\n"
                   "rotation_strength=50\nrotation_speed=240\nflight_speed_min=3\n"
                   "swing_momentum=1\nrotation_response_ms=500\nhand_momentum=100\n"
                   "angular_drag_ms=3000\nhand_speed_min_cm=100\nair_rotation_brake=1\n"
@@ -24681,8 +24682,10 @@ int main() {
                   "point_jump_normal_bias=25\npoint_jump_min_out_degrees=10\npoint_jump_keep=25\n"
                   "point_jump_coyote_ms=120\npoint_jump_buffer_ms=150\npoint_jump_cooldown_ms=250\n"
                   "point_jump_zip_guard_ms=400\npoint_jump_dodge_hold_ms=250\npoint_jump_in_combat=1\n"
-                  "headset_first=1\nanim_head_ride=0\nshoulder_limit=0\nsnap_realign=1\n"
-                  "movement_defaults=2\n",
+                  "headset_first=1\npunch_autotarget=1\npunch_track_cone_deg=45\npunch_track_range_m=6\npunch_view_snap=0\n"
+                  "jump_pull=1\njump_pull_gaze_deg=20\njump_pull_stick_deg=25\njump_pull_range_m=12\njump_pull_cap_dmps=15\n"
+                  "anim_head_ride=0\nshoulder_limit=0\nsnap_realign=1\n"
+                  "movement_defaults=3\n",
               "the defaults' text");
         Values changed = defaults;
         changed.recordingFov = 140;
@@ -31922,20 +31925,23 @@ int main() {
             int Values::* number;
         };
         const Entry numbers[] = {
-            {Item::handstandFall, "handstand_fall_degrees", 15, 60, 35, &Values::handstandFallDegrees},
+            {Item::handstandFall, "handstand_fall_degrees", 15, 60, 50, &Values::handstandFallDegrees},
             {Item::handstandPushGain, "handstand_push_gain", 100, 400, 220, &Values::handstandPushGain},
             {Item::handstandPushMax, "handstand_push_max", 2, 12, 7, &Values::handstandPushMax},
             {Item::handstandHeight, "handstand_height_cm", 60, 140, 95, &Values::handstandHeightCm},
-            {Item::handstandGain, "handstand_gain_pct", 50, 600, 300, &Values::handstandGainPct},
+            {Item::handstandGain, "handstand_gain_pct", 50, 600, 500, &Values::handstandGainPct},
+            {Item::handstandSupport, "handstand_support_cm", 10, 30, 18, &Values::handstandSupportCm},
+            {Item::handstandGrace, "handstand_grace_ms", 100, 1500, 500, &Values::handstandGraceMs},
+            {Item::handstandDamping, "handstand_damping_pct", 0, 600, 250, &Values::handstandDampingPct},
             {Item::handstandEyeDrop, "handstand_eye_drop_cm", 0, 120, 90, &Values::handstandEyeDropCm},
         };
         const auto legsItems = screens()[static_cast<size_t>(Category::legs)].items;
         const auto onLegs = [&](Item item) {
             return std::find(legsItems.begin(), legsItems.end(), item) != legsItems.end();
         };
-        check(onLegs(Item::handstand) && onLegs(Item::handstandAssist),
+        check(onLegs(Item::handstand) && onLegs(Item::handstandAssist) && onLegs(Item::handstandLeap),
               "the switches are not on the legs page");
-        for (const Item item : {Item::handstand, Item::handstandAssist}) {
+        for (const Item item : {Item::handstand, Item::handstandAssist, Item::handstandLeap}) {
             const Row* row = rowFor(item);
             check(row && row->choices.empty() && row->place == Place::launcher && row->help &&
                       std::strlen(row->help) <= 80 && std::strstr(row->title, "HANDSTAND"),
@@ -31989,7 +31995,8 @@ int main() {
         v.realisticFlips = false;
         for (const Item item :
              {Item::handstand, Item::handstandAssist, Item::handstandFall, Item::handstandPushGain,
-              Item::handstandPushMax, Item::handstandHeight, Item::handstandGain, Item::handstandEyeDrop}) {
+              Item::handstandPushMax, Item::handstandHeight, Item::handstandGain, Item::handstandEyeDrop,
+              Item::handstandSupport, Item::handstandGrace, Item::handstandDamping, Item::handstandLeap}) {
             const char* why = inactiveReason(item, v);
             check(why && std::strstr(why, "REALISTIC FLIPS") && shownWhenInactive(item),
                   "needs realistic flips");
@@ -32016,7 +32023,7 @@ int main() {
     test("Native Animation: combined menu inventory and upstream-compatible v39 settings packet", [] {
         using namespace vr_settings;
         const auto& all = rows();
-        check(all.size() == 198 && static_cast<unsigned>(lastItem) < 256, "row/Item bounds");
+        check(all.size() == 202 && static_cast<unsigned>(lastItem) < 256, "row/Item bounds");
         std::array<unsigned, 256> seen{};
         size_t start = all.size();
         for (size_t i = 0; i < all.size(); ++i) {

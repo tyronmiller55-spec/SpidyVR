@@ -1,6 +1,6 @@
 # HANDSTAND, phase H1 (November 12)
 
-Experimental, **off by default** (`handstand=1` in spidy_vr.ini). REALISTIC
+Experimental, on by default since the hybrid-v2 build (`handstand=0` turns it off). REALISTIC
 FLIPS only (`paramsOf` needs `realistic_flips=1`). Leg control (Y+X) stays usable.
 
 ## What it does
@@ -89,3 +89,7 @@ Tests (`tests/handstand_tests.cpp`): a 137, 147, 155 and 167 degree catch surviv
 
 - `TODO(handstand sound)`: the push-off sound and grunt; no sound IDs yet (SOUND TRACE, 1008510).
 - body_ik palm pin (step 10). Menu row.
+
+## The balance pass and the leap (Nov 14, t67u)
+
+See CHANGELOG slice 9 and POLISH_PASS.md. Defaults now: support 18 cm, fall after 500 ms outside the support + 6 cm, 50 degree lean cap, assist 500%, damping 250%, 0.6 s with no fall test after the catch, push-off at 0.45 m/s; leap (A press, left stick at 0.9 for 0.15 s, or a push) = 5.5 m/s up + 4 m/s forward along the view. The log line is `handstand exit: fell|leap|other ...`.

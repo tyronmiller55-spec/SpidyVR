@@ -27,7 +27,23 @@ void check(bool ok, const char* what) {
     ++passed;
 }
 constexpr float dt = 1.f / 90;
+// The balance as it was before the balance pass (Nov 14): the earlier tests' numbers mean this one. `fresh()` is the
+// defaults now.
 Params on() {
+    Params p;
+    p.enabled = true;
+    p.margin = .06f;
+    p.fallSlack = 0.f;
+    p.fallSeconds = .12f;
+    p.fallLeanDegrees = 35.f;
+    p.gain = 3.f;
+    p.damping = 0.f;
+    p.fallGrace = .15f;
+    p.pushSpeed = .6f;
+    p.leap = false;
+    return p;
+}
+Params fresh() {
     Params p;
     p.enabled = true;
     return p;
@@ -137,15 +153,16 @@ int main() {
     }
     // Fall: caught with the CoM far out and moving out.
     {
+        Params p = on();
         Handstand h;
         auto in = inverted();
         in.bodyUp = normalized(Vec3{0, -1, .5f});
         in.velocity = {0, 0, -1.5f};
-        h.update(in, on());
+        h.update(in, p);
         Handstand::Out o;
         Exit why = Exit::none;
         for (int i = 0; i < 90 && why == Exit::none; ++i) {
-            o = h.update(in, on());
+            o = h.update(in, p);
             why = o.exitNow;
         }
         check(why == Exit::fall && length(o.releaseSpin) > 0, "out of the support: a fall, with a spin");
@@ -351,8 +368,8 @@ int main() {
         check(!paramsOf(v).enabled, "needs REALISTIC FLIPS");
         v.realisticFlips = true;
         check(paramsOf(v).enabled && std::abs(paramsOf(v).comHeight - .95f) < 1e-6f && paramsOf(v).assist &&
-                  std::abs(paramsOf(v).gain - 3) < 1e-6f && std::abs(paramsOf(v).pushGain - 2.2f) < 1e-6f &&
-                  paramsOf(v).pushMaxNormal == 7 && paramsOf(v).fallLeanDegrees == 35 &&
+                  std::abs(paramsOf(v).gain - 5) < 1e-6f && std::abs(paramsOf(v).pushGain - 2.2f) < 1e-6f &&
+                  paramsOf(v).pushMaxNormal == 7 && paramsOf(v).fallLeanDegrees == 50 &&
                   std::abs(paramsOf(v).eyeDrop - .9f) < 1e-6f,
               "on with REALISTIC FLIPS");
         const std::string text = tabOnlyText(Values{});
@@ -513,7 +530,7 @@ int main() {
             const auto c = h.update(in, on());
             check(c.caughtNow && c.frame == 0, "seed: caught, frame 0");
             const float rawWant = .95f * std::sin(tilt * deg);
-            check(std::abs(c.seedRaw - rawWant) < .01f && c.seedOffset <= .12f * .6f + 1e-4f,
+            check(std::abs(c.seedRaw - rawWant) < .01f && c.seedOffset <= .18f * .6f + 1e-4f,
                   "seed: the raw offset is the landing's, the seeded one inside 0.6 of the radius");
             in.velocity = {};
             in.angular = {};
@@ -609,6 +626,221 @@ int main() {
         // Gone: no frame.
         Handstand g;
         check(g.update(landing(90.f), on()).frame == -1, "no catch, no frame");
+    }
+    // THE BALANCE PASS (Nov 14, t67u: "a lot more balance. Make it hard to fall out of it, but easy to leap out of."): the
+    // last session had 30 catches held a median 0.27 s, falling at a 6 degree lean with the centre of mass 0.11 m off.
+    {
+        const float deg = 3.14159265f / 180.f;
+        const auto landing = [&](float invertedDeg) {
+            auto in = inverted();
+            in.bodyUp = {0, std::cos(invertedDeg * deg), std::sin(invertedDeg * deg)};
+            return in;
+        };
+        // The defaults: support .18 m, a fall needs .5 s out of the support grown by .06 m, steering 5, damping 2.5 /s, no
+        // fall test for .6 s, 50 degrees, leap on, a push at .45 m/s.
+        const Params d = fresh();
+        check(std::abs(d.palmRadius + d.margin - .18f) < 1e-6f && std::abs(d.fallSeconds - .5f) < 1e-6f &&
+                  d.fallLeanDegrees == 50 && d.gain == 5.f && d.damping == 2.5f && d.fallGrace == .6f && d.leap &&
+                  std::abs(d.fallSlack - .06f) < 1e-6f && std::abs(d.pushSpeed - .45f) < 1e-6f,
+              "balance pass: the new defaults");
+        // How long a catch with no assist (a lean nobody steers) lasts: the wider support, the slack, the longer timer and
+        // the grace hold it far longer than before.
+        const auto holds = [&](Params p) {
+            p.assist = false;
+            Handstand h;
+            auto in = landing(172.f); // ~.13 m of offset, the last session's 0.11 m
+            h.update(in, p);
+            in.velocity = {};
+            in.angular = {};
+            for (int i = 0; i < 90 * 20; ++i)
+                if (h.update(in, p).exitNow == Exit::fall)
+                    return (i + 1) * dt;
+            return 20.f;
+        };
+        const float before = holds(on()), now = holds(d);
+        check(before < .6f && now > before + .8f, "balance pass: an unsteered lean lasts over 0.8 s longer than before");
+        // With the assist (the default) the same catch holds for ever, also with a 0.3 m palm-centre jump every other
+        // frame (the catch log's 0.17 to 0.22 m).
+        {
+            Handstand h;
+            auto in = landing(172.f);
+            h.update(in, d);
+            in.velocity = {};
+            in.angular = {};
+            bool fell = false;
+            for (int i = 0; i < 90 * 8 && !fell; ++i) {
+                const float z = (i & 1) ? .15f : -.15f;
+                in.palms[0].z = in.palms[1].z = z;
+                fell = h.update(in, d).exitNow == Exit::fall;
+            }
+            check(!fell, "balance pass: 8 s with the palms re-placed .3 m every other frame: no fall");
+        }
+        // A catch from a landing speed of 1.5 m/s the old way: the damped, widened balance keeps it.
+        {
+            Handstand h;
+            auto in = landing(160.f);
+            in.velocity = {1.5f, -3.f, -1.5f};
+            h.update(in, d);
+            in.velocity = {};
+            in.angular = {};
+            bool fell = false;
+            State last{};
+            for (int i = 0; i < 90 * 5 && !fell; ++i) {
+                const auto o = h.update(in, d);
+                fell = o.exitNow == Exit::fall;
+                last = o.state;
+            }
+            check(!fell && last == State::balance, "balance pass: a fast landing is kept for 5 s");
+        }
+        // Damping: the same sway dies faster.
+        {
+            Balance a, b;
+            Support s;
+            s.a = {-.2f, 0, 0};
+            s.b = {.2f, 0, 0};
+            s.radius = .18f;
+            Params q = d, none = d;
+            q.assist = none.assist = false;
+            none.damping = 0.f;
+            a.start({0, 0, .05f}, {0, 0, -.2f});
+            b.start({0, 0, .05f}, {0, 0, -.2f});
+            for (int i = 0; i < 45; ++i) {
+                a.step(dt, s, {}, q);
+                b.step(dt, s, {}, none);
+            }
+            check(length(a.v()) < length(b.v()), "balance pass: damping bleeds the sway's speed");
+        }
+        // LEAP OUT. A's press, in the first frame and after; a held A at the catch is not one; into a jump along the view.
+        const auto leapInput = [&] {
+            auto in = landing(165.f);
+            in.viewForward = {0, 0, -1};
+            return in;
+        };
+        {
+            Handstand h;
+            auto in = leapInput();
+            h.update(in, d);
+            check(h.state() == State::catching, "leap: caught first");
+            in.jump = true;
+            const auto o = h.update(in, d);
+            check(o.exitNow == Exit::leap && o.state == State::leaving, "leap: A while catching leaps out at once");
+            check(std::abs(o.launch.y - 5.5f) < 1e-4f && std::abs(o.launch.z + 4.f) < 1e-4f && std::abs(o.launch.x) < 1e-4f,
+                  "leap: 5.5 m/s up and 4 m/s along the view (-z)");
+            check(o.heldSeconds > 0.f && o.heldSeconds < .1f, "leap: the exit says how long it held");
+        }
+        {
+            Handstand h;
+            auto in = leapInput();
+            in.viewForward = {1, 0, 0};
+            for (int i = 0; i < 90; ++i)
+                h.update(in, d);
+            check(h.state() == State::balance, "leap: balancing after a second");
+            in.jump = true;
+            const auto o = h.update(in, d);
+            check(o.exitNow == Exit::leap && std::abs(o.launch.x - 4.f) < 1e-4f, "leap: A in the balance, along where he looks");
+            check(o.heldSeconds > .9f, "leap: it held a second");
+        }
+        {
+            Handstand h; // A held at the catch (the controlled-flip toggle, a grip's A): no leap until it is pressed again
+            auto in = leapInput();
+            in.jump = true;
+            h.update(in, d);
+            bool left = false;
+            for (int i = 0; i < 45; ++i)
+                left |= h.update(in, d).exitNow != Exit::none;
+            check(!left, "leap: A held through the catch is not a press");
+            in.jump = false;
+            h.update(in, d);
+            in.jump = true;
+            check(h.update(in, d).exitNow == Exit::leap, "leap: released and pressed again leaps");
+        }
+        {
+            Handstand h; // the stick: a light one is the balance's aim, a hard one held .15 s leaps
+            auto in = leapInput();
+            h.update(in, d);
+            in.stick = .6f;
+            bool left = false;
+            for (int i = 0; i < 90 && !left; ++i)
+                left = h.update(in, d).exitNow != Exit::none;
+            check(!left, "leap: a stick at .6 is the balance's aim");
+            in.stick = 1.f;
+            int at = -1;
+            for (int i = 0; i < 30 && at < 0; ++i)
+                if (h.update(in, d).exitNow == Exit::leap)
+                    at = i;
+            check(at >= 11 && at <= 14, "leap: a hard stick held .15 s leaps");
+            Handstand g; // a flick shorter than that does not
+            auto gi = leapInput();
+            g.update(gi, d);
+            for (int i = 0; i < 8; ++i) {
+                gi.stick = 1.f;
+                left |= g.update(gi, d).exitNow != Exit::none;
+            }
+            gi.stick = 0.f;
+            g.update(gi, d);
+            for (int i = 0; i < 8; ++i) {
+                gi.stick = 1.f;
+                left |= g.update(gi, d).exitNow != Exit::none;
+            }
+            check(!left, "leap: two short flicks are not a hold");
+        }
+        {
+            Params off = d; // switched off: A does nothing
+            off.leap = false;
+            Handstand h;
+            auto in = leapInput();
+            h.update(in, off);
+            in.jump = true;
+            in.stick = 1.f;
+            bool left = false;
+            for (int i = 0; i < 45; ++i)
+                left |= h.update(in, off).exitNow == Exit::leap;
+            check(!left, "leap: off means no leap");
+        }
+        {
+            // Straight down view (no level direction): straight up; a push at .5 m/s leaves now (it did not at .6).
+            const Params q = d;
+            check(length(leapLaunch({0, -1, 0}, q) - Vec3{0, 5.5f, 0}) < 1e-5f, "leap: no level view is straight up");
+            check(length(leapLaunch({NAN, 0, 0}, q) - Vec3{0, 5.5f, 0}) < 1e-5f, "leap: a NaN view is straight up");
+            Handstand h;
+            auto in = leapInput();
+            h.update(in, q);
+            in.pushInto = 1.0f;
+            Exit why = Exit::none;
+            for (int i = 0; i < 10 && why == Exit::none; ++i)
+                why = h.update(in, q).exitNow;
+            check(why == Exit::push, "push: a push of 1 m/s into the floor exits (threshold .45)");
+        }
+    }
+    // The launcher's values reach the balance, and a saved profile at the old defaults is moved once (revision 3).
+    {
+        vr_settings::Values v;
+        v.realisticFlips = true;
+        const Params p = paramsOf(v);
+        check(std::abs(p.palmRadius + p.margin - .18f) < 1e-6f && std::abs(p.fallSeconds - .5f) < 1e-6f &&
+                  std::abs(p.damping - 2.5f) < 1e-6f && p.leap && p.fallLeanDegrees == 50 && p.gain == 5.f,
+              "balance pass: the defaults reach the balance");
+        v.handstandSupportCm = 12;
+        v.handstandGraceMs = 120;
+        v.handstandDampingPct = 0;
+        v.handstandLeap = false;
+        const Params o = paramsOf(v);
+        check(std::abs(o.palmRadius + o.margin - .12f) < 1e-6f && std::abs(o.fallSeconds - .12f) < 1e-6f && o.damping == 0.f &&
+                  !o.leap,
+              "balance pass: the old values are still choosable");
+        vr_settings::Values saved;
+        saved.handstandFallDegrees = 35;
+        saved.handstandGainPct = 300;
+        const std::string rev2 = "movement_defaults=2\n";
+        const auto moved = vr_settings::withMovementDefaults(saved, rev2);
+        check(moved.handstandFallDegrees == 50 && moved.handstandGainPct == 500, "balance pass: the old defaults become the new");
+        vr_settings::Values tuned;
+        tuned.handstandFallDegrees = 40;
+        tuned.handstandGainPct = 300;
+        const auto kept = vr_settings::withMovementDefaults(tuned, rev2);
+        check(kept.handstandFallDegrees == 40 && kept.handstandGainPct == 500, "balance pass: a tuned angle stays");
+        check(vr_settings::withMovementDefaults(saved, "movement_defaults=3\n").handstandFallDegrees == 35,
+              "balance pass: a file that has seen revision 3 keeps its own");
     }
     std::printf("handstand: %d checks passed\n", passed);
     return 0;
