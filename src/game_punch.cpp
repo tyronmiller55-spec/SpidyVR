@@ -9,6 +9,7 @@
 #include "spidy/game_targets.hpp"
 #include "spidy/game_time.hpp"
 #include "spidy/native_bodies.hpp"
+#include "spidy/punch_track.hpp"
 #include "spidy/spider_sense.hpp"
 #include <algorithm>
 #include <atomic>
@@ -21,6 +22,8 @@ using namespace spidy::game_punch;
 extern "C" {
 __declspec(dllexport) Data SpidyPunchData;
 __declspec(dllexport) Strikes SpidyStrikeData;
+// PUNCH AUTO-TARGET's account (TrackLive), for XR.
+__declspec(dllexport) TrackLive SpidyPunchTrackLive;
 }
 namespace {
 // A street thug from the feet up (other bots by their size, as
@@ -62,6 +65,10 @@ Flow flow{FlowConfig{}};
 // sample (which way he sees the one he hits).
 Cues cues{CueConfig{}};
 Vec3 headAt{};
+// PUNCH AUTO-TARGET (punch_track.hpp): XR's settings, and each hand's throws.
+SRWLOCK trackLock = SRWLOCK_INIT;
+TrackAsk trackAsk{};
+punch_track::Throws trackThrows[2];
 // The enemy his next punch goes to: the one a blow locked him onto, else the
 // one he looks at within a strike's reach (web_strike.hpp's Lock).
 Lock lock{LockConfig{}};
@@ -682,6 +689,50 @@ Opened game_punch::update(float seconds, const Input& in, const Player& player, 
     knockouts(seconds);
     events.clear();
     punches.update(seconds, hands, inReach, events);
+    // PUNCH AUTO-TARGET: a throw is judged on its sample, against the enemy the ring marks (the lock's), never
+    // against anyone else: nobody targeted is no tracking, and no punch's damage depends on any of this.
+    {
+        AcquireSRWLockShared(&trackLock);
+        const TrackAsk ask = trackAsk;
+        ReleaseSRWLockShared(&trackLock);
+        punch_track::Config tc;
+        tc.on = (ask.flags & 1u) != 0;
+        tc.coneDeg = ask.coneDeg;
+        tc.rangeM = ask.rangeM;
+        for (int i = 0; i < 2; ++i) {
+            if (!trackThrows[i].update(seconds, punches.speed(i), hands[i].tracked && !hands[i].busy))
+                continue;
+            bool found{};
+            Vec3 middle{};
+            if (const uint64_t id = lock.target())
+                for (const auto& e : enemies)
+                    if (e.id == id) {
+                        found = true;
+                        middle = e.middle();
+                        break;
+                    }
+            const auto verdict = punch_track::decide(tc, found, head, punches.velocity(i), middle);
+            volatile TrackLive& live = SpidyPunchTrackLive;
+            live.throws = live.throws + 1;
+            switch (verdict.why) {
+            case punch_track::Why::tracked: live.tracked = live.tracked + 1; break;
+            case punch_track::Why::noTarget: live.noTarget = live.noTarget + 1; break;
+            case punch_track::Why::tooFar: live.tooFar = live.tooFar + 1; break;
+            case punch_track::Why::outsideCone: live.outsideCone = live.outsideCone + 1; break;
+            default: live.off = live.off + 1; break;
+            }
+            live.lastHand = static_cast<uint32_t>(i);
+            live.lastWhy = static_cast<uint32_t>(verdict.why);
+            live.target = found ? lock.target() : 0;
+            live.towardX = verdict.toward.x;
+            live.towardY = verdict.toward.y;
+            live.towardZ = verdict.toward.z;
+            live.distance = verdict.distance;
+            live.angleDeg = verdict.angleDeg;
+            MemoryBarrier();
+            live.events = live.events + 1;
+        }
+    }
     flow.update(seconds);
     if (!fighter.combatVisuals || !flow.count())
         cues.clear();
@@ -970,6 +1021,18 @@ extern "C" __declspec(dllexport) DWORD WINAPI SpidyPunchStart(void* input) {
         c.base != reinterpret_cast<uintptr_t>(GetModuleHandleW(nullptr)))
         return 9501;
     return game_punch::start(c.base);
+}
+// PUNCH AUTO-TARGET: XR's settings. 2001: not a TrackAsk; 0 taken. What it saw: SpidyPunchTrackLive.
+extern "C" __declspec(dllexport) DWORD WINAPI SpidyPunchTrack(void* input) {
+    TrackAsk a{};
+    if (!read(reinterpret_cast<uintptr_t>(input), &a, sizeof(a)) || a.magic != 0x5350544b || a.version != 1 ||
+        a.bytes != sizeof(a) || (a.flags & ~1u) || !std::isfinite(a.coneDeg) || a.coneDeg < 5.f || a.coneDeg > 120.f ||
+        !std::isfinite(a.rangeM) || a.rangeM < 1.f || a.rangeM > 30.f)
+        return 2001;
+    AcquireSRWLockExclusive(&trackLock);
+    trackAsk = a;
+    ReleaseSRWLockExclusive(&trackLock);
+    return 0;
 }
 extern "C" __declspec(dllexport) DWORD WINAPI SpidyPunchStop(void*) {
     return game_punch::stop();

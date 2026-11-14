@@ -129,6 +129,28 @@ struct Player {
     // The auto dive holds back: swing_kick_auto is off, or a manual swing kick is under way.
     bool noDive{};
 };
+// PUNCH AUTO-TARGET (punch_track.hpp, the polish pass slice 7). Side channel from XR, beside game_swing::Settings (which stays
+// v40): SpidyPunchTrack takes the TrackAsk (sent when it changes and every second), SpidyPunchTrackLive is what the module
+// saw. `flags` bit 0: punch_autotarget. On a THROW (a free fist leaving rest) the verdict is taken on that sample: `events`
+// counts up LAST (read it, then the rest, then `events` again: a change in between means it was being written); `lastWhy`
+// is punch_track::Why, `lastHand` 0 left / 1 right, `target` the actor record of the targeted enemy (0: nobody), `toward`
+// the unit line from the head to his middle (zero unless tracked), `distance` (m) and `angleDeg` the throw's off it.
+struct TrackAsk {
+    uint32_t magic = 0x5350544b, version = 1, bytes = sizeof(TrackAsk), serial{};
+    uint32_t flags{};
+    float coneDeg = 45.f, rangeM = 6.f;
+    uint32_t reserved{};
+};
+static_assert(sizeof(TrackAsk) == 32);
+struct TrackLive {
+    uint32_t magic = 0x5350544c, version = 1, bytes = sizeof(TrackLive), events{};
+    uint32_t throws{}, tracked{}, noTarget{}, tooFar{}, outsideCone{}, off{};
+    uint32_t lastHand{}, lastWhy{};
+    uint64_t target{};
+    float towardX{}, towardY{}, towardZ{}, distance{}, angleDeg{};
+    uint32_t reserved[3]{};
+};
+static_assert(sizeof(TrackLive) == 88);
 // What a sample opened: a web strike, at the enemy the hand's own web held.
 // The swing lets its webs go, and the grab his.
 struct Opened {

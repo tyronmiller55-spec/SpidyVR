@@ -2350,6 +2350,21 @@ void App::options(ImVec2 origin, ImVec2 size) {
                "A hand moved fast closes into a fist even with nobody to punch. Off: only with an enemy "
                "marked or within reach, so hands at rest never close.",
                S(42), [&] { tabToggle("##airfists", Item::airFists); });
+        settingOption(Item::punchAutotarget, "Punch auto-target",
+               "Punch toward an enemy you have targeted (the one the ring marks) and your body, your aim and the "
+               "icons turn onto him that moment. Punches always do the same damage; only a targeted enemy is "
+               "tracked. Needs the enemy within the cone and range below.",
+               S(42), [&] { tabToggle("##punchautotarget", Item::punchAutotarget); });
+        settingOption(Item::punchTrackCone, "Punch track cone",
+               "How far off the targeted enemy a punch can be thrown and still track him (45 degrees by default).",
+               S(150), [&] { tabCombo("##punchtrackcone", Item::punchTrackCone); });
+        settingOption(Item::punchTrackRange, "Punch track range",
+               "How far away the targeted enemy can be and still be tracked (6 m by default).",
+               S(150), [&] { tabCombo("##punchtrackrange", Item::punchTrackRange); });
+        settingOption(Item::punchViewSnap, "Punch view snap",
+               "A tracked punch turns your view onto the enemy too. Off by default: your view stays where you "
+               "look and only your body and aim turn.",
+               S(42), [&] { tabToggle("##punchviewsnap", Item::punchViewSnap); });
     });
     group(4, 0, "Flip controls", [&] {
         settingOption(Item::realisticFlips, "Realistic flips (experimental)",

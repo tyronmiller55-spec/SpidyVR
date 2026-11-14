@@ -775,7 +775,8 @@ int main() {
             if (key == "physical_tethers" || key.rfind("tether_", 0) == 0)
                 continue;
             // CAMERA MODES (November 13): the player's own comfort, not in shared profiles.
-            if (key == "anim_head_ride" || key == "shoulder_limit" || key == "snap_realign" || key == "headset_first")
+            if (key == "anim_head_ride" || key == "shoulder_limit" || key == "snap_realign" || key == "headset_first" ||
+                key.rfind("punch_", 0) == 0)
                 continue;
             ++lines;
             check(at(key) < std::size(profileSettings) &&

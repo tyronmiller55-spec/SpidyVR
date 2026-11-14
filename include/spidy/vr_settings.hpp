@@ -642,6 +642,15 @@ struct Values {
     // following only your own head and right stick turns after - never relative to the body that is still turning,
     // and (with the view is yours, below) the animation never turns the view. Off: the old HYBRID heading.
     bool headsetFirst = true;
+    // PUNCH AUTO-TARGET (the polish pass, slice 7; the user, t65u: "an autotarget for punches that turns your view toward any
+    // enemy you're attacking", then: "I only want punches to target enemies that are highlighted and targeted by the
+    // player. Punches always do damage, but tracking only happens on targeted enemies. If the player punches toward a
+    // targeted enemy, everything should immediately realign in that direction."): a punch thrown within punchTrackConeDeg of
+    // the targeted enemy (the one the ring marks), at most punchTrackRangeM away, turns the body, the aim and the icons onto
+    // him on that frame. The VIEW turns only with punchViewSnap (off by default: t66u, "it can be a switch"). Punches do the
+    // same damage with all of it off. punch_autotarget, punch_track_cone_deg, punch_track_range_m, punch_view_snap.
+    bool punchAutotarget = true, punchViewSnap = false;
+    int punchTrackConeDeg = 45, punchTrackRangeM = 6;
     bool operator==(const Values&) const = default;
 };
 inline constexpr int eyeAimShots = 1, eyeAimZips = 2;
@@ -883,8 +892,12 @@ enum class Item : uint8_t {
     headsetFirst,
     animHeadRide,
     shoulderLimit,
+    punchAutotarget,
+    punchTrackCone,
+    punchTrackRange,
+    punchViewSnap,
 };
-inline constexpr Item lastItem = Item::shoulderLimit;
+inline constexpr Item lastItem = Item::punchViewSnap;
 // SLOW-MO LENGTH's last step: no time limit (until L3 toggles it off).
 inline constexpr int slowMotionEndless = 91;
 // Real seconds a full meter lasts for a SLOW-MO LENGTH value; 0 = endless.
@@ -914,7 +927,7 @@ struct Row {
     Place place{};
 };
 // Stable row/setting numbers; categories below determine presentation order.
-const std::array<Row, 189>& rows();
+const std::array<Row, 193>& rows();
 const Row* rowFor(Item);
 // camera, shooters and legs (November 11, the user: "I can't find legs or
 // camera settings in any of the menus. Make sure it's clearly labeled"): tabs

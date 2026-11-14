@@ -131,6 +131,10 @@ add_test(NAME direction_report COMMAND spidy_direction_report_tests)
 add_executable(spidy_polish_runtime_tests tests/polish_runtime_tests.cpp)
 target_link_libraries(spidy_polish_runtime_tests PRIVATE spidy_core)
 add_test(NAME polish_runtime COMMAND spidy_polish_runtime_tests)
+# PUNCH AUTO-TARGET (punch_track.hpp, polish pass slice 7): the throw, the verdict, the cone, the range, the settings.
+add_executable(spidy_punch_track_tests tests/punch_track_tests.cpp)
+target_link_libraries(spidy_punch_track_tests PRIVATE spidy_core)
+add_test(NAME punch_track COMMAND spidy_punch_track_tests)
 
 # HEADSET FIRST (hybrid_steer::Basis, hybrid_movement::viewRunDirection, Gate::updateView): the stick's basis, the whole circle runs him,
 # the setting (portable).

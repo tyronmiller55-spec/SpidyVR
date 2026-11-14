@@ -95,6 +95,7 @@
 #include "spidy/animated_arms.hpp"
 #include "spidy/frame_stats.hpp"
 #include "spidy/low_fps.hpp"
+#include "spidy/punch_track.hpp"
 #include "spidy/hitch_guard.hpp"
 #include "spidy/seated.hpp"
 #include "spidy/slow_motion.hpp"
@@ -633,6 +634,10 @@ BridgeCall sampleLine{};
 BridgeCall sampleBends{}, sampleWebFlight{};
 BridgeCall sampleClimb{};
 BridgeCall startPunch{}, samplePunch{}, stopPunch{}, swingSettings{}, sampleStrike{}, sampleSlingshot{};
+// PUNCH AUTO-TARGET (punch_track.hpp): the settings for the punch module (SpidyPunchTrack) and what it saw on each throw
+// (SpidyPunchTrackLive); none in an older module (no tracking).
+BridgeCall punchTrack{};
+const game_punch::TrackLive* punchTrackLive{};
 // Spider-Sense (game_sense, in the same module as the punches): optional, an
 // older module draws no warnings.
 BridgeCall sampleSense{};
@@ -1209,6 +1214,9 @@ DWORD WINAPI run(void*) {
         frame_stats::FrameStats frameStats;
         // LOW FPS (low_fps.hpp): a game stuck under 15 fps puts the diagnostics in their quiet mode.
         low_fps::Watch lowFps;
+        // PUNCH AUTO-TARGET: the last throw read, the settings sent, and the hero's turn onto the enemy (a hold of 0.6 s).
+        uint32_t punchTrackEvents = 0, punchTrackSentKey = 0xffffffffu, punchTracks = 0;
+        float punchTrackSentAge = 0, punchTrackYaw = 0, punchTrackHold = 0;
         // game frame: lines (hitch_guard.hpp): the game thread's own step times, spikes with their length.
         hitch_guard::FreshHold swingFreshHold; // swingFresh with hysteresis (hitch_guard.hpp)
         float swingFreshLogAge{};
@@ -2715,6 +2723,27 @@ DWORD WINAPI run(void*) {
                                         values.gripFlingMax);
                                 gripFlagsSent = key;
                                 gripSentAge = 0;
+                            }
+                        }
+                    }
+                    // PUNCH AUTO-TARGET (punch_track.hpp): the settings go to the punch module whenever they change
+                    // and every second.
+                    if (punchTrack) {
+                        game_punch::TrackAsk ask;
+                        ask.flags = values.punchAutotarget ? 1u : 0u;
+                        ask.coneDeg = static_cast<float>(values.punchTrackConeDeg);
+                        ask.rangeM = static_cast<float>(values.punchTrackRangeM);
+                        punchTrackSentAge += std::isfinite(frame.seconds) ? std::max(frame.seconds, 0.f) : 0.f;
+                        const uint32_t key = ask.flags | (static_cast<uint32_t>(values.punchTrackConeDeg) << 4) |
+                                             (static_cast<uint32_t>(values.punchTrackRangeM) << 16);
+                        if (key != punchTrackSentKey || punchTrackSentAge > 1.f) {
+                            if (punchTrack(&ask) == 0) {
+                                if (key != punchTrackSentKey)
+                                    diag_log::writef("punch track: settings sent (%s, cone %d deg, range %d m, view snap %s)",
+                                                     values.punchAutotarget ? "on" : "off", values.punchTrackConeDeg,
+                                                     values.punchTrackRangeM, values.punchViewSnap ? "on" : "off");
+                                punchTrackSentKey = key;
+                                punchTrackSentAge = 0;
                             }
                         }
                     }
@@ -4299,6 +4328,55 @@ DWORD WINAPI run(void*) {
                             realignNow = true;
                             realignTurn = snapTap.turn;
                             realignTo = stable_yaw::wrap(from + snapTap.turn);
+                        }
+                    }
+                    // PUNCH AUTO-TARGET (punch_track.hpp): a punch thrown toward the enemy the player has targeted. On
+                    // that frame everything answers to it: the body turns onto him (the forced turn, which a fight's
+                    // tail does not hold off), the heading's consumers re-sync through the action serial, and the VIEW
+                    // turns only with PUNCH VIEW SNAP (the realign below, as the right stick's tap does it).
+                    if (const volatile game_punch::TrackLive* tl = punchTrackLive) {
+                        const uint32_t events = tl->events;
+                        if (events != punchTrackEvents) {
+                            game_punch::TrackLive t;
+                            t.lastHand = tl->lastHand;
+                            t.lastWhy = tl->lastWhy;
+                            t.target = tl->target;
+                            t.towardX = tl->towardX;
+                            t.towardY = tl->towardY;
+                            t.towardZ = tl->towardZ;
+                            t.distance = tl->distance;
+                            t.angleDeg = tl->angleDeg;
+                            MemoryBarrier();
+                            if (tl->events == events) {
+                                punchTrackEvents = events;
+                                const auto why = static_cast<punch_track::Why>(t.lastWhy);
+                                const char* hand = t.lastHand ? "R" : "L";
+                                const float flat = std::hypot(t.towardX, t.towardZ);
+                                if (why == punch_track::Why::tracked && values.punchAutotarget && flat > .1f) {
+                                    constexpr float toDeg = 180.f / 3.14159265f;
+                                    punchTrackYaw = hybrid_handoff::lookYaw({t.towardX, 0.f, t.towardZ});
+                                    punchTrackHold = .6f;
+                                    facingHeroPending = true;
+                                    facingHeroYaw = punchTrackYaw;
+                                    facingTurnEvent = facing_check::Event::punchTrack;
+                                    dirActionBits |= 1u << static_cast<unsigned>(direction_report::Action::punch);
+                                    ++punchTracks;
+                                    if (values.punchViewSnap)
+                                        camera_mode::realignToHeading(punchTrackYaw);
+                                    diag_log::writef(
+                                        "punch track: %s hand tracked the targeted enemy (%.1f m, thrown %.0f deg off him): "
+                                        "body and aim turn to %.0f, view %s (hero %.0f, view %.0f), #%u",
+                                        hand, t.distance, t.angleDeg, punchTrackYaw * toDeg,
+                                        values.punchViewSnap ? "snaps" : "stays where you look",
+                                        std::hypot(body[8], body[10]) > .2f
+                                            ? hybrid_handoff::actorLookYaw({body[8], body[9], body[10]}) * toDeg
+                                            : -999.f,
+                                        std::isfinite(hsViewNow) ? hsViewNow * toDeg : -999.f, punchTracks);
+                                } else if (why != punch_track::Why::noTarget && why != punch_track::Why::off) {
+                                    diag_log::writef("punch track: %s hand not tracked (%s: %.1f m, thrown %.0f deg off him)",
+                                                     hand, punch_track::whyName(why), t.distance, t.angleDeg);
+                                }
+                            }
                         }
                     }
                     {
@@ -7366,10 +7444,20 @@ DWORD WINAPI run(void*) {
                                     tin.forceYaw = values.headsetFirst && std::isfinite(hsViewNow) ? hsViewNow
                                                                                                    : hybridHeading.yaw;
                                 }
+                                // PUNCH AUTO-TARGET: for 0.6 s after a tracked throw the hero is turned onto the
+                                // enemy (any angle), whatever the heading does.
+                                if (punchTrackHold > 0.f) {
+                                    punchTrackHold -= std::isfinite(frame.seconds) ? frame.seconds : 0.f;
+                                    if (values.punchAutotarget) {
+                                        tin.force = true;
+                                        tin.forceYaw = punchTrackYaw;
+                                    }
+                                }
                                 // HEADSET FIRST: a landing's turn onto the view is not held off by a fight's
                                 // tail (the 4d58169 landings: the body faced the momentum, not the view).
                                 const bool fightHoldsOff =
-                                    fightBlocks && !(values.headsetFirst && facingTurnEvent == facing_check::Event::landing);
+                                    fightBlocks && !(values.headsetFirst && facingTurnEvent == facing_check::Event::landing) &&
+                                    !(punchTrackHold > 0.f && values.punchAutotarget);
                                 tin.forceAllowed = yieldingPose && heroOk && swingFresh && swingState.grounded &&
                                                    hybridInputL < stable_yaw::steerZone && !fightHoldsOff &&
                                                    !dodging && !zipping && !legStickActive;
@@ -11284,6 +11372,12 @@ extern "C" __declspec(dllexport) DWORD WINAPI SpidyXrStart(void* input) {
     sampleAim = reinterpret_cast<BridgeCall>(GetProcAddress(rays, "SpidyAimSample"));
     startPunch = reinterpret_cast<BridgeCall>(GetProcAddress(rays, "SpidyPunchStart"));
     samplePunch = reinterpret_cast<BridgeCall>(GetProcAddress(rays, "SpidyPunchSample"));
+    punchTrack = reinterpret_cast<BridgeCall>(GetProcAddress(rays, "SpidyPunchTrack"));
+    punchTrackLive = reinterpret_cast<const game_punch::TrackLive*>(GetProcAddress(rays, "SpidyPunchTrackLive"));
+    if (const game_punch::TrackLive expected;
+        punchTrackLive && (punchTrackLive->magic != expected.magic || punchTrackLive->version != expected.version ||
+                           punchTrackLive->bytes != expected.bytes))
+        punchTrackLive = nullptr;
     // Optional too: without them the VR settings' grab, speed and punch
     // switches take effect only at the next session.
     stopPunch = reinterpret_cast<BridgeCall>(GetProcAddress(rays, "SpidyPunchStop"));

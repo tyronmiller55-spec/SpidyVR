@@ -307,6 +307,13 @@ static_assert(std::size(kickGazeConeChoices) == std::size(kickGazeConeSteps));
 constexpr int kickSpinSteps[] = {0, 10, 20, 30, 40, 60, 80, 100};
 constexpr const char* kickSpinChoices[] = {"NONE", "10%", "20%", "30% (DEFAULT)", "40%", "60%", "80%", "100%"};
 static_assert(std::size(kickSpinChoices) == std::size(kickSpinSteps));
+// PUNCH AUTO-TARGET (punch_track.hpp): the cone round the targeted enemy a punch must be thrown in, and the range.
+constexpr int punchTrackConeSteps[] = {15, 30, 45, 60, 90};
+constexpr const char* punchTrackConeChoices[] = {"15 DEG", "30 DEG", "45 DEG (DEFAULT)", "60 DEG", "90 DEG"};
+static_assert(std::size(punchTrackConeChoices) == std::size(punchTrackConeSteps));
+constexpr int punchTrackRangeSteps[] = {3, 4, 6, 8, 10};
+constexpr const char* punchTrackRangeChoices[] = {"3 M", "4 M", "6 M (DEFAULT)", "8 M", "10 M"};
+static_assert(std::size(punchTrackRangeChoices) == std::size(punchTrackRangeSteps));
 // PHYSICAL WEB TETHERS (tether.hpp): the rope's points and its steps a frame.
 constexpr int tetherParticleSteps[] = {12, 16, 20, 24, 28, 32};
 constexpr const char* tetherParticleChoices[] = {"12", "16", "20", "24 (DEFAULT)", "28", "32"};
@@ -443,6 +450,10 @@ std::span<const int> steps(Item item) {
         return enemyHoldCostSteps;
     case Item::kickGazeCone:
         return kickGazeConeSteps;
+    case Item::punchTrackCone:
+        return punchTrackConeSteps;
+    case Item::punchTrackRange:
+        return punchTrackRangeSteps;
     case Item::kickSpin:
         return kickSpinSteps;
     case Item::tetherParticles:
@@ -652,6 +663,10 @@ float numberOf(Item item, const Values& v) {
         return static_cast<float>(v.enemyHoldCost);
     case Item::kickGazeCone:
         return static_cast<float>(v.kickGazeConeDeg);
+    case Item::punchTrackCone:
+        return static_cast<float>(v.punchTrackConeDeg);
+    case Item::punchTrackRange:
+        return static_cast<float>(v.punchTrackRangeM);
     case Item::kickSpin:
         return static_cast<float>(v.kickSpinPct);
     case Item::tetherParticles:
@@ -845,6 +860,10 @@ template <class V> auto switchOf(Item item, V& v) -> decltype(&v.aimMarkers) {
         return &v.animHeadRide;
     case Item::headsetFirst:
         return &v.headsetFirst;
+    case Item::punchAutotarget:
+        return &v.punchAutotarget;
+    case Item::punchViewSnap:
+        return &v.punchViewSnap;
     case Item::groundKicks:
         return &v.groundKicks;
     case Item::enemyJoints:
@@ -1005,6 +1024,8 @@ Values sanitized(Values v) {
     v.handGrabForce = std::clamp(v.handGrabForce, 400, 4000);
     v.enemyHoldCost = std::clamp(v.enemyHoldCost, 0, 5);
     v.kickGazeConeDeg = std::clamp(v.kickGazeConeDeg, 10, 50);
+    v.punchTrackConeDeg = std::clamp(v.punchTrackConeDeg, 15, 90);
+    v.punchTrackRangeM = std::clamp(v.punchTrackRangeM, 3, 10);
     v.kickSpinPct = std::clamp(v.kickSpinPct, 0, 100);
     v.tetherParticles = std::clamp(v.tetherParticles, 8, 32);
     v.tetherSubsteps = std::clamp(v.tetherSubsteps, 2, 16);
@@ -1017,9 +1038,9 @@ Values sanitized(Values v) {
     v.automaticHandThreshold = std::clamp(v.automaticHandThreshold, 50, 300);
     return v;
 }
-const std::array<Row, 189>& rows() {
+const std::array<Row, 193>& rows() {
     // The help fits the game's description column beside the rows.
-    static const std::array<Row, 189> all{{
+    static const std::array<Row, 193> all{{
         {Item::none, "WEBS", nullptr, {}},
         {Item::webStyle, "WEB STYLE",
          "Arcade: webs pass lamp posts, signs and cars, and swings stay above the street.", webStyleChoices},
@@ -1555,6 +1576,24 @@ const std::array<Row, 189>& rows() {
          "Turns the view back when your head is turned past his shoulders. Off by default.",
          {},
          Place::launcher},
+        {Item::punchAutotarget,
+         "PUNCH AUTO-TARGET",
+         "A punch thrown toward the enemy you have targeted turns your body and aim onto him.",
+         {},
+         Place::launcher},
+        {Item::punchTrackCone,
+         "PUNCH TRACK CONE",
+         "How far off the targeted enemy a punch can be thrown and still track him.",
+         punchTrackConeChoices, Place::launcher},
+        {Item::punchTrackRange,
+         "PUNCH TRACK RANGE",
+         "How far away the targeted enemy can be and still be tracked.",
+         punchTrackRangeChoices, Place::launcher},
+        {Item::punchViewSnap,
+         "PUNCH VIEW SNAP",
+         "A tracked punch turns your view onto him too. Off: your view stays where you look.",
+         {},
+         Place::launcher},
         {Item::handstand,
          "HANDSTAND (EXPERIMENTAL)",
          "Catch a handstand: land inverted, both palms on a floor. Needs REALISTIC FLIPS.",
@@ -1614,7 +1653,8 @@ const std::array<Screen, categoryCount>& screens() {
         Item::spidyRun, Item::spidyRunFromStanding, Item::spidyRunJump, Item::momentumLeap,
         Item::earlyJump, Item::softLanding, Item::webLandingSmooth, Item::webLandingImpact,
         Item::handClimb, Item::joystickRunCamera, Item::wallRunCameraTilt, Item::combatResponsive,
-        Item::combatVisuals, Item::halfPunchDamage, Item::airFists, Item::runLogs,
+        Item::combatVisuals, Item::halfPunchDamage, Item::airFists, Item::punchAutotarget, Item::punchTrackCone,
+        Item::punchTrackRange, Item::punchViewSnap, Item::runLogs,
         Item::wallBrake, Item::gripFling, Item::handGrab, Item::handGrabForce, Item::enemyHoldCost,
         Item::physicalTethers, Item::tetherParticles, Item::tetherSubsteps,
     };
@@ -1748,6 +1788,10 @@ const char* inactiveReason(Item item, const Values& v) {
         return !v.handGrab ? "Turn HAND GRAB on first." : nullptr;
     case Item::kickGazeCone:
         return !v.kicks && !v.groundKicks ? "Turn AIR KICKS or GROUND KICKS on first." : nullptr;
+    case Item::punchTrackCone:
+    case Item::punchTrackRange:
+    case Item::punchViewSnap:
+        return !v.punchAutotarget ? "Turn PUNCH AUTO-TARGET on first." : nullptr;
     case Item::kickSpin:
         return !v.kicks ? "Turn AIR KICKS on first." : nullptr;
     case Item::enemyLimbZones:
@@ -1820,6 +1864,9 @@ bool shownWhenInactive(Item item) {
     case Item::enemyHoldCost:
     case Item::kickGazeCone:
     case Item::kickSpin:
+    case Item::punchTrackCone:
+    case Item::punchTrackRange:
+    case Item::punchViewSnap:
     case Item::enemyLimbZones:
     case Item::tetherParticles:
     case Item::tetherSubsteps:
@@ -2096,6 +2143,12 @@ bool choose(Item item, int index, Values& v) {
         break;
     case Item::kickGazeCone:
         v.kickGazeConeDeg = s[index];
+        break;
+    case Item::punchTrackCone:
+        v.punchTrackConeDeg = s[index];
+        break;
+    case Item::punchTrackRange:
+        v.punchTrackRangeM = s[index];
         break;
     case Item::kickSpin:
         v.kickSpinPct = s[index];
@@ -2413,6 +2466,11 @@ constexpr TabOnly tabOnly[] = {
     {"point_jump_in_combat", &Values::pointJumpInCombat, nullptr},
     // CAMERA MODES (camera_mode.hpp): spidy_vr.ini only.
     {"headset_first", &Values::headsetFirst, nullptr},
+    // PUNCH AUTO-TARGET (punch_track.hpp; polish pass, slice 7).
+    {"punch_autotarget", &Values::punchAutotarget, nullptr},
+    {"punch_track_cone_deg", nullptr, &Values::punchTrackConeDeg},
+    {"punch_track_range_m", nullptr, &Values::punchTrackRangeM},
+    {"punch_view_snap", &Values::punchViewSnap, nullptr},
     {"anim_head_ride", &Values::animHeadRide, nullptr},
     {"shoulder_limit", &Values::shoulderLimit, nullptr},
     {"snap_realign", &Values::snapRealign, nullptr},

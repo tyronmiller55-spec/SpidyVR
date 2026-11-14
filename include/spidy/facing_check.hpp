@@ -31,13 +31,14 @@ namespace spidy::facing_check {
 using stable_yaw::degrees;
 using stable_yaw::wrap;
 
-enum class Event : uint8_t { landing, pointLaunch, jumpHandoff, animReentry, takeover };
+enum class Event : uint8_t { landing, pointLaunch, jumpHandoff, animReentry, takeover, punchTrack };
 inline const char* eventName(Event e) {
     switch (e) {
     case Event::landing: return "landing";
     case Event::pointLaunch: return "point launch";
     case Event::jumpHandoff: return "jump handoff";
     case Event::animReentry: return "anim re-entry";
+    case Event::punchTrack: return "punch track";
     default: return "takeover";
     }
 }

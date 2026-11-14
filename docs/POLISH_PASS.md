@@ -57,5 +57,10 @@ Look for: `imposed view turn` at or near 0 in `direction audit:` outside your ow
 
 **Defaults.** Scene resolution 50% (was 67%), STEADY 200/200/200 ms (was 350/300/450) with speed terms .2/.2 (were .12/.12). The 4d58169 sessions all ran the scene at 67% (1120x1128); the 50% advice had not been applied. The reset path: movement-defaults revision 2 and the launcher's `upscale_default=2`.
 
-(PUNCH and jump pull: see the sections below.)
+
+## Punch auto-target (slice 7)
+
+`punch_track.hpp` (pure): `Throws` (one per hand: a free fist's speed past 2.2 m/s after it was under 1.2, or after 0.45 s) and `decide` (the targeted enemy only; the cone is the angle between the fist's velocity and head -> his middle; the range is the distance). `game_punch.cpp` judges each throw on its sample against `lock.target()` among the fighting enemies and publishes `SpidyPunchTrackLive` (`events` last); `game_xr.cpp` reads it before the realign block, so the same frame carries the turn: `facingHeroPending` + `Event::punchTrack` (forced hero turn, 0.6 s hold, not held off by the fight tail), the punch action bit (the heading's consumers re-publish), and `camera_mode::realignToHeading(yaw)` only with PUNCH VIEW SNAP. Cites: enemy positions from `game_targets::position` (C0_FINDINGS section 2.1; REFERENCE.md lines 126-127 for the bots whose state something else moves, which the watch already skips); no velocity of an enemy is read and nothing new is offset-based.
+
+Look for: `punch track: ... tracked the targeted enemy` on a throw at a targeted enemy, followed in the same or next frame by `facing check: punch track hero turn start` and a `direction:` line with `action punch` where `hero` approaches the line to the enemy while `view` stays at your gaze (or snaps with the switch); `punch track: ... not tracked (outside the cone ...)` for a throw wide of him. A punch with nobody targeted logs nothing here.
 
