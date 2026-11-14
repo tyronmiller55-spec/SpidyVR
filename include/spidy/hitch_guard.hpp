@@ -14,6 +14,10 @@
 // GameFrameClock: the game thread's own frame time, from the swing sample's QPC stamp, as diag
 // "game frame:" lines: each spike (a step over 100 ms) with its duration, and a summary that counts
 // every step over 50 ms.
+// FreshHold: whether the swing sample is live, with hysteresis (G1 playtest: a game-thread stall over 100 ms made
+// the sample "stale", which every gate reads as a cutscene, and the whole pipeline flipped for the stall).
+// Enters live on a sample under 100 ms old; stays live until it is 350 ms old. A swing module that stopped
+// (status 0) or has no stamp is not live at once.
 // CostWindow: what the mod itself cost the game thread, per 10 s window (G1 playtest: the mod's share of
 // a hitch could not be told from the render load), and how often the hitch guards fired.
 #pragma once
@@ -231,6 +235,63 @@ class GameFrameClock {
     uint64_t last_{}, steps_{}, summarisedSteps_{};
     float total_{}, longest_{}, worstTotal_{}, sinceSummary_{};
     unsigned spikes_{}, spikesTotal_{};
+};
+
+class FreshHold {
+  public:
+    static constexpr double enterSeconds = .1, holdSeconds = .35;
+    // The account of the stalls since the last `take`: how many the hold carried, the longest sample age it
+    // carried (seconds), and how many ran past it (the game really stopped: a cutscene, a pause).
+    struct Account {
+        unsigned held{}, expired{};
+        float longest{};
+    };
+    // qpc: the sample's stamp; now: the reader's, same clock.
+    bool update(uint64_t qpc, bool status, int64_t now, int64_t frequency) {
+        if (!status || !qpc || frequency <= 0) {
+            live_ = stalled_ = false; // the module stopped: not a stall to count
+            worst_ = 0;
+            return false;
+        }
+        const double age = static_cast<double>(now - static_cast<int64_t>(qpc)) / static_cast<double>(frequency);
+        const bool was = live_;
+        live_ = age < (live_ ? holdSeconds : enterSeconds);
+        if (live_ && age >= enterSeconds) {
+            stalled_ = true;
+            worst_ = std::max(worst_, static_cast<float>(age));
+        } else {
+            endStall(!live_ && was);
+        }
+        return live_;
+    }
+    bool live() const {
+        return live_;
+    }
+    // True while the hold is carrying a stall (the sample is over 100 ms old and still taken as live).
+    bool holding() const {
+        return live_ && stalled_;
+    }
+    Account take() {
+        const Account a = account_;
+        account_ = {};
+        return a;
+    }
+
+  private:
+    void endStall(bool expired) {
+        if (stalled_ || expired) {
+            if (expired)
+                ++account_.expired;
+            else
+                ++account_.held;
+            account_.longest = std::max(account_.longest, worst_);
+        }
+        stalled_ = false;
+        worst_ = 0;
+    }
+    bool live_{}, stalled_{};
+    float worst_{};
+    Account account_{};
 };
 
 // What the mod's game-thread step cost, in microseconds, over a window of game time (QPC). `add` takes one

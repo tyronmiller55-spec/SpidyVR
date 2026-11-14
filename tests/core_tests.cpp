@@ -32216,6 +32216,31 @@ int main() {
               "a reset counter was not counted whole");
         check(!hitch_guard::CostWindow().add(0, hz, 1., 1., 1., 0, 0), "a zero stamp was taken");
     });
+    test("hitch: swing sample stays live through a stall up to 350 ms, then goes stale", [&] {
+        hitch_guard::FreshHold hold;
+        const int64_t hz = 10'000'000;
+        const uint64_t stamp = 9'000'000'000ull;
+        const auto at = [&](double ageSeconds, uint32_t status = 1) {
+            return hold.update(stamp, status != 0, static_cast<int64_t>(stamp) + static_cast<int64_t>(ageSeconds * hz), hz);
+        };
+        check(!at(.12), "not live yet: a sample over 100 ms old must not enter live");
+        check(at(.05) && !hold.holding(), "a 50 ms sample is live");
+        check(at(.2) && hold.holding(), "a 200 ms stall was not carried");
+        check(at(.34), "a 340 ms stall was not carried");
+        check(!at(.36) && !hold.live(), "a 360 ms stall was still live");
+        check(!at(.2), "after going stale a 200 ms sample must not re-enter live");
+        check(at(.02), "a fresh sample did not come back live");
+        const auto a = hold.take();
+        check(a.held == 0 && a.expired == 1 && a.longest > .33f, "the expired stall was not accounted");
+        check(at(.01) && at(.15) && at(.02), "a stall that ended inside the hold");
+        const auto b = hold.take();
+        check(b.held == 1 && b.expired == 0 && std::abs(b.longest - .15f) < .01f, "the carried stall was not accounted");
+        check(!at(.01, 0) && !hold.holding(), "a stopped swing module is not live");
+        check(at(.01) && !hold.take().expired, "stopping the module is not an expired stall");
+        check(!hold.update(0, true, 1, hz) && !hold.update(stamp, true, stamp, 0), "no stamp or no clock is not live");
+        // The raw rule it replaces: a 231 ms stall (the G1 playtest's worst) is carried whole.
+        check(at(.01) && at(.231) && at(.01) && hold.take().held == 1, "the 231 ms stall was not carried");
+    });
     std::cout << total - failed << '/' << total << " tests passed\n";
     return failed ? 1 : 0;
 }

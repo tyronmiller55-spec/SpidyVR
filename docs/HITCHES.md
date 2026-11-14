@@ -26,9 +26,21 @@ velocity not believed because the step was long, stale, not finite or too fast, 
 and `N over-limit frames ignored` is `hitch_guard::OverLimit::ignoredFrames()` (a frame over the speed limit
 that did not count towards letting go of the webs).
 
+## What the mod does about a stall
+
+The swing sample's freshness (`swingFresh` in `game_xr.cpp`) used to be "stamped under 100 ms ago". Every gate
+reads it, and `head_probe::classify` calls a state that is not fresh a cutscene, so a game-thread stall over 100
+ms flipped the whole pipeline (the hybrid air-facing gate, ANIM HEAD RIDE, the hero turn, the steerable and
+turn-in-place gates) for the length of the stall and back after it. `hitch_guard::FreshHold` gives it
+hysteresis: a sample under 100 ms old enters live; it stays live until it is 350 ms old. A swing module that
+stopped (status 0) or has no stamp is not live at once. A stall past 350 ms (a cutscene, a pause) goes stale as
+before, 250 ms later. The one-shot actions (point jump, sidestep, ground kicks, mount) and the realistic-flip
+flight keep the plain 100 ms rule: a stale press must not fire late, and the flight reads web tension.
+`swing sample: N game stalls carried as live ...` (every 10 s, only when there were any) says how often it held.
+
 ## Where it lives
 
-- `include/spidy/hitch_guard.hpp`: `VelocityGuard`, `OverLimit`, `GameFrameClock`, `CostWindow`.
+- `include/spidy/hitch_guard.hpp`: `VelocityGuard`, `OverLimit`, `GameFrameClock`, `CostWindow`, `FreshHold`.
 - `src/game_swing.cpp`: `visit()` times itself (`VisitCost`, `CostTimer`) and publishes `SpidySwingCostLive`
   (`SwingCostLive`, `game_swing.hpp`) once a window; `src/game_xr.cpp` reads it and writes the line. No setting,
   no feel change; an older swing module has no `SpidySwingCostLive` and XR then writes no cost line.

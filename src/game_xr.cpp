@@ -1181,6 +1181,8 @@ DWORD WINAPI run(void*) {
         // perf: lines (frame_stats.hpp).
         frame_stats::FrameStats frameStats;
         // game frame: lines (hitch_guard.hpp): the game thread's own step times, spikes with their length.
+        hitch_guard::FreshHold swingFreshHold; // swingFresh with hysteresis (hitch_guard.hpp)
+        float swingFreshLogAge{};
         uint32_t swingCostWindow = 0; // the last SpidySwingCostLive window logged
         hitch_guard::GameFrameClock gameFrameClock;
         hitch_guard::GameFrameClock::Lines gameFrameLines;
@@ -3000,9 +3002,20 @@ DWORD WINAPI run(void*) {
                     // tested the whole time; only this passed it nothing.
                     const Vec3 feet{body[12], body[13], body[14]};
                     SurfaceHold hold;
+                    // Live for 100 ms, and kept live through a game-thread stall up to 350 ms (hitch_guard::
+                    // FreshHold): a stall no longer reads as a cutscene and flips the pipeline for its length.
                     const bool swingFresh =
-                        swingState.status && swingState.qpc &&
-                        static_cast<int64_t>(swingState.qpc) > now.QuadPart - frequency.QuadPart / 10;
+                        swingFreshHold.update(swingState.qpc, swingState.status != 0, now.QuadPart, frequency.QuadPart);
+                    swingFreshLogAge += std::isfinite(frame.seconds) ? std::clamp(frame.seconds, 0.f, .1f) : 0.f;
+                    if (swingFreshLogAge >= 10.f) {
+                        swingFreshLogAge = 0;
+                        const auto account = swingFreshHold.take();
+                        if (account.held || account.expired)
+                            diag_log::writef("swing sample: %u game stalls carried as live (longest %d ms), %u ran "
+                                             "past 350 ms and went stale",
+                                             account.held, static_cast<int>(account.longest * 1000 + .5f),
+                                             account.expired);
+                    }
                     if (swingFresh && swingState.wall == static_cast<uint32_t>(game_swing::Surface::wall)) {
                         // The wall's face under the feet, in the wall's own frame
                         // (its distance is the body's centre's, a metre over the
