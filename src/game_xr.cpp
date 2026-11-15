@@ -8778,7 +8778,9 @@ DWORD WINAPI run(void*) {
                                 diag_log::writef("perch: left (%.1f m/s across, %+.1f up, %s)", pin.speed, pin.up,
                                                  !pin.airborne ? "the ground" : !pin.free ? "a web, wall, swing or fight"
                                                                                           : "moving");
-                            hybridFrame.perched = values.animHeadRide && perchWatch.perched;
+                            // HEADSET FIRST: the head ride and the shoulder limit turn the view (to his head, to his shoulders), which the view
+                            // guard takes back the same frame: they stand down (the b9b2196 ini still had both on from the old defaults).
+                            hybridFrame.perched = values.animHeadRide && !(values.headsetFirst && hybrid_movement::modeOf(values.movementMode) == hybrid_movement::Mode::hybrid) && perchWatch.perched;
                             rideMoveStick = std::max(0.f, hybridFrame.moveStick);
                             rideSpeed = hybridSpeedH;
                             rideFighting = animState.fighting || animState.dodging;
@@ -10224,7 +10226,7 @@ DWORD WINAPI run(void*) {
                             // Walking, running and the air stay LOCOMOTION (Hybrid v2).
                             {
                                 camera_mode::RideIn rin;
-                                rin.enabled = values.animHeadRide;
+                                rin.enabled = values.animHeadRide && !(values.headsetFirst && hybrid_movement::modeOf(values.movementMode) == hybrid_movement::Mode::hybrid);
                                 rin.lockOn = hybridLock && viewLockActive && boneOk;
                                 rin.animOwns = hybridOwner.domain == hybrid_owner::Domain::anim;
                                 rin.fighting = rideFighting;
@@ -10296,7 +10298,8 @@ DWORD WINAPI run(void*) {
                                 const float shoulders =
                                     camera_mode::shouldersYaw(chestRead, chestYaw, heroYawNow, &usedChest);
                                 const bool limitOn =
-                                    values.shoulderLimit && camera_mode::viewLimitActive.load(std::memory_order_relaxed);
+                                    values.shoulderLimit && !(values.headsetFirst && hybrid_movement::modeOf(values.movementMode) == hybrid_movement::Mode::hybrid) &&
+                                    camera_mode::viewLimitActive.load(std::memory_order_relaxed);
                                 if (limitOn && viewLockActive && boneOk && std::isfinite(shoulders)) {
                                     const unsigned streakWas = shoulderLimit.streak;
                                     const float worstWas = shoulderLimit.streakWorst;
@@ -10373,6 +10376,9 @@ DWORD WINAPI run(void*) {
                                     df.bone = boneYaw;
                                     df.playerTurn = viewLockSnapped ? 0.f : viewLockDelta;
                                     df.discontinuity = viewLockSnapped || bigEdge || viewLockRelatch || !dirFeetSet;
+                                    df.ride = lock.ride;
+                                    df.limit = lock.limit;
+                                    df.tiltDegrees = handstand::invertedDegrees(motion.flipTilt.rotate({0, 1, 0}));
                                     const float fx = body[12], fz = body[14];
                                     if (dirFeetSet && frame.seconds > 0)
                                         df.momentum = direction_report::momentumYaw(fx - dirFeetX, fz - dirFeetZ,
@@ -10399,7 +10405,7 @@ DWORD WINAPI run(void*) {
                                     if (std::isfinite(dirBasis))
                                         dirReport.skew(direction_report::Consumer::stick, dirBasis, hybridHeading.yaw);
                                     const auto step = dirReport.step(df);
-                                    char text[256];
+                                    char text[512];
                                     // THE VIEW GUARD: with Headset first, a turn of the view the player did not
                                     // make (his head, the right stick, a snap or a realign) is taken back on the
                                     // rig's turn and the heading, and published again. A safety net, logged.

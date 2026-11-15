@@ -66,10 +66,19 @@ struct Frame {
     float speed = 0;       // m/s
     float playerTurn = 0;  // the right stick's turn of the view this frame (radians)
     bool discontinuity = false; // a latch, a realign, a snap: the player's or a re-seat, not imposed
+    float ride = 0;       // the head ride's weight on the shown yaw this frame (0 none .. 1 his head bone)
+    float tiltDegrees = 0; // how far the body's up is off the world's (the flip's tilt), degrees: 180 is upside down
+    float limit = 0;      // the shoulder limit's correction on the shown yaw this frame (radians)
 };
 
 struct Audit {
     float imposedDeg = 0, worstStep = 0;
+    // WHO imposed it (the b9b2196 playtest: 292 of 845 windows past 1000 deg/s, none of it traced): the imposed degrees of the
+    // frames the head ride (ride > 0) or the shoulder limit (limit != 0) had a hand in; the rest is `other`.
+    float imposedRideDeg = 0, imposedLimitDeg = 0;
+    // The body upside down or turned over (the user's "body inverting"): the worst tilt and the frames past 100 degrees.
+    float worstTilt = 0;
+    uint32_t invertedFrames = 0;
     uint32_t imposedFrames = 0, frames = 0, actions = 0;
     float skew[static_cast<int>(Consumer::count)]{};
     uint32_t skewFrames[static_cast<int>(Consumer::count)]{};
@@ -117,6 +126,11 @@ class Reporter {
         age_ += dt;
         lineClock_ += dt;
         auditClock_ += dt;
+        if (std::isfinite(f.tiltDegrees)) {
+            audit_.worstTilt = std::max(audit_.worstTilt, f.tiltDegrees);
+            if (f.tiltDegrees >= 100.f)
+                ++audit_.invertedFrames;
+        }
         if (f.ok) {
             if (prevOk_ && !f.discontinuity) {
                 const float moved = wrap(f.view - prevView_);
@@ -129,11 +143,17 @@ class Reporter {
                     audit_.imposedDeg += imposed / degrees;
                     audit_.worstStep = std::max(audit_.worstStep, imposed);
                     ++audit_.imposedFrames;
+                    if (f.limit != 0.f || prevLimit_ != 0.f)
+                        audit_.imposedLimitDeg += imposed / degrees;
+                    else if (f.ride > 0.f || prevRide_ > 0.f)
+                        audit_.imposedRideDeg += imposed / degrees;
                     imposedTotal_ += imposed / degrees;
                 }
             }
             prevView_ = f.view;
             prevHmd_ = f.hmd;
+            prevRide_ = f.ride;
+            prevLimit_ = f.limit;
             prevOk_ = true;
         } else {
             prevOk_ = false;
@@ -165,12 +185,12 @@ class Reporter {
             "direction audit: imposed view turn %.0f deg in %u frames (worst step %.0f deg, %u of %u frames "
             "over %.0f deg); worst skew eyes %.1f hands %.1f arms %.1f stick %.1f deg (frames off: %u/%u/%u/%u); "
             "%u actions; behind the last action's heading in %u/%u/%u of %u frames (eyes/hands/arms); imposed "
-            "since start %.0f deg",
+            "since start %.0f deg; of the imposed turn the head ride had %.0f deg and the shoulder limit %.0f deg; body tilt worst %.0f deg, %u frames past 100",
             audit_.imposedDeg, audit_.imposedFrames, audit_.worstStep / degrees, audit_.imposedFrames,
             audit_.frames, imposedFloor / degrees, audit_.skew[0] / degrees, audit_.skew[1] / degrees,
             audit_.skew[2] / degrees, audit_.skew[3] / degrees, audit_.skewFrames[0], audit_.skewFrames[1],
             audit_.skewFrames[2], audit_.skewFrames[3], audit_.actions, audit_.behind[0], audit_.behind[1],
-            audit_.behind[2], audit_.behindChecked, imposedTotal_);
+            audit_.behind[2], audit_.behindChecked, imposedTotal_, audit_.imposedRideDeg, audit_.imposedLimitDeg, audit_.worstTilt, audit_.invertedFrames);
         audit_ = {};
         return n;
     }
@@ -206,7 +226,7 @@ class Reporter {
 
   private:
     Action last_ = Action::none;
-    float age_ = 0, lineClock_ = 0, auditClock_ = 0, prevView_ = 0, prevHmd_ = 0, imposedTotal_ = 0, lastImposed_ = 0;
+    float age_ = 0, lineClock_ = 0, auditClock_ = 0, prevView_ = 0, prevHmd_ = 0, imposedTotal_ = 0, lastImposed_ = 0, prevRide_ = 0, prevLimit_ = 0;
     bool prevOk_ = false, edge_ = false;
     Audit audit_{};
     uint32_t total_[static_cast<int>(Action::count)]{};

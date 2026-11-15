@@ -113,6 +113,35 @@ int main() {
               "audit text");
         check(r.window().skew[1] == 0, "audit clears the window");
     }
+    // WHO imposed it, and the body's tilt (the b9b2196 playtest: 292 of 845 windows past 1000 deg/s, untraced).
+    {
+        Reporter r;
+        Frame f = still(0.f, 0.f);
+        f.ride = .4f;
+        r.step(f);
+        f = still(.5f, 0.f);
+        f.ride = .5f;
+        r.step(f); // 0.5 rad imposed while the ride is on
+        f = still(1.f, 0.f);
+        f.limit = .2f;
+        f.tiltDegrees = 170.f;
+        r.step(f); // 0.5 rad imposed with the limit
+        f = still(1.5f, 0.f);
+        f.ride = 0.f;
+        f.limit = 0.f;
+        r.step(f); // the step after a limit frame still counts with it (the correction's own undo)
+        f = still(2.f, 0.f);
+        r.step(f); // neither
+        const auto& w = r.window();
+        check(near(w.imposedRideDeg, .5f * 57.29578f, .5f) && near(w.imposedLimitDeg, 2 * .5f * 57.29578f, .5f) &&
+                  w.imposedFrames == 4,
+              "imposed degrees split by the head ride and the shoulder limit; the rest is neither");
+        check(near(w.worstTilt, 170.f, .01f) && w.invertedFrames == 1, "the audit keeps the worst tilt and the frames past 100");
+        char text[512];
+        r.formatAudit(text, sizeof(text));
+        check(std::strstr(text, "head ride had") && std::strstr(text, "body tilt worst 170 deg, 1 frames past 100"),
+              "the audit text names the head ride, the shoulder limit and the tilt");
+    }
     // RE-SYNC: the published block is read whole, with its action serial; a consumer on an older serial is
     // counted as behind.
     {
