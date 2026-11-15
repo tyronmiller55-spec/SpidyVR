@@ -884,7 +884,11 @@ struct HybridOwner {
         //   animation to wait for,
         // and the inputs that need SpidyVR (web, grip, flip, wall, point jump) took it above, at once. The landing is the
         // animation's: only the air is VR's (VR -> ANIM on touchdown).
-        if (f.jumpHandoffNs > 0 && !busy) {
+        // AIR TAKEOVER (slice 9): the air goes back to SpidyVR after a request's move (a web strike, a finisher, a dive) or a
+        // fall's start only if no landing is near: with the ground less than landKeepEta ahead the animation keeps the body to
+        // its landing (a hop, a short drop and the end of a strike near the street never switch twice).
+        const bool landSoon = std::isfinite(f.landEta) && f.landEta <= landKeepEta;
+        if (f.jumpHandoffNs > 0 && !busy && !landSoon) {
             JumpKind kind = airKind_;
             if (kind == JumpKind::fall && airRose_)
                 kind = JumpKind::jump;

@@ -425,6 +425,7 @@ int main() {
             check(s.owner.domain == Domain::anim && s.vrEdges == 1, "kept to the landing");
             s.ground();
             check(s.owner.domain == Domain::anim && s.animEdges == edges, "no second switch at the touchdown");
+            s.f.landEta = NAN;
             s.takeoff(true, 7.f);
             s.run(340 * ms);
             check(s.owner.domain == Domain::vr, "the next jump is VR's again by its timer");
@@ -476,6 +477,60 @@ int main() {
             check(s.owner.domain == Domain::vr, "the owner's minimum dwell: 0.25 s before it goes back");
             s.run(200 * ms);
             check(s.owner.domain == Domain::anim, "and then it does");
+        }
+    }
+    // AIR TAKEOVER, slice 9: airborne moves the player asks the game for (web strike, finisher, a prompt's button) are animation
+    // handoffs by request: the game takes him, plays it, and the air is SpidyVR's again unless a landing is near.
+    {
+        auto vrAir = [&](Sim& s) {
+            s.f.takeoffDoneVel = takeoffDoneVel;
+            s.f.takeoffMinNs = takeoffMinNs;
+            s.f.fallHandoffNs = 150 * ms;
+            s.ground();
+            s.takeoff(true, 7.f);
+            s.run(340 * ms);
+            s.f.state.owned = true; // the swing has him in VR's air
+            s.run(300 * ms);
+            s.f.velY = 0;
+        };
+        {
+            Sim s(300 * ms);
+            vrAir(s);
+            check(s.owner.domain == Domain::vr, "VR's air");
+            s.f.zipPress = true; // the request
+            s.run(frameNs);
+            s.f.state.owned = false; // the game takes him: the swing yields
+            s.run(40 * ms);
+            check(s.owner.domain == Domain::anim && s.lastAnim == EnterAnim::zip, "the game took the request: the animation has the body");
+            s.run(700 * ms);
+            check(s.owner.domain == Domain::anim, "and plays it");
+            s.f.state.owned = true; // its move ended: the swing has him back
+            s.run(60 * ms);
+            check(s.owner.domain == Domain::vr, "SpidyVR's air again after the move, no landing near");
+        }
+        {
+            Sim s(300 * ms);
+            vrAir(s);
+            s.f.zipPress = true;
+            s.run(600 * ms); // the game never takes it: owned stays true
+            check(s.owner.domain == Domain::vr && s.animEdges == 0, "a request the game does not take changes nothing");
+        }
+        {
+            // After a fall's start, the air stays the animation's when the ground is near, and goes to VR when it is not.
+            for (bool near : {true, false}) {
+                Sim s(300 * ms);
+                s.f.takeoffDoneVel = takeoffDoneVel;
+                s.f.takeoffMinNs = takeoffMinNs;
+                s.f.fallHandoffNs = 150 * ms;
+                s.ground();
+                s.takeoff(false, -2.f);
+                s.f.landEta = near ? .3f : .9f;
+                s.run(400 * ms);
+                check(near ? (s.owner.domain == Domain::anim && s.vrEdges == 0)
+                           : (s.owner.domain == Domain::vr && s.lastVr == EnterVr::timed),
+                      near ? "a short drop with the ground near is the animation's to the landing"
+                           : "a long drop hands over at 0.15 s");
+            }
         }
     }
     // The settings.

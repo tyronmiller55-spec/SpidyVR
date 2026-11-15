@@ -1290,7 +1290,7 @@ DWORD WINAPI run(void*) {
         // ANIMATED HYBRID web zips (hybrid_owner::Frame::zipPress): pressed this
         // frame, for the owner's update further down the same frame.
         bool hybridZipPress{};
-        bool hybridYWas{};
+        bool hybridYWas{}, hybridAirAskWas{};
         // ANIMATED HYBRID jump / air adopt (hybrid_owner::Frame::jumpAsk): a real jump or leap
         // asked for on the ground this frame, or any other mid-air takeover. hybridLeapAir: the
         // body was adopted in the air (its legs keep that pose, body::Targets::airborne). The
@@ -4483,8 +4483,7 @@ DWORD WINAPI run(void*) {
                             // LANDING BLEND-IN: in SpidyVR's air the roof over his feet means nothing; its slot reads the
                             // ground under them instead (tag 8), for the time to impact.
                             if (values.airLandingBlend && swingFresh && !swingState.grounded && swingState.wall == 0 &&
-                                ((values.animatedHybrid && values.animatedMoves) && (hybridOwner.domain == hybrid_owner::Domain::vr ||
-                                              hybridOwner.handedBack()))) {
+                                values.animatedHybrid && values.animatedMoves) {
                                 roof = {feet + Vec3{0, .1f, 0}, landing_blend::Params{}.maxHeight + .1f, {0, -1, 0}, 8u};
                                 headroomSeen = 0.f;
                                 ++landingRays;
@@ -7229,7 +7228,18 @@ DWORD WINAPI run(void*) {
                             const bool airY = yDown && !hybridYWas && !calibrationInput && !yWall &&
                                               (inFlight || (reaching && !swingState.grounded));
                             hybridYWas = yDown;
-                            if ((walk.zip && !zipping) || airY)
+                            // AIR TAKEOVER (slice 9): any other move the game is asked for in flight (a finisher's or a
+                            // prompt's button, the dive it names) is a request too: the owner leaves SpidyVR only if the game
+                            // takes him (the swing yields), plays it, and the air is SpidyVR's again after it unless a
+                            // landing is near (hybrid_owner.hpp).
+                            const bool airAsk = steering && swingState.owned && !calibrationInput && inFlight && !yWall &&
+                                                (walk.demand.any() || named != 0);
+                            const bool airAskEdge = airAsk && !hybridAirAskWas;
+                            hybridAirAskWas = airAsk;
+                            if (airAskEdge)
+                                diag_log::writef("hybrid: airborne request noted (game prompt %u, demand %d)",
+                                                 static_cast<unsigned>(named), walk.demand.any() ? 1 : 0);
+                            if ((walk.zip && !zipping) || airY || airAskEdge)
                                 hybridZipPress = true;
                         }
                         walk.jump = (keys & swingJumpKey) != 0;
@@ -8818,8 +8828,8 @@ DWORD WINAPI run(void*) {
                                 handstand::invertedDegrees(motion.flipTilt.rotate({0, 1, 0})) > 100.f;
                             landing_blend::Input lbi;
                             lbi.seconds = frame.seconds;
-                            lbi.air = swingFresh && !swingState.grounded && swingState.wall == 0 &&
-                                      (hybridOwner.domain == hybrid_owner::Domain::vr || hybridOwner.handedBack());
+                            // Any air (the animation's too: the owner keeps the body to the landing when it is near).
+                            lbi.air = swingFresh && !swingState.grounded && swingState.wall == 0;
                             const int64_t groundAgeNs = groundSeenAt >= 0 ? frame.predictedDisplayTime - groundSeenAt : -1;
                             lbi.rayOk = groundOk && groundAgeNs >= 0 && groundAgeNs < 250'000'000;
                             lbi.height = groundHeight;

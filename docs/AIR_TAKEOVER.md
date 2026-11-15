@@ -34,3 +34,6 @@ The takeoff animation plays; the air is VR's at the first of `jump_handoff_ms` (
 2. The game's own landing clip is the normal one, not the hard landing, for a fall of 5-12 m/s down (look for `landing hero` lines and the animation's landing name in the sound/animation trace around the touchdown).
 3. The `landing blend:` error stays within 40 ms over at least 50 landings, so the release point is the right one.
 Run it with `air_landing_release=1` for a session; if 1 or 2 fail, leave it off. (Releasing a swing-owned body in mid-air is what `game_swing::AirYield` does for the game's own zip and strike, which suggests 1 holds, but that path only runs while the game has begun a move.)
+
+## 9. Airborne requests
+Web strike (Y), web zip and now any other game move asked for in flight (a prompt's button, a finisher's) hand the body to the animation only when the game takes it, and the swing has him back at the end of the move. After a request or a fall's start the timers do not take the air back while the time to impact is under 0.45 s (`Frame::landEta`): the animation keeps it to the landing. Not wired: an air dodge (B) and finishers with no button. A 0.25 s owner-wide minimum dwell is kept only where it is new (the takeoff and the landing release); the punch's 0.19 s VR stint is the strike hold's and is unchanged.
