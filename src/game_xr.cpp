@@ -1304,6 +1304,16 @@ DWORD WINAPI run(void*) {
         std::array<aim_filter::Direction, 2> aimSteady; // WRIST MARKER SMOOTHING (shot = marker)
         bool hybridLeapAir{};
         bool hybridAdoptWaiting{};
+        // The landing's head bone, measured on a frame after the VR->anim switch (the edge frame has no head
+        // sample yet: "headbone n/a"): from the last VR eyes, against the first head bone the animation gives.
+        struct LandHeadProbe {
+            bool pending{};
+            int frames{};
+            int64_t startNs{};
+            Vec3 fromEyes{};
+            float fromYaw{};
+            const char* why = "";
+        } landHeadProbe;
         uint64_t hybridAdoptSeen{};
         // Horizontal measured (feet position-delta) speed for the owner's speed intent.
         Vec3 hybridFeetWas{};
@@ -9176,6 +9186,37 @@ DWORD WINAPI run(void*) {
                                                         : facing_check::Event::takeover,
                                                     eyesOk ? worldYaw : NAN);
                             }
+                            // The landing's head bone, a frame (or a few) after the switch: what the eye blend
+                            // actually starts from.
+                            if (landHeadProbe.pending && !hybridOwner.enterAnim) {
+                                ++landHeadProbe.frames;
+                                const float afterMs = static_cast<float>(handoffNs - landHeadProbe.startNs) / 1e6f;
+                                Mat4 headMat{};
+                                if (hybridOwner.enterVr) {
+                                    diag_log::writef("hybrid: vr->anim (%s) headbone n/a: back to VR %d frames, "
+                                                     "%.0f ms after the switch",
+                                                     landHeadProbe.why, landHeadProbe.frames, afterMs);
+                                    landHeadProbe.pending = false;
+                                } else if (game_fp::frame(headMat) &&
+                                    finite(Vec3{headMat[12], headMat[13], headMat[14]})) {
+                                    const Vec3 hb{headMat[12], headMat[13], headMat[14]};
+                                    const float hbYaw =
+                                        hybrid_handoff::lookYaw({headMat[8], headMat[9], headMat[10]});
+                                    diag_log::writef(
+                                        "hybrid: vr->anim (%s) headbone %d frame(s), %.0f ms after the switch: dPos "
+                                        "%.2f m dAng %.0f deg from the last VR eyes",
+                                        landHeadProbe.why, landHeadProbe.frames, afterMs,
+                                        length(landHeadProbe.fromEyes - hb),
+                                        std::abs(hybrid_handoff::wrapPi(hbYaw - landHeadProbe.fromYaw)) *
+                                            (180.f / 3.14159265f));
+                                    landHeadProbe.pending = false;
+                                } else if (landHeadProbe.frames >= 30 || !hybridOn) {
+                                    diag_log::writef("hybrid: vr->anim (%s) headbone still n/a %d frames, %.0f ms "
+                                                     "after the switch",
+                                                     landHeadProbe.why, landHeadProbe.frames, afterMs);
+                                    landHeadProbe.pending = false;
+                                }
+                            }
                             // Landing on the feet ends an ease at once (the animation's
                             // view takes over); any other switch back too.
                             if (hybridOwner.enterAnim)
@@ -9267,6 +9308,15 @@ DWORD WINAPI run(void*) {
                                                      "%.1f) eyeBlend %.0f ms, headbone n/a",
                                                      why, landMs, why, landMs, landSpeed,
                                                      hybrid_handoff::handoffSec * 1000.f);
+                                // Measure it again on the next frames (the head follow is on by then).
+                                landHeadProbe = {};
+                                if (fromOk) {
+                                    landHeadProbe.pending = true;
+                                    landHeadProbe.startNs = handoffNs;
+                                    landHeadProbe.fromEyes = fromEyes;
+                                    landHeadProbe.fromYaw = fromYaw;
+                                    landHeadProbe.why = why;
+                                }
                                 // FACING CHECK: the view SpidyVR showed last is the facing the
                                 // player expects on the animation's side, view and hero.
                                 {
