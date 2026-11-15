@@ -184,7 +184,9 @@ inline uint32_t actionSerial() {
 inline void publish(const State& s) {
     // A single writer (the XR worker): the sequence goes odd, the fields, the sequence goes even.
     const uint32_t seq = liveSeq.load(std::memory_order_relaxed);
-    liveSeq.store(seq + 1, std::memory_order_release);
+    liveSeq.store(seq + 1, std::memory_order_relaxed);
+    // The fence keeps the field stores after the odd sequence on every CPU (a release store alone lets them move up).
+    std::atomic_thread_fence(std::memory_order_release);
     liveRide.store(s.ride, std::memory_order_relaxed);
     liveLimit.store(s.limit, std::memory_order_relaxed);
     liveYaw.store(s.yaw, std::memory_order_relaxed);

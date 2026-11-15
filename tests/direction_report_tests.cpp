@@ -174,6 +174,9 @@ int main() {
         r.behind(Consumer::hands, serial - 1, serial);
         check(r.window().behind[0] == 0 && r.window().behind[1] == 1 && r.window().behindChecked == 1, "behind counts");
         // A reader racing the writer never sees a torn block: yaw, sway and ride always agree.
+        view_yaw_lock::State calm; // a block whose fields agree, as the writer below keeps them
+        calm.on = true;
+        view_yaw_lock::publish(calm);
         std::atomic<bool> stop{false};
         std::atomic<int> torn{0}, reads{0};
         std::thread reader([&] {
