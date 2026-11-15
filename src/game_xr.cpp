@@ -4631,6 +4631,13 @@ DWORD WINAPI run(void*) {
                                           hybridHeading.set && (fullLockGate || headRide.active()) &&
                                           !legStickActive && !motion.basicFlipControls && frame.hands[1].valid &&
                                           !camera_mode::snapInputYielded.load(std::memory_order_relaxed);
+                    // SNAP TAP WINDOW (snap_tap_ms): the tap's longest push, from the player's setting.
+                    if (const float tap = camera_mode::SnapRealign::tapSecondsOf(values.snapTapMs);
+                        tap != snapRealign.tapSeconds) {
+                        snapRealign.tapSeconds = tap;
+                        diag_log::writef("snap realign: tap window %.0f ms (a longer push is the smooth turn)",
+                                         tap * 1000.f);
+                    }
                     const auto snapTap = snapRealign.update(frame.seconds, snapGate ? frame.hands[1].stickX : 0.f,
                                                             values.smoothTurn > 0, values.snapTurn);
                     if (snapTap.began)
@@ -4763,7 +4770,14 @@ DWORD WINAPI run(void*) {
                                                   ? hybrid_handoff::actorLookYaw({body[8], body[9], body[10]})
                                                   : NAN;
                         const float viewWas = lastViewYaw;
+                        const auto holdWas = hybridHeading.hold;
                         hybridHeading.begin(hybrid_movement::Heading::Hold::snap, realignTo, 0.f);
+                        // SNAP BODY TURN (snap_body_turn): the snap hold brings the body onto the new heading (the walk
+                        // stick, fights included); off, the hold is let go and only the view snaps.
+                        if (values.snapBodyTurn)
+                            facingTurnEvent = facing_check::Event::realign;
+                        else
+                            hybridHeading.hold = holdWas;
                         viewLock.yaw = hybridHeading.yaw;
                         hsHeadingWritten = true;
                         snapRealignPending = true;
@@ -4785,6 +4799,10 @@ DWORD WINAPI run(void*) {
                                          realignWhy, realignTurn * toDeg, realignTo * toDeg,
                                          std::isfinite(viewWas) ? viewWas * toDeg : -999.f,
                                          std::isfinite(heroNow) ? heroNow * toDeg : -999.f, snapRealigns);
+                        diag_log::writef("snap realign: body %s (gap %+.0f deg; snap body turn %s, tap window %.0f ms)",
+                                         values.snapBodyTurn ? "turns onto the new heading" : "stays (only the view snaps)",
+                                         std::isfinite(heroNow) ? stable_yaw::wrap(realignTo - heroNow) * toDeg : 0.f,
+                                         values.snapBodyTurn ? "on" : "off", snapRealign.tapSeconds * 1000.f);
                     }
                     {
                         const bool hybridNow =
@@ -7915,6 +7933,9 @@ DWORD WINAPI run(void*) {
                                 // tail (the 4d58169 landings: the body faced the momentum, not the view).
                                 const bool fightHoldsOff =
                                     fightBlocks && !(values.headsetFirst && facingTurnEvent == facing_check::Event::landing) &&
+                                    // SNAP BODY TURN / DODGE RE-FACE (the owner, Nov 15): fights included.
+                                    !(values.snapBodyTurn && hybridHeroTurn &&
+                                      facingTurnEvent == facing_check::Event::realign) &&
                                     !(punchTrackHold > 0.f && values.punchAutotarget);
                                 tin.forceAllowed = yieldingPose && heroOk && swingFresh && swingState.grounded &&
                                                    hybridInputL < stable_yaw::steerZone && !fightHoldsOff &&

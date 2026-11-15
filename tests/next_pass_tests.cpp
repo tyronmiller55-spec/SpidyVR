@@ -1,5 +1,7 @@
 // NEXT PASS (the owner's decisions, Nov 15: handoff hitches, body yaw, handstands): the pure parts of each change.
 // Portable.
+#include "spidy/camera_mode.hpp"
+#include "spidy/facing_check.hpp"
 #include "spidy/hybrid_handoff.hpp"
 #include "spidy/vr_settings.hpp"
 #include <cmath>
@@ -42,6 +44,15 @@ int main() {
         const Pose q = blendEyeSplit(from, {}, to, .5f, .5f), r = blendEye(from, {}, to, .5f);
         check(near(q.position.x, r.position.x) && near(q.orientation.y, r.orientation.y), "equal weights: blendEye");
         check(vr_settings::Values{}.handoffOneBlend, "on by default");
+    }
+    // SNAP BODY TURN / SNAP TAP WINDOW: on by default, 120 ms, the turn named in the logs.
+    {
+        const vr_settings::Values v{};
+        check(v.snapBodyTurn && v.snapTapMs == 120, "snap body turn on, tap window 120 ms");
+        check(near(camera_mode::SnapRealign::tapSecondsOf(v.snapTapMs), .12f), "the window in seconds");
+        check(std::string(facing_check::eventName(facing_check::Event::realign)) == "snap realign" &&
+                  std::string(facing_check::eventName(facing_check::Event::dodge)) == "dodge re-face",
+              "the hero turns' names");
     }
     std::printf("next pass: %d checks passed\n", passed);
     return 0;

@@ -244,11 +244,15 @@ inline float shouldersYaw(bool chestOk, float chestYaw, float heroYaw, bool* use
 // The right stick's tap left or right: one snap of the heading (SNAP TURN
 // degrees, 45 when that is 0), any number of times round the full 360, and
 // every tap a realign (game_xr: heading, model and headset re-synced). With
-// SMOOTH TURN on, a tap is out past 0.7 and back under 0.4 within 0.25 s (a
-// longer push is the smooth turn, as before); without it, the flick fires on
+// SMOOTH TURN on, a tap is out past 0.7 and back under 0.4 within `tapSeconds`
+// (snap_tap_ms, 120 ms; it was 0.25 s; a longer push is the smooth turn, as before); without it, the flick fires on
 // the way out (the old snap's feel). `turn`: radians, + left (the rig's yaw).
 struct SnapRealign {
-    static constexpr float on = .7f, off = .4f, tapSeconds = .25f;
+    static constexpr float on = .7f, off = .4f, defaultTapSeconds = .12f;
+    float tapSeconds = defaultTapSeconds;
+    static float tapSecondsOf(int ms) {
+        return static_cast<float>(std::clamp(ms, 60, 400)) * .001f;
+    }
     bool out = false;
     bool fired = false; // this push already fired (snap mode)
     float outFor = 0;

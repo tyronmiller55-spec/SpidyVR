@@ -179,10 +179,24 @@ int main() {
         // Smooth mode: a quick tap right is one snap right (- yaw), on release.
         auto o = s.update(.01f, .9f, true, 30);
         check(o.began && !o.fire, "smooth: the push starts, nothing yet");
-        o = s.update(.1f, .9f, true, 30);
+        o = s.update(.06f, .9f, true, 30);
         check(!o.fire, "still out");
         o = s.update(.05f, .1f, true, 30);
-        check(o.fire && near(o.turn, -30 * deg), "smooth: back within 0.25 s: one snap right");
+        check(o.fire && near(o.turn, -30 * deg), "smooth: back within 0.12 s: one snap right");
+        // SNAP TAP WINDOW (snap_tap_ms, 120): a 0.15 s push is the smooth turn now; at 250 ms it was a snap.
+        {
+            SnapRealign w;
+            check(near(w.tapSeconds, .12f) && near(SnapRealign::tapSecondsOf(120), .12f) &&
+                      near(SnapRealign::tapSecondsOf(5), .06f) && near(SnapRealign::tapSecondsOf(9000), .4f),
+                  "the tap window: 120 ms by default, clamped 60-400 ms");
+            w.update(.01f, .9f, true, 30);
+            w.update(.1f, .9f, true, 30);
+            check(!w.update(.05f, .1f, true, 30).fire, "a 0.15 s push: no snap at 120 ms");
+            w.tapSeconds = SnapRealign::tapSecondsOf(250);
+            w.update(.01f, .9f, true, 30);
+            w.update(.1f, .9f, true, 30);
+            check(w.update(.05f, .1f, true, 30).fire, "the same push snaps at 250 ms (the old window)");
+        }
         // A long push is the smooth turn, no snap.
         s.update(.01f, -.9f, true, 30);
         for (int i = 0; i < 4; ++i)

@@ -756,6 +756,10 @@ int main() {
                 key == "animated_torso_twist" || key == "anim_forearm_fallback_deg")
                 continue;
             // NEXT PASS (November 15): the player's own feel.
+            if (key == "snap_tap_ms")
+                continue;
+            if (key == "snap_body_turn")
+                continue;
             if (key == "view_relatch_fix")
                 continue;
             if (key == "handoff_one_blend")

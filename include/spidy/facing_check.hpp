@@ -31,7 +31,8 @@ namespace spidy::facing_check {
 using stable_yaw::degrees;
 using stable_yaw::wrap;
 
-enum class Event : uint8_t { landing, pointLaunch, jumpHandoff, animReentry, takeover, punchTrack };
+// realign, dodge: the next pass's hero turns (snap_body_turn, dodge_reface), named for the turn's logs.
+enum class Event : uint8_t { landing, pointLaunch, jumpHandoff, animReentry, takeover, punchTrack, realign, dodge };
 inline const char* eventName(Event e) {
     switch (e) {
     case Event::landing: return "landing";
@@ -39,6 +40,8 @@ inline const char* eventName(Event e) {
     case Event::jumpHandoff: return "jump handoff";
     case Event::animReentry: return "anim re-entry";
     case Event::punchTrack: return "punch track";
+    case Event::realign: return "snap realign";
+    case Event::dodge: return "dodge re-face";
     default: return "takeover";
     }
 }

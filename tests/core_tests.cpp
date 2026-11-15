@@ -24702,6 +24702,8 @@ int main() {
                   "handoff_one_blend=1\n"
                   "punch_camera_lock_ms=300\n"
                   "view_relatch_fix=1\n"
+                  "snap_body_turn=1\n"
+                  "snap_tap_ms=120\n"
                   "movement_defaults=3\n",
               "the defaults' text");
         Values changed = defaults;

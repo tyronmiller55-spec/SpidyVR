@@ -723,6 +723,13 @@ struct Values {
     // not by subtracting the old reference's headset turn: that one wrong frame let a turn hold "arrive" with the hero still
     // far off (snap realigns and landings that never turned him, 9790d67). Off: as before.
     bool viewRelatchFix = true;
+    // SNAP BODY TURN (snap_body_turn, on): a snap realign (the right stick's tap) turns the body onto the new heading
+    // too - the walk stick brings him round, fights included - and the turn is logged as a "realign" hero turn.
+    // Off: the view snaps and the body stays where it was.
+    bool snapBodyTurn = true;
+    // SNAP TAP WINDOW (snap_tap_ms, 120; was 250): with SMOOTH TURN on, a right-stick push out and back within this
+    // many milliseconds is a snap realign; a longer push is the smooth turn. Shorter: fewer snaps by accident.
+    int snapTapMs = 120;
     // [next pass settings]
     bool operator==(const Values&) const = default;
 };
