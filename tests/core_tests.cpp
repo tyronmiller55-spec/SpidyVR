@@ -24704,6 +24704,7 @@ int main() {
                   "view_relatch_fix=1\n"
                   "snap_body_turn=1\n"
                   "snap_tap_ms=120\n"
+                  "dodge_reface=1\n"
                   "movement_defaults=3\n",
               "the defaults' text");
         Values changed = defaults;

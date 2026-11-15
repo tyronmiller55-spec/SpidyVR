@@ -3,6 +3,7 @@
 #include "spidy/camera_mode.hpp"
 #include "spidy/facing_check.hpp"
 #include "spidy/hybrid_handoff.hpp"
+#include "spidy/view_yaw_lock.hpp"
 #include "spidy/vr_settings.hpp"
 #include <cmath>
 #include <cstdio>
@@ -53,6 +54,29 @@ int main() {
         check(std::string(facing_check::eventName(facing_check::Event::realign)) == "snap realign" &&
                   std::string(facing_check::eventName(facing_check::Event::dodge)) == "dodge re-face",
               "the hero turns' names");
+    }
+    // DODGE RE-FACE: on by default; due when the dodge's tail opens (0.4 s after the button), gone when it closes.
+    {
+        check(vr_settings::Values{}.dodgeReface, "dodge re-face on by default");
+        view_yaw_lock::DodgeTail t;
+        bool armed = false, pending = false;
+        int dueAt = -1;
+        for (int i = 0; i < 400; ++i) {
+            const bool dodge = i < 30;
+            t.update(.01f, dodge);
+            if (dodge) {
+                armed = true;
+                pending = false;
+            } else if (armed && t.open()) {
+                armed = false;
+                pending = true;
+                dueAt = i;
+            } else if (!t.open()) {
+                pending = false;
+            }
+        }
+        check(dueAt >= 69 && dueAt <= 71, "due 0.4 s after the dodge button is let go");
+        check(!pending, "and not left due once the tail has closed (taken once in game)");
     }
     std::printf("next pass: %d checks passed\n", passed);
     return 0;

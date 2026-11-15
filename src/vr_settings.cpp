@@ -2954,6 +2954,7 @@ constexpr TabOnly tabOnly[] = {
     {"view_relatch_fix", &Values::viewRelatchFix, nullptr},
     {"snap_body_turn", &Values::snapBodyTurn, nullptr},
     {"snap_tap_ms", nullptr, &Values::snapTapMs},
+    {"dodge_reface", &Values::dodgeReface, nullptr},
     {"movement_defaults", nullptr, &Values::movementDefaults},
 };
 } // namespace

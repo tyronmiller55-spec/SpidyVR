@@ -1239,6 +1239,11 @@ DWORD WINAPI run(void*) {
         hitch_guard::FreshHold swingFreshHold; // swingFresh with hysteresis (hitch_guard.hpp)
         float swingFreshLogAge{};
         view_yaw_lock::DodgeTail dodgeTail; // the turn after a dodge, whatever the fight's tail says
+        // DODGE RE-FACE (dodge_reface): armed by a dodge, due once it settles (the tail opens), taken in the animation's domain.
+        bool dodgeRefaceArmed = false, dodgeRefacePending = false;
+        uint32_t dodgeRefaces = 0;
+        // SNAP BODY TURN / DODGE RE-FACE: seconds since one of them started a hero turn (fights hold it off again after 3 s).
+        float nextPassTurnAge = 1e9f;
         uint32_t swingCostWindow = 0; // the last SpidySwingCostLive window logged
         uint32_t swingSectionsWindow = 0; // the last SpidySwingCostSections window logged
         uint32_t swingScanWindow = 0;     // the last SpidySwingScanCost window logged
@@ -4774,8 +4779,10 @@ DWORD WINAPI run(void*) {
                         hybridHeading.begin(hybrid_movement::Heading::Hold::snap, realignTo, 0.f);
                         // SNAP BODY TURN (snap_body_turn): the snap hold brings the body onto the new heading (the walk
                         // stick, fights included); off, the hold is let go and only the view snaps.
-                        if (values.snapBodyTurn)
+                        if (values.snapBodyTurn) {
                             facingTurnEvent = facing_check::Event::realign;
+                            nextPassTurnAge = 0;
+                        }
                         else
                             hybridHeading.hold = holdWas;
                         viewLock.yaw = hybridHeading.yaw;
@@ -7922,6 +7929,8 @@ DWORD WINAPI run(void*) {
                                 }
                                 // PUNCH AUTO-TARGET: for 0.6 s after a tracked throw the hero is turned onto the
                                 // enemy (any angle), whatever the heading does.
+                                if (nextPassTurnAge < 1e8f && std::isfinite(frame.seconds))
+                                    nextPassTurnAge += std::clamp(frame.seconds, 0.f, .1f);
                                 if (punchTrackHold > 0.f) {
                                     punchTrackHold -= std::isfinite(frame.seconds) ? frame.seconds : 0.f;
                                     if (values.punchAutotarget) {
@@ -7934,8 +7943,9 @@ DWORD WINAPI run(void*) {
                                 const bool fightHoldsOff =
                                     fightBlocks && !(values.headsetFirst && facingTurnEvent == facing_check::Event::landing) &&
                                     // SNAP BODY TURN / DODGE RE-FACE (the owner, Nov 15): fights included.
-                                    !(values.snapBodyTurn && hybridHeroTurn &&
-                                      facingTurnEvent == facing_check::Event::realign) &&
+                                    !(nextPassTurnAge < 3.f &&
+                                      ((values.snapBodyTurn && facingTurnEvent == facing_check::Event::realign) ||
+                                       (values.dodgeReface && facingTurnEvent == facing_check::Event::dodge))) &&
                                     !(punchTrackHold > 0.f && values.punchAutotarget);
                                 tin.forceAllowed = yieldingPose && heroOk && swingFresh && swingState.grounded &&
                                                    hybridInputL < stable_yaw::steerZone && !fightHoldsOff &&
@@ -8176,6 +8186,15 @@ DWORD WINAPI run(void*) {
                         dodges += walk.dodge && !dodging;
                         dodging = walk.dodge;
                         dodgeTail.update(frame.seconds, dodging);
+                        if (dodging) {
+                            dodgeRefaceArmed = true;
+                            dodgeRefacePending = false;
+                        } else if (dodgeRefaceArmed && dodgeTail.open()) {
+                            dodgeRefaceArmed = false;
+                            dodgeRefacePending = values.dodgeReface;
+                        } else if (!dodgeTail.open()) {
+                            dodgeRefacePending = false; // its window passed (a takeover, an animation of his own)
+                        }
                         heals += walk.heal && !healing;
                         healing = walk.heal;
                         zips += walk.zip && !zipping;
@@ -10504,6 +10523,43 @@ DWORD WINAPI run(void*) {
                                     facingTurnEvent = facingCheck.event;
                                 }
                                 logFacing(facingCheck, fc);
+                            }
+                            // DODGE RE-FACE (dodge_reface; the owner, Nov 15: "turn back to my view, fights included"):
+                            // the dodge has settled; the body is brought back onto where the player looks by the walk
+                            // stick (the facing hold / forced turn: a smooth turn, never a snap). The view is not written.
+                            if (dodgeRefacePending && hybridOwner.domain != hybrid_owner::Domain::vr) {
+                                dodgeRefacePending = false;
+                                constexpr float toDeg = 180.f / 3.14159265f;
+                                const float view =
+                                    values.headsetFirst && std::isfinite(hsViewNow) ? hsViewNow : lastViewYaw;
+                                const float gap = std::isfinite(view) && std::isfinite(heroYawNow)
+                                                      ? stable_yaw::wrap(view - heroYawNow)
+                                                      : NAN;
+                                if (!std::isfinite(gap) || headRide.active() || punchTrackHold > 0.f) {
+                                    diag_log::writef("dodge re-face: skipped (%s)",
+                                                     !std::isfinite(gap) ? "no view or facing"
+                                                     : headRide.active() ? "the head ride: the view is his head"
+                                                                         : "a punch is tracking an enemy");
+                                } else if (std::abs(gap) <= 10.f / toDeg) {
+                                    diag_log::writef("dodge re-face: he already faces the view (gap %+.0f deg)",
+                                                     gap * toDeg);
+                                } else {
+                                    if (hybridLock) {
+                                        hybridHeading.begin(hybrid_movement::Heading::Hold::facing,
+                                                            values.headsetFirst ? hybridHeading.yaw : view);
+                                        viewLock.yaw = hybridHeading.yaw;
+                                    } else {
+                                        facingHeroPending = true;
+                                        facingHeroYaw = view;
+                                    }
+                                    facingTurnEvent = facing_check::Event::dodge;
+                                    nextPassTurnAge = 0;
+                                    ++dodgeRefaces;
+                                    diag_log::writef("dodge re-face: body turns back to the view, gap %+.0f deg (hero %.0f, "
+                                                     "view %.0f, %s), #%u",
+                                                     gap * toDeg, heroYawNow * toDeg, view * toDeg,
+                                                     rideFighting || fightLately ? "in a fight" : "no fight", dodgeRefaces);
+                                }
                             }
                             view_yaw_lock::State lock;
                             lock.on = viewLockActive;

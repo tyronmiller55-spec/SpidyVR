@@ -730,6 +730,10 @@ struct Values {
     // SNAP TAP WINDOW (snap_tap_ms, 120; was 250): with SMOOTH TURN on, a right-stick push out and back within this
     // many milliseconds is a snap realign; a longer push is the smooth turn. Shorter: fewer snaps by accident.
     int snapTapMs = 120;
+    // DODGE RE-FACE (dodge_reface, on): when a dodge has settled (0.4 s after the button is let go) and the body faces
+    // more than 10 degrees off where the player looks, the walk stick turns him back onto the view - a smooth turn,
+    // never a snap, fights included; the view is never written. Off: as before (only the turn-in-place angle).
+    bool dodgeReface = true;
     // [next pass settings]
     bool operator==(const Values&) const = default;
 };
