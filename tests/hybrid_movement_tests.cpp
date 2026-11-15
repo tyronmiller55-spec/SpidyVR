@@ -390,6 +390,9 @@ int main() {
         s.heroMatters = true;
         s.heroOk = true;
         s.hero = -80 * deg;
+        // Nov 14 (air takeover, slice 3): in a fight the hero is still turned round to the view; a calm landing with the view
+        // more than 120 deg behind him is not (the body stays and the stick brings him round).
+        s.fighting = true;
         const auto o = c.update(dt, s);
         check(o.view.verdict == facing_check::Verdict::ok && o.heroTurn, "facing check in HYBRID: view ok, hero corrected");
     }

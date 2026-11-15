@@ -765,7 +765,10 @@ int main() {
             if (key.rfind("swing_kick", 0) == 0)
                 continue;
             // WALL BRAKE and GRIP FLING (G1, November 14): experimental, the player's own.
-            if (key.rfind("wall_brake", 0) == 0 || key.rfind("grip_fling", 0) == 0)
+            if (key.rfind("wall_brake", 0) == 0 || key.rfind("grip_fling", 0) == 0 || key == "grip_stop_pct")
+                continue;
+            // AIR TAKEOVER (November 14): the player's own feel (upright time, fall handoff, landing blend and release).
+            if (key == "air_correct_ms" || key == "fall_handoff_ms" || key.rfind("air_landing", 0) == 0)
                 continue;
             // HAND GRAB (G2, November 14): experimental, the player's own.
             if (key.rfind("hand_grab", 0) == 0 || key == "enemy_hold_cost")
