@@ -78,6 +78,22 @@ int main() {
         check(dueAt >= 69 && dueAt <= 71, "due 0.4 s after the dodge button is let go");
         check(!pending, "and not left due once the tail has closed (taken once in game)");
     }
+    // LANDING REAR TURN: the facing check's rear rule follows the setting.
+    {
+        constexpr float deg = 3.14159265f / 180.f;
+        check(vr_settings::Values{}.landingRearTurn, "rear turn on by default");
+        facing_check::Check fc;
+        fc.arm(facing_check::Event::landing, 0.f);
+        facing_check::Sample fs;
+        fs.heroMatters = fs.heroOk = true;
+        fs.hero = 150 * deg;
+        fs.rearTurns = false;
+        check(fc.update(.01f, fs).hero.verdict == facing_check::Verdict::kept, "rear turn off: kept (as before)");
+        fc.arm(facing_check::Event::landing, 0.f);
+        fs.rearTurns = true;
+        const auto r = fc.update(.01f, fs);
+        check(r.hero.verdict == facing_check::Verdict::corrected && r.heroTurn, "rear turn on: he turns");
+    }
     std::printf("next pass: %d checks passed\n", passed);
     return 0;
 }

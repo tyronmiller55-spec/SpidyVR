@@ -734,6 +734,9 @@ struct Values {
     // more than 10 degrees off where the player looks, the walk stick turns him back onto the view - a smooth turn,
     // never a snap, fights included; the view is never written. Off: as before (only the turn-in-place angle).
     bool dodgeReface = true;
+    // LANDING REAR TURN (landing_rear_turn, on): a calm landing with the view more than 120 degrees behind him turns him
+    // onto it too (the facing check no longer keeps him facing away). Off: he stays, as before.
+    bool landingRearTurn = true;
     // [next pass settings]
     bool operator==(const Values&) const = default;
 };

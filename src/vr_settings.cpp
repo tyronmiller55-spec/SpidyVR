@@ -2955,6 +2955,7 @@ constexpr TabOnly tabOnly[] = {
     {"snap_body_turn", &Values::snapBodyTurn, nullptr},
     {"snap_tap_ms", nullptr, &Values::snapTapMs},
     {"dodge_reface", &Values::dodgeReface, nullptr},
+    {"landing_rear_turn", &Values::landingRearTurn, nullptr},
     {"movement_defaults", nullptr, &Values::movementDefaults},
 };
 } // namespace

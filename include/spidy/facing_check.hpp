@@ -86,6 +86,7 @@ struct Sample {
     bool heroOk = false;
     float hero = 0;          // the actor's facing
     bool fighting = false;   // a fight or a dodge is on: the hero turns onto the view whatever the gap
+    bool rearTurns = false;  // LANDING REAR TURN (landing_rear_turn): a calm landing's rear gap turns him too (no keep)
 };
 struct Report {
     Verdict verdict = Verdict::none;
@@ -147,7 +148,8 @@ struct Check {
             out.hero.got = wrap(s.hero);
             if (std::abs(wrap(expected - s.hero)) <= heroTolerance) {
                 out.hero.verdict = Verdict::ok;
-            } else if (event == Event::landing && !s.fighting && std::abs(wrap(expected - s.hero)) > rearTurn) {
+            } else if (event == Event::landing && !s.fighting && !s.rearTurns &&
+                       std::abs(wrap(expected - s.hero)) > rearTurn) {
                 out.hero.verdict = Verdict::kept;
             } else {
                 out.hero.verdict = Verdict::corrected;

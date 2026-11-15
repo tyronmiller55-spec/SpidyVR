@@ -10497,7 +10497,16 @@ DWORD WINAPI run(void*) {
                                 fs.heroOk = std::isfinite(heroYawNow);
                                 fs.hero = heroYawNow;
                                 fs.fighting = rideFighting || fightLately;
+                                fs.rearTurns = values.landingRearTurn;
                                 auto fc = facingCheck.update(frame.seconds, fs);
+                                // LANDING REAR TURN: a calm landing facing away from the view, turned (it was kept).
+                                if (values.landingRearTurn && facingCheck.event == facing_check::Event::landing &&
+                                    fc.hero.verdict == facing_check::Verdict::corrected && !fs.fighting &&
+                                    std::abs(stable_yaw::wrap(fc.hero.expected - fc.hero.got)) > facing_check::rearTurn)
+                                    diag_log::writef("landing rear turn: the view is %.0f deg behind him; he turns onto it "
+                                                     "(it was kept before)",
+                                                     std::abs(stable_yaw::wrap(fc.hero.expected - fc.hero.got)) * 180.f /
+                                                         3.14159265f);
                                 // ANIM HEAD RIDE: the view is his head; nothing turns him onto an old view.
                                 if (headRide.active()) {
                                     fc.viewFix = 0.f;
