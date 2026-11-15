@@ -2918,6 +2918,11 @@ void App::options(ImVec2 origin, ImVec2 size) {
                    "into your look, so a flat look still leaves the surface. 25% by default; the jump never "
                    "goes into the surface either way.",
                    S(150), [&] { tabCombo("##pointjumppush", Item::pointJumpPush); });
+            settingOption(Item::pointJumpBullet, "Bullet body",
+                   "On a point jump your body turns along your eyes, any angle, straight down too, over about "
+                   "a tenth of a second, and comes upright when you land, web, press A or slow down. Your view "
+                   "never turns for it. On by default.",
+                   S(42), [&] { tabToggle("##pointjumpbullet", Item::pointJumpBullet); });
         });
         group(pointJumpPage, 1, "Point jump: more in spidy_vr.ini", [&] {
             ImGui::PushTextWrapPos(0);

@@ -123,6 +123,10 @@ add_test(NAME hand_grab COMMAND spidy_hand_grab_tests)
 add_executable(spidy_handstand_tests tests/handstand_tests.cpp)
 target_link_libraries(spidy_handstand_tests PRIVATE spidy_core)
 add_test(NAME handstand COMMAND spidy_handstand_tests)
+# POINT JUMP BULLET (point_bullet.hpp): the body takes the raw look, eased, and lets go.
+add_executable(spidy_point_bullet_tests tests/point_bullet_tests.cpp)
+target_link_libraries(spidy_point_bullet_tests PRIVATE spidy_core)
+add_test(NAME point_bullet COMMAND spidy_point_bullet_tests)
 # LEG HOLD (leg_hold.hpp): Y+X chord, suppression, stick persistence, neutral cancel, easing (portable).
 add_executable(spidy_leg_hold_tests tests/leg_hold_tests.cpp)
 target_link_libraries(spidy_leg_hold_tests PRIVATE spidy_core)

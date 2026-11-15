@@ -17,3 +17,6 @@ the hero round. The turn itself cannot be eased: there is no facing write, and t
 
 ## 5. A in the air
 `air_correct_ms` (1000; 400-2000 in the launcher, 300-2500 in the ini): REALISTIC FLIPS' A press turns the body from its tilt to level about the heading as one minimum-jerk turn (`RealisticFlipSettings::levelMs`). A half turn takes the whole time, a smaller tilt its share (floor 30%, 0.2 s). The old rule chased the error at up to `speed` deg/s. The turn is the body tilt only; it never writes the view, and the heading it takes (`takeHeading`) is unchanged.
+
+## 6. Point jump bullet
+`point_jump_bullet` (on): the body's axis takes the raw look at the launch, eased 120 ms, any angle (straight down: a half turn about the heading's right). Body only (`pose.tilt` in `game_xr.cpp`'s native body), so the view and the heading are untouched; the velocity keeps the 10 deg out-of-surface fix. Lets go on touchdown, web, A (a fresh press: the chord's own A is not one), hands holding, under 6 m/s after 0.4 s, or 4 s.

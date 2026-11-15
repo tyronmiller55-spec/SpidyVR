@@ -1017,6 +1017,8 @@ template <class V> auto switchOf(Item item, V& v) -> decltype(&v.aimMarkers) {
         return &v.showtimeAutoFinish;
     case Item::showtimeSlowMo:
         return &v.showtimeSlowMo;
+    case Item::pointJumpBullet:
+        return &v.pointJumpBullet;
     case Item::groundKicks:
         return &v.groundKicks;
     case Item::enemyJoints:
@@ -1211,9 +1213,9 @@ Values sanitized(Values v) {
     v.automaticHandThreshold = std::clamp(v.automaticHandThreshold, 50, 300);
     return v;
 }
-const std::array<Row, 218>& rows() {
+const std::array<Row, 219>& rows() {
     // The help fits the game's description column beside the rows.
-    static const std::array<Row, 218> all{{
+    static const std::array<Row, 219> all{{
         {Item::none, "WEBS", nullptr, {}},
         {Item::webStyle, "WEB STYLE",
          "Arcade: webs pass lamp posts, signs and cars, and swings stay above the street.", webStyleChoices},
@@ -1892,6 +1894,10 @@ const std::array<Row, 218>& rows() {
          "AIR UPRIGHT TIME",
          "A in the air rights you smoothly over this long (REALISTIC FLIPS). 1 s default.",
          airCorrectChoices, Place::launcher},
+        {Item::pointJumpBullet,
+         "POINT JUMP BULLET",
+         "A point jump turns your body along your eyes, any angle, like a bullet.",
+         {}, Place::launcher},
     }};
     return all;
 }
@@ -1994,6 +2000,7 @@ const std::array<Screen, categoryCount>& screens() {
     static constexpr Item pointJump[] = {
         Item::pointJump, Item::pointJumpTrigger, Item::pointJumpMinSpeed,
         Item::pointJumpMaxSpeed, Item::pointJumpFull, Item::pointJumpPush,
+        Item::pointJumpBullet,
     };
     // SHOWTIME (showtime.hpp; experimental, off by default): its switch and its feel.
     static constexpr Item showtime[] = {
@@ -2153,6 +2160,7 @@ const char* inactiveReason(Item item, const Values& v) {
     case Item::pointJumpMaxSpeed:
     case Item::pointJumpFull:
     case Item::pointJumpPush:
+    case Item::pointJumpBullet:
         return !v.pointJump ? "Turn POINT JUMP on first." : nullptr;
     case Item::recordingSmoothing:
         return v.recordingFov == 0 ? "Enable Recording FOV first." : nullptr;
@@ -2896,6 +2904,7 @@ constexpr TabOnly tabOnly[] = {
     {"showtime_slow_mo", &Values::showtimeSlowMo, nullptr},
     {"showtime_latch", nullptr, &Values::showtimeLatch},
     {"air_correct_ms", nullptr, &Values::airCorrectMs},
+    {"point_jump_bullet", &Values::pointJumpBullet, nullptr},
     {"movement_defaults", nullptr, &Values::movementDefaults},
 };
 } // namespace

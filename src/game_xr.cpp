@@ -19,6 +19,7 @@
 #include "spidy/game_bridge_protocol.hpp"
 #include "spidy/dodge_tumble.hpp"
 #include "spidy/game_dodge.hpp"
+#include "spidy/point_bullet.hpp"
 #include "spidy/point_jump.hpp"
 #include "spidy/sidestep.hpp"
 #include "spidy/grip.hpp"
@@ -1486,6 +1487,9 @@ DWORD WINAPI run(void*) {
         Vec3 pointJumpLook{}, pointJumpNormal{0, 1, 0};
         bool pointJumpFired{}, pointJumpHold{}, pointJumpCharged{}, pointJumpBothWas{}, pointJumpOffLogged{};
         float pointJumpHoldAge{};
+        // POINT JUMP BULLET (point_bullet.hpp): the body takes the raw look on a launch; pbADown: A as of last frame.
+        point_bullet::Bullet pointBullet;
+        bool pbADown{};
         const char* pointJumpSurface = "ground";
         // QUICK SIDESTEP (sidestep.hpp): the flick-then-A trigger, the bursts
         // sent, refused and denied, the swing's account read so far, B as it
@@ -2666,6 +2670,25 @@ DWORD WINAPI run(void*) {
                                 pointJumpFired = pointJumpHold = true;
                                 pointJumpHoldAge = 0;
                                 pointJumpOffLogged = false;
+                                // The body takes the RAW look (any angle, down too), not the 10 degree out-fixed way.
+                                {
+                                    point_bullet::Params pbp;
+                                    pbp.enabled = values.pointJumpBullet;
+                                    Vec3 face = {look.x, 0, look.z};
+                                    if (length(face) < .1f)
+                                        face = motion.headPose.orientation.rotate({0, 0, -1});
+                                    pointBullet.launch(look, face, pbp);
+                                    pbADown = true; // the chord's A is not an upright press
+                                    if (pointBullet.live())
+                                        diag_log::writef(
+                                            "point bullet: body to the look (%.2f, %.2f, %.2f) pitch %.0f deg, turn %.0f deg, "
+                                            "launch way pitch %.0f deg (out-fix %.0f deg)",
+                                            look.x, look.y, look.z,
+                                            std::asin(std::clamp(normalized(look).y, -1.f, 1.f)) * 57.29578f,
+                                            pointBullet.degrees(),
+                                            std::asin(std::clamp(way.way.y, -1.f, 1.f)) * 57.29578f,
+                                            way.outFixDegrees);
+                                }
                                 // MOVE HAPTICS: the point jump's double thump, at its
                                 // own strength (the second thump 110 ms on).
                                 {
@@ -9930,6 +9953,26 @@ DWORD WINAPI run(void*) {
                             tilt.x != 0 || tilt.y != 0 || tilt.z != 0) {
                             const Quat yaw = Quat::yaw(motion.swing.trackingYaw);
                             pose.tilt = yaw * tilt * yaw.conjugate();
+                        }
+                        // POINT JUMP BULLET: the body only, in world axes, about the eyes; never the view or the heading.
+                        {
+                            point_bullet::Params pbp;
+                            pbp.enabled = values.pointJumpBullet;
+                            const bool aDown = (origins.play() & buttonA) != 0;
+                            point_bullet::Input pbi;
+                            pbi.seconds = armDt;
+                            pbi.grounded = swingFresh && swingState.grounded != 0;
+                            pbi.speed = swingFresh ? length(swingState.velocity) : 0.f;
+                            pbi.webbed = swingFresh && (swingState.webs[0].attached || swingState.webs[1].attached);
+                            pbi.aPressed = aDown && !pbADown;
+                            pbi.handsHold = motion.handstand.supporting;
+                            pbADown = aDown;
+                            const bool wasLive = pointBullet.live();
+                            const Quat bullet = pointBullet.update(pbi, pbp);
+                            if (pointBullet.live())
+                                pose.tilt = bullet * pose.tilt;
+                            else if (wasLive)
+                                diag_log::writef("point bullet: let go (%s)", pointBullet.why());
                         }
                         // ANIMATED AIR SPIN (off by default; animated_air_spin.hpp):
                         // the flip tilt (+ momentum lean) turns the yielded anim

@@ -683,6 +683,9 @@ struct Values {
     // A IN THE AIR (the user, Nov 14 t71u; air_correct_ms): the upright turn takes this long, smoothly (realistic_flip.hpp
     // RealisticFlipSettings::levelMs). REALISTIC FLIPS' A rights the player; it was a 0.18 s chase with a hard start.
     int airCorrectMs = 1000;
+    // POINT JUMP BULLET (the user, Nov 14 t71u, t73s656; point_jump_bullet, default on): the body takes the RAW look on a point
+    // jump, any angle, eased over about 120 ms (point_bullet.hpp). The launch velocity is unchanged (10 degree out-of-surface fix).
+    bool pointJumpBullet = true;
     // [air takeover pass settings]
     bool operator==(const Values&) const = default;
 };
@@ -954,8 +957,9 @@ enum class Item : uint8_t {
     showtimeAutoFinish,
     showtimeBody,
     airCorrect,
+    pointJumpBullet,
 };
-inline constexpr Item lastItem = Item::airCorrect;
+inline constexpr Item lastItem = Item::pointJumpBullet;
 // SLOW-MO LENGTH's last step: no time limit (until L3 toggles it off).
 inline constexpr int slowMotionEndless = 91;
 // Real seconds a full meter lasts for a SLOW-MO LENGTH value; 0 = endless.
@@ -985,7 +989,7 @@ struct Row {
     Place place{};
 };
 // Stable row/setting numbers; categories below determine presentation order.
-const std::array<Row, 218>& rows();
+const std::array<Row, 219>& rows();
 const Row* rowFor(Item);
 // camera, shooters and legs (November 11, the user: "I can't find legs or
 // camera settings in any of the menus. Make sure it's clearly labeled"): tabs
