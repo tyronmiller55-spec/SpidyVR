@@ -26,6 +26,26 @@ inline float blendAlpha(int64_t elapsedNs) {
 
 inline bool blendDone(int64_t elapsedNs) { return elapsedNs >= handoffNs; }
 
+// ONE HANDOFF BLEND (handoff_one_blend): the same smoothstep over `durationNs` (handoffNs when not positive).
+inline float blendAlphaFor(int64_t elapsedNs, int64_t durationNs) {
+    const int64_t d = durationNs > 0 ? durationNs : handoffNs;
+    if (elapsedNs <= 0)
+        return 0.f;
+    if (elapsedNs >= d)
+        return 1.f;
+    const float t = static_cast<float>(elapsedNs) / static_cast<float>(d);
+    return t * t * (3.f - 2.f * t);
+}
+inline bool blendDoneFor(int64_t elapsedNs, int64_t durationNs) {
+    return elapsedNs >= (durationNs > 0 ? durationNs : handoffNs);
+}
+// Its length: AIR VIEW EASE's (150-400 ms) with the setting on, else handoffNs (also when AIR VIEW EASE is off).
+inline int64_t oneBlendNs(bool on, int airViewEaseMs) {
+    if (!on || airViewEaseMs <= 0)
+        return handoffNs;
+    return static_cast<int64_t>(std::clamp(airViewEaseMs, 150, 400)) * 1'000'000;
+}
+
 // World look yaw from a level forward (0 = facing −Z, same as the tracking rig).
 inline float lookYaw(Vec3 forward) {
     if (!finite(forward))
@@ -200,6 +220,10 @@ inline bool shownYaw(const Shown& s, float& yaw) {
 // One eye of the blend: the shown eye carried by the player's travel since it was
 // shown, toward the new owner's eye. a = blendAlpha: 0 is exactly the source, 1
 // exactly the destination.
+// ONE HANDOFF BLEND: the place and the angle on their own weights (the view ease carries the place: `aPos` 1).
+inline Pose blendEyeSplit(Pose from, Vec3 carry, Pose to, float aPos, float aOri) {
+    return {lerpVec(from.position + carry, to.position, aPos), slerpQuat(from.orientation, to.orientation, aOri)};
+}
 inline Pose blendEye(Pose from, Vec3 carry, Pose to, float a) {
     return {lerpVec(from.position + carry, to.position, a), slerpQuat(from.orientation, to.orientation, a)};
 }

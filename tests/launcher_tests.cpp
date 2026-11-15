@@ -756,6 +756,8 @@ int main() {
                 key == "animated_torso_twist" || key == "anim_forearm_fallback_deg")
                 continue;
             // NEXT PASS (November 15): the player's own feel.
+            if (key == "handoff_one_blend")
+                continue;
             if (key == "head_height_fade_ms")
                 continue;
             if (key == "takeover_view_ease")

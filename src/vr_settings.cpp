@@ -2947,6 +2947,7 @@ constexpr TabOnly tabOnly[] = {
     {"handstand_reach_cm", nullptr, &Values::handstandReachCm},
     {"takeover_view_ease", &Values::takeoverViewEase, nullptr},
     {"head_height_fade_ms", nullptr, &Values::headHeightFadeMs},
+    {"handoff_one_blend", &Values::handoffOneBlend, nullptr},
     {"movement_defaults", nullptr, &Values::movementDefaults},
 };
 } // namespace

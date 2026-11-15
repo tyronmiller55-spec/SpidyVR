@@ -710,6 +710,10 @@ struct Values {
     // where tracking puts the eyes (median 0.27 m seated) fades out over this, on its own, instead of riding the view
     // ease's 250 ms (view_ease.hpp). Only with a view ease.
     int headHeightFadeMs = 500;
+    // ONE HANDOFF BLEND (handoff_one_blend, on): a switch's eye blend runs as long as AIR VIEW EASE (250 ms; 180 ms when
+    // that is off), and when the view ease carries the eyes' place, the blend turns only their angle: one ease of one
+    // length instead of a 180 ms blend on top of a 250 ms ease (the 9790d67 playtest). Off: as before.
+    bool handoffOneBlend = true;
     // [next pass settings]
     bool operator==(const Values&) const = default;
 };

@@ -166,6 +166,10 @@ add_test(NAME headset_first COMMAND spidy_headset_first_tests)
 add_executable(spidy_view_ease_tests tests/view_ease_tests.cpp)
 target_link_libraries(spidy_view_ease_tests PRIVATE spidy_core)
 add_test(NAME view_ease COMMAND spidy_view_ease_tests)
+# NEXT PASS (Nov 15): handoff smoothing, body yaw, snap realign, dodge re-face, handstand catch (portable).
+add_executable(spidy_next_pass_tests tests/next_pass_tests.cpp)
+target_link_libraries(spidy_next_pass_tests PRIVATE spidy_core)
+add_test(NAME next_pass COMMAND spidy_next_pass_tests)
 # MOVE HAPTICS (move_haptics.hpp): takeoffs, landings, the point jump's double thump, the scale (portable).
 add_executable(spidy_move_haptics_tests tests/move_haptics_tests.cpp)
 target_link_libraries(spidy_move_haptics_tests PRIVATE spidy_core)

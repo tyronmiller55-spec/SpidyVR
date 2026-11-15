@@ -1425,6 +1425,10 @@ DWORD WINAPI run(void*) {
             Vec3 fromEyePos[2]{};
             Quat fromEyeOri[2]{};
             bool fromValid{};
+            // ONE HANDOFF BLEND (handoff_one_blend): its length, and whether the view ease carries the eyes' place
+            // (the blend then turns only their angle).
+            int64_t durNs = hybrid_handoff::handoffNs;
+            bool posFollowsEase{};
             bool delayArmsClear{};
             bool delayModelYaw{};
             float enterEyeDPos{};
@@ -3853,7 +3857,7 @@ DWORD WINAPI run(void*) {
                                                       : static_cast<int64_t>(GetTickCount64()) * 1'000'000ll;
                     const bool hybridInputYawHold =
                         hybridBlend.active && !hybridBlend.toTraversal && hybridBlend.delayModelYaw &&
-                        !hybrid_handoff::blendDone(hybridInputNs - hybridBlend.startNs);
+                        !hybrid_handoff::blendDoneFor(hybridInputNs - hybridBlend.startNs, hybridBlend.durNs);
                     const float hybridInputR = values.animatedModelYaw && !motion.basicFlipControls &&
                                                        !legStickActive &&
                                                        !hybridInputYawHold && frame.hands[1].valid
@@ -7760,7 +7764,7 @@ DWORD WINAPI run(void*) {
                             const bool hybridYawHold =
                                 hybridSteer && hybridBlend.active && !hybridBlend.toTraversal &&
                                 hybridBlend.delayModelYaw &&
-                                !hybrid_handoff::blendDone(blendNowNs - hybridBlend.startNs);
+                                !hybrid_handoff::blendDoneFor(blendNowNs - hybridBlend.startNs, hybridBlend.durNs);
                             // OWNERSHIP UPDATE: a midair native animation (jump, point
                             // launch, zip) plays as in the main game: the R stick turns
                             // the camera there, never the hero (no walk-stick turn).
@@ -7790,7 +7794,7 @@ DWORD WINAPI run(void*) {
                                     : modelYawOwns;
                             const bool blendHold =
                                 hybridBlend.active &&
-                                !hybrid_handoff::blendDone(blendNowNs - hybridBlend.startNs);
+                                !hybrid_handoff::blendDoneFor(blendNowNs - hybridBlend.startNs, hybridBlend.durNs);
                             if (hybridBlend.recheckMove &&
                                 hybrid_steer::doneRecheck(blendHold, hybridInputL)) {
                                 cameraLook.reset();
@@ -9061,6 +9065,8 @@ DWORD WINAPI run(void*) {
                                         motion.headPose.orientation.rotate({0, 0, -1}));
                                     dYaw = hybrid_handoff::wrapPi(worldYaw - preYaw) * (180.f / 3.14159265f);
                                 }
+                                bool takeoverEased = false; // ONE HANDOFF BLEND: the view ease carries the place
+                                int takeoverEaseMs = 0;
                                 // POSITION LOCK: one authority, the actor's feet. The tracking
                                 // origin goes over them (look yaw kept); the anim head's offset
                                 // is not baked into the VR stint. The eye blend covers the move.
@@ -9110,6 +9116,8 @@ DWORD WINAPI run(void*) {
                                                               heightFade)) {
                                             easeWhy = easeName;
                                             punchEaseEndsLogged = rig.viewEase().ends();
+                                            takeoverEased = true;
+                                            takeoverEaseMs = easeMs;
                                             if (rig.viewEase().heightSeconds() > 0)
                                                 diag_log::writef("%s view ease: start offset %.2f m level, height %+.2f m "
                                                                  "fading over %.0f ms, dur %d ms",
@@ -9155,6 +9163,16 @@ DWORD WINAPI run(void*) {
                                 hybridBlend.active = true;
                                 hybridBlend.toTraversal = true;
                                 hybridBlend.startNs = handoffNs;
+                                // ONE HANDOFF BLEND: one length; with the view ease the blend turns only the angle.
+                                if (values.handoffOneBlend) {
+                                    hybridBlend.durNs = takeoverEased
+                                                            ? static_cast<int64_t>(takeoverEaseMs) * 1'000'000
+                                                            : hybrid_handoff::oneBlendNs(true, values.airViewEaseMs);
+                                    hybridBlend.posFollowsEase = takeoverEased;
+                                    diag_log::writef("hybrid: one blend %.0f ms (%s)", hybridBlend.durNs / 1e6,
+                                                     takeoverEased ? "the view ease carries the place, the blend the angle"
+                                                                   : "place and angle");
+                                }
                                 hybridBlend.fromEyes = worldEyes;
                                 hybridBlend.fromYaw = worldYaw;
                                 hybridBlend.fromValid = eyesOk;
@@ -9320,6 +9338,11 @@ DWORD WINAPI run(void*) {
                                 hybridBlend.active = true;
                                 hybridBlend.toTraversal = false;
                                 hybridBlend.startNs = handoffNs;
+                                // ONE HANDOFF BLEND: the landing's eye blend as long as the takeovers' ease.
+                                if (values.handoffOneBlend) {
+                                    hybridBlend.durNs = hybrid_handoff::oneBlendNs(true, values.airViewEaseMs);
+                                    diag_log::writef("hybrid: one blend %.0f ms (onto the head)", hybridBlend.durNs / 1e6);
+                                }
                                 hybridBlend.fromEyes = fromEyes;
                                 hybridBlend.fromYaw = fromYaw;
                                 hybridBlend.fromValid = fromOk;
@@ -9706,7 +9729,7 @@ DWORD WINAPI run(void*) {
                         const bool hybridArmFade =
                             hybridOn && hybridBlend.active && hybridBlend.toTraversal &&
                             hybridBlend.delayArmsClear &&
-                            !hybrid_handoff::blendDone(handoffNs - hybridBlend.startNs);
+                            !hybrid_handoff::blendDoneFor(handoffNs - hybridBlend.startNs, hybridBlend.durNs);
                         const bool armsWanted =
                             values.animatedArms && yieldAnim && !flatScreen && values.body;
                         const bool armsOverlayLive =
@@ -10226,9 +10249,9 @@ DWORD WINAPI run(void*) {
                             : static_cast<int64_t>(GetTickCount64()) * 1'000'000ll;
                     const int64_t eyeBlendElapsed =
                         hybridBlend.active ? (eyeBlendNow - hybridBlend.startNs)
-                                           : hybrid_handoff::handoffNs;
+                                           : hybridBlend.durNs;
                     const float eyeBlendW =
-                        hybridBlend.active ? hybrid_handoff::blendAlpha(eyeBlendElapsed) : 1.f;
+                        hybridBlend.active ? hybrid_handoff::blendAlphaFor(eyeBlendElapsed, hybridBlend.durNs) : 1.f;
                     const bool hybridEyeBlend =
                         hybridBlend.active && hybridBlend.fromValid && eyeBlendW < 1.f - 1e-4f && !flatScreen;
                     // SMOOTHING filters the animated head the view sits on, not the
@@ -10831,16 +10854,19 @@ DWORD WINAPI run(void*) {
                             animHeadRefSet = false;
                         }
                         const Vec3 carry = hybrid_handoff::travel(hybridBlend.fromAnchor, motion.anchor);
+                        // ONE HANDOFF BLEND: the tracked eyes (the view ease under them) are the place, from the frame
+                        // after the switch (the switch's own frame was placed before the ease began: the shown eyes).
+                        const bool toTraversalEyes = !toHead && hybridBlend.toTraversal;
                         for (unsigned i = 0; i < 2; ++i) {
-                            const Pose blended = hybrid_handoff::blendEye(
+                            const Pose blended = hybrid_handoff::blendEyeSplit(
                                 {hybridBlend.fromEyePos[i], hybridBlend.fromEyeOri[i]}, carry, to[i],
-                                eyeBlendW);
+                                hybridBlend.posFollowsEase && toTraversalEyes && eyeBlendElapsed > 0 ? 1.f : eyeBlendW, eyeBlendW);
                             eyes.eyes[i].world =
                                 hybrid_handoff::eyeMatFromPose(blended.position, blended.orientation);
                         }
                         eyes.anchored = 1;
                     }
-                    if (hybridBlend.active && hybrid_handoff::blendDone(eyeBlendElapsed)) {
+                    if (hybridBlend.active && hybrid_handoff::blendDoneFor(eyeBlendElapsed, hybridBlend.durNs)) {
                         if (hybridBlend.delayArmsClear)
                             animatedArmsState = {};
                         hybridBlend.delayArmsClear = false;
