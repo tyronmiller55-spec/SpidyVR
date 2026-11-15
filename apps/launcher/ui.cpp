@@ -1825,8 +1825,13 @@ void App::nativeAnimation(ImVec2 origin, ImVec2 size) {
         option("Jump to SpidyVR",
                "Plain jumps, zip launches, vaults and wall launches hand over from the animation to SpidyVR "
                "this long into the air. Stay to landing: the old way (animation until you land). Flips, grip "
-               "cancel, webs and walls still break at once; landing returns to the animation. Default: 500 ms.",
+               "cancel, webs and walls still break at once; landing returns to the animation. A jump whose rise has slowed under 4 m/s hands over after a quarter second at the soonest. Default: 300 ms.",
                S(150), [&] { tabCombo("##nativejumphandoff", Item::jumpHandoff); });
+        option("Fall to SpidyVR",
+               "A plain fall (a ledge or a stumble, no jump press) hands from the animation to SpidyVR this long "
+               "into the air; there is no takeoff to wait for. With the jump timer: it waits for that. "
+               "Default: 150 ms.",
+               S(150), [&] { tabCombo("##nativefallhandoff", Item::fallHandoff); });
         option("Hybrid speed",
                "How long 15 m/s in the air takes to switch to SpidyVR. Off disables speed takeover; "
                "webs, mid-air turns and wall runs still take over. Default: 200 ms.",

@@ -3,7 +3,7 @@
 Source: the user, Nov 12 05:41 PST. Code: `include/spidy/hybrid_owner.hpp` (timer, kinds), `include/spidy/view_ease.hpp`, `src/game_xr.cpp` (wiring, logs, leg chord). Tests: `tests/jump_handoff_tests.cpp`.
 
 ## JUMP TO SPIDYVR (`jump_handoff_ms`, NATIVE ANIMATION screen and launcher)
-STAY TO LANDING / 300 / 400 / 500 (default) / 700 / 1000 ms.
+STAY TO LANDING / 300 (default since Nov 14) / 400 / 500 / 700 / 1000 ms. Air takeover (Nov 14): a jump whose vertical speed is under 4 m/s hands over after 0.25 s; a plain fall after `fall_handoff_ms` (0 / 100 / 150 default / 250 / 400 ms). See AIR_TAKEOVER.md.
 
 - Kinds (from the frame before takeoff): `wall launch` (off the game's wall), `vault` (NATIVE RUN held), `jump` (a jump press within 400 ms, or he rose faster than 1 m/s), `fall` (walked off), `zip launch` (timer from the launch's rise; the pull itself never hands over).
 - The timer waits while he fights, dodges (combat clear-out 300 ms) or zips.

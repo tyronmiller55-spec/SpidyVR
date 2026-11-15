@@ -515,7 +515,7 @@ struct Values {
     // plain jumps, zip launches, vaults and wall launches hand off to SpidyVR
     // after a timer): ms into a midair animation's air; 0 STAY TO LANDING (the
     // November 11 23:39 rule). 500 by default. jump_handoff_ms.
-    int jumpHandoffMs = 500;
+    int jumpHandoffMs = 300;
     // AIR VIEW EASE (view_ease.hpp, the punch's hold and ease): the timed
     // jump handoff, a flip break and the grip cancel hold the view where the
     // animation showed it and ease it onto the feet over this; 0 OFF (SNAP),
@@ -686,6 +686,9 @@ struct Values {
     // POINT JUMP BULLET (the user, Nov 14 t71u, t73s656; point_jump_bullet, default on): the body takes the RAW look on a point
     // jump, any angle, eased over about 120 ms (point_bullet.hpp). The launch velocity is unchanged (10 degree out-of-surface fix).
     bool pointJumpBullet = true;
+    // AIR TAKEOVER (fall_handoff_ms, 150): a plain fall (a ledge, a stumble; no jump press, never rose) hands to SpidyVR this long
+    // into the air; 0 waits for JUMP TO SPIDYVR's timer (hybrid_owner.hpp Frame::fallHandoffNs).
+    int fallHandoffMs = 150;
     // [air takeover pass settings]
     bool operator==(const Values&) const = default;
 };
@@ -958,8 +961,9 @@ enum class Item : uint8_t {
     showtimeBody,
     airCorrect,
     pointJumpBullet,
+    fallHandoff,
 };
-inline constexpr Item lastItem = Item::pointJumpBullet;
+inline constexpr Item lastItem = Item::fallHandoff;
 // SLOW-MO LENGTH's last step: no time limit (until L3 toggles it off).
 inline constexpr int slowMotionEndless = 91;
 // Real seconds a full meter lasts for a SLOW-MO LENGTH value; 0 = endless.
@@ -989,7 +993,7 @@ struct Row {
     Place place{};
 };
 // Stable row/setting numbers; categories below determine presentation order.
-const std::array<Row, 219>& rows();
+const std::array<Row, 220>& rows();
 const Row* rowFor(Item);
 // camera, shooters and legs (November 11, the user: "I can't find legs or
 // camera settings in any of the menus. Make sure it's clearly labeled"): tabs

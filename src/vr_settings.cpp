@@ -377,6 +377,9 @@ static_assert(std::size(showtimeLatchChoices) == std::size(showtimeLatchSteps));
 constexpr int airCorrectSteps[] = {400, 600, 800, 1000, 1500, 2000};
 constexpr const char* airCorrectChoices[] = {"0.4 S", "0.6 S", "0.8 S", "1 S (DEFAULT)", "1.5 S", "2 S"};
 static_assert(std::size(airCorrectChoices) == std::size(airCorrectSteps));
+constexpr int fallHandoffSteps[] = {0, 100, 150, 250, 400};
+constexpr const char* fallHandoffChoices[] = {"WITH THE JUMP TIMER", "100 MS", "150 MS (DEFAULT)", "250 MS", "400 MS"};
+static_assert(std::size(fallHandoffChoices) == std::size(fallHandoffSteps));
 // PHYSICAL WEB TETHERS (tether.hpp): the rope's points and its steps a frame.
 constexpr int tetherParticleSteps[] = {12, 16, 20, 24, 28, 32};
 constexpr const char* tetherParticleChoices[] = {"12", "16", "20", "24 (DEFAULT)", "28", "32"};
@@ -557,6 +560,8 @@ std::span<const int> steps(Item item) {
         return showtimeLatchSteps;
     case Item::airCorrect:
         return airCorrectSteps;
+    case Item::fallHandoff:
+        return fallHandoffSteps;
     case Item::kickSpin:
         return kickSpinSteps;
     case Item::tetherParticles:
@@ -810,6 +815,8 @@ float numberOf(Item item, const Values& v) {
         return static_cast<float>(v.showtimeLatch);
     case Item::airCorrect:
         return static_cast<float>(v.airCorrectMs);
+    case Item::fallHandoff:
+        return static_cast<float>(v.fallHandoffMs);
     case Item::kickSpin:
         return static_cast<float>(v.kickSpinPct);
     case Item::tetherParticles:
@@ -1198,6 +1205,7 @@ Values sanitized(Values v) {
     v.showtimeVignette = std::clamp(v.showtimeVignette, 0, 2);
     v.showtimeLatch = std::clamp(v.showtimeLatch, 0, 1);
     v.airCorrectMs = std::clamp(v.airCorrectMs, 300, 2500);
+    v.fallHandoffMs = std::clamp(v.fallHandoffMs, 0, 1000);
     v.kickSpinPct = std::clamp(v.kickSpinPct, 0, 100);
     v.tetherParticles = std::clamp(v.tetherParticles, 8, 32);
     v.tetherSubsteps = std::clamp(v.tetherSubsteps, 2, 16);
@@ -1213,9 +1221,9 @@ Values sanitized(Values v) {
     v.automaticHandThreshold = std::clamp(v.automaticHandThreshold, 50, 300);
     return v;
 }
-const std::array<Row, 219>& rows() {
+const std::array<Row, 220>& rows() {
     // The help fits the game's description column beside the rows.
-    static const std::array<Row, 219> all{{
+    static const std::array<Row, 220> all{{
         {Item::none, "WEBS", nullptr, {}},
         {Item::webStyle, "WEB STYLE",
          "Arcade: webs pass lamp posts, signs and cars, and swings stay above the street.", webStyleChoices},
@@ -1898,6 +1906,10 @@ const std::array<Row, 219>& rows() {
          "POINT JUMP BULLET",
          "A point jump turns your body along your eyes, any angle, like a bullet.",
          {}, Place::launcher},
+        {Item::fallHandoff,
+         "FALL TO SPIDYVR",
+         "A plain fall (no jump) hands to SpidyVR this long into the air. 150 ms.",
+         fallHandoffChoices, Place::launcher},
     }};
     return all;
 }
@@ -1960,6 +1972,7 @@ const std::array<Screen, categoryCount>& screens() {
         Item::slowMotionLength,
         Item::softLock,
         Item::animatedTorsoTwist,
+        Item::fallHandoff,
     };
     // CAMERA & STABILIZATION (November 11): how much the animation moves the
     // view (amounts, HEAD ANGLE), then how smoothly (the response times).
@@ -2554,6 +2567,9 @@ bool choose(Item item, int index, Values& v) {
     case Item::airCorrect:
         v.airCorrectMs = s[index];
         break;
+    case Item::fallHandoff:
+        v.fallHandoffMs = s[index];
+        break;
     case Item::kickSpin:
         v.kickSpinPct = s[index];
         break;
@@ -2905,6 +2921,7 @@ constexpr TabOnly tabOnly[] = {
     {"showtime_latch", nullptr, &Values::showtimeLatch},
     {"air_correct_ms", nullptr, &Values::airCorrectMs},
     {"point_jump_bullet", &Values::pointJumpBullet, nullptr},
+    {"fall_handoff_ms", nullptr, &Values::fallHandoffMs},
     {"movement_defaults", nullptr, &Values::movementDefaults},
 };
 } // namespace

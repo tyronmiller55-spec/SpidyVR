@@ -92,6 +92,15 @@ constexpr int64_t handstandLandNs = 250'000'000;
 // JUMP TO SPIDYVR (the user, November 12 04:56 / 05:07 / 05:41: "All jumps
 // should switch to Spidy VR after about a half of a second"; plain jumps, zip
 // launches, vaults and wall launches): which midair animation the timer ended.
+// What took a jump-timer handoff: the timer itself, a jump's vertical speed under takeoffDoneVel, or a plain fall.
+enum class TimedWhy : uint8_t { timer, slowRise, fall };
+inline const char* timedWhyName(TimedWhy w) {
+    switch (w) {
+    case TimedWhy::slowRise: return "vertical speed low";
+    case TimedWhy::fall: return "plain fall";
+    default: return "timer";
+    }
+}
 enum class JumpKind : uint8_t { none, jump, fall, zipLaunch, vault, wallLaunch };
 inline const char* jumpKindName(JumpKind k) {
     switch (k) {
@@ -213,6 +222,9 @@ constexpr int64_t zipMaxNs = 3'000'000'000;
 constexpr int64_t airAnimMinNs = 300'000'000;
 constexpr int64_t fallHoldNs = 150'000'000;
 constexpr int64_t airAnimMaxNs = 2'500'000'000;
+// AIR TAKEOVER (Nov 14): a jump's vertical speed under this, after this long in the air, takes the air early.
+constexpr float takeoffDoneVel = 4.f;
+constexpr int64_t takeoffMinNs = 250'000'000;
 // November 11 23:39 (the user: "Jumps are in animation until it's broken with
 // a rotation, or grip cancel"): a midair animation no longer hands the air to
 // SpidyVR when it ends (anim-end); it plays through the fall to the landing
@@ -347,6 +359,10 @@ struct Frame {
     // zip's point launch from its rise) hands to VR this long into the air;
     // 0 stays to the landing (the November 11 23:39 rule).
     int64_t jumpHandoffNs = 0;
+    // AIR TAKEOVER: earlier takeovers inside the JUMP TO SPIDYVR timer (each 0 = off, as before): a jump whose vertical
+    // speed is under takeoffDoneVel (m/s) once it has been takeoffMinNs in the air; a plain fall after fallHandoffNs.
+    float takeoffDoneVel = 0;
+    int64_t takeoffMinNs = 0, fallHandoffNs = 0;
     // HANDSTAND (handstand.hpp, H1): the hands hold him on a floor (caught,
     // balancing, or just let go of): SpidyVR keeps the body, ground included;
     // the landing waits until this ends.
@@ -506,6 +522,7 @@ struct HybridOwner {
     // `timed` switch) and how long he had been in that air (ms).
     JumpKind lastJumpKind = JumpKind::none;
     int64_t lastJumpAirNs{};
+    TimedWhy lastTimedWhy = TimedWhy::timer; // which rule took the last jump-timer handoff
 
     // A FLIP BREAK (the user, November 11 23:39 / 23:41: "Any cancel or
     // pitch/tilt will break animation on that exact frame"; turning left or
@@ -819,12 +836,35 @@ struct HybridOwner {
         }
         // JUMP TO SPIDYVR: the timer ends the midair animation (never during a
         // fight, a dodge or a zip; landing first keeps it the animation's).
-        if (f.jumpHandoffNs > 0 && !busy && inAir >= f.jumpHandoffNs) {
+        // AIR TAKEOVER (the user, Nov 14 t71u, t73u, t73s656: "give the air to SpidyVR completely", "take over 0.3 s after
+        // leaving the ground; vertical speed under 4 m/s, or an input that needs SpidyVR, can take over earlier"): the
+        // takeoff animation plays, and the air is SpidyVR's at the first of
+        //   the timer (jumpHandoffNs, 300 ms by default),
+        //   a jump's vertical speed under takeoffDoneVel once it has had takeoffMinNs (a hop never reaches the timer),
+        //   a fall with no press (no jump ask, never rose: a ledge, a stumble) after fallHandoffNs, there being no takeoff
+        //   animation to wait for,
+        // and the inputs that need SpidyVR (web, grip, flip, wall, point jump) took it above, at once. The landing is the
+        // animation's: only the air is VR's (VR -> ANIM on touchdown).
+        if (f.jumpHandoffNs > 0 && !busy) {
             JumpKind kind = airKind_;
             if (kind == JumpKind::fall && airRose_)
                 kind = JumpKind::jump;
-            goTimed(kind, inAir, nowNs);
-            return domain;
+            TimedWhy why = TimedWhy::timer;
+            bool due = inAir >= f.jumpHandoffNs;
+            if (!due && kind == JumpKind::jump && f.takeoffDoneVel > 0 && inAir >= f.takeoffMinNs &&
+                std::isfinite(f.velY) && f.velY < f.takeoffDoneVel) {
+                due = true;
+                why = TimedWhy::slowRise;
+            }
+            if (!due && kind == JumpKind::fall && f.fallHandoffNs > 0 && inAir >= f.fallHandoffNs) {
+                due = true;
+                why = TimedWhy::fall;
+            }
+            if (due) {
+                lastTimedWhy = why;
+                goTimed(kind, inAir, nowNs);
+                return domain;
+            }
         }
         return domain;
     }

@@ -8776,6 +8776,10 @@ DWORD WINAPI run(void*) {
                                                : NAN;
                         // JUMP TO SPIDYVR: the midair animation's timer (0 stays to the landing).
                         hybridFrame.jumpHandoffNs = static_cast<int64_t>(values.jumpHandoffMs) * 1'000'000ll;
+                        // AIR TAKEOVER: a slow-rising jump and a plain fall hand over inside that timer.
+                        hybridFrame.takeoffDoneVel = hybrid_owner::takeoffDoneVel;
+                        hybridFrame.takeoffMinNs = hybrid_owner::takeoffMinNs;
+                        hybridFrame.fallHandoffNs = static_cast<int64_t>(values.fallHandoffMs) * 1'000'000ll;
                         // HANDSTAND (H1): the hands hold him on the ground; SpidyVR keeps him.
                         hybridFrame.handSupport = motion.handstand.holdVr;
                         hybridFrame.moveStick = frame.hands[0].valid && std::isfinite(frame.hands[0].stickX) &&
@@ -8864,10 +8868,11 @@ DWORD WINAPI run(void*) {
                                                  hybridOwner.enterAnim ? "vr->anim this frame"
                                                                        : "already anim");
                             if (hybridOwner.enterVr && hybridOwner.lastEnterVr == hybrid_owner::EnterVr::timed)
-                                diag_log::writef("jump handoff: %s after %d ms (timer %d ms)",
+                                diag_log::writef("jump handoff: %s after %d ms (timer %d ms, fall %d ms; by %s)",
                                                  hybrid_owner::jumpKindName(hybridOwner.lastJumpKind),
                                                  static_cast<int>(hybridOwner.lastJumpAirNs / 1'000'000),
-                                                 values.jumpHandoffMs);
+                                                 values.jumpHandoffMs, values.fallHandoffMs,
+                                                 hybrid_owner::timedWhyName(hybridOwner.lastTimedWhy));
                             if (hybridOwner.enterVr) {
                                 // Slice 2 G→T (anim→vr): capture the view the player is seeing,
                                 // re-anchor tracking onto it, warm-reclaim IK, start

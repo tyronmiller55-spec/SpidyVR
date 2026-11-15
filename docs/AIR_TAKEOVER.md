@@ -20,3 +20,6 @@ the hero round. The turn itself cannot be eased: there is no facing write, and t
 
 ## 6. Point jump bullet
 `point_jump_bullet` (on): the body's axis takes the raw look at the launch, eased 120 ms, any angle (straight down: a half turn about the heading's right). Body only (`pose.tilt` in `game_xr.cpp`'s native body), so the view and the heading are untouched; the velocity keeps the 10 deg out-of-surface fix. Lets go on touchdown, web, A (a fresh press: the chord's own A is not one), hands holding, under 6 m/s after 0.4 s, or 4 s.
+
+## 7. The air is SpidyVR's
+The takeoff animation plays; the air is VR's at the first of `jump_handoff_ms` (300), a jump's vertical speed under 4 m/s after the 0.25 s minimum dwell, or a plain fall after `fall_handoff_ms` (150). Web, grip, flip stick, Spidy's wall and a point jump still take it at once. Fights, dodges and zips keep the animation; the landing is the animation's. A fall has no takeoff animation, so the 0.25 s dwell applies to jumps only.
