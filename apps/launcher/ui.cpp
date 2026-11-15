@@ -2986,6 +2986,11 @@ void App::options(ImVec2 origin, ImVec2 size) {
                    "(whether the scene camera is the view) so the next build can tell finishers from cutscenes. "
                    "It never moves the camera. Off by default.",
                    S(42), [&] { tabToggle("##showtimeautofinish", Item::showtimeAutoFinish); });
+            settingOption(Item::showtimeBody, "Body (advanced)",
+                   "What you see of him from outside. Game pose: his head is shown (in play it is hidden because "
+                   "your eyes are inside it) and the body is whatever drives him now, the game's animation or "
+                   "your own body. As in play: the head stays hidden, to compare.",
+                   S(150), [&] { tabCombo("##showtimebody", Item::showtimeBody); });
         });
     }
     group(static_cast<int>(spidy::vr_settings::categoryCount) + 1, 0, "Troubleshooting", [&] {

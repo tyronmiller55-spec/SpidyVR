@@ -24103,7 +24103,7 @@ int main() {
         // then (still November 14) HAND GRAB STRENGTH and HOLD COST, then AIR KICKS, AIM and SPIN.
         // then (still November 14) WEB TETHERS, TETHER POINTS and TETHER STEPS, then GROUND KICKS, ENEMY JOINTS and ENEMY LIMB ZONES.
         // Polish pass: HEADSET FIRST, ANIM HEAD RIDE and SHOULDER LIMIT (launcher rows) after those.
-        constexpr size_t rowsAfter = 61; // + PUNCH AUTO-TARGET (4 rows), JUMP PULL (5 rows) and the handstand balance (4 rows), SHOWTIME (3 rows, then 8, Nov 14)
+        constexpr size_t rowsAfter = 62; // + PUNCH AUTO-TARGET (4 rows), JUMP PULL (5 rows) and the handstand balance (4 rows), SHOWTIME (3 rows, then 8, Nov 14)
         check(all.size() == firstRealistic + std::size(realistic) + rowsAfter,
               "the realistic flips' rows are not the last but the appended ones");
         for (size_t i = 0; i < std::size(realistic); ++i)
@@ -24379,7 +24379,7 @@ int main() {
                   "a row in the wrong place");
         }
         check(std::count_if(all.begin(), all.end(), [](const Row& r) { return r.place == Place::tab; }) ==
-                  157, // (Nov 14: +14 SHOWTIME) November 11: +8 (SHOOTERS, LOCK STRENGTH, CAMERA MOTION, PITCH, ROLL, BOB x2, HEAD ANGLE), -5 old wrist rows; +6 POINT JUMP; November 12: +1 PUNCH VIEW EASE, +3 MOVE HAPTICS, VIEW YAW SOURCE, SOUND TRACE, +2 JUMP TO SPIDYVR, AIR VIEW EASE, +2 ANIM YAW SWAY, TURN-IN-PLACE ANGLE, +4 PASSIVE LEGS, PASSIVE COUPLING, AIR CROUCH, REACH SPREAD
+                  158, // (Nov 14: +15 SHOWTIME) November 11: +8 (SHOOTERS, LOCK STRENGTH, CAMERA MOTION, PITCH, ROLL, BOB x2, HEAD ANGLE), -5 old wrist rows; +6 POINT JUMP; November 12: +1 PUNCH VIEW EASE, +3 MOVE HAPTICS, VIEW YAW SOURCE, SOUND TRACE, +2 JUMP TO SPIDYVR, AIR VIEW EASE, +2 ANIM YAW SWAY, TURN-IN-PLACE ANGLE, +4 PASSIVE LEGS, PASSIVE COUPLING, AIR CROUCH, REACH SPREAD
               "the tab's own rows");
         check(all[1].item == Item::webStyle && std::strcmp(all[1].title, "WEB STYLE") == 0 &&
                   all[1].choices.size() == 2 && std::strcmp(all[1].choices[0], "REALISTIC") == 0 &&
@@ -24685,10 +24685,9 @@ int main() {
                   "headset_first=1\npunch_autotarget=1\npunch_track_cone_deg=45\npunch_track_range_m=6\npunch_view_snap=0\n"
                   "jump_pull=1\njump_pull_gaze_deg=20\njump_pull_stick_deg=25\njump_pull_range_m=12\njump_pull_cap_dmps=15\n"
                   "anim_head_ride=0\nshoulder_limit=0\nsnap_realign=1\n"
-                  "showtime=0\nshowtime_while=0\nshowtime_fade_ms=150\n"
-                  "showtime_distance_cm=250\nshowtime_height_cm=30\nshowtime_angle_deg=35\nshowtime_turn=0\nshowtime_follow=1\n"
-                  "showtime_vignette=1\nshowtime_slow_mo=1\nshowtime_latch=0\n"
-                  "showtime_chord=0\nshowtime_auto_dodge=0\nshowtime_auto_finish=0\n"
+                  "showtime=0\nshowtime_while=0\nshowtime_fade_ms=150\nshowtime_body=0\nshowtime_chord=0\nshowtime_auto_dodge=0\n"
+                  "showtime_auto_finish=0\nshowtime_distance_cm=250\nshowtime_height_cm=30\nshowtime_angle_deg=35\n"
+                  "showtime_turn=0\nshowtime_follow=1\nshowtime_vignette=1\nshowtime_slow_mo=1\nshowtime_latch=0\n"
                   "movement_defaults=3\n",
               "the defaults' text");
         Values changed = defaults;
@@ -32027,7 +32026,7 @@ int main() {
     test("Native Animation: combined menu inventory and upstream-compatible v39 settings packet", [] {
         using namespace vr_settings;
         const auto& all = rows();
-        check(all.size() == 216 && static_cast<unsigned>(lastItem) < 256, "row/Item bounds");
+        check(all.size() == 217 && static_cast<unsigned>(lastItem) < 256, "row/Item bounds");
         std::array<unsigned, 256> seen{};
         size_t start = all.size();
         for (size_t i = 0; i < all.size(); ++i) {

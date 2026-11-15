@@ -61,6 +61,17 @@ Log line each second out: `showtime: cam d=<m> lag=<m> v=<m/s> w=<rad/s> vignett
 | AUTO: DODGES | OFF | PERFECT ONLY: the camera goes out when the game slows its time for a dodge (the `Moment::dodge` start). ALL: at the start of any dodge. It ends 0.3 s after the dodge input does, unless X+B is held; a dodge never seen live within 0.5 s is dropped; nothing keeps it out past 4 s (`showtime::Auto`). An auto dodge keeps its own A and B while out (WATCH ONLY would otherwise cut them). |
 | AUTO: FINISHERS (LOG ONLY) | OFF | **Gated.** The plan has finishers go out by themselves with ON as the default. Finishers read as a first-person scene to the mod (`fpScene`) and nothing yet tells one from a cutscene, or says which owner animates him. This row only logs `showtime: finisher candidate (scene started; scene camera on|off, level view n)` for each scene start, so a headset session gives the data. Nothing moves the camera. |
 
+## S3: the body from outside
+
+| Piece | What it does |
+|---|---|
+| Head restored | While out (fade to fade), his head is shown. In an animation the head shrink is a write in the game's own pose job (`game_fp::shrinkHead`); `game_fp::showtimeHead` (a 250 ms lease the XR thread refreshes each frame) makes it stand down, and since nothing persists, the next job shrinks it again at the cut back, or within a quarter second if the thread stalls. In SpidyVR (the native body) the solver's `hideHead` pose flag is dropped while out. The second is by the flag's own definition (`native_body.hpp`: "the head shrinks away"), not measured on a headset. |
+| Hands, webs, marks | Not drawn over the outside view (scene mode), as in S0. |
+| BODY (ADVANCED) | GAME POSE, HEAD SHOWN (default) / AS IN PLAY (NO HEAD): the second keeps the head hidden, to compare if the head restore misbehaves. |
+| Who drives the body | Unchanged. Showtime never changes the owner (ANIM or VR) and never yields or re-adopts the pose: the body is what drives him now. |
+
+**Gated, not built:** the plan's CORRECTED and RAW (DEBUG) body modes and the hybrid's pose corrections (they need a body forced to the VR pose or a corrected animation pose outside, which would flip the owner or edit the game's pose mid-animation; nothing here was verified on the game), the pose-yield handling that puts the VR body back with the position lock, and the plan's "finisher ends while the chord is held: carry on" (finishers are not classified yet). The camera, its collision (the ray fan, the game's own collision query and the boom fields) and AUTO: FINISHERS are as described above.
+
 ## Verification
 
 `tests/showtime_rig_tests.cpp` (the spring has no overshoot and is exact for any step, placement, the yaw only from the stick, the snap and its blink, the height range, follow and lag, the vignette curve, the pull-in, the latch). `tests/showtime_tests.cpp` (chord order, Y block, B hold-back, fade at the cut, the exit reasons, the level frame's layout and yaw, the stick rotation). The camera, fade, and chord feel need the headset: nothing here was run on a headset.

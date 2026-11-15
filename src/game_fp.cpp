@@ -374,6 +374,8 @@ std::atomic<bool> viewOnCamera{};
 // it was refreshed in the last 250 ms, so a thread that stops publishing gives the eyes back to the head within a quarter second.
 std::atomic<float> showFrame[16];
 std::atomic<uint64_t> showMs{};
+// SHOWTIME: his head is shown (the head shrink stands down) while the XR thread keeps saying so (refreshed within 250 ms).
+std::atomic<uint64_t> headShownMs{};
 bool cameraNow(float* out);
 bool showtimeNow(float* out) {
     const uint64_t t = showMs.load(std::memory_order_acquire);
@@ -1985,6 +1987,9 @@ void showtimeFrame(const Mat4* frame) {
         showFrame[i].store((*frame)[i], std::memory_order_relaxed);
     showMs.store(GetTickCount64(), std::memory_order_release);
 }
+void showtimeHead(bool shown) {
+    headShownMs.store(shown ? GetTickCount64() : 0, std::memory_order_release);
+}
 bool showtimeActive() {
     float f[16];
     return showtimeNow(f);
@@ -2127,6 +2132,10 @@ bool shrinkJoints(float* joints, uintptr_t rig, uintptr_t a, uintptr_t b) {
 }
 } // namespace
 bool shrinkHead(float* joints, uintptr_t rig) {
+    // SHOWTIME, seen from outside: the pose job leaves his head as the game posed it. Nothing persists: the next job without
+    // this flag shrinks it again, so a stalled XR thread gives the head back to the view within a quarter second.
+    if (const uint64_t t = headShownMs.load(std::memory_order_acquire); t && GetTickCount64() - t <= 250)
+        return false;
     if (!wanted.load(std::memory_order_relaxed) && !followHeroOn.load(std::memory_order_relaxed))
         return false;
     const uintptr_t a = shrinkObject[0].load(std::memory_order_relaxed),

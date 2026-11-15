@@ -678,6 +678,8 @@ struct Values {
     // (log only in this build, off by default).
     int showtimeChord = 0, showtimeAutoDodge = 0;
     bool showtimeAutoFinish = false;
+    // SHOWTIME's body (S3): 0 game pose with the head shown, 1 as in play (no head).
+    int showtimeBody = 0;
     bool operator==(const Values&) const = default;
 };
 inline constexpr int eyeAimShots = 1, eyeAimZips = 2;
@@ -946,8 +948,9 @@ enum class Item : uint8_t {
     showtimeChord,
     showtimeAutoDodge,
     showtimeAutoFinish,
+    showtimeBody,
 };
-inline constexpr Item lastItem = Item::showtimeAutoFinish;
+inline constexpr Item lastItem = Item::showtimeBody;
 // SLOW-MO LENGTH's last step: no time limit (until L3 toggles it off).
 inline constexpr int slowMotionEndless = 91;
 // Real seconds a full meter lasts for a SLOW-MO LENGTH value; 0 = endless.
@@ -977,7 +980,7 @@ struct Row {
     Place place{};
 };
 // Stable row/setting numbers; categories below determine presentation order.
-const std::array<Row, 216>& rows();
+const std::array<Row, 217>& rows();
 const Row* rowFor(Item);
 // camera, shooters and legs (November 11, the user: "I can't find legs or
 // camera settings in any of the menus. Make sure it's clearly labeled"): tabs

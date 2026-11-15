@@ -2436,6 +2436,7 @@ DWORD WINAPI run(void*) {
                             showtimeOut = {};
                             showtimeInit = false;
                             game_fp::showtimeFrame(nullptr);
+                            game_fp::showtimeHead(false);
                             if (stWasOut)
                                 diag_log::write("showtime: exit (lost control: not in play)");
                         } else {
@@ -2459,8 +2460,10 @@ DWORD WINAPI run(void*) {
                                 diag_log::writef("showtime: exit (%s) after %.1f s", showtime::exitName(showtimeOut.exitWhy),
                                                  showtimeOut.outSeconds);
                             }
-                            if (!showtimeMachine.out())
+                            if (!showtimeMachine.out()) {
                                 game_fp::showtimeFrame(nullptr);
+                                game_fp::showtimeHead(false);
+                            }
                         }
                         // While out: the right stick is the orbit's (read here, the game gets none of it). WATCH ONLY (the default):
                         // nothing new starts - a hand holding a web keeps its squeeze and trigger, every other is let go of; the left
@@ -9513,7 +9516,9 @@ DWORD WINAPI run(void*) {
                         }
                         pose.flags =
                             (flatScreen || !values.body || yieldAnim || sceneBody ? 0u : native_body::bodyOn) |
-                            native_body::hideHead | native_body::handTurn |
+                            // SHOWTIME: outside, his head is shown (BODY: GAME POSE); the solver's hide policy stands down.
+                            (showtimeMachine.out() && values.showtimeBody == 0 ? 0u : native_body::hideHead) |
+                            native_body::handTurn |
                             ((swingState.owned || hybridLeapAir) && !motion.standing ? native_body::airborne
                                                                                      : 0u) |
                             (calibratedEye > 0 || values.heightCm ? native_body::calibrated : 0u) |
@@ -10885,6 +10890,7 @@ DWORD WINAPI run(void*) {
                         showtimeCam = showtimeRig.update(ri, rp);
                         const Mat4 stFrame = showtime::levelFrame(showtimeCam.position, showtimeCam.yaw);
                         game_fp::showtimeFrame(&stFrame);
+                        game_fp::showtimeHead(values.showtimeBody == 0);
                         saved.showtimeVignette = showtimeCam.vignette;
                         saved.showtimeFade = std::max({showtimeOut.fade, showtimeCam.blink, showtimeCam.closeFade});
                         if (const uint64_t nowMs = GetTickCount64(); nowMs - showtimeLogMs >= 1000) {

@@ -105,6 +105,8 @@ bool frameLevel(Mat4& head);
 // nothing is hidden or shrunk by this call. showtimeActive(): one is current.
 void showtimeFrame(const Mat4* frame);
 bool showtimeActive();
+// SHOWTIME: the head shrink (shrinkHead) stands down while true is refreshed every frame (250 ms lease): his head is seen from outside.
+void showtimeHead(bool shown);
 // The game's own gameplay camera (the stock follow or combat camera, sampled every frame by the render thread): its place and where
 // it faces, yaw as the rig has it (0 facing -z). False when no sample is under half a second old. Read only: SHOWTIME reads its
 // distance behind him as the world's own limit on a camera back there.

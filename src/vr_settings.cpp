@@ -344,6 +344,9 @@ static_assert(std::size(showtimeWhileChoices) == std::size(showtimeWhileSteps));
 constexpr int showtimeFadeSteps[] = {0, 100, 150, 250, 400};
 constexpr const char* showtimeFadeChoices[] = {"CUT (NO FADE)", "100 MS", "150 MS (DEFAULT)", "250 MS", "400 MS"};
 static_assert(std::size(showtimeFadeChoices) == std::size(showtimeFadeSteps));
+constexpr int showtimeBodySteps[] = {0, 1};
+constexpr const char* showtimeBodyChoices[] = {"GAME POSE, HEAD SHOWN (DEFAULT)", "AS IN PLAY (NO HEAD)"};
+static_assert(std::size(showtimeBodyChoices) == std::size(showtimeBodySteps));
 constexpr int showtimeChordSteps[] = {0, 1};
 constexpr const char* showtimeChordChoices[] = {"HOLD X+B (DEFAULT)", "AUTO ONLY"};
 static_assert(std::size(showtimeChordChoices) == std::size(showtimeChordSteps));
@@ -529,6 +532,8 @@ std::span<const int> steps(Item item) {
         return showtimeWhileSteps;
     case Item::showtimeFade:
         return showtimeFadeSteps;
+    case Item::showtimeBody:
+        return showtimeBodySteps;
     case Item::showtimeChord:
         return showtimeChordSteps;
     case Item::showtimeAutoDodge:
@@ -778,6 +783,8 @@ float numberOf(Item item, const Values& v) {
         return static_cast<float>(v.showtimeWhile);
     case Item::showtimeFade:
         return static_cast<float>(v.showtimeFadeMs);
+    case Item::showtimeBody:
+        return static_cast<float>(v.showtimeBody);
     case Item::showtimeChord:
         return static_cast<float>(v.showtimeChord);
     case Item::showtimeAutoDodge:
@@ -1171,6 +1178,7 @@ Values sanitized(Values v) {
     v.jumpPullCapDmps = std::clamp(v.jumpPullCapDmps, 5, 30);
     v.showtimeWhile = std::clamp(v.showtimeWhile, 0, 1);
     v.showtimeFadeMs = std::clamp(v.showtimeFadeMs, 0, 400);
+    v.showtimeBody = std::clamp(v.showtimeBody, 0, 1);
     v.showtimeChord = std::clamp(v.showtimeChord, 0, 1);
     v.showtimeAutoDodge = std::clamp(v.showtimeAutoDodge, 0, 2);
     v.showtimeDistanceCm = std::clamp(v.showtimeDistanceCm, 150, 400);
@@ -1195,9 +1203,9 @@ Values sanitized(Values v) {
     v.automaticHandThreshold = std::clamp(v.automaticHandThreshold, 50, 300);
     return v;
 }
-const std::array<Row, 216>& rows() {
+const std::array<Row, 217>& rows() {
     // The help fits the game's description column beside the rows.
-    static const std::array<Row, 216> all{{
+    static const std::array<Row, 217> all{{
         {Item::none, "WEBS", nullptr, {}},
         {Item::webStyle, "WEB STYLE",
          "Arcade: webs pass lamp posts, signs and cars, and swings stay above the street.", webStyleChoices},
@@ -1784,6 +1792,10 @@ const std::array<Row, 216>& rows() {
          "FADE TIME",
          "Fade to black and back at each cut. CUT: no fade.",
          showtimeFadeChoices},
+        {Item::showtimeBody,
+         "BODY (ADVANCED)",
+         "His head is shown from outside. AS IN PLAY: hidden as in play, to compare.",
+         showtimeBodyChoices},
         {Item::showtimeChord,
          "CHORD",
          "HOLD X+B steps outside by hand. AUTO ONLY: no chord, only the automatic moments.",
@@ -1973,6 +1985,7 @@ const std::array<Screen, categoryCount>& screens() {
     // SHOWTIME (showtime.hpp; experimental, off by default): its switch and its feel.
     static constexpr Item showtime[] = {
         Item::showtime, Item::showtimeWhile, Item::showtimeFade,
+        Item::showtimeBody,
         Item::showtimeChord,
         Item::showtimeAutoDodge,
         Item::showtimeAutoFinish,
@@ -2078,6 +2091,7 @@ const char* inactiveReason(Item item, const Values& v) {
     case Item::showtimeChord:
     case Item::showtimeAutoDodge:
     case Item::showtimeAutoFinish:
+    case Item::showtimeBody:
         return !v.showtime ? "Turn SHOWTIME on first." : nullptr;
     case Item::kickSpin:
         return !v.kicks ? "Turn AIR KICKS on first." : nullptr;
@@ -2164,6 +2178,7 @@ bool shownWhenInactive(Item item) {
     case Item::jumpPullCap:
     case Item::showtimeWhile:
     case Item::showtimeFade:
+    case Item::showtimeBody:
     case Item::showtimeChord:
     case Item::showtimeAutoDodge:
     case Item::showtimeAutoFinish:
@@ -2484,6 +2499,9 @@ bool choose(Item item, int index, Values& v) {
         break;
     case Item::showtimeFade:
         v.showtimeFadeMs = s[index];
+        break;
+    case Item::showtimeBody:
+        v.showtimeBody = s[index];
         break;
     case Item::showtimeChord:
         v.showtimeChord = s[index];
@@ -2849,6 +2867,7 @@ constexpr TabOnly tabOnly[] = {
     {"showtime", &Values::showtime, nullptr},
     {"showtime_while", nullptr, &Values::showtimeWhile},
     {"showtime_fade_ms", nullptr, &Values::showtimeFadeMs},
+    {"showtime_body", nullptr, &Values::showtimeBody},
     {"showtime_chord", nullptr, &Values::showtimeChord},
     {"showtime_auto_dodge", nullptr, &Values::showtimeAutoDodge},
     {"showtime_auto_finish", &Values::showtimeAutoFinish, nullptr},
