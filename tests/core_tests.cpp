@@ -24103,7 +24103,7 @@ int main() {
         // then (still November 14) HAND GRAB STRENGTH and HOLD COST, then AIR KICKS, AIM and SPIN.
         // then (still November 14) WEB TETHERS, TETHER POINTS and TETHER STEPS, then GROUND KICKS, ENEMY JOINTS and ENEMY LIMB ZONES.
         // Polish pass: HEADSET FIRST, ANIM HEAD RIDE and SHOULDER LIMIT (launcher rows) after those.
-        constexpr size_t rowsAfter = 47; // + PUNCH AUTO-TARGET (4 rows), JUMP PULL (5 rows) and the handstand balance (4 rows)
+        constexpr size_t rowsAfter = 50; // + PUNCH AUTO-TARGET (4 rows), JUMP PULL (5 rows) and the handstand balance (4 rows), SHOWTIME (3 rows, Nov 14)
         check(all.size() == firstRealistic + std::size(realistic) + rowsAfter,
               "the realistic flips' rows are not the last but the appended ones");
         for (size_t i = 0; i < std::size(realistic); ++i)
@@ -24685,6 +24685,7 @@ int main() {
                   "headset_first=1\npunch_autotarget=1\npunch_track_cone_deg=45\npunch_track_range_m=6\npunch_view_snap=0\n"
                   "jump_pull=1\njump_pull_gaze_deg=20\njump_pull_stick_deg=25\njump_pull_range_m=12\njump_pull_cap_dmps=15\n"
                   "anim_head_ride=0\nshoulder_limit=0\nsnap_realign=1\n"
+                  "showtime=0\nshowtime_while=0\nshowtime_fade_ms=150\n"
                   "movement_defaults=3\n",
               "the defaults' text");
         Values changed = defaults;
@@ -32023,7 +32024,7 @@ int main() {
     test("Native Animation: combined menu inventory and upstream-compatible v39 settings packet", [] {
         using namespace vr_settings;
         const auto& all = rows();
-        check(all.size() == 202 && static_cast<unsigned>(lastItem) < 256, "row/Item bounds");
+        check(all.size() == 205 && static_cast<unsigned>(lastItem) < 256, "row/Item bounds");
         std::array<unsigned, 256> seen{};
         size_t start = all.size();
         for (size_t i = 0; i < all.size(); ++i) {

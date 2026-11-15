@@ -99,6 +99,12 @@ bool heroHead(Mat4& head);
 // where the character faced when the scene (or the cut to its next shot) began, so only where he is follows
 // him, not where he looks, and the viewer looks about freely from there.
 bool frameLevel(Mat4& head);
+// SHOWTIME (showtime.hpp): the XR thread publishes the outside camera's level frame (showtime::levelFrame: the rig's place, level,
+// facing the rig yaw) every frame while the view is out, and null when it comes back. While a frame was published in the last
+// 250 ms, frame() and frameLevel() hand the eyes THAT frame (never turned by the view yaw lock) instead of the hero's head;
+// nothing is hidden or shrunk by this call. showtimeActive(): one is current.
+void showtimeFrame(const Mat4* frame);
+bool showtimeActive();
 // The heading the scene's view has in the world, for the play that follows it (the XR worker): the
 // character's head (`level` false) or frameLevel's frame (`level` true), yaw in radians as the rig has it (0
 // facing -z). False before one was sampled.

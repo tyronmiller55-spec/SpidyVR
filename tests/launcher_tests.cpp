@@ -755,6 +755,9 @@ int main() {
                 // TORSO TWIST, ARM AIM FALLBACK (November 13): the player's own feel.
                 key == "animated_torso_twist" || key == "anim_forearm_fallback_deg")
                 continue;
+            // SHOWTIME (November 14): experimental, the player's own.
+            if (key.rfind("showtime", 0) == 0)
+                continue;
             // HANDSTAND (H1, November 12): experimental, the player's own.
             if (key.rfind("handstand", 0) == 0)
                 continue;

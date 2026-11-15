@@ -35,11 +35,15 @@ class D3D12Renderer {
         float ripple = -1;      // 0..1 of the ring's way out; below 0 none
         float rippleStrength{}; // 0..1
         bool entering{};        // the ring follows a start (cool) or an end (pale)
+        // SHOWTIME (showtime.hpp), about each eye's lens, not part of slow motion's look: `vignette` 0..1 narrows the clear
+        // middle of the view (nothing at 0), `fade` 0..1 takes the whole picture to black.
+        float vignette{}, fade{};
         // Each view's lens: the tangents of its field of view, left, right,
         // up and down (left and down negative).
         std::array<std::array<float, 4>, 2> tangents{};
         bool visible() const {
-            return amount > .002f || (ripple >= 0 && ripple < 1 && rippleStrength > 0);
+            return amount > .002f || (ripple >= 0 && ripple < 1 && rippleStrength > 0) || vignette > .002f ||
+                   fade > .002f;
         }
     };
     // A flat picture shown on a quad in the views: the phone's screen. Its

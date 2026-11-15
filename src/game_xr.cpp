@@ -1,4 +1,5 @@
 #include "spidy/animation_cancel.hpp"
+#include "spidy/showtime.hpp"
 #include "spidy/web_fire.hpp"
 // Bounded first-person OpenXR integration using the game's two native views.
 #include "spidy/native_appearance.hpp"
@@ -1247,6 +1248,16 @@ DWORD WINAPI run(void*) {
         // accounted for in a `web fire:` line.
         web_fire::Queue webFireQueue;
         web_fire::Tracker webFireTracker;
+        // SHOWTIME (showtime.hpp): the chord, the machine, and the outside camera's place (fixed at the cut in this first build).
+        showtime::Chord showtimeChord;
+        showtime::Machine showtimeMachine;
+        showtime::Machine::Output showtimeOut{};
+        showtime::Chord::Output showtimeChordOut{};
+        bool showtimeInit{}, showtimeRefSet{}, showtimeFeetKnown{};
+        Vec3 showtimeSeat{}, showtimeFeetLast{};
+        float showtimeYaw{}, showtimeYawEntry{};
+        Pose showtimeRef{};
+        uint64_t showtimeEnterMs{};
         unsigned webFirePrevButtons{}, webFireFiredNow{}, webFireNumber{};
         unsigned webFireCounts[7]{}; // by web_fire::Outcome
         float webFireWaited[2]{}, webFireRigError[2]{-1.f, -1.f};
@@ -2358,6 +2369,87 @@ DWORD WINAPI run(void*) {
                         ++SpidyXrData.toggles;
                         SpidyXrData.flatScreen = flatScreen;
                         InterlockedIncrement64(&SpidyXrData.sequence);
+                    }
+                    // SHOWTIME (showtime.hpp; EXPERIMENTAL, off by default): hold X+B and the eyes step outside Spidey. Taken here,
+                    // before FLAIL, POINT JUMP, the dodge, the wheel and the legs read X or B: the chord's buttons are the chord's
+                    // (swallowX/swallowB), and while the camera is out the hands start nothing new (WATCH ONLY). It never writes the
+                    // view heading: see the header.
+                    {
+                        const bool stOk = values.showtime && values.body && !flatScreen && viewing && gameplay &&
+                                          motion.active && spiderMan && !calibrationInput && !phone.open() &&
+                                          !padLayer.latched();
+                        const bool stFree = !gadgetWheel.open() &&
+                                            !(namedPress.claimed() &
+                                              (game_pad::NamedPress::controlX | game_pad::NamedPress::controlB));
+                        showtime::Chord::Input ci;
+                        ci.seconds = frame.seconds;
+                        ci.x = (frame.buttons & buttonX) != 0;
+                        ci.y = (frame.buttons & buttonY) != 0;
+                        ci.b = (frame.buttons & buttonB) != 0;
+                        ci.allowed = stOk && (stFree || showtimeMachine.state() != showtime::State::head);
+                        showtimeChordOut = showtimeChord.update(ci);
+                        if (showtimeChordOut.swallowX)
+                            frame.buttons &= ~static_cast<uint32_t>(buttonX);
+                        if (showtimeChordOut.swallowB)
+                            frame.buttons &= ~static_cast<uint32_t>(buttonB);
+                        if (showtimeChordOut.entered)
+                            diag_log::writef("showtime: chord lead=%s (X+B held %d ms)",
+                                             showtime::leadName(showtimeChordOut.lead),
+                                             static_cast<int>(showtimeChordOut.held * 1000 + .5f));
+                        // A feet jump of 30 m in a frame is a teleport or a load.
+                        const Vec3 stFeet{body[12], body[13], body[14]};
+                        bool stTeleport = false;
+                        if (finite(stFeet)) {
+                            stTeleport = showtimeFeetKnown && length(stFeet - showtimeFeetLast) > showtime::maxTeleportMetres;
+                            showtimeFeetLast = stFeet;
+                            showtimeFeetKnown = true;
+                        }
+                        showtime::Machine::Input mi;
+                        mi.seconds = frame.seconds;
+                        mi.fadeSeconds = static_cast<float>(values.showtimeFadeMs) / 1000.f;
+                        mi.wantOut = showtimeChordOut.active;
+                        mi.wantWhy = showtime::Why::chord;
+                        mi.allowed = stOk;
+                        mi.forced = (frame.buttons & buttonMenu) ? showtime::ExitWhy::menu
+                                    : stTeleport                  ? showtime::ExitWhy::teleport
+                                                                  : showtime::ExitWhy::none;
+                        const bool stWasOut = showtimeMachine.out();
+                        if (!stOk && showtimeMachine.state() != showtime::State::head) {
+                            // A scene, a menu or a lost character took the view: no fade over it, the frame is withdrawn at once.
+                            showtimeMachine.reset();
+                            showtimeChord.reset();
+                            showtimeOut = {};
+                            showtimeInit = false;
+                            game_fp::showtimeFrame(nullptr);
+                            if (stWasOut)
+                                diag_log::write("showtime: exit (lost control: not in play)");
+                        } else {
+                            showtimeOut = showtimeMachine.update(mi);
+                            if (showtimeOut.entered)
+                                showtimeInit = true;
+                            if (showtimeOut.left) {
+                                showtimeInit = false;
+                                diag_log::writef("showtime: exit (%s) after %.1f s", showtime::exitName(showtimeOut.exitWhy),
+                                                 showtimeOut.outSeconds);
+                            }
+                            if (!showtimeMachine.out())
+                                game_fp::showtimeFrame(nullptr);
+                        }
+                        // WATCH ONLY: while out, nothing new starts. A hand holding a web keeps its squeeze and trigger; every
+                        // other is let go of. The right stick is the orbit's (next build), the left stick and A, B, X, Y are not
+                        // the game's.
+                        if (showtimeMachine.out()) {
+                            frame.jump = false;
+                            frame.buttons &= ~static_cast<uint32_t>(buttonA | buttonB | buttonX | buttonY);
+                            for (unsigned i = 0; i < 2; ++i) {
+                                frame.hands[i].stickX = frame.hands[i].stickY = 0;
+                                frame.hands[i].stickClick = false;
+                                if (!(swingState.status && swingState.webs[i].attached)) {
+                                    frame.hands[i].squeeze = 0;
+                                    frame.hands[i].trigger = 0;
+                                }
+                            }
+                        }
                     }
                     // POINT JUMP (point_jump.hpp; the user, November 11): touching a
                     // surface, A+B together (or hold B, then A) charges a jump the way
@@ -10702,6 +10794,55 @@ DWORD WINAPI run(void*) {
                             view.grips[i] = motion.grips[i];
                         }
                     }
+                    // SHOWTIME: the fade covers the cut both ways; while out the eyes are the headset's own, on the outside
+                    // camera's level frame (eye command 4, as a level scene's), Spidey's own marks, webs and hands not drawn.
+                    saved.showtimeFade = showtimeOut.fade;
+                    if (showtimeMachine.out()) {
+                        if (showtimeInit) {
+                            showtimeInit = false;
+                            // The camera starts behind him, along the heading the player looks (the cut turns nothing), at the height
+                            // of his head and a little above; fixed here, the orbit and the follow come next.
+                            const Vec3 stFeet{body[12], body[13], body[14]};
+                            float yaw = std::isfinite(hsViewNow) ? hsViewNow : 0.f;
+                            if (!std::isfinite(hsViewNow)) {
+                                const float fx = body[8], fz = body[10];
+                                if (std::hypot(fx, fz) > .3f)
+                                    yaw = showtime::yawOfForward(fx / std::hypot(fx, fz), fz / std::hypot(fx, fz));
+                            }
+                            showtimeYaw = showtimeYawEntry = yaw;
+                            const float distance = 2.5f, height = 1.7f + .3f;
+                            showtimeSeat = {stFeet.x + std::sin(yaw) * distance, stFeet.y + height,
+                                            stFeet.z + std::cos(yaw) * distance};
+                            showtimeRef = {frame.head.position, screenAhead(frame.head, 0).orientation};
+                            showtimeRefSet = validTrackedPose(frame.head);
+                            showtimeEnterMs = GetTickCount64();
+                            diag_log::writef("showtime: enter (%s) yaw %.0f deg, seat %.1f m behind and %.1f m up, head view %s",
+                                             showtime::whyName(showtimeOut.enterWhy), yaw * 57.29578f, distance, height,
+                                             std::isfinite(hsViewNow) ? "headset" : "body");
+                        }
+                        const Mat4 stFrame = showtime::levelFrame(showtimeSeat, showtimeYaw);
+                        game_fp::showtimeFrame(&stFrame);
+                        headset_smoothing::liveLevel.store(0, std::memory_order_relaxed);
+                        headset_smoothing::publish({});
+                        headset_smoothing::liveRide.store(false, std::memory_order_relaxed);
+                        camera_motion::publish({});
+                        eyes.anchored = 4;
+                        const Pose toRef = inverse(showtimeRef);
+                        const Mat4 axes = {1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1};
+                        for (unsigned i = 0; i < 2; ++i) {
+                            const Pose eye = compose(toRef, frame.eyes[i].pose);
+                            eyes.eyes[i].world = native_view::relativePose(axes, eye);
+                            const auto& f = frame.eyes[i].fov;
+                            eyes.eyes[i].fov[0] = f.left;
+                            eyes.eyes[i].fov[1] = f.right;
+                            eyes.eyes[i].fov[2] = f.down;
+                            eyes.eyes[i].fov[3] = f.up;
+                        }
+                        saved.scene = true;
+                        saved.animation = false;
+                        saved.rigTurn = {};
+                        turnNow = {};
+                    }
                     history.remember(saved);
                     const auto code = SpidySetEyes(&eyes);
                     if (code && code != 4003)
@@ -11265,6 +11406,8 @@ DWORD WINAPI run(void*) {
                         std::array<D3D12Renderer::ViewTarget, 2> overlayViews;
                         // Slow motion recolours the image under the overlay, about each eye's lens.
                         D3D12Renderer::Grade grade;
+                        grade.vignette = saved->showtimeVignette;
+                        grade.fade = saved->showtimeFade;
                         grade.amount = saved->slow.blend;
                         grade.ripple = saved->slow.ripple;
                         grade.rippleStrength = saved->slow.entering ? 1.f : .7f;
@@ -11290,7 +11433,12 @@ DWORD WINAPI run(void*) {
                         if (!bare)
                             overlay.renderViews(overlayViews, vertices, true, false, translucent, &grade,
                                                 &phonePicture);
-                        else if (feedback && (!vertices.empty() || !translucent.empty() || !phoneScreen.empty()))
+                        else if (grade.vignette > .002f || grade.fade > .002f)
+                            // SHOWTIME: the fade and the vignette (and slow motion's look) over a bare view.
+                        {
+                            const std::vector<Vertex> none;
+                            overlay.renderViews(overlayViews, none, true, false, none, &grade, nullptr);
+                        } else if (feedback && (!vertices.empty() || !translucent.empty() || !phoneScreen.empty()))
                             overlay.renderViews(overlayViews, vertices, true, false, translucent, nullptr,
                                                 &phonePicture);
                         overlayMs = std::chrono::duration<double, std::milli>(

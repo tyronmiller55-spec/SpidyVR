@@ -337,6 +337,13 @@ static_assert(std::size(jumpPullRangeChoices) == std::size(jumpPullRangeSteps));
 constexpr int jumpPullCapSteps[] = {5, 10, 15, 20, 30};
 constexpr const char* jumpPullCapChoices[] = {"0.5 M/S", "1 M/S", "1.5 M/S (DEFAULT)", "2 M/S", "3 M/S"};
 static_assert(std::size(jumpPullCapChoices) == std::size(jumpPullCapSteps));
+// SHOWTIME (showtime.hpp): its rows' steps.
+constexpr int showtimeWhileSteps[] = {0, 1};
+constexpr const char* showtimeWhileChoices[] = {"WATCH ONLY (DEFAULT)", "KEEP CONTROL"};
+static_assert(std::size(showtimeWhileChoices) == std::size(showtimeWhileSteps));
+constexpr int showtimeFadeSteps[] = {0, 100, 150, 250, 400};
+constexpr const char* showtimeFadeChoices[] = {"CUT (NO FADE)", "100 MS", "150 MS (DEFAULT)", "250 MS", "400 MS"};
+static_assert(std::size(showtimeFadeChoices) == std::size(showtimeFadeSteps));
 // PHYSICAL WEB TETHERS (tether.hpp): the rope's points and its steps a frame.
 constexpr int tetherParticleSteps[] = {12, 16, 20, 24, 28, 32};
 constexpr const char* tetherParticleChoices[] = {"12", "16", "20", "24 (DEFAULT)", "28", "32"};
@@ -491,6 +498,10 @@ std::span<const int> steps(Item item) {
         return jumpPullRangeSteps;
     case Item::jumpPullCap:
         return jumpPullCapSteps;
+    case Item::showtimeWhile:
+        return showtimeWhileSteps;
+    case Item::showtimeFade:
+        return showtimeFadeSteps;
     case Item::kickSpin:
         return kickSpinSteps;
     case Item::tetherParticles:
@@ -718,6 +729,10 @@ float numberOf(Item item, const Values& v) {
         return static_cast<float>(v.jumpPullRangeM);
     case Item::jumpPullCap:
         return static_cast<float>(v.jumpPullCapDmps);
+    case Item::showtimeWhile:
+        return static_cast<float>(v.showtimeWhile);
+    case Item::showtimeFade:
+        return static_cast<float>(v.showtimeFadeMs);
     case Item::kickSpin:
         return static_cast<float>(v.kickSpinPct);
     case Item::tetherParticles:
@@ -919,6 +934,8 @@ template <class V> auto switchOf(Item item, V& v) -> decltype(&v.aimMarkers) {
         return &v.punchViewSnap;
     case Item::jumpPull:
         return &v.jumpPull;
+    case Item::showtime:
+        return &v.showtime;
     case Item::groundKicks:
         return &v.groundKicks;
     case Item::enemyJoints:
@@ -1085,6 +1102,8 @@ Values sanitized(Values v) {
     v.jumpPullStickDeg = std::clamp(v.jumpPullStickDeg, 15, 45);
     v.jumpPullRangeM = std::clamp(v.jumpPullRangeM, 6, 20);
     v.jumpPullCapDmps = std::clamp(v.jumpPullCapDmps, 5, 30);
+    v.showtimeWhile = std::clamp(v.showtimeWhile, 0, 1);
+    v.showtimeFadeMs = std::clamp(v.showtimeFadeMs, 0, 400);
     v.kickSpinPct = std::clamp(v.kickSpinPct, 0, 100);
     v.tetherParticles = std::clamp(v.tetherParticles, 8, 32);
     v.tetherSubsteps = std::clamp(v.tetherSubsteps, 2, 16);
@@ -1100,9 +1119,9 @@ Values sanitized(Values v) {
     v.automaticHandThreshold = std::clamp(v.automaticHandThreshold, 50, 300);
     return v;
 }
-const std::array<Row, 202>& rows() {
+const std::array<Row, 205>& rows() {
     // The help fits the game's description column beside the rows.
-    static const std::array<Row, 202> all{{
+    static const std::array<Row, 205> all{{
         {Item::none, "WEBS", nullptr, {}},
         {Item::webStyle, "WEB STYLE",
          "Arcade: webs pass lamp posts, signs and cars, and swings stay above the street.", webStyleChoices},
@@ -1677,6 +1696,18 @@ const std::array<Row, 202>& rows() {
          "JUMP PULL LIMIT",
          "The most speed a jump's pull adds in all.",
          jumpPullCapChoices, Place::launcher},
+        {Item::showtime,
+         "SHOWTIME (EXPERIMENTAL)",
+         "Hold X+B and your view steps outside Spidey. Let go to return. Off.",
+         {}},
+        {Item::showtimeWhile,
+         "WHILE OUT",
+         "WATCH ONLY: nothing starts. KEEP CONTROL: walk, jump, dodge.",
+         showtimeWhileChoices},
+        {Item::showtimeFade,
+         "FADE TIME",
+         "Fade to black and back at each cut. CUT: no fade.",
+         showtimeFadeChoices},
         {Item::handstand,
          "HANDSTAND (EXPERIMENTAL)",
          "Catch a handstand: land inverted, both palms on a floor. Needs REALISTIC FLIPS.",
@@ -1819,6 +1850,10 @@ const std::array<Screen, categoryCount>& screens() {
         Item::pointJump, Item::pointJumpTrigger, Item::pointJumpMinSpeed,
         Item::pointJumpMaxSpeed, Item::pointJumpFull, Item::pointJumpPush,
     };
+    // SHOWTIME (showtime.hpp; experimental, off by default): its switch and its feel.
+    static constexpr Item showtime[] = {
+        Item::showtime, Item::showtimeWhile, Item::showtimeFade,
+    };
     static const std::array<Screen, categoryCount> all{{
         {"Setup", "VR SETUP", setup},
         {"Webs", "VR WEBS", webs},
@@ -1832,6 +1867,7 @@ const std::array<Screen, categoryCount>& screens() {
         {"Web Shooters", "VR WEB SHOOTERS", shooters},
         {"Legs (Advanced)", "VR LEGS (ADVANCED)", legs},
         {"Point Jump", "VR POINT JUMP", pointJump},
+        {"Showtime", "VR SHOWTIME", showtime},
     }};
     return all;
 }
@@ -1898,6 +1934,9 @@ const char* inactiveReason(Item item, const Values& v) {
     case Item::jumpPullRange:
     case Item::jumpPullCap:
         return !v.jumpPull ? "Turn JUMP PULL on first." : nullptr;
+    case Item::showtimeWhile:
+    case Item::showtimeFade:
+        return !v.showtime ? "Turn SHOWTIME on first." : nullptr;
     case Item::kickSpin:
         return !v.kicks ? "Turn AIR KICKS on first." : nullptr;
     case Item::enemyLimbZones:
@@ -1981,6 +2020,8 @@ bool shownWhenInactive(Item item) {
     case Item::jumpPullStick:
     case Item::jumpPullRange:
     case Item::jumpPullCap:
+    case Item::showtimeWhile:
+    case Item::showtimeFade:
     case Item::enemyLimbZones:
     case Item::tetherParticles:
     case Item::tetherSubsteps:
@@ -2284,6 +2325,12 @@ bool choose(Item item, int index, Values& v) {
         break;
     case Item::jumpPullCap:
         v.jumpPullCapDmps = s[index];
+        break;
+    case Item::showtimeWhile:
+        v.showtimeWhile = s[index];
+        break;
+    case Item::showtimeFade:
+        v.showtimeFadeMs = s[index];
         break;
     case Item::kickSpin:
         v.kickSpinPct = s[index];
@@ -2619,6 +2666,9 @@ constexpr TabOnly tabOnly[] = {
     {"anim_head_ride", &Values::animHeadRide, nullptr},
     {"shoulder_limit", &Values::shoulderLimit, nullptr},
     {"snap_realign", &Values::snapRealign, nullptr},
+    {"showtime", &Values::showtime, nullptr},
+    {"showtime_while", nullptr, &Values::showtimeWhile},
+    {"showtime_fade_ms", nullptr, &Values::showtimeFadeMs},
     {"movement_defaults", nullptr, &Values::movementDefaults},
 };
 } // namespace

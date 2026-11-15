@@ -66,6 +66,9 @@ struct NativeEyeFrame {
     // How Spidy's marks look in this image (the tab's UI STYLE).
     UiStyle uiStyle{};
     bool combatVisuals{}; // overlay choice when this image was submitted
+    // SHOWTIME (showtime.hpp): the view is outside Spidey. `showtimeFade` 0..1 takes the picture to black, `showtimeVignette` 0..1
+    // narrows its clear middle (rig speed, never head motion). Both go to the recolouring pass (D3D12Renderer::Grade).
+    float showtimeFade{}, showtimeVignette{};
     bool flatScreen{};
     // A first-person scene (eye command anchored 2): the eyes show the scene from inside the head of the
     // character it plays; Spidy's own marks, webs and hands are not drawn over it.

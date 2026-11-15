@@ -370,6 +370,22 @@ std::atomic<uint64_t> camMs{};
 std::atomic<int> cameraMode{};
 std::atomic<uint64_t> lastCameraMs{};
 std::atomic<bool> viewOnCamera{};
+// SHOWTIME (showtime.hpp): the outside camera's level frame, published by the XR thread each frame while out. It is "on" while
+// it was refreshed in the last 250 ms, so a thread that stops publishing gives the eyes back to the head within a quarter second.
+std::atomic<float> showFrame[16];
+std::atomic<uint64_t> showMs{};
+bool cameraNow(float* out);
+bool showtimeNow(float* out) {
+    const uint64_t t = showMs.load(std::memory_order_acquire);
+    if (!t || GetTickCount64() - t > 250)
+        return false;
+    for (int i = 0; i < 16; ++i)
+        out[i] = showFrame[i].load(std::memory_order_relaxed);
+    for (int i = 0; i < 16; ++i)
+        if (!std::isfinite(out[i]))
+            return false;
+    return true;
+}
 bool cameraNow(float* out) {
     const uint64_t t = camMs.load(std::memory_order_acquire);
     if (!t || GetTickCount64() - t > 500)
@@ -1960,7 +1976,25 @@ bool heroHead(Mat4& head) {
     std::memcpy(head.data(), world, sizeof(world));
     return true;
 }
+void showtimeFrame(const Mat4* frame) {
+    if (!frame) {
+        showMs.store(0, std::memory_order_release);
+        return;
+    }
+    for (int i = 0; i < 16; ++i)
+        showFrame[i].store((*frame)[i], std::memory_order_relaxed);
+    showMs.store(GetTickCount64(), std::memory_order_release);
+}
+bool showtimeActive() {
+    float f[16];
+    return showtimeNow(f);
+}
 bool frame(Mat4& head) {
+    // SHOWTIME: the outside camera, as published; never turned by the view yaw lock (that is the head's).
+    if (float showing[16]; showtimeNow(showing)) {
+        std::memcpy(head.data(), showing, sizeof(showing));
+        return true;
+    }
     if (!heroHead(head))
         return false;
     // FULL head lock on the stable heading: gameplay only (a first-person
@@ -1981,6 +2015,10 @@ bool sceneYaw(bool level, float& yaw) {
     return std::isfinite(yaw);
 }
 bool frameLevel(Mat4& out) {
+    if (float showing[16]; showtimeNow(showing)) {
+        std::memcpy(out.data(), showing, sizeof(showing));
+        return true;
+    }
     Mat4 head{};
     if (!frame(head))
         return false;

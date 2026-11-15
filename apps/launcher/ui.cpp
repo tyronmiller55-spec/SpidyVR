@@ -2597,6 +2597,7 @@ void App::options(ImVec2 origin, ImVec2 size) {
         const int shootersPage = static_cast<int>(Category::shooters);
         const int legsPage = static_cast<int>(Category::legs);
         const int pointJumpPage = static_cast<int>(Category::pointJump);
+        const int showtimePage = static_cast<int>(Category::showtime);
         group(cameraPage, 0, "Camera motion (how much)", [&] {
             settingOption(Item::cameraMotion, "Camera motion preset",
                    "How much of the animation's own camera motion reaches your view while Native Animation "
@@ -2922,6 +2923,22 @@ void App::options(ImVec2 origin, ImVec2 size) {
                                 "(150), point_jump_cooldown_ms (250), point_jump_zip_guard_ms (400, after a game "
                                 "zip), point_jump_dodge_hold_ms (250) and point_jump_in_combat (1).");
             ImGui::PopTextWrapPos();
+        });
+        group(showtimePage, 0, "Showtime (experimental)", [&] {
+            settingOption(Item::showtime, "Showtime",
+                   "Hold X and B together for a fifth of a second and your view steps outside Spidey, to watch him "
+                   "from where the game's camera is; your head still looks and leans one to one. Let go and the "
+                   "view is back on his head, looking where it looked. X first: no dodge. B first: the dodge, then "
+                   "Showtime. Y held is the legs' flail, not Showtime. Off by default.",
+                   S(42), [&] { tabToggle("##showtime", Item::showtime); });
+            settingOption(Item::showtimeWhile, "While out",
+                   "Watch only: nothing you press starts anything (a web you already hold stays held). Keep "
+                   "control: the left stick walks the way the camera faces, A jumps, B dodges; webs, punches and "
+                   "flips stay off.",
+                   S(150), [&] { tabCombo("##showtimewhile", Item::showtimeWhile); });
+            settingOption(Item::showtimeFade, "Fade time",
+                   "The fade to black and back under each step out and in (150 ms by default). Cut: none.",
+                   S(150), [&] { tabCombo("##showtimefade", Item::showtimeFade); });
         });
     }
     group(static_cast<int>(spidy::vr_settings::categoryCount) + 1, 0, "Troubleshooting", [&] {

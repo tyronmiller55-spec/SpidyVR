@@ -665,6 +665,10 @@ struct Values {
     // m/s (15 = 1.5 m/s). jump_pull, jump_pull_gaze_deg, jump_pull_stick_deg, jump_pull_range_m, jump_pull_cap_dmps.
     bool jumpPull = true;
     int jumpPullGazeDeg = 20, jumpPullStickDeg = 25, jumpPullRangeM = 12, jumpPullCapDmps = 15;
+    // SHOWTIME (showtime.hpp; the plan's Pillar 6, EXPERIMENTAL, everything off by default): hold X + B and the view steps outside
+    // Spidey. showtimeWhile: 0 WATCH ONLY, 1 KEEP CONTROL; showtimeFadeMs: the whole cut. showtime, showtime_while, showtime_fade_ms.
+    bool showtime = false;
+    int showtimeWhile = 0, showtimeFadeMs = 150;
     bool operator==(const Values&) const = default;
 };
 inline constexpr int eyeAimShots = 1, eyeAimZips = 2;
@@ -919,8 +923,11 @@ enum class Item : uint8_t {
     handstandGrace,
     handstandDamping,
     handstandLeap,
+    showtime,
+    showtimeWhile,
+    showtimeFade,
 };
-inline constexpr Item lastItem = Item::handstandLeap;
+inline constexpr Item lastItem = Item::showtimeFade;
 // SLOW-MO LENGTH's last step: no time limit (until L3 toggles it off).
 inline constexpr int slowMotionEndless = 91;
 // Real seconds a full meter lasts for a SLOW-MO LENGTH value; 0 = endless.
@@ -950,14 +957,14 @@ struct Row {
     Place place{};
 };
 // Stable row/setting numbers; categories below determine presentation order.
-const std::array<Row, 202>& rows();
+const std::array<Row, 205>& rows();
 const Row* rowFor(Item);
 // camera, shooters and legs (November 11, the user: "I can't find legs or
 // camera settings in any of the menus. Make sure it's clearly labeled"): tabs
 // of their own, after the older ones so their numbers stay.
 // pointJump (November 11): POINT JUMP's own tab, last so the others keep theirs.
 enum class Category : uint8_t { setup, webs, swinging, movement, flips, feedback, display, nativeAnimation,
-                                camera, shooters, legs, pointJump, count };
+                                camera, shooters, legs, pointJump, showtime, count };
 inline constexpr size_t categoryCount = static_cast<size_t>(Category::count);
 struct Screen {
     const char* title;

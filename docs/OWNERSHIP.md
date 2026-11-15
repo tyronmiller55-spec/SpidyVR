@@ -42,6 +42,7 @@ Source: the user, Nov 9 09:34 PST. Code: `include/spidy/hybrid_owner.hpp`, the `
 - The position lock (`position lock:` diag) runs on every switch.
 - **View handoff (Nov 12 05:41):** a punch, the jump timer, a flip break and a grip cancel hold the view where it was and ease it onto the new eyes (one code path, `view_ease.hpp` / `beginViewEase`; the rig placement moves, so eyes, hands, webs and body move together). Punch: PUNCH VIEW EASE; the others: AIR VIEW EASE (`air_view_ease_ms`, 250 by default; OFF = the old snap). Landing cancels an ease (`cancelled (landed)`). Diag: `<why> view ease: start offset X m, dur N ms` and `<why> view ease: <end> after N ms`.
 - **Legs across the timer:** Y+X may engage the legs during a midair animation (it is not zipped); an engaged hold carries into VR, and the air legs blend in over 0.2 s.
+- **SHOWTIME (X+B, experimental):** while the camera is out the view is the outside level frame; the owner (ANIM/VR) is not changed by it and nothing it does writes the heading authority or the hybrid latch ([SHOWTIME.md](SHOWTIME.md)). X and B are taken before FLAIL, POINT JUMP, the dodge and the wheel read them.
 - Same-frame breaks (flip, grip cancel, web, Spidy's wall) still come first, before the timer; right-stick turning never breaks; point jump and swing releases are instant.
 
 ## Flip break (the user, Nov 11 23:39 and 23:41)
