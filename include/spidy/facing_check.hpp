@@ -45,6 +45,10 @@ inline const char* eventName(Event e) {
 
 inline constexpr float viewTolerance = 45.f * degrees; // past this the view turned without the player
 inline constexpr float heroTolerance = 45.f * degrees; // past this the hero faces the game's way (was 90: G1 playtest)
+// A calm landing with the view more than this behind him does not spin the hero round onto it (the game turns him at about
+// 142 deg/s by its own walk-turn, 0.78 s for a 90+ degree gap in the b9b2196 session; there is no facing write to ease it): the
+// body stays, the view is yours, and the left stick or the turn in place brings him round when you move. A fight still turns him.
+inline constexpr float rearTurn = 120.f * degrees;
 inline constexpr float launchCone = 90.f * degrees;    // launch direction counts within this of the view
 inline constexpr float windowSeconds = .3f;            // the check's reach after the event
 
@@ -78,6 +82,7 @@ struct Sample {
     bool heroMatters = false; // the animation owns the hero (his facing shows)
     bool heroOk = false;
     float hero = 0;          // the actor's facing
+    bool fighting = false;   // a fight or a dodge is on: the hero turns onto the view whatever the gap
 };
 struct Report {
     Verdict verdict = Verdict::none;
@@ -139,6 +144,8 @@ struct Check {
             out.hero.got = wrap(s.hero);
             if (std::abs(wrap(expected - s.hero)) <= heroTolerance) {
                 out.hero.verdict = Verdict::ok;
+            } else if (event == Event::landing && !s.fighting && std::abs(wrap(expected - s.hero)) > rearTurn) {
+                out.hero.verdict = Verdict::kept;
             } else {
                 out.hero.verdict = Verdict::corrected;
                 out.heroTurn = true;

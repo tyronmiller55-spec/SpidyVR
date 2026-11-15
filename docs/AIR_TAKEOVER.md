@@ -9,3 +9,8 @@ answers to: the headset leads the view (HEADSET FIRST); nothing here writes the 
 With Headset first on, the head ride (`anim_head_ride`) and the shoulder limit (`shoulder_limit`) are ignored whatever the
 settings file holds: they turn the view and the view guard turns it back, every frame. `direction audit:` now ends with
 `of the imposed turn the head ride had N deg and the shoulder limit N deg; body tilt worst N deg, N frames past 100`.
+
+## 3. The rear landing
+`facing_check::rearTurn` (120 deg): a calm landing (no fight, no dodge) with the view further than that behind him does not force
+the hero round. The turn itself cannot be eased: there is no facing write, and the game does not turn its actor in SpidyVR's air
+(hybrid_movement.hpp `airSyncStick`), so the 142 deg/s walk-turn is the game's. Fights and gaps under 120 deg are as before.

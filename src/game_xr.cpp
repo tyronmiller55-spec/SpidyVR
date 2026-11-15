@@ -572,7 +572,10 @@ void logFacing(const facing_check::Check& c, const facing_check::Out& o) {
     if (o.hero.verdict != facing_check::Verdict::none)
         diag_log::writef("facing check: %s hero expected %.0f got %.0f (%s)%s", ev, o.hero.expected * toDeg,
                          o.hero.got * toDeg, facing_check::verdictName(o.hero.verdict),
-                         o.hero.verdict == facing_check::Verdict::corrected ? ", walk stick turns him" : "");
+                         o.hero.verdict == facing_check::Verdict::corrected ? ", walk stick turns him"
+                         : o.hero.verdict == facing_check::Verdict::kept
+                             ? ", he stays (the view is over 120 deg behind him and nothing is fighting: no spin; your stick runs along the view)"
+                             : "");
 }
 XrConfig config;
 BridgeCall submitInput{}, sampleBridge{}, stopBridge{}, retargetBridge{};
@@ -10183,6 +10186,7 @@ DWORD WINAPI run(void*) {
                                 fs.heroMatters = true;
                                 fs.heroOk = std::isfinite(heroYawNow);
                                 fs.hero = heroYawNow;
+                                fs.fighting = rideFighting || fightLately;
                                 auto fc = facingCheck.update(frame.seconds, fs);
                                 // ANIM HEAD RIDE: the view is his head; nothing turns him onto an old view.
                                 if (headRide.active()) {

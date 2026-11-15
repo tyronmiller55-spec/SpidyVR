@@ -33,6 +33,7 @@ Sample anim(float view, float hero, bool fixable = true) {
     s.heroMatters = true;
     s.heroOk = true;
     s.hero = hero;
+    s.fighting = true; // the older cases are fights' turns; the rear landing's tests say calm
     return s;
 }
 Sample vr(float view) {
@@ -306,5 +307,25 @@ int main() {
         check(!l.update(look).started, "the look's turn: under its angle, none");
     }
     std::printf("facing check tests: %d passed\n", passed);
+    // --- THE REAR LANDING (Nov 14, b9b2196: 83 of 265 landings turned the hero more than 90 deg onto the view, 142 deg/s, 0.78 s):
+    // a calm landing with the view more than 120 deg behind him leaves him as he is; a fight, or a gap under 120, turns him.
+    {
+        Check calm;
+        calm.arm(Event::landing, 97 * deg);
+        auto quiet = anim(97 * deg, -80 * deg);
+        quiet.fighting = false;
+        const auto o = calm.update(dt, quiet);
+        check(o.hero.verdict == Verdict::kept && !o.heroTurn, "calm landing, view 177 behind him: he stays, no spin");
+        Check near100;
+        near100.arm(Event::landing, 97 * deg);
+        auto q100 = anim(97 * deg, -3 * deg);
+        q100.fighting = false;
+        const auto n = near100.update(dt, q100);
+        check(n.hero.verdict == Verdict::corrected && n.heroTurn, "calm landing, view 100 off: he turns onto it");
+        Check punch;
+        punch.arm(Event::punchTrack, 97 * deg);
+        const auto p = punch.update(dt, anim(97 * deg, -80 * deg));
+        check(p.heroTurn, "other events keep their turn (a punch track)");
+    }
     return 0;
 }
