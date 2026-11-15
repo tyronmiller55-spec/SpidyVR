@@ -718,6 +718,11 @@ struct Values {
     // most often, straight back on the landing (45 of 58 short stints in the 9790d67 playtest): the view is held where
     // the animation showed it for this long before PUNCH VIEW EASE starts, so a round trip inside it never moves the camera.
     int punchCameraLockMs = 300;
+    // VIEW RELATCH FIX (view_relatch_fix, on): when the head lock's reference is latched afresh (a landing, a takeover
+    // back, a recenter, a snap realign), the next frame measures where the player looks against the new reference,
+    // not by subtracting the old reference's headset turn: that one wrong frame let a turn hold "arrive" with the hero still
+    // far off (snap realigns and landings that never turned him, 9790d67). Off: as before.
+    bool viewRelatchFix = true;
     // [next pass settings]
     bool operator==(const Values&) const = default;
 };

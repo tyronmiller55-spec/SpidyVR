@@ -1359,6 +1359,7 @@ DWORD WINAPI run(void*) {
         // HEADSET FIRST: the left stick's basis (hybrid_steer::Basis) and last frame's headset turn.
         hybrid_steer::Basis hsBasis{};
         float hsLastHmd = NAN;
+        int64_t hsRelatchLogAt = 0; // VIEW RELATCH FIX: the log's rate
         float hsViewNow = NAN; // where the player looks this frame (headset first), NAN when not known
         int64_t hsPressLogAt = 0;
         direction_report::ViewGuard viewGuard{};
@@ -10596,6 +10597,25 @@ DWORD WINAPI run(void*) {
                             view_yaw_lock::publish(lock);
                             if (viewLockActive && boneOk)
                                 lastViewYaw = stable_yaw::wrap(view_yaw_lock::shownYaw(lock, boneYaw) + hmdNow);
+                            // VIEW RELATCH FIX (view_relatch_fix): the headset-first view measure (hsViewNow) adds the
+                            // headset's turn since the last frame to lastViewYaw - so the turn it subtracts must be the one
+                            // lastViewYaw was made with, against the same head reference. A relatch (a landing, a
+                            // takeover back, a recenter, a snap realign) changed the reference under it, and the next
+                            // frame read the view off by the whole old turn: a turn hold "arrived" with the hero far off.
+                            if (values.viewRelatchFix && viewLockActive && boneOk) {
+                                if (std::isfinite(hsLastHmd)) {
+                                    const float off = stable_yaw::wrap(hsLastHmd - hmdNow);
+                                    if (std::abs(off) > 10.f * 3.14159265f / 180.f &&
+                                        frame.predictedDisplayTime - hsRelatchLogAt > 250'000'000) {
+                                        hsRelatchLogAt = frame.predictedDisplayTime;
+                                        diag_log::writef("view relatch: the view measure re-paired with the head reference "
+                                                         "(the old pairing would have misread the view by %+.0f deg; "
+                                                         "view %.0f)",
+                                                         off * 180.f / 3.14159265f, lastViewYaw * 180.f / 3.14159265f);
+                                    }
+                                }
+                                hsLastHmd = hmdNow;
+                            }
                             if (viewLockActive && boneOk) {
                                 // Divergence: the view (lock + sway + headset) against the
                                 // hero's facing and against the old view (head bone + headset).

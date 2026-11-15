@@ -2950,6 +2950,7 @@ constexpr TabOnly tabOnly[] = {
     {"head_height_fade_ms", nullptr, &Values::headHeightFadeMs},
     {"handoff_one_blend", &Values::handoffOneBlend, nullptr},
     {"punch_camera_lock_ms", nullptr, &Values::punchCameraLockMs},
+    {"view_relatch_fix", &Values::viewRelatchFix, nullptr},
     {"movement_defaults", nullptr, &Values::movementDefaults},
 };
 } // namespace
