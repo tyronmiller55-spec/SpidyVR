@@ -10615,8 +10615,11 @@ DWORD WINAPI run(void*) {
                                         diag_log::write(text);
                                     }
                                     if (step.audit) {
-                                        dirReport.formatAudit(text, sizeof(text));
+                                        // Two lines: one would run past the diag's line and lose its tail.
+                                        char more[256];
+                                        dirReport.formatAudit(text, sizeof(text), more, sizeof(more));
                                         diag_log::write(text);
+                                        diag_log::write(more);
                                     }
                                 }
                                 const float rX = frame.hands[1].valid ? frame.hands[1].stickX : 0.f;

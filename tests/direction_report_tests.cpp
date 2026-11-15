@@ -142,6 +142,32 @@ int main() {
         check(std::strstr(text, "head ride had") && std::strstr(text, "body tilt worst 170 deg, 1 frames past 100"),
               "the audit text names the head ride, the shoulder limit and the tilt");
     }
+    // The audit as two lines, each within the diag's text (the 9790d67 playtest: one line lost the head ride,
+    // the shoulder limit and the tilt to the 239-character cut), with the window's worst numbers.
+    {
+        Reporter r;
+        Frame f = still(0.f, 0.f);
+        f.ride = .4f;
+        f.tiltDegrees = 179.f;
+        for (int i = 0; i < 2000; ++i) {
+            f.hmd = f.view = f.shown = static_cast<float>(i % 2) * 3.f;
+            f.limit = static_cast<float>(i % 3) * .1f;
+            r.step(f);
+        }
+        for (unsigned c = 0; c < 4; ++c)
+            for (int i = 0; i < 1500; ++i)
+                r.skew(static_cast<Consumer>(c), 0.f, 3.1f);
+        char text[512], more[256];
+        r.formatAudit(text, sizeof(text), more, sizeof(more));
+        check(std::strstr(text, "direction audit:") == text && std::strstr(text, "worst skew eyes") &&
+                  std::strlen(text) <= 228,
+              "the audit's first line holds the turn and the skew within the diag's text");
+        check(std::strstr(more, "direction audit 2:") == more && std::strstr(more, "head ride had") &&
+                  std::strstr(more, "shoulder limit") && std::strstr(more, "body tilt worst 179 deg") &&
+                  std::strlen(more) <= 228,
+              "the audit's second line holds the head ride, the shoulder limit and the tilt within the diag's text");
+        check(r.window().imposedFrames == 0, "the two-line audit clears the window too");
+    }
     // RE-SYNC: the published block is read whole, with its action serial; a consumer on an older serial is
     // counted as behind.
     {

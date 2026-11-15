@@ -178,9 +178,32 @@ class Reporter {
                              deg(f.hmd), deg(f.shown), deg(f.view), deg(f.basis), deg(f.hero), deg(f.bone),
                              deg(f.momentum), f.speed, actionName(last_), static_cast<int>(age_ * 1000.f + .5f));
     }
-    // "direction audit: ..." into out; clears the window.
-    int formatAudit(char* out, std::size_t size) {
-        const int n = std::snprintf(
+    // "direction audit: ..." into out; clears the window. With `more`, the audit is two lines (each within the
+    // diag's 228 text characters, diag_log::lineChars less its stamp): the view's turn and the skew in `out`, the
+    // actions, who imposed the turn and the body's tilt in `more` ("direction audit 2: ..."). Without it, one
+    // line, which the diag cuts short.
+    int formatAudit(char* out, std::size_t size, char* more = nullptr, std::size_t moreSize = 0) {
+        int n = 0;
+        if (more && moreSize) {
+            n = std::snprintf(
+                out, size,
+                "direction audit: imposed view turn %.0f deg in %u frames (worst step %.0f deg, %u of %u frames "
+                "over %.0f deg); worst skew eyes %.1f hands %.1f arms %.1f stick %.1f deg (frames off: %u/%u/%u/%u)",
+                audit_.imposedDeg, audit_.imposedFrames, audit_.worstStep / degrees, audit_.imposedFrames,
+                audit_.frames, imposedFloor / degrees, audit_.skew[0] / degrees, audit_.skew[1] / degrees,
+                audit_.skew[2] / degrees, audit_.skew[3] / degrees, audit_.skewFrames[0], audit_.skewFrames[1],
+                audit_.skewFrames[2], audit_.skewFrames[3]);
+            std::snprintf(more, moreSize,
+                          "direction audit 2: %u actions; behind the last action's heading in %u/%u/%u of %u frames "
+                          "(eyes/hands/arms); imposed since start %.0f deg; head ride had %.0f deg, shoulder limit "
+                          "%.0f deg; body tilt worst %.0f deg, %u frames past 100",
+                          audit_.actions, audit_.behind[0], audit_.behind[1], audit_.behind[2], audit_.behindChecked,
+                          imposedTotal_, audit_.imposedRideDeg, audit_.imposedLimitDeg, audit_.worstTilt,
+                          audit_.invertedFrames);
+            audit_ = {};
+            return n;
+        }
+        n = std::snprintf(
             out, size,
             "direction audit: imposed view turn %.0f deg in %u frames (worst step %.0f deg, %u of %u frames "
             "over %.0f deg); worst skew eyes %.1f hands %.1f arms %.1f stick %.1f deg (frames off: %u/%u/%u/%u); "
