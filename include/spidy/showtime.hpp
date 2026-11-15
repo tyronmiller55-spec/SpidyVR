@@ -299,6 +299,56 @@ class Machine {
     float outSeconds_{}, started_{};
 };
 
+// ---- LATCH: a double press keeps the camera out ----
+// OFF (the default): out only while the chord is held. DOUBLE PRESS: a chord entered again within `window` of the last one's
+// end latches the camera out after the let-go; the next chord press (its rising edge) takes the latch off, and the let-go after
+// it leaves. Any forced exit (menu, teleport, control lost) clears it.
+class Latch {
+  public:
+    static constexpr float window = .8f;
+    // `active`: the chord is held long enough (Chord::Output::active). Returns whether the camera is wanted out.
+    bool update(bool enabled, bool active, float seconds) {
+        const float dt = std::isfinite(seconds) ? std::clamp(seconds, 0.f, .1f) : 0.f;
+        clock_ += dt;
+        if (!enabled) {
+            latched_ = false;
+            was_ = active;
+            return active;
+        }
+        const bool rose = active && !was_, fell = !active && was_;
+        was_ = active;
+        if (rose) {
+            if (latched_) {
+                latched_ = false; // pressed again: the latch comes off, the let-go leaves
+                armed_ = false;
+            } else if (hasEnd_ && clock_ - endAt_ <= window)
+                armed_ = true; // the second press: the let-go keeps it
+        }
+        if (fell) {
+            endAt_ = clock_;
+            hasEnd_ = true;
+            if (armed_) {
+                latched_ = true;
+                armed_ = false;
+            }
+        }
+        return active || latched_;
+    }
+    bool latched() const {
+        return latched_;
+    }
+    void clear() {
+        latched_ = armed_ = false;
+    }
+    void reset() {
+        *this = {};
+    }
+
+  private:
+    float clock_{}, endAt_{};
+    bool was_{}, latched_{}, armed_{}, hasEnd_{};
+};
+
 // ---- The outside camera's frame ----
 // The level frame game_fp hands the eyes (game_fp.cpp cameraFrame's layout: columns right, down, forward, position; the game's
 // camera looks along +z, so the forward column is (ax, az) and the yaw the rig has it, 0 facing -z, is atan2(-ax, -az)).

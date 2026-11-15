@@ -669,6 +669,11 @@ struct Values {
     // Spidey. showtimeWhile: 0 WATCH ONLY, 1 KEEP CONTROL; showtimeFadeMs: the whole cut. showtime, showtime_while, showtime_fade_ms.
     bool showtime = false;
     int showtimeWhile = 0, showtimeFadeMs = 150;
+    // SHOWTIME's camera (S1): DISTANCE and HEIGHT in cm, ORBIT ANGLE in degrees off his back, ORBIT TURN 0 smooth / 1 snap, FOLLOW 0..2,
+    // VIGNETTE 0..2, SLOW-MO IN SHOWTIME (L3), LATCH 0 off / 1 double press.
+    int showtimeDistanceCm = 250, showtimeHeightCm = 30, showtimeAngleDeg = 35, showtimeTurn = 0, showtimeFollow = 1, showtimeVignette = 1;
+    bool showtimeSlowMo = true;
+    int showtimeLatch = 0;
     bool operator==(const Values&) const = default;
 };
 inline constexpr int eyeAimShots = 1, eyeAimZips = 2;
@@ -926,8 +931,16 @@ enum class Item : uint8_t {
     showtime,
     showtimeWhile,
     showtimeFade,
+    showtimeDistance,
+    showtimeHeight,
+    showtimeAngle,
+    showtimeTurn,
+    showtimeFollow,
+    showtimeVignette,
+    showtimeSlowMo,
+    showtimeLatch,
 };
-inline constexpr Item lastItem = Item::showtimeFade;
+inline constexpr Item lastItem = Item::showtimeLatch;
 // SLOW-MO LENGTH's last step: no time limit (until L3 toggles it off).
 inline constexpr int slowMotionEndless = 91;
 // Real seconds a full meter lasts for a SLOW-MO LENGTH value; 0 = endless.
@@ -957,7 +970,7 @@ struct Row {
     Place place{};
 };
 // Stable row/setting numbers; categories below determine presentation order.
-const std::array<Row, 205>& rows();
+const std::array<Row, 213>& rows();
 const Row* rowFor(Item);
 // camera, shooters and legs (November 11, the user: "I can't find legs or
 // camera settings in any of the menus. Make sure it's clearly labeled"): tabs

@@ -1989,6 +1989,25 @@ bool showtimeActive() {
     float f[16];
     return showtimeNow(f);
 }
+bool stockSeat(Vec3& position, float& yaw) {
+    float cam[16];
+    if (!cameraNow(cam))
+        return false;
+    for (int i = 0; i < 16; ++i)
+        if (!std::isfinite(cam[i]))
+            return false;
+    float ax = cam[8], az = cam[10];
+    if (ax * ax + az * az < .09f) {
+        const float s = cam[9] < 0 ? -1.f : 1.f;
+        ax = s * cam[4];
+        az = s * cam[6];
+    }
+    if (ax * ax + az * az < 1e-6f)
+        return false;
+    position = {cam[12], cam[13], cam[14]};
+    yaw = std::atan2(-ax, -az);
+    return true;
+}
 bool frame(Mat4& head) {
     // SHOWTIME: the outside camera, as published; never turned by the view yaw lock (that is the head's).
     if (float showing[16]; showtimeNow(showing)) {

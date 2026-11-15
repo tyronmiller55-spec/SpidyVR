@@ -105,6 +105,10 @@ bool frameLevel(Mat4& head);
 // nothing is hidden or shrunk by this call. showtimeActive(): one is current.
 void showtimeFrame(const Mat4* frame);
 bool showtimeActive();
+// The game's own gameplay camera (the stock follow or combat camera, sampled every frame by the render thread): its place and where
+// it faces, yaw as the rig has it (0 facing -z). False when no sample is under half a second old. Read only: SHOWTIME reads its
+// distance behind him as the world's own limit on a camera back there.
+bool stockSeat(Vec3& position, float& yaw);
 // The heading the scene's view has in the world, for the play that follows it (the XR worker): the
 // character's head (`level` false) or frameLevel's frame (`level` true), yaw in radians as the rig has it (0
 // facing -z). False before one was sampled.

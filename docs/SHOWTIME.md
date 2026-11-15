@@ -2,7 +2,7 @@
 
 > The plan's Pillar 6 (the user, Nov 13 3:50 PM PT): hold X and B and the view steps outside Spidey. You still look and lean with the headset, one to one. Let go and you are back on his head.
 
-Built in stages, one commit each (S0 here; S1 to S3 are listed in the CHANGELOG as they land). Every row sits under **Showtime** in the SPIDY VR tab and the launcher, and none of it runs unless SHOWTIME is turned on.
+Built in stages, one commit each (S0 the chord and the cut; S1 the camera; S2 the automatic moments; S3 the body). See the CHANGELOG for each. Every row sits under **Showtime** in the SPIDY VR tab and the launcher, and none of it runs unless SHOWTIME is turned on.
 
 ## How it keeps "animation never turns the view yaw"
 
@@ -19,8 +19,8 @@ The user's standing rule: the headset's direction is the single per-frame view-h
 |---|---|
 | Chord (`showtime::Chord`) | X and B held for 200 ms. **X first:** B never reaches the game (no dodge). **B first:** B passes at once (the dodge keeps its perfect-dodge timing), then X and B held 200 ms enter. **Y held blocks it** (Y+X+B is the passive legs' flail, [PASSIVE_LEGS.md](PASSIVE_LEGS.md)). A+B and hold-B-then-A (the point jump, [POINT_JUMP.md](POINT_JUMP.md)) have no X, so they are not a chord. From the moment both are down X is Showtime's (no gadget wheel, no Back); once entered, B is too. It is read before FLAIL, POINT JUMP, the dodge and the wheel see X or B. |
 | Cut (`showtime::Machine`) | Fade out and in about the cut: FADE ms (OFF / 100 / 150 / 250 / 400, default 150), the cut at black. OFF cuts instantly. |
-| Camera | Eye command 4 (`anchored` level frame) as a level scene uses, resolved on the render thread from `game_fp::showtimeFrame` (the XR thread publishes the frame every update; it expires after 250 ms, so a stalled thread gives the eyes back to the head within a quarter second). The eyes are the headset's own (`toRef`: the head's position and heading at the cut). S0: fixed 2.5 m behind him along the look heading, 2.0 m above his feet. |
-| Hands | **WATCH ONLY (default):** nothing new starts. No web, ball, punch, strike, walk, jump or dodge; a hand holding a web keeps its squeeze and trigger, every other is let go of; sticks, A, B, X and Y are not the game's. **KEEP CONTROL:** WHILE row is stored (the left stick walks relative to the camera, A jumps, B dodges) and is wired in S1. |
+| Camera | Eye command 4 (`anchored` level frame) as a level scene uses, resolved on the render thread from `game_fp::showtimeFrame` (the XR thread publishes the frame every update; it expires after 250 ms, so a stalled thread gives the eyes back to the head within a quarter second). The eyes are the headset's own (`toRef`: the head's position and heading at the cut). S0: fixed 2.5 m behind him along the look heading; S1 below. |
+| Hands | **WATCH ONLY (default):** nothing new starts. No web, ball, punch, strike, walk, jump or dodge; a hand holding a web keeps its squeeze and trigger, every other is let go of; sticks, A, B, X and Y are not the game's. **KEEP CONTROL (S1):** the left stick walks the way the camera faces, A jumps, B dodges (B is the chord's while X is held, so the dodge is for LATCH); webs, punches and flips stay off. |
 | Exits | Release, SHOWTIME turned off, the Menu button (`menu`), a feet jump over 30 m in a frame (`teleport`), or the game taking the view (a scene, a pause, a lost character: `lost control`, no fade over it, the published frame is withdrawn at once). |
 | Look | `D3D12Renderer::Grade` gained `vignette` and `fade` (the slow-motion recolouring pass, root constants 12 to 16). The grade now also runs over a bare (scene) view when either is on, so the fade covers the cut both ways. |
 
@@ -36,6 +36,23 @@ Log lines: `showtime: chord lead=X|B (X+B held N ms)`, `showtime: enter (chord) 
 
 Needs the body on (`values.body`), Spider-Man as the player, and the headset tracking. None of these rows is in shared profiles.
 
+## S1: the camera
+
+`showtime_rig.hpp` (`OrbitRig`): a level frame (never a roll or a pitch) at Spidey's pivot (his pelvis, 1 m above his feet) plus an offset.
+
+| Piece | What it does |
+|---|---|
+| Place | DISTANCE behind along the orbit heading, ORBIT ANGLE off his back (he appears that many degrees to one side of the view's middle), HEIGHT above the pivot. Defaults 2.5 m, 35 degrees, +0.3 m. The first frame is the headset's look heading, so the cut turns nothing. |
+| Follow | A critically damped spring on the pivot in every action, swings and zips included: horizontal omega SOFT 4 / NORMAL 6 / TIGHT 9 rad/s, vertical 3.5; omega rises toward 12 as the lag goes from 3 to 6 m (never loses him, never a cut); a 0.12 s look-ahead of his velocity, low-passed at 2 Hz. The orbit itself is not smoothed: it is the player's own input. |
+| Orbit | The right stick turns the camera round him: smooth at your SMOOTH TURN speed (120 deg/s when the launcher has snap turn), eased in and out; or ORBIT TURN snap: 30 degrees a flick under a 100 ms blink (the yaw moves at the blink's black). Up and down: the height, -0.5 to +1.5 m in all. The right stick never turns the play heading, zips or heals while out. |
+| Vignette | From the rig's own speed (starts 3 m/s, full 12) or acceleration (6 to 20 m/s2), low-passed; LIGHT 25 %, STRONG 45 %, OFF. Never from head motion. Drawn by the grade pass. |
+| Nearer than 0.8 m | The picture fades to black. |
+| Collision | **Only the game's own camera as a pull-in**, read-only (`game_fp::stockSeat`): when it sits within 30 degrees of the way we would sit and nearer than the distance it reached in the last 3 s, our distance is limited to it (in at 20 rad/s, out at 3). The plan's primary (steering the game's camera by its stick), the follow mover's collision query and boom fields (needs RE) and the ray fan are **not in this build**: the eight native ray slots are all used by the head, hands and roof, and taking them while out would starve head clearance and hand contact. Without a stock camera near our side the camera has no collision: it can sit in a wall. |
+| Slow motion | SLOW-MO IN SHOWTIME (on): L3 starts it while out, drains the same meter. Off: L3 does nothing out there. R3 is never the game's out there (so no pause pair). |
+| LATCH | Double press: a chord entered again within 0.8 s of the last one's end keeps the camera out after the let-go; the next chord press takes the latch off and its let-go leaves. Any forced exit clears it. |
+
+Log line each second out: `showtime: cam d=<m> lag=<m> v=<m/s> w=<rad/s> vignette=<0-1> collide=stock|none pull=<m> fade=close|none`.
+
 ## Verification
 
-`tests/showtime_tests.cpp` (chord order, Y block, B hold-back, fade at the cut, the exit reasons, the level frame's layout and yaw, the stick rotation). The camera, fade, and chord feel need the headset: nothing here was run on a headset.
+`tests/showtime_rig_tests.cpp` (the spring has no overshoot and is exact for any step, placement, the yaw only from the stick, the snap and its blink, the height range, follow and lag, the vignette curve, the pull-in, the latch). `tests/showtime_tests.cpp` (chord order, Y block, B hold-back, fade at the cut, the exit reasons, the level frame's layout and yaw, the stick rotation). The camera, fade, and chord feel need the headset: nothing here was run on a headset.

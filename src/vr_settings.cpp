@@ -344,6 +344,27 @@ static_assert(std::size(showtimeWhileChoices) == std::size(showtimeWhileSteps));
 constexpr int showtimeFadeSteps[] = {0, 100, 150, 250, 400};
 constexpr const char* showtimeFadeChoices[] = {"CUT (NO FADE)", "100 MS", "150 MS (DEFAULT)", "250 MS", "400 MS"};
 static_assert(std::size(showtimeFadeChoices) == std::size(showtimeFadeSteps));
+constexpr int showtimeDistanceSteps[] = {150, 200, 250, 300, 350, 400};
+constexpr const char* showtimeDistanceChoices[] = {"1.5 M", "2 M", "2.5 M (DEFAULT)", "3 M", "3.5 M", "4 M"};
+static_assert(std::size(showtimeDistanceChoices) == std::size(showtimeDistanceSteps));
+constexpr int showtimeHeightSteps[] = {-50, 0, 30, 60, 100, 150};
+constexpr const char* showtimeHeightChoices[] = {"-0.5 M", "0 M", "+0.3 M (DEFAULT)", "+0.6 M", "+1 M", "+1.5 M"};
+static_assert(std::size(showtimeHeightChoices) == std::size(showtimeHeightSteps));
+constexpr int showtimeAngleSteps[] = {0, 20, 35, 50, 90};
+constexpr const char* showtimeAngleChoices[] = {"0 DEGREES", "20 DEGREES", "35 DEGREES (DEFAULT)", "50 DEGREES", "90 DEGREES"};
+static_assert(std::size(showtimeAngleChoices) == std::size(showtimeAngleSteps));
+constexpr int showtimeTurnSteps[] = {0, 1};
+constexpr const char* showtimeTurnChoices[] = {"SMOOTH (DEFAULT)", "SNAP 30 DEGREES"};
+static_assert(std::size(showtimeTurnChoices) == std::size(showtimeTurnSteps));
+constexpr int showtimeFollowSteps[] = {0, 1, 2};
+constexpr const char* showtimeFollowChoices[] = {"SOFT", "NORMAL (DEFAULT)", "TIGHT"};
+static_assert(std::size(showtimeFollowChoices) == std::size(showtimeFollowSteps));
+constexpr int showtimeVignetteSteps[] = {0, 1, 2};
+constexpr const char* showtimeVignetteChoices[] = {"OFF", "LIGHT (DEFAULT)", "STRONG"};
+static_assert(std::size(showtimeVignetteChoices) == std::size(showtimeVignetteSteps));
+constexpr int showtimeLatchSteps[] = {0, 1};
+constexpr const char* showtimeLatchChoices[] = {"OFF (DEFAULT)", "DOUBLE PRESS"};
+static_assert(std::size(showtimeLatchChoices) == std::size(showtimeLatchSteps));
 // PHYSICAL WEB TETHERS (tether.hpp): the rope's points and its steps a frame.
 constexpr int tetherParticleSteps[] = {12, 16, 20, 24, 28, 32};
 constexpr const char* tetherParticleChoices[] = {"12", "16", "20", "24 (DEFAULT)", "28", "32"};
@@ -502,6 +523,20 @@ std::span<const int> steps(Item item) {
         return showtimeWhileSteps;
     case Item::showtimeFade:
         return showtimeFadeSteps;
+    case Item::showtimeDistance:
+        return showtimeDistanceSteps;
+    case Item::showtimeHeight:
+        return showtimeHeightSteps;
+    case Item::showtimeAngle:
+        return showtimeAngleSteps;
+    case Item::showtimeTurn:
+        return showtimeTurnSteps;
+    case Item::showtimeFollow:
+        return showtimeFollowSteps;
+    case Item::showtimeVignette:
+        return showtimeVignetteSteps;
+    case Item::showtimeLatch:
+        return showtimeLatchSteps;
     case Item::kickSpin:
         return kickSpinSteps;
     case Item::tetherParticles:
@@ -733,6 +768,20 @@ float numberOf(Item item, const Values& v) {
         return static_cast<float>(v.showtimeWhile);
     case Item::showtimeFade:
         return static_cast<float>(v.showtimeFadeMs);
+    case Item::showtimeDistance:
+        return static_cast<float>(v.showtimeDistanceCm);
+    case Item::showtimeHeight:
+        return static_cast<float>(v.showtimeHeightCm);
+    case Item::showtimeAngle:
+        return static_cast<float>(v.showtimeAngleDeg);
+    case Item::showtimeTurn:
+        return static_cast<float>(v.showtimeTurn);
+    case Item::showtimeFollow:
+        return static_cast<float>(v.showtimeFollow);
+    case Item::showtimeVignette:
+        return static_cast<float>(v.showtimeVignette);
+    case Item::showtimeLatch:
+        return static_cast<float>(v.showtimeLatch);
     case Item::kickSpin:
         return static_cast<float>(v.kickSpinPct);
     case Item::tetherParticles:
@@ -936,6 +985,8 @@ template <class V> auto switchOf(Item item, V& v) -> decltype(&v.aimMarkers) {
         return &v.jumpPull;
     case Item::showtime:
         return &v.showtime;
+    case Item::showtimeSlowMo:
+        return &v.showtimeSlowMo;
     case Item::groundKicks:
         return &v.groundKicks;
     case Item::enemyJoints:
@@ -1104,6 +1155,13 @@ Values sanitized(Values v) {
     v.jumpPullCapDmps = std::clamp(v.jumpPullCapDmps, 5, 30);
     v.showtimeWhile = std::clamp(v.showtimeWhile, 0, 1);
     v.showtimeFadeMs = std::clamp(v.showtimeFadeMs, 0, 400);
+    v.showtimeDistanceCm = std::clamp(v.showtimeDistanceCm, 150, 400);
+    v.showtimeHeightCm = std::clamp(v.showtimeHeightCm, -50, 150);
+    v.showtimeAngleDeg = std::clamp(v.showtimeAngleDeg, 0, 90);
+    v.showtimeTurn = std::clamp(v.showtimeTurn, 0, 1);
+    v.showtimeFollow = std::clamp(v.showtimeFollow, 0, 2);
+    v.showtimeVignette = std::clamp(v.showtimeVignette, 0, 2);
+    v.showtimeLatch = std::clamp(v.showtimeLatch, 0, 1);
     v.kickSpinPct = std::clamp(v.kickSpinPct, 0, 100);
     v.tetherParticles = std::clamp(v.tetherParticles, 8, 32);
     v.tetherSubsteps = std::clamp(v.tetherSubsteps, 2, 16);
@@ -1119,9 +1177,9 @@ Values sanitized(Values v) {
     v.automaticHandThreshold = std::clamp(v.automaticHandThreshold, 50, 300);
     return v;
 }
-const std::array<Row, 205>& rows() {
+const std::array<Row, 213>& rows() {
     // The help fits the game's description column beside the rows.
-    static const std::array<Row, 205> all{{
+    static const std::array<Row, 213> all{{
         {Item::none, "WEBS", nullptr, {}},
         {Item::webStyle, "WEB STYLE",
          "Arcade: webs pass lamp posts, signs and cars, and swings stay above the street.", webStyleChoices},
@@ -1708,6 +1766,38 @@ const std::array<Row, 205>& rows() {
          "FADE TIME",
          "Fade to black and back at each cut. CUT: no fade.",
          showtimeFadeChoices},
+        {Item::showtimeDistance,
+         "DISTANCE",
+         "How far behind him the outside camera sits.",
+         showtimeDistanceChoices},
+        {Item::showtimeHeight,
+         "HEIGHT",
+         "How high above his waist it sits. The right stick up and down changes it.",
+         showtimeHeightChoices},
+        {Item::showtimeAngle,
+         "ORBIT ANGLE",
+         "Where it starts, off his back: 0 is straight behind, 90 is beside him.",
+         showtimeAngleChoices},
+        {Item::showtimeTurn,
+         "ORBIT TURN",
+         "The right stick orbits him: smooth, or in 30 degree steps under a blink.",
+         showtimeTurnChoices},
+        {Item::showtimeFollow,
+         "FOLLOW",
+         "How closely the camera keeps up with him. Always smooth.",
+         showtimeFollowChoices},
+        {Item::showtimeVignette,
+         "VIGNETTE",
+         "Darkens the edges as the camera moves fast. Never from your head.",
+         showtimeVignetteChoices},
+        {Item::showtimeSlowMo,
+         "SLOW-MO IN SHOWTIME",
+         "The left stick click starts slow motion while you are outside. Drains the meter.",
+         {}},
+        {Item::showtimeLatch,
+         "LATCH",
+         "DOUBLE PRESS: a second X+B press keeps the camera out. Press again to return.",
+         showtimeLatchChoices},
         {Item::handstand,
          "HANDSTAND (EXPERIMENTAL)",
          "Catch a handstand: land inverted, both palms on a floor. Needs REALISTIC FLIPS.",
@@ -1853,6 +1943,14 @@ const std::array<Screen, categoryCount>& screens() {
     // SHOWTIME (showtime.hpp; experimental, off by default): its switch and its feel.
     static constexpr Item showtime[] = {
         Item::showtime, Item::showtimeWhile, Item::showtimeFade,
+        Item::showtimeDistance,
+        Item::showtimeHeight,
+        Item::showtimeAngle,
+        Item::showtimeTurn,
+        Item::showtimeFollow,
+        Item::showtimeVignette,
+        Item::showtimeSlowMo,
+        Item::showtimeLatch,
     };
     static const std::array<Screen, categoryCount> all{{
         {"Setup", "VR SETUP", setup},
@@ -1936,6 +2034,14 @@ const char* inactiveReason(Item item, const Values& v) {
         return !v.jumpPull ? "Turn JUMP PULL on first." : nullptr;
     case Item::showtimeWhile:
     case Item::showtimeFade:
+    case Item::showtimeDistance:
+    case Item::showtimeHeight:
+    case Item::showtimeAngle:
+    case Item::showtimeTurn:
+    case Item::showtimeFollow:
+    case Item::showtimeVignette:
+    case Item::showtimeSlowMo:
+    case Item::showtimeLatch:
         return !v.showtime ? "Turn SHOWTIME on first." : nullptr;
     case Item::kickSpin:
         return !v.kicks ? "Turn AIR KICKS on first." : nullptr;
@@ -2022,6 +2128,14 @@ bool shownWhenInactive(Item item) {
     case Item::jumpPullCap:
     case Item::showtimeWhile:
     case Item::showtimeFade:
+    case Item::showtimeDistance:
+    case Item::showtimeHeight:
+    case Item::showtimeAngle:
+    case Item::showtimeTurn:
+    case Item::showtimeFollow:
+    case Item::showtimeVignette:
+    case Item::showtimeSlowMo:
+    case Item::showtimeLatch:
     case Item::enemyLimbZones:
     case Item::tetherParticles:
     case Item::tetherSubsteps:
@@ -2331,6 +2445,27 @@ bool choose(Item item, int index, Values& v) {
         break;
     case Item::showtimeFade:
         v.showtimeFadeMs = s[index];
+        break;
+    case Item::showtimeDistance:
+        v.showtimeDistanceCm = s[index];
+        break;
+    case Item::showtimeHeight:
+        v.showtimeHeightCm = s[index];
+        break;
+    case Item::showtimeAngle:
+        v.showtimeAngleDeg = s[index];
+        break;
+    case Item::showtimeTurn:
+        v.showtimeTurn = s[index];
+        break;
+    case Item::showtimeFollow:
+        v.showtimeFollow = s[index];
+        break;
+    case Item::showtimeVignette:
+        v.showtimeVignette = s[index];
+        break;
+    case Item::showtimeLatch:
+        v.showtimeLatch = s[index];
         break;
     case Item::kickSpin:
         v.kickSpinPct = s[index];
@@ -2669,6 +2804,14 @@ constexpr TabOnly tabOnly[] = {
     {"showtime", &Values::showtime, nullptr},
     {"showtime_while", nullptr, &Values::showtimeWhile},
     {"showtime_fade_ms", nullptr, &Values::showtimeFadeMs},
+    {"showtime_distance_cm", nullptr, &Values::showtimeDistanceCm},
+    {"showtime_height_cm", nullptr, &Values::showtimeHeightCm},
+    {"showtime_angle_deg", nullptr, &Values::showtimeAngleDeg},
+    {"showtime_turn", nullptr, &Values::showtimeTurn},
+    {"showtime_follow", nullptr, &Values::showtimeFollow},
+    {"showtime_vignette", nullptr, &Values::showtimeVignette},
+    {"showtime_slow_mo", &Values::showtimeSlowMo, nullptr},
+    {"showtime_latch", nullptr, &Values::showtimeLatch},
     {"movement_defaults", nullptr, &Values::movementDefaults},
 };
 } // namespace

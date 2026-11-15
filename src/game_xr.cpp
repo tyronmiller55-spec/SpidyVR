@@ -1,5 +1,6 @@
 #include "spidy/animation_cancel.hpp"
 #include "spidy/showtime.hpp"
+#include "spidy/showtime_rig.hpp"
 #include "spidy/web_fire.hpp"
 // Bounded first-person OpenXR integration using the game's two native views.
 #include "spidy/native_appearance.hpp"
@@ -1254,8 +1255,12 @@ DWORD WINAPI run(void*) {
         showtime::Machine::Output showtimeOut{};
         showtime::Chord::Output showtimeChordOut{};
         bool showtimeInit{}, showtimeRefSet{}, showtimeFeetKnown{};
-        Vec3 showtimeSeat{}, showtimeFeetLast{};
-        float showtimeYaw{}, showtimeYawEntry{};
+        Vec3 showtimeFeetLast{};
+        showtime::OrbitRig showtimeRig;
+        showtime::OrbitRig::Output showtimeCam{};
+        showtime::Latch showtimeLatch;
+        float showtimeStickX{}, showtimeStickY{}, showtimeEntryHeading{};
+        uint64_t showtimeLogMs{};
         Pose showtimeRef{};
         uint64_t showtimeEnterMs{};
         unsigned webFirePrevButtons{}, webFireFiredNow{}, webFireNumber{};
@@ -2407,12 +2412,16 @@ DWORD WINAPI run(void*) {
                         showtime::Machine::Input mi;
                         mi.seconds = frame.seconds;
                         mi.fadeSeconds = static_cast<float>(values.showtimeFadeMs) / 1000.f;
-                        mi.wantOut = showtimeChordOut.active;
+                        // LATCH (off by default): a double press keeps the camera out after the let-go.
+                        bool stWant = showtimeLatch.update(values.showtimeLatch == 1, showtimeChordOut.active, frame.seconds);
+                        mi.wantOut = stWant;
                         mi.wantWhy = showtime::Why::chord;
                         mi.allowed = stOk;
                         mi.forced = (frame.buttons & buttonMenu) ? showtime::ExitWhy::menu
                                     : stTeleport                  ? showtime::ExitWhy::teleport
                                                                   : showtime::ExitWhy::none;
+                        if (mi.forced != showtime::ExitWhy::none || !stOk)
+                            showtimeLatch.clear();
                         const bool stWasOut = showtimeMachine.out();
                         if (!stOk && showtimeMachine.state() != showtime::State::head) {
                             // A scene, a menu or a lost character took the view: no fade over it, the frame is withdrawn at once.
@@ -2425,8 +2434,19 @@ DWORD WINAPI run(void*) {
                                 diag_log::write("showtime: exit (lost control: not in play)");
                         } else {
                             showtimeOut = showtimeMachine.update(mi);
-                            if (showtimeOut.entered)
+                            if (showtimeOut.entered) {
                                 showtimeInit = true;
+                                // The heading the player looks along (headset first), else the body's: the camera starts facing it,
+                                // so the cut turns nothing.
+                                float heading = std::isfinite(hsViewNow) ? hsViewNow : 0.f;
+                                if (!std::isfinite(hsViewNow)) {
+                                    const float fx = body[8], fz = body[10], n = std::hypot(fx, fz);
+                                    if (n > .3f)
+                                        heading = showtime::yawOfForward(fx / n, fz / n);
+                                }
+                                showtimeEntryHeading = heading;
+                                showtimeCam.yaw = heading;
+                            }
                             if (showtimeOut.left) {
                                 showtimeInit = false;
                                 diag_log::writef("showtime: exit (%s) after %.1f s", showtime::exitName(showtimeOut.exitWhy),
@@ -2435,15 +2455,34 @@ DWORD WINAPI run(void*) {
                             if (!showtimeMachine.out())
                                 game_fp::showtimeFrame(nullptr);
                         }
-                        // WATCH ONLY: while out, nothing new starts. A hand holding a web keeps its squeeze and trigger; every
-                        // other is let go of. The right stick is the orbit's (next build), the left stick and A, B, X, Y are not
-                        // the game's.
+                        // While out: the right stick is the orbit's (read here, the game gets none of it). WATCH ONLY (the default):
+                        // nothing new starts - a hand holding a web keeps its squeeze and trigger, every other is let go of; the left
+                        // stick, A, B, X, Y are not the game's. KEEP CONTROL: the left stick walks the way the camera faces (turned
+                        // by the camera's yaw against the heading he walks from), A jumps and B dodges (B is the chord's while X is
+                        // held, so the dodge is for LATCH); webs, punches and flips stay off. L3 is slow motion if SLOW-MO IN SHOWTIME
+                        // is on; R3 (the pause pair's other half) is not the game's. Y and X never reach it.
+                        showtimeStickX = showtimeStickY = 0;
                         if (showtimeMachine.out()) {
-                            frame.jump = false;
-                            frame.buttons &= ~static_cast<uint32_t>(buttonA | buttonB | buttonX | buttonY);
+                            showtimeStickX = frame.hands[1].stickX;
+                            showtimeStickY = frame.hands[1].stickY;
+                            const bool keep = values.showtimeWhile == 1;
+                            if (!keep) {
+                                frame.jump = false;
+                                frame.buttons &= ~static_cast<uint32_t>(buttonA | buttonB);
+                            }
+                            frame.buttons &= ~static_cast<uint32_t>(buttonX | buttonY);
+                            if (keep && showtimeMachine.state() == showtime::State::out) {
+                                const float heading = std::isfinite(hsViewNow) ? hsViewNow : showtimeEntryHeading;
+                                showtime::rotateStick(frame.hands[0].stickX, frame.hands[0].stickY,
+                                                      showtime::wrap(showtimeCam.yaw - heading));
+                            } else {
+                                frame.hands[0].stickX = frame.hands[0].stickY = 0;
+                            }
+                            frame.hands[1].stickX = frame.hands[1].stickY = 0;
+                            frame.hands[1].stickClick = false;
+                            if (!values.showtimeSlowMo)
+                                frame.hands[0].stickClick = false;
                             for (unsigned i = 0; i < 2; ++i) {
-                                frame.hands[i].stickX = frame.hands[i].stickY = 0;
-                                frame.hands[i].stickClick = false;
                                 if (!(swingState.status && swingState.webs[i].attached)) {
                                     frame.hands[i].squeeze = 0;
                                     frame.hands[i].trigger = 0;
@@ -10798,30 +10837,48 @@ DWORD WINAPI run(void*) {
                     // camera's level frame (eye command 4, as a level scene's), Spidey's own marks, webs and hands not drawn.
                     saved.showtimeFade = showtimeOut.fade;
                     if (showtimeMachine.out()) {
+                        const Vec3 stFeet{body[12], body[13], body[14]};
+                        showtime::RigParams rp;
+                        rp.distance = static_cast<float>(values.showtimeDistanceCm) / 100.f;
+                        rp.height = static_cast<float>(values.showtimeHeightCm) / 100.f;
+                        rp.angleDeg = static_cast<float>(values.showtimeAngleDeg);
+                        rp.follow = values.showtimeFollow;
+                        rp.snap = values.showtimeTurn == 1;
+                        rp.turnRadians = values.smoothTurn > 0 ? static_cast<float>(values.smoothTurn) * 0.017453292f : 2.0943951f;
+                        rp.vignette = values.showtimeVignette;
                         if (showtimeInit) {
                             showtimeInit = false;
-                            // The camera starts behind him, along the heading the player looks (the cut turns nothing), at the height
-                            // of his head and a little above; fixed here, the orbit and the follow come next.
-                            const Vec3 stFeet{body[12], body[13], body[14]};
-                            float yaw = std::isfinite(hsViewNow) ? hsViewNow : 0.f;
-                            if (!std::isfinite(hsViewNow)) {
-                                const float fx = body[8], fz = body[10];
-                                if (std::hypot(fx, fz) > .3f)
-                                    yaw = showtime::yawOfForward(fx / std::hypot(fx, fz), fz / std::hypot(fx, fz));
-                            }
-                            showtimeYaw = showtimeYawEntry = yaw;
-                            const float distance = 2.5f, height = 1.7f + .3f;
-                            showtimeSeat = {stFeet.x + std::sin(yaw) * distance, stFeet.y + height,
-                                            stFeet.z + std::cos(yaw) * distance};
                             showtimeRef = {frame.head.position, screenAhead(frame.head, 0).orientation};
                             showtimeRefSet = validTrackedPose(frame.head);
                             showtimeEnterMs = GetTickCount64();
-                            diag_log::writef("showtime: enter (%s) yaw %.0f deg, seat %.1f m behind and %.1f m up, head view %s",
-                                             showtime::whyName(showtimeOut.enterWhy), yaw * 57.29578f, distance, height,
-                                             std::isfinite(hsViewNow) ? "headset" : "body");
+                            showtimeRig.begin(stFeet, showtimeEntryHeading, rp);
+                            diag_log::writef("showtime: enter (%s) yaw %.0f deg, %.1f m out, %.0f deg off his back, head view %s",
+                                             showtime::whyName(showtimeOut.enterWhy), showtimeEntryHeading * 57.29578f,
+                                             rp.distance, rp.angleDeg, std::isfinite(hsViewNow) ? "headset" : "body");
                         }
-                        const Mat4 stFrame = showtime::levelFrame(showtimeSeat, showtimeYaw);
+                        showtime::OrbitRig::Input ri;
+                        ri.seconds = frame.seconds;
+                        ri.feet = stFeet;
+                        ri.stickX = showtimeStickX;
+                        ri.stickY = showtimeStickY;
+                        ri.turning = showtimeMachine.state() == showtime::State::out;
+                        Vec3 stockPlace{};
+                        float stockYaw{};
+                        ri.stockOk = game_fp::stockSeat(stockPlace, stockYaw);
+                        ri.stock = stockPlace;
+                        showtimeCam = showtimeRig.update(ri, rp);
+                        const Mat4 stFrame = showtime::levelFrame(showtimeCam.position, showtimeCam.yaw);
                         game_fp::showtimeFrame(&stFrame);
+                        saved.showtimeVignette = showtimeCam.vignette;
+                        saved.showtimeFade = std::max({showtimeOut.fade, showtimeCam.blink, showtimeCam.closeFade});
+                        if (const uint64_t nowMs = GetTickCount64(); nowMs - showtimeLogMs >= 1000) {
+                            showtimeLogMs = nowMs;
+                            diag_log::writef("showtime: cam d=%.1f m lag=%.1f m v=%.1f m/s w=%.1f rad/s vignette=%.2f collide=%s "
+                                             "pull=%.1f m fade=%s",
+                                             rp.distance, showtimeCam.lag, showtimeCam.speed, showtimeCam.omega,
+                                             showtimeCam.vignette, ri.stockOk ? "stock" : "none", showtimeCam.pull,
+                                             showtimeCam.closeFade > .01f ? "close" : "none");
+                        }
                         headset_smoothing::liveLevel.store(0, std::memory_order_relaxed);
                         headset_smoothing::publish({});
                         headset_smoothing::liveRide.store(false, std::memory_order_relaxed);

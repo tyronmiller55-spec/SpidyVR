@@ -2927,7 +2927,7 @@ void App::options(ImVec2 origin, ImVec2 size) {
         group(showtimePage, 0, "Showtime (experimental)", [&] {
             settingOption(Item::showtime, "Showtime",
                    "Hold X and B together for a fifth of a second and your view steps outside Spidey, to watch him "
-                   "from where the game's camera is; your head still looks and leans one to one. Let go and the "
+                   "from behind and above; your head still looks and leans one to one. Let go and the "
                    "view is back on his head, looking where it looked. X first: no dodge. B first: the dodge, then "
                    "Showtime. Y held is the legs' flail, not Showtime. Off by default.",
                    S(42), [&] { tabToggle("##showtime", Item::showtime); });
@@ -2939,6 +2939,39 @@ void App::options(ImVec2 origin, ImVec2 size) {
             settingOption(Item::showtimeFade, "Fade time",
                    "The fade to black and back under each step out and in (150 ms by default). Cut: none.",
                    S(150), [&] { tabCombo("##showtimefade", Item::showtimeFade); });
+            settingOption(Item::showtimeDistance, "Distance",
+                   "How far behind him the outside camera sits: 2.5 m by default. The camera never gets nearer "
+                   "than 0.8 m; nearer than that the picture goes black.",
+                   S(150), [&] { tabCombo("##showtimedistance", Item::showtimeDistance); });
+            settingOption(Item::showtimeHeight, "Height",
+                   "How high above his waist the camera sits (+0.3 m by default). While you are outside, the "
+                   "right stick up and down raises and lowers it from -0.5 m to +1.5 m in all.",
+                   S(150), [&] { tabCombo("##showtimeheight", Item::showtimeHeight); });
+            settingOption(Item::showtimeAngle, "Orbit angle",
+                   "Where the camera starts, off his back: 0 is straight behind him, 90 is beside him (35 "
+                   "degrees by default, an over-the-shoulder view).",
+                   S(150), [&] { tabCombo("##showtimeangle", Item::showtimeAngle); });
+            settingOption(Item::showtimeTurn, "Orbit turn",
+                   "The right stick orbits the camera round him while you are outside. Smooth turns at your own "
+                   "turn speed; Snap goes 30 degrees a flick under a 100 ms blink. Only the stick turns it, "
+                   "never his animation.",
+                   S(150), [&] { tabCombo("##showtimeturn", Item::showtimeTurn); });
+            settingOption(Item::showtimeFollow, "Follow",
+                   "How closely the camera keeps up with him. Always a smooth spring, never a cut: Soft trails "
+                   "more, Tight less. It catches up faster the further he gets.",
+                   S(150), [&] { tabCombo("##showtimefollow", Item::showtimeFollow); });
+            settingOption(Item::showtimeVignette, "Vignette",
+                   "Darkens the edges of the view as the camera itself moves fast (a swing, a zip): Light 25%, "
+                   "Strong 45%. It follows the camera's speed, never your head.",
+                   S(150), [&] { tabCombo("##showtimevignette", Item::showtimeVignette); });
+            settingOption(Item::showtimeSlowMo, "Slow motion in Showtime",
+                   "While you are outside, a click of the left stick starts slow motion as it does in play, "
+                   "drains the same meter and ends the same way. Off: the click does nothing out there.",
+                   S(42), [&] { tabToggle("##showtimeslowmo", Item::showtimeSlowMo); });
+            settingOption(Item::showtimeLatch, "Latch",
+                   "Double press: press and hold X+B again within a second of letting go and the camera stays "
+                   "out after you let go; press X+B once more to come back. Off: out only while held.",
+                   S(150), [&] { tabCombo("##showtimelatch", Item::showtimeLatch); });
         });
     }
     group(static_cast<int>(spidy::vr_settings::categoryCount) + 1, 0, "Troubleshooting", [&] {
