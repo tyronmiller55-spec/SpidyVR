@@ -702,6 +702,10 @@ struct Values {
     // HANDSTAND REACH (handstand_reach_cm, 130; 100 before): an upside-down touchdown counts a palm within this of the
     // floor (and still clearly below the head: the hands-over-head gesture is kept).
     int handstandReachCm = 130;
+    // TAKEOVER VIEW EASE (takeover_view_ease, on): every switch to SpidyVR (a point jump, a web, a wall run, a handstand,
+    // a sidestep, a swing, an animation's end) holds the view and eases it over AIR VIEW EASE, as the jump, flip and grip
+    // cancel always did (the 9790d67 playtest: 60-110 uneased 0.26-0.30 m eye jumps a session). Off: only those.
+    bool takeoverViewEase = true;
     // [next pass settings]
     bool operator==(const Values&) const = default;
 };

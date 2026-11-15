@@ -391,8 +391,12 @@ struct Frame {
 // a punch's PUNCH VIEW EASE; the timed jump handoff, a flip break and the grip
 // cancel AIR VIEW EASE (November 12 05:41: "the punch hold-and-ease view
 // handoff ... to the timed jump handoff plus flip-break and grip-cancel").
-inline int viewEaseMs(EnterVr why, int punchMs, int airMs) {
+// TAKEOVER VIEW EASE (takeover_view_ease; the owner, Nov 15: hitching during handoffs): `everyTakeover` gives every
+// other takeover (a point jump, a web, a wall run, a handstand, a sidestep, a swing, an animation's end) AIR VIEW EASE too.
+inline int viewEaseMs(EnterVr why, int punchMs, int airMs, bool everyTakeover = false) {
     switch (why) {
+    case EnterVr::none:
+        return 0;
     case EnterVr::punch:
         return std::max(punchMs, 0);
     case EnterVr::timed:
@@ -400,7 +404,7 @@ inline int viewEaseMs(EnterVr why, int punchMs, int airMs) {
     case EnterVr::cancel:
         return std::max(airMs, 0);
     default:
-        return 0;
+        return everyTakeover ? std::max(airMs, 0) : 0;
     }
 }
 

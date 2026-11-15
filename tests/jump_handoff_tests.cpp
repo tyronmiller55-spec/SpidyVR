@@ -294,6 +294,17 @@ int main() {
         check(viewEaseMs(EnterVr::web, 250, 300) == 0 && viewEaseMs(EnterVr::wallRun, 250, 300) == 0 &&
                   viewEaseMs(EnterVr::pointJump, 250, 300) == 0,
               "web, wall run, point jump: as before (snap)");
+        // TAKEOVER VIEW EASE (the owner, Nov 15): every takeover gets AIR VIEW EASE; the punch keeps its own; off: as before.
+        check(viewEaseMs(EnterVr::web, 250, 300, true) == 300 && viewEaseMs(EnterVr::wallRun, 250, 300, true) == 300 &&
+                  viewEaseMs(EnterVr::pointJump, 250, 300, true) == 300 &&
+                  viewEaseMs(EnterVr::handstand, 250, 300, true) == 300 &&
+                  viewEaseMs(EnterVr::sidestep, 250, 300, true) == 300 &&
+                  viewEaseMs(EnterVr::swing, 250, 300, true) == 300 && viewEaseMs(EnterVr::animEnd, 250, 300, true) == 300,
+              "every takeover: AIR VIEW EASE");
+        check(viewEaseMs(EnterVr::punch, 250, 300, true) == 250 && viewEaseMs(EnterVr::none, 250, 300, true) == 0 &&
+                  viewEaseMs(EnterVr::web, 250, 0, true) == 0,
+              "the punch keeps PUNCH VIEW EASE, no switch none, AIR VIEW EASE OFF the snap");
+        check(vr_settings::Values{}.takeoverViewEase, "on by default");
         // A flip break's median 0.50 m jump (03:49 session): held, then eased.
         view_ease::Ease e;
         check(e.begin({0, 0, .5f}, .25f), "0.50 m: an ease");

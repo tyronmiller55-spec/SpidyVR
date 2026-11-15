@@ -2944,6 +2944,7 @@ constexpr TabOnly tabOnly[] = {
     {"air_landing_release", &Values::airLandingRelease, nullptr},
     {"handstand_catch_hold_cm", nullptr, &Values::handstandCatchHoldCm},
     {"handstand_reach_cm", nullptr, &Values::handstandReachCm},
+    {"takeover_view_ease", &Values::takeoverViewEase, nullptr},
     {"movement_defaults", nullptr, &Values::movementDefaults},
 };
 } // namespace

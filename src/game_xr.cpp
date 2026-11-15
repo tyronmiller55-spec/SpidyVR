@@ -9085,13 +9085,16 @@ DWORD WINAPI run(void*) {
                                         // AIR VIEW EASE (November 12 05:41): the same hold and
                                         // ease for the timed jump handoff, a flip break and the
                                         // grip cancel (hybrid_owner::viewEaseMs); 0 the snap.
+                                        // TAKEOVER VIEW EASE (takeover_view_ease): every other takeover too.
                                         const int easeMs = hybrid_owner::viewEaseMs(
-                                            hybridOwner.lastEnterVr, values.punchViewEaseMs, values.airViewEaseMs);
+                                            hybridOwner.lastEnterVr, values.punchViewEaseMs, values.airViewEaseMs,
+                                            values.takeoverViewEase);
                                         const auto why = hybridOwner.lastEnterVr;
                                         const char* easeName = why == hybrid_owner::EnterVr::punch  ? "punch"
                                                                : why == hybrid_owner::EnterVr::timed ? "jump handoff"
                                                                : why == hybrid_owner::EnterVr::flip  ? "flip-break"
-                                                                                                     : "grip-cancel";
+                                                               : why == hybrid_owner::EnterVr::cancel ? "grip-cancel"
+                                                                   : hybrid_owner::enterVrName(why);
                                         // Log the previous ease's end under its own name first.
                                         if (rig.viewEase().active()) {
                                             rig.cancelViewEase(view_ease::End::handoff);
@@ -9112,7 +9115,8 @@ DWORD WINAPI run(void*) {
                                                                  easeName, length(worldEyes - (lockFeet + Vec3{0, frame.head.position.y, 0})));
                                             else if (why == hybrid_owner::EnterVr::timed ||
                                                      why == hybrid_owner::EnterVr::flip ||
-                                                     why == hybrid_owner::EnterVr::cancel)
+                                                     why == hybrid_owner::EnterVr::cancel ||
+                                                     (values.takeoverViewEase && why != hybrid_owner::EnterVr::punch))
                                                 diag_log::writef("%s view ease: off (snap)", easeName);
                                             rig.cancelViewEase(view_ease::End::handoff);
                                             punchEaseEndsLogged = rig.viewEase().ends();
