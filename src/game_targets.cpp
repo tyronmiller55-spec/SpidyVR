@@ -1,5 +1,6 @@
 // Finds web-grab candidates in-process, the way game_player finds the player.
 #include "spidy/game_targets.hpp"
+#include <algorithm>
 #include <chrono>
 #include <cmath>
 #include <cstring>
@@ -167,7 +168,7 @@ uint32_t game_targets::classOf(uintptr_t base, uintptr_t vtable) {
         const float us = std::chrono::duration<float, std::micro>(std::chrono::steady_clock::now() - start).count();
         std::lock_guard lock(costLock);
         ++scanCost.classWaits;
-        scanCost.classWaitMaxUs = std::max(scanCost.classWaitMaxUs, us);
+        scanCost.classWaitMaxUs = (std::max)(scanCost.classWaitMaxUs, us);
     }
     std::lock_guard lock(classesLock, std::adopt_lock);
     return lookup(base, vtable);
@@ -183,7 +184,7 @@ bool game_targets::scan(uintptr_t base, uint32_t kinds, std::vector<Candidate>& 
     std::lock_guard lock(costLock);
     ++scanCost.scans;
     scanTotalMs += ms;
-    scanCost.maxMs = std::max(scanCost.maxMs, static_cast<float>(ms));
+    scanCost.maxMs = (std::max)(scanCost.maxMs, static_cast<float>(ms));
     return found;
 }
 namespace {
