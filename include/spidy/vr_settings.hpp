@@ -714,6 +714,10 @@ struct Values {
     // that is off), and when the view ease carries the eyes' place, the blend turns only their angle: one ease of one
     // length instead of a 180 ms blend on top of a 250 ms ease (the 9790d67 playtest). Off: as before.
     bool handoffOneBlend = true;
+    // PUNCH CAMERA LOCK (punch_camera_lock_ms, 300; 0: off): a punch thrown on the ground hands him to SpidyVR and,
+    // most often, straight back on the landing (45 of 58 short stints in the 9790d67 playtest): the view is held where
+    // the animation showed it for this long before PUNCH VIEW EASE starts, so a round trip inside it never moves the camera.
+    int punchCameraLockMs = 300;
     // [next pass settings]
     bool operator==(const Values&) const = default;
 };

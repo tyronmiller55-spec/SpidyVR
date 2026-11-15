@@ -192,6 +192,32 @@ int main() {
         Ease up;
         check(up.begin({0, .27f, 0}, .25f, .5f) && finiteVec(up.step(dt, {}, 0)), "a height-only offset still eases");
     }
+    // PUNCH CAMERA LOCK (the owner, Nov 15): the whole offset held through the hold, then the ease; the cancels still apply.
+    {
+        Ease e;
+        check(e.begin({0, 0, .4f}, .25f, 0.f, .3f) && e.holding() && near(e.holdSeconds(), .3f), "a held ease");
+        float t = 0;
+        Vec3 o{};
+        while (t < .25f) {
+            o = e.step(dt, {t * 3.f, 0, 0}, 0);
+            t += dt;
+        }
+        check(e.holding() && near(o.z, .4f, 1e-5f), "through the hold (moving 3 m/s): the whole offset, no bleed");
+        while (e.holding())
+            o = e.step(dt, {}, 0), t += dt;
+        o = e.step(dt, {}, 0);
+        check(e.active() && o.z < .4f && o.z > .3f, "after the hold, the ease begins");
+        while (e.active() && t < 2.f)
+            e.step(dt, {}, 0), t += dt;
+        check(!e.active() && e.lastEnd() == End::finished && t < .65f, "and ends within the ease after the hold");
+        Ease turned;
+        turned.begin({0, 0, .4f}, .25f, 0.f, .3f);
+        turned.step(dt, {}, 0);
+        turned.step(dt, {}, 1.f);
+        check(!turned.active() && turned.lastEnd() == End::turn, "a large turn in the hold still cancels");
+        Ease none;
+        check(none.begin({0, 0, .4f}, .25f) && !none.holding(), "no hold: as before");
+    }
     std::printf("punch view ease: %d checks passed\n", passed);
     return 0;
 }

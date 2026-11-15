@@ -70,7 +70,10 @@ class Ease {
     // offset's height (the animation head's height over where tracking puts the eyes: median 0.27 m for a seated
     // player) fades on its own over `verticalSeconds` (the same ease-out, no motion bleed) while the level part eases
     // as before. 0 (or shorter): one offset, as before.
-    bool begin(Vec3 offset, float durationSeconds, float verticalSeconds = 0) {
+    // PUNCH CAMERA LOCK (punch_camera_lock_ms; the owner, Nov 15: "keep the camera locked"): `holdSeconds` holds the
+    // whole offset (no bleed) before the ease starts, so a punch that lands back in the animation within it never
+    // moves the view; the turn and teleport cancels still apply.
+    bool begin(Vec3 offset, float durationSeconds, float verticalSeconds = 0, float holdSeconds = 0) {
         if (active_)
             stop(End::handoff);
         if (!finite(offset) || !std::isfinite(durationSeconds) || durationSeconds <= 0)
@@ -91,6 +94,8 @@ class Ease {
         dir_ = lm > 1e-6f ? level / lm : Vec3{};
         start_ = magnitude_ = lm;
         duration_ = durationSeconds;
+        hold_ = std::isfinite(holdSeconds) ? std::clamp(holdSeconds, 0.f, 2.f) : 0.f;
+        held_ = 0;
         elapsed_ = 0;
         turned_ = 0;
         haveLast_ = false;
@@ -126,6 +131,11 @@ class Ease {
         lastFeet_ = feet;
         lastYaw_ = yaw;
         haveLast_ = true;
+        // PUNCH CAMERA LOCK: the whole offset, unchanged, through the hold.
+        if (held_ < hold_) {
+            held_ += dt;
+            return dir_ * magnitude_ + Vec3{0, vMagnitude_, 0};
+        }
         // The first VR frame holds the shown eyes exactly (elapsed 0), then it eases.
         const float curve = start_ * remaining(elapsed_, duration_);
         const float vCurve = split_ ? vStart_ * remaining(elapsed_, vDuration_) : 0.f;
@@ -174,6 +184,16 @@ class Ease {
     float startHeight() const {
         return vStart_;
     }
+    // PUNCH CAMERA LOCK: still holding (before the ease), and how long it has held (s).
+    bool holding() const {
+        return active_ && held_ < hold_;
+    }
+    float held() const {
+        return held_;
+    }
+    float holdSeconds() const {
+        return hold_;
+    }
     // How the last ease ended, and how many have ended (to log each once).
     End lastEnd() const {
         return lastEnd_;
@@ -195,6 +215,7 @@ class Ease {
     }
     bool active_{}, haveLast_{}, split_{};
     float vStart_{}, vMagnitude_{}, vDuration_{};
+    float hold_{}, held_{};
     Vec3 dir_{}, lastFeet_{};
     float start_{}, magnitude_{}, duration_{}, elapsed_{}, lastYaw_{}, turned_{};
     End lastEnd_ = End::none;

@@ -1226,6 +1226,7 @@ Values sanitized(Values v) {
     v.handstandCatchHoldCm = std::clamp(v.handstandCatchHoldCm, 5, 60);
     v.handstandReachCm = std::clamp(v.handstandReachCm, 60, 200);
     v.headHeightFadeMs = std::clamp(v.headHeightFadeMs, 0, 1500);
+    v.punchCameraLockMs = std::clamp(v.punchCameraLockMs, 0, 1000);
     return v;
 }
 const std::array<Row, 222>& rows() {
@@ -2948,6 +2949,7 @@ constexpr TabOnly tabOnly[] = {
     {"takeover_view_ease", &Values::takeoverViewEase, nullptr},
     {"head_height_fade_ms", nullptr, &Values::headHeightFadeMs},
     {"handoff_one_blend", &Values::handoffOneBlend, nullptr},
+    {"punch_camera_lock_ms", nullptr, &Values::punchCameraLockMs},
     {"movement_defaults", nullptr, &Values::movementDefaults},
 };
 } // namespace

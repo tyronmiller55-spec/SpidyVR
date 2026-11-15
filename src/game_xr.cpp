@@ -9111,9 +9111,17 @@ DWORD WINAPI run(void*) {
                                         }
                                         // HEAD HEIGHT FADE (head_height_fade_ms): the height fades on its own, longer.
                                         const float heightFade = static_cast<float>(values.headHeightFadeMs) * .001f;
+                                        // PUNCH CAMERA LOCK (punch_camera_lock_ms): a punch on the ground holds the view
+                                        // first; the landing back in the animation usually comes inside the hold.
+                                        const float punchHold = why == hybrid_owner::EnterVr::punch && animState.grounded
+                                                                    ? static_cast<float>(values.punchCameraLockMs) * .001f
+                                                                    : 0.f;
                                         if (easeMs > 0 && eyesOk &&
                                             rig.beginViewEase(worldEyes, frame.head, static_cast<float>(easeMs) * .001f,
-                                                              heightFade)) {
+                                                              heightFade, punchHold)) {
+                                            if (punchHold > 0)
+                                                diag_log::writef("punch camera lock: held %.0f ms before the ease (a punch "
+                                                                 "on the ground)", punchHold * 1000.f);
                                             easeWhy = easeName;
                                             punchEaseEndsLogged = rig.viewEase().ends();
                                             takeoverEased = true;
@@ -9290,6 +9298,12 @@ DWORD WINAPI run(void*) {
                                     landHeadProbe.pending = false;
                                 }
                             }
+                            // PUNCH CAMERA LOCK: a punch's round trip back inside the hold: the camera never moved.
+                            if (hybridOwner.enterAnim && rig.viewEase().active() && rig.viewEase().holdSeconds() > 0)
+                                diag_log::writef("punch camera lock: back to the animation after %.0f ms %s",
+                                                 rig.viewEase().held() * 1000.f,
+                                                 rig.viewEase().holding() ? "inside the hold (the camera stayed)"
+                                                                          : "after the hold, mid-ease");
                             // Landing on the feet ends an ease at once (the animation's
                             // view takes over); any other switch back too.
                             if (hybridOwner.enterAnim)

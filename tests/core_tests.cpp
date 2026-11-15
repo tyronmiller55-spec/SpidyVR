@@ -24700,6 +24700,7 @@ int main() {
                   "takeover_view_ease=1\n"
                   "head_height_fade_ms=500\n"
                   "handoff_one_blend=1\n"
+                  "punch_camera_lock_ms=300\n"
                   "movement_defaults=3\n",
               "the defaults' text");
         Values changed = defaults;
