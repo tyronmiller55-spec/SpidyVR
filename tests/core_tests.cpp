@@ -24695,6 +24695,8 @@ int main() {
                   "fall_handoff_ms=150\n"
                   "air_landing_blend=1\n"
                   "air_landing_release=0\n"
+                  "handstand_catch_hold_cm=35\n"
+                  "handstand_reach_cm=130\n"
                   "movement_defaults=3\n",
               "the defaults' text");
         Values changed = defaults;

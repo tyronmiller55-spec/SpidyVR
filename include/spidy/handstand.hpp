@@ -126,6 +126,9 @@ template <class V> Params paramsOf(const V& v) {
     p.pushMaxNormal = static_cast<float>(std::clamp(v.handstandPushMax, 2, 12));
     p.fallLeanDegrees = static_cast<float>(std::clamp(v.handstandFallDegrees, 15, 60));
     p.eyeDrop = std::clamp(v.handstandEyeDropCm, 0, 120) / 100.f;
+    // THE CATCH STICKS (the 9790d67 playtest; the owner, Nov 15): the hold while catching and the touchdown's reach.
+    p.floorReach = std::clamp(v.handstandCatchHoldCm, 5, 60) / 100.f;
+    p.touchdownReach = std::clamp(v.handstandReachCm, 60, 200) / 100.f;
     return p;
 }
 

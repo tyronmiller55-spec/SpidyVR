@@ -370,6 +370,17 @@ int main() {
         v.handstand = true;
         v.realisticFlips = false;
         check(!paramsOf(v).enabled, "needs REALISTIC FLIPS");
+        {
+            vr_settings::Values d;
+            d.realisticFlips = true;
+            check(std::abs(paramsOf(d).floorReach - .35f) < 1e-6f && std::abs(paramsOf(d).touchdownReach - 1.3f) < 1e-6f &&
+                      std::abs(paramsOf(d).armsBelowHead - .2f) < 1e-6f,
+                  "the defaults: a 0.35 m catch hold, a 1.3 m reach, the below-head test kept");
+            d.handstandCatchHoldCm = 12;
+            d.handstandReachCm = 100;
+            check(std::abs(paramsOf(d).floorReach - .12f) < 1e-6f && std::abs(paramsOf(d).touchdownReach - 1.f) < 1e-6f,
+                  "12 and 100: the old hold and reach");
+        }
         v.realisticFlips = true;
         check(paramsOf(v).enabled && std::abs(paramsOf(v).comHeight - .95f) < 1e-6f && paramsOf(v).assist &&
                   std::abs(paramsOf(v).gain - 5) < 1e-6f && std::abs(paramsOf(v).pushGain - 2.2f) < 1e-6f &&
@@ -430,6 +441,29 @@ int main() {
             m = high.update(stay, on());
         check(m.exitNow == Exit::missed && frames * dt > .55f && frames * dt < .7f,
               "palms left high after a touchdown catch: missed after the settle (0.6 s)");
+        // THE CATCH STICKS (the owner, Nov 15): with HANDSTAND CATCH HOLD's 0.35 m, palms 0.3 m over the floor hold the
+        // catch through the settle (0.12 m dropped it: 3 of 3 in the 9790d67 playtest), and 0.5 m still misses.
+        {
+            auto holdP = on();
+            holdP.floorReach = .35f;
+            Handstand held;
+            fly(held);
+            held.update(touchdown(), holdP);
+            auto near30 = touchdown();
+            near30.palms[0].y = near30.palms[1].y = .3f;
+            Handstand::Out ho{};
+            for (int i = 0; i < 90 && ho.exitNow == Exit::none; ++i)
+                ho = held.update(near30, holdP);
+            check(ho.exitNow == Exit::none && ho.state == State::balance,
+                  "palms 0.3 m over the floor with a 0.35 m hold: the catch holds into the balance");
+            Handstand loose;
+            fly(loose);
+            loose.update(touchdown(), holdP);
+            Handstand::Out lo{};
+            for (int i = 0; i < 200 && lo.exitNow == Exit::none; ++i)
+                lo = loose.update(stay, holdP);
+            check(lo.exitNow == Exit::missed, "palms 0.5 m up with a 0.35 m hold: still missed at the settle");
+        }
 
         Handstand late;
         fly(late);

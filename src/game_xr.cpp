@@ -3715,11 +3715,14 @@ DWORD WINAPI run(void*) {
                     {
                         const auto& hs = motion.handstand;
                         if (hs.caughtNow)
-                            diag_log::writef("handstand: catch%s (inverted %.0f deg, eyes down %.2f m%s%s)",
+                            diag_log::writef("handstand: catch%s (inverted %.0f deg, eyes down %.2f m%s%s; hold %.2f m, "
+                                             "reach %.2f m)",
                                              hs.touchdownCatch ? " at the touchdown" : "",
                                              handstand::invertedDegrees(motion.flipTilt.rotate({0, 1, 0})),
                                              motion.handstandDrop, hs.gripCarried ? ", grip carried" : "",
-                                             handstandGates.landing ? ", on the landing handoff" : "");
+                                             handstandGates.landing ? ", on the landing handoff" : "",
+                                             std::clamp(values.handstandCatchHoldCm, 5, 60) / 100.f,
+                                             std::clamp(values.handstandReachCm, 60, 200) / 100.f);
                         else if (hs.touchdownNow && hs.refused != handstand::Refusal::none) {
                             // Every gate that failed (the first is the reason), not only the first.
                             char failed[200];

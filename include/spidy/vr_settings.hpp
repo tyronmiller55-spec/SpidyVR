@@ -696,6 +696,13 @@ struct Values {
     // his velocity and pick its normal landing clip when the body is let go in the air). Needs AIR LANDING BLEND.
     bool airLandingRelease = false;
     // [air takeover pass settings]
+    // HANDSTAND CATCH HOLD (handstand_catch_hold_cm, 35; 12 was the old floorReach): while a catch settles, palms
+    // within this of the floor count as on it, so a catch is not dropped at the 0.6 s settle (the 9790d67 playtest: 3 of 3).
+    int handstandCatchHoldCm = 35;
+    // HANDSTAND REACH (handstand_reach_cm, 130; 100 before): an upside-down touchdown counts a palm within this of the
+    // floor (and still clearly below the head: the hands-over-head gesture is kept).
+    int handstandReachCm = 130;
+    // [next pass settings]
     bool operator==(const Values&) const = default;
 };
 inline constexpr int eyeAimShots = 1, eyeAimZips = 2;

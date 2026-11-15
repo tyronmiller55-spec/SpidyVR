@@ -1223,6 +1223,8 @@ Values sanitized(Values v) {
     v.automaticHandStrength = std::clamp(v.automaticHandStrength, 0, 200);
     v.automaticFalloff = std::clamp(v.automaticFalloff, 500, 3000);
     v.automaticHandThreshold = std::clamp(v.automaticHandThreshold, 50, 300);
+    v.handstandCatchHoldCm = std::clamp(v.handstandCatchHoldCm, 5, 60);
+    v.handstandReachCm = std::clamp(v.handstandReachCm, 60, 200);
     return v;
 }
 const std::array<Row, 222>& rows() {
@@ -2940,6 +2942,8 @@ constexpr TabOnly tabOnly[] = {
     {"fall_handoff_ms", nullptr, &Values::fallHandoffMs},
     {"air_landing_blend", &Values::airLandingBlend, nullptr},
     {"air_landing_release", &Values::airLandingRelease, nullptr},
+    {"handstand_catch_hold_cm", nullptr, &Values::handstandCatchHoldCm},
+    {"handstand_reach_cm", nullptr, &Values::handstandReachCm},
     {"movement_defaults", nullptr, &Values::movementDefaults},
 };
 } // namespace
