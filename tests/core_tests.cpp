@@ -24705,6 +24705,8 @@ int main() {
                   "snap_body_turn=1\n"
                   "snap_tap_ms=120\n"
                   "dodge_reface=1\n"
+                  "landing_body_to_view=1\n"
+                  "landing_body_ease_ms=500\n"
                   "landing_rear_turn=1\n"
                   "movement_defaults=3\n",
               "the defaults' text");

@@ -758,6 +758,10 @@ int main() {
             // NEXT PASS (November 15): the player's own feel.
             if (key == "landing_rear_turn")
                 continue;
+            if (key == "landing_body_ease_ms")
+                continue;
+            if (key == "landing_body_to_view")
+                continue;
             if (key == "dodge_reface")
                 continue;
             if (key == "snap_tap_ms")

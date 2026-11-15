@@ -3,6 +3,7 @@
 #include "spidy/camera_mode.hpp"
 #include "spidy/facing_check.hpp"
 #include "spidy/hybrid_handoff.hpp"
+#include "spidy/landing_body.hpp"
 #include "spidy/view_yaw_lock.hpp"
 #include "spidy/vr_settings.hpp"
 #include <cmath>
@@ -78,20 +79,77 @@ int main() {
         check(dueAt >= 69 && dueAt <= 71, "due 0.4 s after the dodge button is let go");
         check(!pending, "and not left due once the tail has closed (taken once in game)");
     }
-    // LANDING REAR TURN: the facing check's rear rule follows the setting.
+    // LANDING BODY TO VIEW / LANDING REAR TURN.
     {
-        constexpr float deg = 3.14159265f / 180.f;
-        check(vr_settings::Values{}.landingRearTurn, "rear turn on by default");
+        using namespace landing_body;
+        constexpr float deg = 3.14159265f / 180.f, dt = 1.f / 90.f;
+        const vr_settings::Values v{};
+        check(v.landingBodyToView && v.landingBodyEaseMs == 500 && v.landingRearTurn, "on, 500 ms, rear turn on");
+        // The turn's sign: the rig's yaw convention.
+        const Vec3 f = Quat::yaw(.3f).rotate({0, 0, -1});
+        check(near(hybrid_handoff::lookYaw(turnOf(.5f).rotate(f)), .8f), "turnOf(a) turns a facing by +a");
+        // A 60-degree landing: eases in (no snap), holds while he comes round, eases out, ends.
+        Ease e;
+        e.begin(.5f, true);
+        float hero = 0, view = 60 * deg, last = 0, worstStep = 0, t = 0;
+        bool started = false, out = false, past = false;
+        End ended = End::none;
+        for (int i = 0; i < 600 && ended == End::none; ++i, t += dt) {
+            const bool turning = t > .3f && std::abs(view - hero) > 12 * deg;
+            if (turning)
+                hero += std::min(142 * deg * dt, view - hero);
+            const auto o = e.update(dt, view - hero, turning, false, false);
+            started |= o.started;
+            out |= o.easingOut == End::arrived;
+            ended = o.ended;
+            worstStep = std::max(worstStep, std::abs(o.yaw - last));
+            last = o.yaw;
+            past |= std::abs(hero + o.yaw - view) > 60 * deg + 1e-3f;
+        }
+        check(!past, "never turned past the view");
+        check(started && out && ended == End::arrived, "in, held while he turns, out once he arrives");
+        check(worstStep < 3 * deg, "smooth: under 3 degrees a frame (no snap)");
+        // Small gaps are left alone; a rear gap only with LANDING REAR TURN.
+        Ease small;
+        small.begin(.5f, true);
+        check(small.update(dt, 8 * deg, false, false, false).ended == End::skippedSmall, "8 degrees: nothing to show");
+        Ease rear;
+        rear.begin(.5f, false);
+        check(rear.update(dt, 150 * deg, false, false, false).ended == End::skippedRear, "rear, rear turn off: kept");
+        Ease rearOn;
+        rearOn.begin(.5f, true);
+        float y = 0;
+        for (int i = 0; i < 60; ++i)
+            y = rearOn.update(dt, (i % 2 ? 179.f : -179.f) * deg, true, false, false).yaw;
+        check(std::abs(y) > 170 * deg && y < 0, "a gap round +-180: kept the same way round, no flip");
+        // The left stick and a takeover end it.
+        Ease drive;
+        drive.begin(.5f, true);
+        drive.update(dt, 50 * deg, false, false, false);
+        check(drive.update(dt, 50 * deg, false, true, false).easingOut == End::driving, "the left stick: eases out");
+        Ease cut;
+        cut.begin(.5f, true);
+        cut.update(dt, 50 * deg, false, false, false);
+        const auto c = cut.update(dt, 50 * deg, false, false, true);
+        check(c.ended == End::cancelled && c.yaw == 0 && !cut.active(), "a takeover: gone at once");
+        // No turn ever starts: it does not hold the body off his facing for long.
+        Ease idle;
+        idle.begin(.5f, true);
+        int frames = 0;
+        while (idle.active() && frames < 1000)
+            idle.update(dt, 40 * deg, false, false, false), ++frames;
+        check(frames * dt < 1.7f, "no turn: back on his facing within 1.6 s");
+        // The facing check's rear rule follows the setting.
         facing_check::Check fc;
         fc.arm(facing_check::Event::landing, 0.f);
         facing_check::Sample fs;
         fs.heroMatters = fs.heroOk = true;
         fs.hero = 150 * deg;
         fs.rearTurns = false;
-        check(fc.update(.01f, fs).hero.verdict == facing_check::Verdict::kept, "rear turn off: kept (as before)");
+        check(fc.update(dt, fs).hero.verdict == facing_check::Verdict::kept, "rear turn off: kept (as before)");
         fc.arm(facing_check::Event::landing, 0.f);
         fs.rearTurns = true;
-        const auto r = fc.update(.01f, fs);
+        const auto r = fc.update(dt, fs);
         check(r.hero.verdict == facing_check::Verdict::corrected && r.heroTurn, "rear turn on: he turns");
     }
     std::printf("next pass: %d checks passed\n", passed);

@@ -20,6 +20,7 @@
 #include "spidy/dodge_tumble.hpp"
 #include "spidy/game_dodge.hpp"
 #include "spidy/landing_blend.hpp"
+#include "spidy/landing_body.hpp"
 #include "spidy/point_bullet.hpp"
 #include "spidy/point_jump.hpp"
 #include "spidy/sidestep.hpp"
@@ -1291,6 +1292,8 @@ DWORD WINAPI run(void*) {
         animated_air_spin::Tracker airSpin{};
         int64_t airSpinDiagAt{};
         bool airSpinWas{};
+        landing_body::Ease landingBody; // LANDING BODY TO VIEW: the drawn body's turn onto the view after a landing
+        bool landingTiltWas = false;
         // ANIMATED HYBRID (off by default): animation-default / intent-VR owner FSM.
         hybrid_owner::HybridOwner hybridOwner{};
         hybrid_owner::FreshPush flipFreshPush{}; // left-stick flip break: fresh pushes only
@@ -9471,6 +9474,12 @@ DWORD WINAPI run(void*) {
                                         const float actorNow = hybrid_handoff::actorLookYaw({body[8], body[9], body[10]});
                                         hybridHeading.begin(hybrid_movement::Heading::Hold::facing, before);
                                         hsHeadingWritten = true;
+                                        // LANDING BODY TO VIEW: the drawn body eases onto the view while he comes round.
+                                        if (values.landingBodyToView && values.headsetFirst &&
+                                            hybridOwner.lastEnterAnim == hybrid_owner::EnterAnim::land)
+                                            landingBody.begin(static_cast<float>(std::clamp(values.landingBodyEaseMs, 100,
+                                                                                            1500)) * .001f,
+                                                              values.landingRearTurn);
                                         viewLock.set = true;
                                         viewLock.yaw = hybridHeading.yaw;
                                         diag_log::writef(
@@ -10278,6 +10287,38 @@ DWORD WINAPI run(void*) {
                                     spun.pitchDeg, spun.bankDeg, spun.bodyDeg, length(swingState.velocity),
                                     animated_moves::headFollowName(animHeadMode));
                             }
+                        }
+                        // LANDING BODY TO VIEW (landing_body.hpp; the owner, Nov 15): after a landing the drawn body is
+                        // turned about the head onto the view while the walk stick brings the hero round, then eases back
+                        // onto his facing. The pose job only (setYieldTilt, hands kept on the controllers): no game write,
+                        // and the camera (the head) does not move. The air spin owns the tilt when it runs.
+                        if (landingBody.active() || landingTiltWas) {
+                            constexpr float toDeg = 180.f / 3.14159265f;
+                            const bool heroOk = std::hypot(body[8], body[10]) > .2f;
+                            const float heroY = heroOk ? hybrid_handoff::actorLookYaw({body[8], body[9], body[10]}) : NAN;
+                            const float viewY = std::isfinite(hsViewNow) ? hsViewNow : lastViewYaw;
+                            const bool cancel = !hybridOn || !values.landingBodyToView || !values.headsetFirst ||
+                                                hybridOwner.domain == hybrid_owner::Domain::vr || airSpinWas ||
+                                                headRide.active() || !heroOk;
+                            const auto lb = landingBody.update(armDt, viewY - heroY, hybridHeroTurn,
+                                                               hybridInputL >= stable_yaw::steerZone, cancel);
+                            if (lb.started && lb.ended == landing_body::End::none)
+                                diag_log::writef("landing body: the drawn body eases onto the view, gap %+.0f deg over "
+                                                 "%.0f ms (the pose only; no game write), #%u",
+                                                 landingBody.startGap * toDeg, landingBody.easeSeconds * 1000.f,
+                                                 landingBody.begun);
+                            if (lb.easingOut != landing_body::End::none)
+                                diag_log::writef("landing body: easing back onto his facing (%s), gap left %+.0f deg",
+                                                 landing_body::endName(lb.easingOut),
+                                                 std::isfinite(viewY - heroY) ? stable_yaw::wrap(viewY - heroY) * toDeg
+                                                                              : 0.f);
+                            if (lb.ended != landing_body::End::none)
+                                diag_log::writef("landing body: done (%s; gap at the start %+.0f deg)",
+                                                 landing_body::endName(lb.ended), landingBody.startGap * toDeg);
+                            const float shown = yieldAnim ? lb.yaw : 0.f;
+                            if (!airSpinWas && (shown != 0.f || landingTiltWas))
+                                native_body::setYieldTilt(landing_body::turnOf(shown), landing_body::turnOf(shown));
+                            landingTiltWas = shown != 0.f;
                         }
                         // Submitted together with the finalized eye-frame mapping below.
                     } else {
