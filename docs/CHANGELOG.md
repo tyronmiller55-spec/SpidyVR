@@ -3,6 +3,12 @@
 Every build, newest first, with what changed, why, and what was measured.
 Per-check results are in [VALIDATION.md](VALIDATION.md).
 
+## Showtime and web fire (Nov 14, branch `feat/showtime`, on b9b2196)
+
+The user, Nov 14 (t70u): "I need a pass on firing webs from animation. Sometimes nothing happens, but I can see a switch to SpideyVR happening. We have to get the webs working from animation properly, it's getting hard to fire accurate web lines in combat." One commit per feature.
+
+- **Webs fired from animation always fire (`web_fire.hpp`, `tests/web_fire_tests.cpp`).** Root cause, from game-vr-20261114-104706 (55 grip cancels; see [WEB_FIRE.md](WEB_FIRE.md)): the midair grip was the air cancel and the cancel CONSUMED the press (`animation_cancel::Gate`: that hand's web stays blocked until both hands are let go), so the owner flipped to SpidyVR and no web came; a squeeze held on did nothing either, and the other hand's press during the wait was dropped too. The swing shoots on the rising edge it sees, so it never saw one. The cancel still flips the owner on that frame, but the press is queued through the handoff and given to the swing on the next frame as a fresh press, in whichever owner has the body then (the log's `vr->anim (land 0 ms)` flips back at once); a tap is held 200 ms. The shot's line is never more than 2.5 degrees off the controller's own current line (the marker's low-pass lagged a flick). `web fire:` on every press: hand, owner then and now, outcome (attached / missed / dropped / unanswered) with its reason, the aim error off the controller's current line, the rig's own error, the wait, and running totals. `wb drops:` splits the web-ball drops by reason (`SpidyShooterDrops`, a live export; `Data` stays v5): revoked in the queue, revoked at dispatch, refused at enqueue, the game's refusals by cause. No new setting: it is a bug fix.
+
 ## Polish pass (Nov 14, branch `feat/polish-pass`, on 4d58169)
 
 The user, Nov 14 (t64u): "Landings, combat, and movement in general are having a problem with lag and immediacy ... Where the player looks takes full precedence, and everything else should be adjusting to it ... There should be a direction report from the headset that everything is answering to every moment." The plan, with the numbers from the 4d58169 logs, is `docs/POLISH_PASS.md`. One commit per slice.

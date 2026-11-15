@@ -24,8 +24,13 @@ using namespace spidy;
 using namespace spidy::game_shooter;
 extern "C" {
 __declspec(dllexport) Data SpidyShooterData;
+// Why web balls were dropped (game_shooter.hpp DropLive); counters bumped with interlocked adds from any thread.
+__declspec(dllexport) DropLive SpidyShooterDrops;
 }
 namespace {
+void bump(uint32_t& counter) {
+    InterlockedIncrement(reinterpret_cast<volatile LONG*>(&counter));
+}
 // The camera's update, once a frame on the main thread in play and in fights
 // (where shots go out), and the muzzle every weapon asks its emitters for.
 constexpr uintptr_t frameRva = 0x897d30, muzzleRva = 0x2150c40;
@@ -480,6 +485,7 @@ struct Fired {
     bool resolved{}, gadget{}, empty{};
     uint32_t gadgetCalls{}, fallbackCalls{};
     Vec3 origin{}, direction{};
+    uint8_t fail{}; // refuse(): 0 none; DropLive's refusals
 };
 // The equipped gadget fired from the hand: with a charge to fire, as the
 // game asks before its own; its own event from the aim written into it; the
@@ -523,6 +529,12 @@ bool fireGadget(uintptr_t weapon, const Pending& p, Vec3 origin, Vec3 forward, F
     out.shot = resolve(value<uint32_t>(weapon + 0x518 + 4ull * index));
     return true;
 }
+// Why a pull was refused (game_shooter::DropLive): the line is no line, the equipped gadget would not fire, the ball's
+// weapon is not live, not ready, its event could not be made, or the engine's fire call said no.
+bool refuse(Fired& out, uint8_t why) {
+    out.fail = why;
+    return false;
+}
 bool fireNow(const Pending& p, Fired& out) {
     // The hand where it is now, as far from the player as it was in the sample.
     Vec3 origin = p.shot.origin, feet{};
@@ -530,11 +542,11 @@ bool fireNow(const Pending& p, Fired& out) {
         origin += feet - p.feet;
     const Vec3 forward = normalized(p.shot.aimPoint - origin);
     if (!finite(origin) || !finite(p.shot.aimPoint) || length(forward) < .5f)
-        return false;
+        return refuse(out, 1);
     out.origin = origin;
     out.direction = forward;
     if (const auto gadget = equippedGadget())
-        return fireGadget(gadget, p, origin, forward, out);
+        return fireGadget(gadget, p, origin, forward, out) || refuse(out, 2);
     // The game's own Web Shooter, where it is the gadget the game has equipped
     // (what its RB fires: every player's, unless a wheel chose another). Its
     // shot is the game's web, which seals a leak, webs up a vent, a turret or a
@@ -558,16 +570,16 @@ bool fireNow(const Pending& p, Fired& out) {
     const auto weapon = gadgets.current();
     if (!liveGadget(weapon)) {
         gadgets.lost();
-        return false;
+        return refuse(out, 3);
     }
     // The fire reads the weapon's setup (+0x48) and SpawnShot the actor at
     // +0x5b0 without asking whether there is one.
     if (!pointer(weapon + 0x48) || !actorOf(value<uint32_t>(weapon + 0x5b0)))
-        return false;
+        return refuse(out, 4);
     alignas(16) uint8_t event[0x80]{};
     uint32_t id{};
     if (!fill(weapon, event) || !newId(id))
-        return false;
+        return refuse(out, 5);
     std::memcpy(event, eventHeader, sizeof(eventHeader));
     const uint8_t emitter = p.shot.hand == 1 ? 0 : 1; // right wrist 0, left 1
     event[0xa] = emitter;
@@ -590,7 +602,7 @@ bool fireNow(const Pending& p, Fired& out) {
     muzzleMatrix(origin, forward, firingMatrix);
     ++out.fallbackCalls;
     if (!fire(weapon, event))
-        return false;
+        return refuse(out, 6);
     out.resolved = ref && (value<uint32_t>(weapon + 0x68) & 1);
     const auto handle = value<uint32_t>(weapon + 0x518 + 4ull * emitter);
     out.shot = resolve(handle);
@@ -890,13 +902,30 @@ void fireQueued() {
     for (unsigned i = 0; i < count; ++i) {
         const auto& p = batch[i];
         Fired fired;
-        bool expired = now - p.queuedMs >= leaseMs;
+        bool expired = now - p.queuedMs >= leaseMs, ran{};
         const bool ok = animation_cancel::dispatchAction(dispatchMutex, p.inputSerial, p.generation,
             [&] { return animation_cancel::ActionEpoch{actionGeneration.load(), actionFloor.load()}; },
             [&] {
+                ran = true;
                 expired = GetTickCount64() - p.queuedMs >= leaseMs;
                 return !expired && fireNow(p, fired);
             });
+        if (!ok) {
+            auto& why = SpidyShooterDrops;
+            if (expired)
+                bump(why.expired);
+            else if (!ran)
+                bump(why.revokedAtDispatch);
+            else
+                switch (fired.fail) {
+                case 1: bump(why.failLine); break;
+                case 2: bump(why.failGadget); break;
+                case 3: bump(why.failNotLive); break;
+                case 4: bump(why.failNotReady); break;
+                case 5: bump(why.failEvent); break;
+                default: bump(why.failCall); break;
+                }
+        }
         publish([&](Data& d) {
             // A gadget without a charge: its pull dropped, or for the game's
             // Web Shooter answered with the ball.
@@ -965,6 +994,10 @@ bool enqueue(const Pending& p) {
     if (room && current)
         queue[queued++] = p;
     ReleaseSRWLockExclusive(&queueLock);
+    if (!room)
+        bump(SpidyShooterDrops.queueFull);
+    else if (!current)
+        bump(SpidyShooterDrops.refusedAtEnqueue);
     publish([&](Data& d) {
         d.diagnostic.queued += room && current;
         d.diagnostic.queueFull += !room;
@@ -1279,6 +1312,9 @@ void game_shooter::invalidatePending(uint64_t inputSerial) {
         // gadgetFire is persistent wheel selection, not an action latch.
         // Revocation must not silently turn the selected gadget off.
     });
+    bump(SpidyShooterDrops.revocations);
+    for (unsigned i = 0; i < revoked; ++i)
+        bump(SpidyShooterDrops.revokedQueued);
     publish([&](Data& d) { d.dropped += revoked; d.diagnostic.rejected += revoked; });
 }
 void game_shooter::cancel() {

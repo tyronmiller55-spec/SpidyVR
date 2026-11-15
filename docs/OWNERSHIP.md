@@ -18,7 +18,7 @@ Source: the user, Nov 9 09:34 PST. Code: `include/spidy/hybrid_owner.hpp`, the `
 | Ground + grip or trigger | ANIM | **None.** Grip only enables SpidyVR's arm features on the animated arms (webs, web balls, punches, markers). The one exception is a punch's web strike under FULL ARMS (next rows). |
 | Jump, vault, point launch, Y zip, fall: any midair native animation | ANIM, then VR on the timer | **Nov 12 05:41 (JUMP TO SPIDYVR, `jump_handoff_ms`, default 500):** a plain jump, a fall, a zip launch, a vault or a wall launch plays animated for the timer's time in the air, then hands to VR (`jump-timer`; diag `jump handoff: <kind> after X ms`). A zip launch's timer counts from its rise; the zip's pull itself stays ANIM. The timer waits while he fights, dodges or zips. Landing before the timer: no switch. **STAY TO LANDING** (0) keeps the Nov 11 23:39 rule: the animation plays through the fall to the landing. |
 | Midair animation + a flip's pitch or tilt (either stick, see below) | VR | `flip-break`, **on the frame the input is read** (`HybridOwner::breakForFlip`, before that frame's tracking, hands and body). |
-| Midair animation + grip | VR | Grip cancel (`grip-cancel`). It is consumed and fires no web or ball. **Nov 11:** on the frame the gate consumes it (`breakForCancel`). |
+| Midair animation + grip | VR | Grip cancel (`grip-cancel`). **Nov 14 (t70u): the squeeze is a web too.** The owner flips on that frame (`breakForCancel`) and the press is QUEUED through the handoff (`web_fire.hpp`): the swing gets it as a fresh press on the next frame, in whichever owner has the body then, and a tap is held 200 ms so it shoots. It is never dropped; every press is one `web fire:` line (owner, outcome, reason, aim error). Web balls (the trigger) are still not fired by the cancel. Before this a cancel consumed the press, and the other hand's squeeze while the gate waited for both to let go; the swing saw no web and the player saw only the switch. |
 | Midair animation + Spidy's wall | VR | `wallrun` |
 | Midair animation + a SpidyVR web attaching | VR | `web` |
 | Air after a break (flip, grip, web, wall) or the jump timer | VR | It stays VR until landing; landing on the feet always returns to ANIM (`land`). |
@@ -55,7 +55,7 @@ What counts (`hybrid_owner::flipBreak`; dead zone 0.2, noise only):
 | Right stick left / right | **Never** (the snap or smooth turn). |
 | Right stick up / down (pitch), diagonals by their up/down part | Basic FLIPS (the right stick flips), or LEG CONTROL in force (with CONTROLLED or REALISTIC FLIPS; the legs' swing pitches him). Not FLIPS' zip flick (`zipPriority`). With no flips on the right stick, up / down stays the zip / heal push and breaks nothing. |
 | Left stick, any way (pitch and tilt) | CONTROLLED FLIPS toggled on in the air (A), or REALISTIC FLIPS with FLIPS on (its left-stick steering). Otherwise the left stick steers the game's jump and breaks nothing. **Fresh push only (Nov 12):** a stick already tilted at takeoff is the run's; it breaks after it has rested inside the dead zone, or moved more than 60 deg from its takeoff direction (`hybrid_owner::FreshPush`). |
-| Grip cancel | Always, in a midair animation (consumed, no shot). |
+| Grip cancel | Always, in a midair animation (the owner flips on that frame; the squeeze fires its web on the next, `web_fire.hpp`; no ball). |
 
 How (game_xr, `flip break:` and `grip cancel: anim->vr this frame` diag lines with the display time):
 - The right stick is read before the legs take it and before `rig.update`; the left stick right after `rig.update` (it reports the controlled flip's toggle). Either calls `breakForFlip`, which switches the owner at once; the owner's update later in the same frame reports `enterVr` with `flip-break`, so the usual handoff runs that frame: position lock on the actor's feet, the pose seeded from the air (`adoptsFromAir`), the swing's velocity kept.
@@ -103,7 +103,7 @@ In HYBRID the walk stick is the mod's on the ground (front half: along the right
 
 ## Defaults chosen (flag if wrong)
 
-- **Air cancel input** = grip, the web-hold button. If WEB BUTTON is swapped, it is the trigger. Web balls never cancel.
+- **Air cancel input** = grip, the web-hold button. If WEB BUTTON is swapped, it is the trigger. Web balls never cancel. The cancel's press is a web (Nov 14): queued through the handoff and fired one frame later, see the midair row.
 - **Native Run release** applies to a wall run entered within 0.5 s of Native Run's RT. "Released" = left stick tilt under 0.2. In open air the release changes nothing, because SpidyVR owns the air and landing hands back anyway.
 - **ANIMATED HYBRID SPEED** setting is still parsed but no longer used, because the speed takeover was removed.
 

@@ -167,6 +167,22 @@ struct Test {
     Vec3 origin{}, aimPoint{};
     uint64_t target{};
 };
+// SpidyShooterDrops (a live side-channel export, as SpidySwingCostLive: Data stays v5 and 432 bytes): why web balls were
+// dropped, the account the "wb dispatch:" line's `rej` number lacked (Nov 14: 143 of 615 requests were dropped and the
+// reasons were deferred). Counters count up from any thread; each dropped pull is counted under one reason below.
+//  refusedAtEnqueue: the pull's input was already revoked (an air cancel or an owner flip came first).
+//  revokedQueued:    it waited in the queue when one came (game_shooter::invalidatePending).
+//  revokedAtDispatch: it was copied for dispatch when one came.
+//  fail*: the game thread refused it: failLine (no usable line), failGadget (the equipped gadget would not fire),
+//  failNotLive (the ball's weapon is gone), failNotReady (its setup or actor is missing), failEvent (its event could
+//  not be made), failCall (the engine's fire call said no).
+struct DropLive {
+    uint32_t magic = 0x53484452, version = 1, bytes = sizeof(DropLive), revocations{};
+    uint32_t refusedAtEnqueue{}, queueFull{}, revokedQueued{}, revokedAtDispatch{}, expired{};
+    uint32_t failLine{}, failGadget{}, failNotLive{}, failNotReady{}, failEvent{}, failCall{};
+    uint32_t reserved{};
+};
+static_assert(sizeof(DropLive) == 64 && offsetof(DropLive, failLine) == 36);
 // SpidyShooterGadgets: game_shooter::gadgetWheel.
 struct GadgetCommand {
     uint32_t magic = 0x53484f47, version = 1, bytes = sizeof(GadgetCommand), fire{};

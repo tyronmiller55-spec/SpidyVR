@@ -1,4 +1,5 @@
 #include "spidy/animation_cancel.hpp"
+#include "spidy/web_fire.hpp"
 // Bounded first-person OpenXR integration using the game's two native views.
 #include "spidy/native_appearance.hpp"
 #include "spidy/native_body.hpp"
@@ -606,6 +607,7 @@ BridgeCall swingKick{};
 const game_swing::SwingKickLive* swingKickLive{};
 // The swing module's cost to the game thread, per 10 s window (SpidySwingCostLive): the "game thread cost:" line.
 const game_swing::SwingCostLive* swingCostLive{};
+const game_shooter::DropLive* shooterDrops{}; // SpidyShooterDrops: why web balls were dropped
 // Where that window's longest visit went (SpidySwingCostSections): the "game thread sections:" line.
 const game_swing::SwingCostSections* swingCostSections{};
 // JUMP PULL (jump_pull.hpp): the ask the swing gets every frame (SpidyJumpPull: the gaze and the stick move) and what it did
@@ -1241,6 +1243,14 @@ DWORD WINAPI run(void*) {
         // ANIMATED ONLY (off by default): cutscene/stale grace and state diag.
         animated_moves::StayLatch animatedOnlyLatch{};
         animation_cancel::Gate gripCancelGate;
+        // WEB FIRE (web_fire.hpp): a press the air cancel consumed is queued through the handoff and fired; every press is
+        // accounted for in a `web fire:` line.
+        web_fire::Queue webFireQueue;
+        web_fire::Tracker webFireTracker;
+        unsigned webFirePrevButtons{}, webFireFiredNow{}, webFireNumber{};
+        unsigned webFireCounts[7]{}; // by web_fire::Outcome
+        float webFireWaited[2]{}, webFireRigError[2]{-1.f, -1.f};
+        Vec3 webFireRigLine[2]{};
         uint32_t gripCancelToken{};
         uint64_t actionFrameFloor{};
         uint64_t cancellationSerialFloor{};
@@ -4679,6 +4689,38 @@ DWORD WINAPI run(void*) {
                                                       cancelSupported),
                             motion.active && !flatScreen && controlsVisible && spiderMan,
                             webButtons, shotButtons, trackedHands);
+                        // WEB FIRE: the squeezes of this frame are accounted for, and a squeeze the cancel (or the wait
+                        // for both hands to let go after one) took is QUEUED through the handoff, never dropped: it
+                        // is let through on the next frame, as a fresh press, in whichever owner has the body then.
+                        const bool webFocused = motion.active && !flatScreen && controlsVisible && spiderMan;
+                        const unsigned webPressed = webButtons & ~webFirePrevButtons & trackedHands;
+                        webFirePrevButtons = webButtons;
+                        const unsigned webBlockedAtPress = gripCancel.webBlocked;
+                        const web_fire::Owner pressOwner =
+                            hybridOwner.domain == hybrid_owner::Domain::anim ? web_fire::Owner::anim : web_fire::Owner::vr;
+                        for (unsigned i = 0; i < 2; ++i) {
+                            webFireRigLine[i] = motion.swing.hands[i].aim.orientation.rotate({0, 0, -1});
+                            if (!(webPressed & (1u << i)))
+                                continue;
+                            const bool queuedPress = gripCancel.cancel || (webBlockedAtPress & (1u << i)) != 0;
+                            webFireTracker.press(i, pressOwner, queuedPress, -1.f, -1.f, swingState.attaches,
+                                                 swingState.misses, swingState.obstructed,
+                                                 gripCancel.cancel ? "air cancel took the press, queued through the handoff"
+                                                 : queuedPress     ? "the other hand's cancel was holding webs, queued"
+                                                                   : "");
+                            if (!webFocused)
+                                webFireTracker.dropped(i, "the swing is not driven (no control, a scene, flat screen or not Spider-Man)");
+                        }
+                        webFireQueue.queue(webPressed & webBlockedAtPress & (webFocused ? 3u : 0u));
+                        const auto webWf = webFireQueue.update(std::isfinite(frame.seconds) ? frame.seconds : 0.f, webButtons,
+                                                               webFocused);
+                        for (unsigned i = 0; i < 2; ++i) {
+                            if (webWf.expired & (1u << i))
+                                webFireTracker.dropped(i, "a queued press ran out of time or lost control");
+                            webFireWaited[i] = webWf.waited[i];
+                        }
+                        gripCancel.webBlocked &= ~webWf.pass;
+                        webFireFiredNow = (webWf.fired | (webPressed & ~webBlockedAtPress)) & trackedHands;
                         if (gripCancel.cancel) {
                             // The cancel is SpidyVR's on this frame (review M1 for this
                             // path), not at the owner's update further down.
@@ -4702,6 +4744,10 @@ DWORD WINAPI run(void*) {
                         // Suppress before submitSwing: ownership is evaluated later in
                         // this loop, too late to prevent an outgoing grip web otherwise.
                         animation_cancel::suppress(motion.swing.hands, gripCancel);
+                        // WEB FIRE: a tap taken through a handoff is held down long enough to shoot (web_fire::minHold).
+                        for (unsigned i = 0; i < 2; ++i)
+                            if (webWf.force & (1u << i) && motion.swing.hands[i].tracked)
+                                motion.swing.hands[i].grip = 1.f;
                         if (setSwingPoseCoupling) {
                             game_swing::PoseCoupling pose;
                             pose.inertia = swing_coupling::scales(native_body::tuckWeight()).inertia;
@@ -5200,10 +5246,66 @@ DWORD WINAPI run(void*) {
                                 motion.swing.hands[i].aim = input.hands[i].aim;
                             }
                         }
+                        // WEB FIRE: the line a web leaves on, at the squeeze, is never more than a few degrees off the
+                        // controller's own (the marker's low-pass lagged a flick in a fight); then what it was is logged.
+                        for (unsigned i = 0; i < 2; ++i) {
+                            if (!(webFireFiredNow & (1u << i)) || !input.focused || !input.hands[i].tracked)
+                                continue;
+                            const Vec3 used0 = input.hands[i].aim.orientation.rotate({0, 0, -1});
+                            const bool haveHeading = kin.handValid[i] && !swingState.webs[i].attached;
+                            const Vec3 heading = haveHeading ? kin.aim[i].orientation.rotate({0, 0, -1}) : Vec3{};
+                            if (haveHeading) {
+                                const Vec3 limited = web_fire::limitLag(heading, used0);
+                                if (web_fire::angleDeg(limited, used0) > .01f)
+                                    input.hands[i].aim = aim_filter::steer(input.hands[i].aim, limited);
+                                motion.swing.hands[i].aim = input.hands[i].aim;
+                            }
+                            const Vec3 used = input.hands[i].aim.orientation.rotate({0, 0, -1});
+                            webFireTracker.fired(i, webFireWaited[i],
+                                                 haveHeading ? web_fire::angleDeg(used, heading) : -1.f,
+                                                 haveHeading ? web_fire::angleDeg(webFireRigLine[i], heading) : -1.f,
+                                                 armView.valid ? "this frame's mapped hand"
+                                                 : haveHeading ? "the rig's hand"
+                                                               : "no current heading");
+                        }
                         // POINT JUMP aims where the actions' head looks (next frame's fire).
                         pointJumpLook = input.look;
                         check(submitSwing(&input), "Tracked swing input");
                         check(sampleSwing(&swingState), "Native swing feedback");
+                        // WEB FIRE: the swing's answer to each press.
+                        for (unsigned i = 0; i < 2; ++i) {
+                            const bool onSomething = swingState.status && swingState.webs[i].attached;
+                            if (!webFireTracker.update(i, frame.seconds, swingState.attaches, swingState.misses,
+                                                       swingState.obstructed, onSomething,
+                                                       length(swingState.webs[i].anchor - swingState.position)))
+                                continue;
+                            web_fire::Press done;
+                            if (!webFireTracker.finished(i, done))
+                                continue;
+                            ++webFireNumber;
+                            ++webFireCounts[static_cast<unsigned>(done.outcome)];
+                            diag_log::writef(
+                                "web fire: %s hand, pressed in %s (now %s), %s%s%s%s, aim %.1f deg off the controller's "
+                                "current line (rig line %.1f, from %s), queued %.0f ms, #%u (attached %u, missed %u, "
+                                "obstructed %u, dropped %u, unanswered %u)",
+                                i ? "R" : "L", web_fire::ownerName(done.owner),
+                                hybridOwner.domain == hybrid_owner::Domain::anim ? "ANIM" : "VR",
+                                web_fire::outcomeName(done.outcome),
+                                done.outcome == web_fire::Outcome::attached ? "" : " (",
+                                done.outcome == web_fire::Outcome::attached ? "" : done.reason,
+                                done.outcome == web_fire::Outcome::attached ? "" : ")",
+                                static_cast<double>(done.aimError), static_cast<double>(done.rigError),
+                                done.source, static_cast<double>(std::max(done.firedAfter, 0.f) * 1000.f),
+                                webFireNumber,
+                                webFireCounts[static_cast<unsigned>(web_fire::Outcome::attached)],
+                                webFireCounts[static_cast<unsigned>(web_fire::Outcome::missed)],
+                                webFireCounts[static_cast<unsigned>(web_fire::Outcome::obstructed)],
+                                webFireCounts[static_cast<unsigned>(web_fire::Outcome::dropped)],
+                                webFireCounts[static_cast<unsigned>(web_fire::Outcome::unanswered)]);
+                            if (done.outcome == web_fire::Outcome::attached)
+                                diag_log::writef("web fire: attached %.1f m out%s", static_cast<double>(done.distance),
+                                                 done.queued ? " (the press went through the handoff)" : "");
+                        }
                         // The swing sample's stamp moves once per game step it processed: a gap
                         // over 50 ms is a game-thread hitch (WEBS SURVIVE HITCHES).
                         gameFrameClock.update(swingState.status ? swingState.qpc : 0, frequency.QuadPart,
@@ -6061,6 +6163,15 @@ DWORD WINAPI run(void*) {
                                     (unsigned long long)d.rejected, (unsigned long long)d.objectKnown,
                                     (unsigned long long)d.objectUnknown, (unsigned long long)d.gadgetCalls,
                                     (unsigned long long)d.fallbackCalls);
+                                // WHY the rest were dropped (the reasons the 143 of 615 of Nov 14 lacked).
+                                if (const volatile game_shooter::DropLive* w = shooterDrops)
+                                    diag_log::writef(
+                                        "wb drops: revoked-queued %u (%u revocations) revoked-at-dispatch %u refused-at-enqueue %u "
+                                        "queue-full %u expired %u | game refused: no-line %u gadget %u weapon-gone %u "
+                                        "not-ready %u event %u call %u",
+                                        w->revokedQueued, w->revocations, w->revokedAtDispatch, w->refusedAtEnqueue,
+                                        w->queueFull, w->expired, w->failLine, w->failGadget, w->failNotLive,
+                                        w->failNotReady, w->failEvent, w->failCall);
                                 // Snapshot, not a record of every shot: bounded by the existing one-second cadence.
                                 const auto event = d.expired + d.callSuccess + d.rejected;
                                 static uint64_t lastDispatchEvent{};
@@ -11495,6 +11606,11 @@ extern "C" __declspec(dllexport) DWORD WINAPI SpidyXrStart(void* input) {
         (swingKickLive->magic != expected.magic || swingKickLive->version != expected.version ||
          swingKickLive->bytes != expected.bytes))
         swingKickLive = nullptr;
+    shooterDrops = reinterpret_cast<const game_shooter::DropLive*>(GetProcAddress(rays, "SpidyShooterDrops"));
+    if (const game_shooter::DropLive expected;
+        shooterDrops && (shooterDrops->magic != expected.magic || shooterDrops->version != expected.version ||
+                         shooterDrops->bytes != expected.bytes))
+        shooterDrops = nullptr; // an older module has none: no "wb drops:" line
     swingCostLive =
         reinterpret_cast<const game_swing::SwingCostLive*>(GetProcAddress(rays, "SpidySwingCostLive"));
     if (const game_swing::SwingCostLive expected;
