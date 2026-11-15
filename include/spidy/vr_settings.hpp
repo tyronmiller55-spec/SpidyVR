@@ -706,6 +706,10 @@ struct Values {
     // a sidestep, a swing, an animation's end) holds the view and eases it over AIR VIEW EASE, as the jump, flip and grip
     // cancel always did (the 9790d67 playtest: 60-110 uneased 0.26-0.30 m eye jumps a session). Off: only those.
     bool takeoverViewEase = true;
+    // HEAD HEIGHT FADE (head_height_fade_ms, 500; 0: off): at a switch to SpidyVR the animation head's height over
+    // where tracking puts the eyes (median 0.27 m seated) fades out over this, on its own, instead of riding the view
+    // ease's 250 ms (view_ease.hpp). Only with a view ease.
+    int headHeightFadeMs = 500;
     // [next pass settings]
     bool operator==(const Values&) const = default;
 };

@@ -9103,12 +9103,22 @@ DWORD WINAPI run(void*) {
                                                              view_ease::endName(rig.viewEase().lastEnd()),
                                                              static_cast<int>(rig.viewEase().elapsed() * 1000 + .5f));
                                         }
+                                        // HEAD HEIGHT FADE (head_height_fade_ms): the height fades on its own, longer.
+                                        const float heightFade = static_cast<float>(values.headHeightFadeMs) * .001f;
                                         if (easeMs > 0 && eyesOk &&
-                                            rig.beginViewEase(worldEyes, frame.head, static_cast<float>(easeMs) * .001f)) {
+                                            rig.beginViewEase(worldEyes, frame.head, static_cast<float>(easeMs) * .001f,
+                                                              heightFade)) {
                                             easeWhy = easeName;
                                             punchEaseEndsLogged = rig.viewEase().ends();
-                                            diag_log::writef("%s view ease: start offset %.2f m, dur %d ms", easeName,
-                                                             rig.viewEase().startOffset(), easeMs);
+                                            if (rig.viewEase().heightSeconds() > 0)
+                                                diag_log::writef("%s view ease: start offset %.2f m level, height %+.2f m "
+                                                                 "fading over %.0f ms, dur %d ms",
+                                                                 easeName, rig.viewEase().startOffset(),
+                                                                 rig.viewEase().startHeight(),
+                                                                 rig.viewEase().heightSeconds() * 1000.f, easeMs);
+                                            else
+                                                diag_log::writef("%s view ease: start offset %.2f m, dur %d ms", easeName,
+                                                                 rig.viewEase().startOffset(), easeMs);
                                         } else {
                                             if (easeMs > 0 && eyesOk)
                                                 diag_log::writef("%s view ease: none (offset %.2f m outside 0.01-3 m)",

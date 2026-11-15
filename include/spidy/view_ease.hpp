@@ -66,7 +66,11 @@ class Ease {
   public:
     // offset: shown eyes minus where tracking puts them after the switch
     // (world). Returns whether an ease began.
-    bool begin(Vec3 offset, float durationSeconds) {
+    // HEAD HEIGHT FADE (head_height_fade_ms; the owner, Nov 15): with `verticalSeconds` longer than the ease, the
+    // offset's height (the animation head's height over where tracking puts the eyes: median 0.27 m for a seated
+    // player) fades on its own over `verticalSeconds` (the same ease-out, no motion bleed) while the level part eases
+    // as before. 0 (or shorter): one offset, as before.
+    bool begin(Vec3 offset, float durationSeconds, float verticalSeconds = 0) {
         if (active_)
             stop(End::handoff);
         if (!finite(offset) || !std::isfinite(durationSeconds) || durationSeconds <= 0)
@@ -74,8 +78,18 @@ class Ease {
         const float m = length(offset);
         if (!(m >= minOffset) || m > maxOffset)
             return false;
-        dir_ = offset / m;
-        start_ = magnitude_ = m;
+        split_ = std::isfinite(verticalSeconds) && verticalSeconds > durationSeconds;
+        Vec3 level = offset;
+        vStart_ = vMagnitude_ = 0;
+        vDuration_ = 0;
+        if (split_) {
+            vStart_ = vMagnitude_ = offset.y;
+            vDuration_ = verticalSeconds;
+            level.y = 0;
+        }
+        const float lm = length(level);
+        dir_ = lm > 1e-6f ? level / lm : Vec3{};
+        start_ = magnitude_ = lm;
         duration_ = durationSeconds;
         elapsed_ = 0;
         turned_ = 0;
@@ -114,14 +128,22 @@ class Ease {
         haveLast_ = true;
         // The first VR frame holds the shown eyes exactly (elapsed 0), then it eases.
         const float curve = start_ * remaining(elapsed_, duration_);
+        const float vCurve = split_ ? vStart_ * remaining(elapsed_, vDuration_) : 0.f;
         elapsed_ += dt;
         const float bled = magnitude_ - (bleedBase + bleedPerSpeed * std::min(speed, 60.f)) * dt;
         magnitude_ = std::max(0.f, std::min(curve, bled));
-        if (magnitude_ <= 1e-3f || elapsed_ >= duration_) {
+        vMagnitude_ = vCurve;
+        const bool levelDone = magnitude_ <= 1e-3f || elapsed_ >= duration_;
+        const bool heightDone = !split_ || std::abs(vMagnitude_) <= 1e-3f || elapsed_ >= vDuration_;
+        if (levelDone && heightDone) {
             stop(End::finished);
             return {};
         }
-        return dir_ * magnitude_;
+        if (levelDone)
+            magnitude_ = 0;
+        if (heightDone)
+            vMagnitude_ = 0;
+        return dir_ * magnitude_ + Vec3{0, vMagnitude_, 0};
     }
     void cancel(End why) {
         if (active_)
@@ -142,6 +164,16 @@ class Ease {
     float magnitude() const {
         return active_ ? magnitude_ : 0.f;
     }
+    // HEAD HEIGHT FADE: the height still faded in (m, signed; 0 without the split), and its length (s).
+    float height() const {
+        return active_ ? vMagnitude_ : 0.f;
+    }
+    float heightSeconds() const {
+        return split_ ? vDuration_ : 0.f;
+    }
+    float startHeight() const {
+        return vStart_;
+    }
     // How the last ease ended, and how many have ended (to log each once).
     End lastEnd() const {
         return lastEnd_;
@@ -157,10 +189,12 @@ class Ease {
     void stop(End why) {
         active_ = false;
         magnitude_ = 0;
+        vMagnitude_ = 0;
         lastEnd_ = why;
         ++ends_;
     }
-    bool active_{}, haveLast_{};
+    bool active_{}, haveLast_{}, split_{};
+    float vStart_{}, vMagnitude_{}, vDuration_{};
     Vec3 dir_{}, lastFeet_{};
     float start_{}, magnitude_{}, duration_{}, elapsed_{}, lastYaw_{}, turned_{};
     End lastEnd_ = End::none;

@@ -290,12 +290,12 @@ float GameTrackingRig::lockToFeet(Vec3 feet, Vec3 worldEyes, float worldLookYaw,
         return 0.f;
     return std::hypot(worldEyes.x - feet.x, worldEyes.z - feet.z);
 }
-bool GameTrackingRig::beginViewEase(Vec3 worldEyes, const Pose& head, float seconds) {
+bool GameTrackingRig::beginViewEase(Vec3 worldEyes, const Pose& head, float seconds, float verticalSeconds) {
     if (!finite(worldEyes) || !validTrackedPose(head) || !finite(rig_.origin) || !std::isfinite(rig_.yaw)) {
         viewEase_.cancel(view_ease::End::handoff);
         return false;
     }
-    return viewEase_.begin(worldEyes - rig_.toWorld(head).position, seconds);
+    return viewEase_.begin(worldEyes - rig_.toWorld(head).position, seconds, verticalSeconds);
 }
 float GameTrackingRig::residualAcross(const Pose& head, Vec3 feet) const {
     return hybrid_handoff::residualAcross(rig_.origin, rig_.yaw, head.position, feet);

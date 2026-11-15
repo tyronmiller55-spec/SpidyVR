@@ -529,7 +529,7 @@ class GameTrackingRig {
     // `worldEyes` (what the last animated frame showed), easing to the lock
     // over `seconds`. The lock (rig origin) is not changed. Returns whether
     // an ease began; the offset is startOffset() of viewEase().
-    bool beginViewEase(Vec3 worldEyes, const Pose& head, float seconds);
+    bool beginViewEase(Vec3 worldEyes, const Pose& head, float seconds, float verticalSeconds = 0);
     void cancelViewEase(view_ease::End why) {
         viewEase_.cancel(why);
     }

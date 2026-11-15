@@ -166,6 +166,32 @@ int main() {
         check(listed, "on VR CAMERA & STABILIZATION");
         check(tabOnlyText(v).find("punch_view_ease_ms=0") != std::string::npos, "saved as punch_view_ease_ms");
     }
+    // HEAD HEIGHT FADE (the owner, Nov 15): the height fades on its own over the longer time, the level part as before.
+    {
+        Ease e;
+        check(e.begin({.3f, .27f, 0}, .25f, .5f) && e.heightSeconds() == .5f && near(e.startHeight(), .27f) &&
+                  near(e.startOffset(), .3f),
+              "a split ease: 0.30 m level, 0.27 m height over 0.5 s");
+        Vec3 o = e.step(dt, {}, 0);
+        check(near(o.x, .3f, 3e-3f) && near(o.y, .27f), "the first frame holds the whole offset");
+        float t = dt;
+        while (t < .26f) {
+            o = e.step(dt, {}, 0);
+            t += dt;
+        }
+        check(e.active() && near(o.x, 0.f) && o.y > .005f && o.y < .27f * .2f,
+              "after the level ease is over, the height is still fading");
+        while (e.active() && t < 1.f) {
+            o = e.step(dt, {}, 0);
+            t += dt;
+        }
+        check(!e.active() && t < .55f && e.lastEnd() == End::finished, "the height is gone by 0.5 s");
+        Ease one;
+        check(one.begin({.3f, .27f, 0}, .25f, 0.f) && one.heightSeconds() == 0 && near(one.startOffset(), length(Vec3{.3f, .27f, 0})),
+              "0: one offset, as before");
+        Ease up;
+        check(up.begin({0, .27f, 0}, .25f, .5f) && finiteVec(up.step(dt, {}, 0)), "a height-only offset still eases");
+    }
     std::printf("punch view ease: %d checks passed\n", passed);
     return 0;
 }

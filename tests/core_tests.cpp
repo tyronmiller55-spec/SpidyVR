@@ -24698,6 +24698,7 @@ int main() {
                   "handstand_catch_hold_cm=35\n"
                   "handstand_reach_cm=130\n"
                   "takeover_view_ease=1\n"
+                  "head_height_fade_ms=500\n"
                   "movement_defaults=3\n",
               "the defaults' text");
         Values changed = defaults;
