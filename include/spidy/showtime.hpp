@@ -349,6 +349,58 @@ class Latch {
     bool was_{}, latched_{}, armed_{}, hasEnd_{};
 };
 
+// ---- Automatic moments (AUTO: DODGES) ----
+// A dodge steps the camera out by itself: PERFECT ONLY on the game's perfect dodge (the moment that slows its time), ALL on any dodge.
+// It ends 0.3 s after the dodge does, unless the chord is held (the machine keeps the camera while either wants it). If the cause is
+// never seen live within 0.5 s it gives up; nothing keeps it out longer than 4 s. Why::finisher is not triggered by anything in this
+// build (AUTO: FINISHERS only logs).
+class Auto {
+  public:
+    static constexpr float tailSeconds = .3f, giveUpSeconds = .5f, capSeconds = 4.f;
+    void trigger(Why why) {
+        why_ = why;
+        on_ = true;
+        t_ = tail_ = 0;
+        seen_ = false;
+    }
+    // `live`: the cause is going on now (the dodge). True while the camera is wanted out.
+    bool update(float seconds, bool live) {
+        if (!on_)
+            return false;
+        const float dt = std::isfinite(seconds) ? std::clamp(seconds, 0.f, .1f) : 0.f;
+        t_ += dt;
+        if (live) {
+            seen_ = true;
+            tail_ = 0;
+        } else if (seen_ || t_ > giveUpSeconds) {
+            tail_ += dt;
+            if (tail_ >= tailSeconds) {
+                on_ = false;
+                return false;
+            }
+        }
+        if (t_ > capSeconds) {
+            on_ = false;
+            return false;
+        }
+        return true;
+    }
+    bool on() const {
+        return on_;
+    }
+    Why why() const {
+        return why_;
+    }
+    void clear() {
+        on_ = false;
+    }
+
+  private:
+    Why why_ = Why::dodge;
+    float t_{}, tail_{};
+    bool on_{}, seen_{};
+};
+
 // ---- The outside camera's frame ----
 // The level frame game_fp hands the eyes (game_fp.cpp cameraFrame's layout: columns right, down, forward, position; the game's
 // camera looks along +z, so the forward column is (ax, az) and the yaw the rig has it, 0 facing -z, is atan2(-ax, -az)).

@@ -53,6 +53,14 @@ Needs the body on (`values.body`), Spider-Man as the player, and the headset tra
 
 Log line each second out: `showtime: cam d=<m> lag=<m> v=<m/s> w=<rad/s> vignette=<0-1> collide=stock|none pull=<m> fade=close|none`.
 
+## S2: the automatic moments
+
+| Row | Default | What it does |
+|---|---|---|
+| CHORD | HOLD X+B | AUTO ONLY: the chord is not read at all (X and B are the game's, the gadget wheel and the dodge as always). |
+| AUTO: DODGES | OFF | PERFECT ONLY: the camera goes out when the game slows its time for a dodge (the `Moment::dodge` start). ALL: at the start of any dodge. It ends 0.3 s after the dodge input does, unless X+B is held; a dodge never seen live within 0.5 s is dropped; nothing keeps it out past 4 s (`showtime::Auto`). An auto dodge keeps its own A and B while out (WATCH ONLY would otherwise cut them). |
+| AUTO: FINISHERS (LOG ONLY) | OFF | **Gated.** The plan has finishers go out by themselves with ON as the default. Finishers read as a first-person scene to the mod (`fpScene`) and nothing yet tells one from a cutscene, or says which owner animates him. This row only logs `showtime: finisher candidate (scene started; scene camera on|off, level view n)` for each scene start, so a headset session gives the data. Nothing moves the camera. |
+
 ## Verification
 
 `tests/showtime_rig_tests.cpp` (the spring has no overshoot and is exact for any step, placement, the yaw only from the stick, the snap and its blink, the height range, follow and lag, the vignette curve, the pull-in, the latch). `tests/showtime_tests.cpp` (chord order, Y block, B hold-back, fade at the cut, the exit reasons, the level frame's layout and yaw, the stick rotation). The camera, fade, and chord feel need the headset: nothing here was run on a headset.

@@ -1259,6 +1259,8 @@ DWORD WINAPI run(void*) {
         showtime::OrbitRig showtimeRig;
         showtime::OrbitRig::Output showtimeCam{};
         showtime::Latch showtimeLatch;
+        showtime::Auto showtimeAuto;
+        showtime::Why showtimeWhy{};
         float showtimeStickX{}, showtimeStickY{}, showtimeEntryHeading{};
         uint64_t showtimeLogMs{};
         Pose showtimeRef{};
@@ -2391,7 +2393,7 @@ DWORD WINAPI run(void*) {
                         ci.x = (frame.buttons & buttonX) != 0;
                         ci.y = (frame.buttons & buttonY) != 0;
                         ci.b = (frame.buttons & buttonB) != 0;
-                        ci.allowed = stOk && (stFree || showtimeMachine.state() != showtime::State::head);
+                        ci.allowed = values.showtimeChord == 0 && stOk && (stFree || showtimeMachine.state() != showtime::State::head);
                         showtimeChordOut = showtimeChord.update(ci);
                         if (showtimeChordOut.swallowX)
                             frame.buttons &= ~static_cast<uint32_t>(buttonX);
@@ -2414,14 +2416,18 @@ DWORD WINAPI run(void*) {
                         mi.fadeSeconds = static_cast<float>(values.showtimeFadeMs) / 1000.f;
                         // LATCH (off by default): a double press keeps the camera out after the let-go.
                         bool stWant = showtimeLatch.update(values.showtimeLatch == 1, showtimeChordOut.active, frame.seconds);
-                        mi.wantOut = stWant;
-                        mi.wantWhy = showtime::Why::chord;
+                        // AUTO: DODGES (triggered below where a dodge starts): the camera is out while the moment lasts and 0.3 s after.
+                        const bool stAuto = stOk && showtimeAuto.update(frame.seconds, dodging);
+                        mi.wantOut = stWant || stAuto;
+                        mi.wantWhy = stWant || !stAuto ? showtime::Why::chord : showtimeAuto.why();
                         mi.allowed = stOk;
                         mi.forced = (frame.buttons & buttonMenu) ? showtime::ExitWhy::menu
                                     : stTeleport                  ? showtime::ExitWhy::teleport
                                                                   : showtime::ExitWhy::none;
-                        if (mi.forced != showtime::ExitWhy::none || !stOk)
+                        if (mi.forced != showtime::ExitWhy::none || !stOk) {
                             showtimeLatch.clear();
+                            showtimeAuto.clear();
+                        }
                         const bool stWasOut = showtimeMachine.out();
                         if (!stOk && showtimeMachine.state() != showtime::State::head) {
                             // A scene, a menu or a lost character took the view: no fade over it, the frame is withdrawn at once.
@@ -2445,6 +2451,7 @@ DWORD WINAPI run(void*) {
                                         heading = showtime::yawOfForward(fx / n, fz / n);
                                 }
                                 showtimeEntryHeading = heading;
+                                showtimeWhy = showtimeOut.enterWhy;
                                 showtimeCam.yaw = heading;
                             }
                             if (showtimeOut.left) {
@@ -2466,7 +2473,8 @@ DWORD WINAPI run(void*) {
                             showtimeStickX = frame.hands[1].stickX;
                             showtimeStickY = frame.hands[1].stickY;
                             const bool keep = values.showtimeWhile == 1;
-                            if (!keep) {
+                            if (!keep && showtimeWhy != showtime::Why::dodge) {
+                                // (an automatic dodge keeps its own B and A until they are let go of)
                                 frame.jump = false;
                                 frame.buttons &= ~static_cast<uint32_t>(buttonA | buttonB);
                             }
@@ -4153,6 +4161,10 @@ DWORD WINAPI run(void*) {
                                       fpScene ? "started" : "ended",
                                       static_cast<unsigned long long>(fpNow % 100000000ull));
                         message(3, 0, text);
+                        // AUTO: FINISHERS is log only in this build: what a finisher scene looks like to the classifier, for the next one.
+                        if (fpScene && values.showtime && values.showtimeAutoFinish)
+                            diag_log::writef("showtime: finisher candidate (scene started; scene camera %s, level view %d): not entered, "
+                                             "AUTO: FINISHERS is log only", game_fp::onCamera() ? "on" : "off", levelView ? 1 : 0);
                         wasFpScene = fpScene;
                     }
                     if (!fpScene || frame.recentered)
@@ -7388,6 +7400,8 @@ DWORD WINAPI run(void*) {
                         }
                         // A perfect dodge: the game slows its own time within a
                         // moment of a B that went down with it at full speed.
+                        if (walk.dodge && !dodging && values.showtime && values.showtimeAutoDodge == 2)
+                            showtimeAuto.trigger(showtime::Why::dodge);
                         if (walk.dodge && !dodging) {
                             dodgeWatch = game_time::telemetry().own > .95f ? .7f : 0.f;
                             // A whoosh across the body the way the stick sends him.
@@ -7404,6 +7418,8 @@ DWORD WINAPI run(void*) {
                             if (const auto time = game_time::telemetry(); time.installed && time.own < .9f) {
                                 dodgeWatch = 0;
                                 moments.start(Moment::dodge);
+                                if (values.showtime && values.showtimeAutoDodge >= 1)
+                                    showtimeAuto.trigger(showtime::Why::dodge);
                                 runtime.haptic(0, .5f);
                                 runtime.haptic(1, .5f);
                                 feel(body_haptics::Kind::perfectDodge, -1, 1, dodgeFrom);

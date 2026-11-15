@@ -2972,6 +2972,20 @@ void App::options(ImVec2 origin, ImVec2 size) {
                    "Double press: press and hold X+B again within a second of letting go and the camera stays "
                    "out after you let go; press X+B once more to come back. Off: out only while held.",
                    S(150), [&] { tabCombo("##showtimelatch", Item::showtimeLatch); });
+            settingOption(Item::showtimeChord, "Chord",
+                   "Hold X+B: you step outside by hand (the default). Auto only: the chord does nothing and X and B "
+                   "are the game's as always; only the automatic moments below take the camera out.",
+                   S(150), [&] { tabCombo("##showtimechord", Item::showtimeChord); });
+            settingOption(Item::showtimeAutoDodge, "Auto: dodges",
+                   "The camera steps outside by itself for a dodge and comes back 0.3 s after it ends (and not "
+                   "while you hold X+B). Perfect only: just the dodge the game slows time for. All: every dodge. "
+                   "A dodge keeps its own B while you are out.",
+                   S(150), [&] { tabCombo("##showtimeautododge", Item::showtimeAutoDodge); });
+            settingOption(Item::showtimeAutoFinish, "Auto: finishers (log only)",
+                   "Not in this build: when on, the session log notes each first-person scene that starts "
+                   "(whether the scene camera is the view) so the next build can tell finishers from cutscenes. "
+                   "It never moves the camera. Off by default.",
+                   S(42), [&] { tabToggle("##showtimeautofinish", Item::showtimeAutoFinish); });
         });
     }
     group(static_cast<int>(spidy::vr_settings::categoryCount) + 1, 0, "Troubleshooting", [&] {

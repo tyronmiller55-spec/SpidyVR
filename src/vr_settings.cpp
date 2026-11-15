@@ -344,6 +344,12 @@ static_assert(std::size(showtimeWhileChoices) == std::size(showtimeWhileSteps));
 constexpr int showtimeFadeSteps[] = {0, 100, 150, 250, 400};
 constexpr const char* showtimeFadeChoices[] = {"CUT (NO FADE)", "100 MS", "150 MS (DEFAULT)", "250 MS", "400 MS"};
 static_assert(std::size(showtimeFadeChoices) == std::size(showtimeFadeSteps));
+constexpr int showtimeChordSteps[] = {0, 1};
+constexpr const char* showtimeChordChoices[] = {"HOLD X+B (DEFAULT)", "AUTO ONLY"};
+static_assert(std::size(showtimeChordChoices) == std::size(showtimeChordSteps));
+constexpr int showtimeAutoDodgeSteps[] = {0, 1, 2};
+constexpr const char* showtimeAutoDodgeChoices[] = {"OFF (DEFAULT)", "PERFECT ONLY", "ALL"};
+static_assert(std::size(showtimeAutoDodgeChoices) == std::size(showtimeAutoDodgeSteps));
 constexpr int showtimeDistanceSteps[] = {150, 200, 250, 300, 350, 400};
 constexpr const char* showtimeDistanceChoices[] = {"1.5 M", "2 M", "2.5 M (DEFAULT)", "3 M", "3.5 M", "4 M"};
 static_assert(std::size(showtimeDistanceChoices) == std::size(showtimeDistanceSteps));
@@ -523,6 +529,10 @@ std::span<const int> steps(Item item) {
         return showtimeWhileSteps;
     case Item::showtimeFade:
         return showtimeFadeSteps;
+    case Item::showtimeChord:
+        return showtimeChordSteps;
+    case Item::showtimeAutoDodge:
+        return showtimeAutoDodgeSteps;
     case Item::showtimeDistance:
         return showtimeDistanceSteps;
     case Item::showtimeHeight:
@@ -768,6 +778,10 @@ float numberOf(Item item, const Values& v) {
         return static_cast<float>(v.showtimeWhile);
     case Item::showtimeFade:
         return static_cast<float>(v.showtimeFadeMs);
+    case Item::showtimeChord:
+        return static_cast<float>(v.showtimeChord);
+    case Item::showtimeAutoDodge:
+        return static_cast<float>(v.showtimeAutoDodge);
     case Item::showtimeDistance:
         return static_cast<float>(v.showtimeDistanceCm);
     case Item::showtimeHeight:
@@ -985,6 +999,8 @@ template <class V> auto switchOf(Item item, V& v) -> decltype(&v.aimMarkers) {
         return &v.jumpPull;
     case Item::showtime:
         return &v.showtime;
+    case Item::showtimeAutoFinish:
+        return &v.showtimeAutoFinish;
     case Item::showtimeSlowMo:
         return &v.showtimeSlowMo;
     case Item::groundKicks:
@@ -1155,6 +1171,8 @@ Values sanitized(Values v) {
     v.jumpPullCapDmps = std::clamp(v.jumpPullCapDmps, 5, 30);
     v.showtimeWhile = std::clamp(v.showtimeWhile, 0, 1);
     v.showtimeFadeMs = std::clamp(v.showtimeFadeMs, 0, 400);
+    v.showtimeChord = std::clamp(v.showtimeChord, 0, 1);
+    v.showtimeAutoDodge = std::clamp(v.showtimeAutoDodge, 0, 2);
     v.showtimeDistanceCm = std::clamp(v.showtimeDistanceCm, 150, 400);
     v.showtimeHeightCm = std::clamp(v.showtimeHeightCm, -50, 150);
     v.showtimeAngleDeg = std::clamp(v.showtimeAngleDeg, 0, 90);
@@ -1177,9 +1195,9 @@ Values sanitized(Values v) {
     v.automaticHandThreshold = std::clamp(v.automaticHandThreshold, 50, 300);
     return v;
 }
-const std::array<Row, 213>& rows() {
+const std::array<Row, 216>& rows() {
     // The help fits the game's description column beside the rows.
-    static const std::array<Row, 213> all{{
+    static const std::array<Row, 216> all{{
         {Item::none, "WEBS", nullptr, {}},
         {Item::webStyle, "WEB STYLE",
          "Arcade: webs pass lamp posts, signs and cars, and swings stay above the street.", webStyleChoices},
@@ -1766,6 +1784,18 @@ const std::array<Row, 213>& rows() {
          "FADE TIME",
          "Fade to black and back at each cut. CUT: no fade.",
          showtimeFadeChoices},
+        {Item::showtimeChord,
+         "CHORD",
+         "HOLD X+B steps outside by hand. AUTO ONLY: no chord, only the automatic moments.",
+         showtimeChordChoices},
+        {Item::showtimeAutoDodge,
+         "AUTO: DODGES",
+         "Step outside by itself for a dodge, and back 0.3 s after it ends.",
+         showtimeAutoDodgeChoices},
+        {Item::showtimeAutoFinish,
+         "AUTO: FINISHERS (LOG ONLY)",
+         "Not yet: only writes to the log when a finisher scene starts. Off.",
+         {}},
         {Item::showtimeDistance,
          "DISTANCE",
          "How far behind him the outside camera sits.",
@@ -1943,6 +1973,9 @@ const std::array<Screen, categoryCount>& screens() {
     // SHOWTIME (showtime.hpp; experimental, off by default): its switch and its feel.
     static constexpr Item showtime[] = {
         Item::showtime, Item::showtimeWhile, Item::showtimeFade,
+        Item::showtimeChord,
+        Item::showtimeAutoDodge,
+        Item::showtimeAutoFinish,
         Item::showtimeDistance,
         Item::showtimeHeight,
         Item::showtimeAngle,
@@ -2042,6 +2075,9 @@ const char* inactiveReason(Item item, const Values& v) {
     case Item::showtimeVignette:
     case Item::showtimeSlowMo:
     case Item::showtimeLatch:
+    case Item::showtimeChord:
+    case Item::showtimeAutoDodge:
+    case Item::showtimeAutoFinish:
         return !v.showtime ? "Turn SHOWTIME on first." : nullptr;
     case Item::kickSpin:
         return !v.kicks ? "Turn AIR KICKS on first." : nullptr;
@@ -2128,6 +2164,9 @@ bool shownWhenInactive(Item item) {
     case Item::jumpPullCap:
     case Item::showtimeWhile:
     case Item::showtimeFade:
+    case Item::showtimeChord:
+    case Item::showtimeAutoDodge:
+    case Item::showtimeAutoFinish:
     case Item::showtimeDistance:
     case Item::showtimeHeight:
     case Item::showtimeAngle:
@@ -2445,6 +2484,12 @@ bool choose(Item item, int index, Values& v) {
         break;
     case Item::showtimeFade:
         v.showtimeFadeMs = s[index];
+        break;
+    case Item::showtimeChord:
+        v.showtimeChord = s[index];
+        break;
+    case Item::showtimeAutoDodge:
+        v.showtimeAutoDodge = s[index];
         break;
     case Item::showtimeDistance:
         v.showtimeDistanceCm = s[index];
@@ -2804,6 +2849,9 @@ constexpr TabOnly tabOnly[] = {
     {"showtime", &Values::showtime, nullptr},
     {"showtime_while", nullptr, &Values::showtimeWhile},
     {"showtime_fade_ms", nullptr, &Values::showtimeFadeMs},
+    {"showtime_chord", nullptr, &Values::showtimeChord},
+    {"showtime_auto_dodge", nullptr, &Values::showtimeAutoDodge},
+    {"showtime_auto_finish", &Values::showtimeAutoFinish, nullptr},
     {"showtime_distance_cm", nullptr, &Values::showtimeDistanceCm},
     {"showtime_height_cm", nullptr, &Values::showtimeHeightCm},
     {"showtime_angle_deg", nullptr, &Values::showtimeAngleDeg},

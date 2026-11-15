@@ -279,6 +279,35 @@ void latch() {
     run(true, false, .1f);
     check(!want, "a forced exit clears it");
 }
+void autoMoments() {
+    Auto a;
+    check(!a.update(dt, true), "nothing triggered: not wanted");
+    a.trigger(Why::dodge);
+    bool want = false;
+    for (int i = 0; i < 20; ++i) want = a.update(dt, true);
+    check(want && a.why() == Why::dodge, "a dodge on: out");
+    float t = 0;
+    while ((want = a.update(dt, false)) && t < 1.f) t += dt;
+    check(!want && t > .27f && t < .33f, "0.3 s after the dodge ends");
+    // never seen: gives up after 0.5 s and the tail
+    a.trigger(Why::dodge);
+    t = 0;
+    while (a.update(dt, false) && t < 2.f) t += dt;
+    check(t > .75f && t < .85f, "a dodge never seen is dropped");
+    // a dodge again in the tail keeps it
+    a.trigger(Why::dodge);
+    for (int i = 0; i < 9; ++i) a.update(dt, true);
+    for (int i = 0; i < 18; ++i) a.update(dt, false);
+    check(a.update(dt, true), "a second dodge inside the tail keeps it out");
+    // the cap
+    a.trigger(Why::dodge);
+    t = 0;
+    while (a.update(dt, true) && t < 6.f) t += dt;
+    check(t > 3.9f && t < 4.1f, "never out longer than 4 s");
+    a.trigger(Why::dodge);
+    a.clear();
+    check(!a.update(dt, true), "cleared");
+}
 } // namespace
 int main() {
     springSettles();
@@ -290,5 +319,6 @@ int main() {
     vignette();
     pullIn();
     latch();
+    autoMoments();
     std::puts("showtime rig tests passed");
 }
