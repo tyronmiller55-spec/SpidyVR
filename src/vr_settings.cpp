@@ -1916,7 +1916,7 @@ const std::array<Row, 222>& rows() {
          fallHandoffChoices, Place::launcher},
         {Item::airLandingBlend,
          "AIR LANDING BLEND",
-         "Body comes upright over the last 0.3 s before you land; the landing is the game's.",
+         "Body comes upright over the last 0.3 s before landing; the game lands you.",
          {}, Place::launcher},
         {Item::airLandingRelease,
          "AIR LANDING RELEASE (EXPERIMENTAL)",
