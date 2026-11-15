@@ -184,6 +184,9 @@ int main() {
                 reads.fetch_add(1);
             }
         });
+        // The reader must be running before the writer starts (a busy CI machine may not schedule it in time otherwise).
+        while (reads.load() == 0)
+            std::this_thread::yield();
         for (int i = 1; i <= 200000; ++i) {
             view_yaw_lock::State t;
             t.on = true;
