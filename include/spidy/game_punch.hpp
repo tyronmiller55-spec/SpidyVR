@@ -159,6 +159,11 @@ struct Opened {
 // One input sample in the swing's callback (seconds since the previous one,
 // 0: the same sample again).
 Opened update(float seconds, const Input&, const Player&, const WorldQueries&);
+// The last update's time per part (microseconds; the swing module's "punch scan" section, split): targets (the
+// enemy list and its reads), sense, lock (the lock and knockouts), punches (and their tracking), flow (and flights),
+// strikes (the web strike, dives, counters). Same thread as update().
+inline constexpr unsigned partCount = 6;
+void lastParts(double (&out)[partCount]);
 // The web strike's say over the step of the player's mover about to be
 // asked for: `seconds` of real time after the one before, from `feet`.
 struct Flight {

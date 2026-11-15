@@ -411,6 +411,66 @@ inline void sectionLine(const SectionWindow::Account& a, char* out, size_t size)
     for (unsigned i = 0; i < sectionCount && n > 0 && static_cast<size_t>(n) < size; ++i)
         n += std::snprintf(out + n, size - static_cast<size_t>(n), " %.0f", a.peak[i]);
 }
+// THE PUNCH SCAN, SPLIT, AND THE TARGET SCAN (the 9790d67 playtest: "punch scan" peaks of 19-39 ms whether a fight
+// was on or not): per window, the parts of the longest punch visit (index order `punchPartName`), and the
+// background target scan's walks and the waits the game thread had on its class table. Pure.
+inline constexpr unsigned punchPartCount = 6;
+inline const char* punchPartName(unsigned i) {
+    static constexpr const char* names[punchPartCount] = {"targets", "sense", "lock", "punches", "flow", "strikes"};
+    return i < punchPartCount ? names[i] : "?";
+}
+class PunchScanWindow {
+  public:
+    struct Account {
+        uint32_t visits{};
+        float worstUs{};
+        float worst[punchPartCount]{};
+    };
+    // One punch visit's parts (microseconds).
+    void add(const double (&parts)[punchPartCount]) {
+        double sum = 0;
+        float clean[punchPartCount]{};
+        for (unsigned i = 0; i < punchPartCount; ++i) {
+            const double s = std::isfinite(parts[i]) && parts[i] > 0 ? parts[i] : 0.;
+            clean[i] = static_cast<float>(s);
+            sum += s;
+        }
+        ++visits_;
+        if (sum >= worstUs_) {
+            worstUs_ = static_cast<float>(sum);
+            std::copy(std::begin(clean), std::end(clean), worst_);
+        }
+    }
+    Account take() {
+        Account a;
+        a.visits = visits_;
+        a.worstUs = worstUs_;
+        std::copy(std::begin(worst_), std::end(worst_), a.worst);
+        *this = PunchScanWindow{};
+        return a;
+    }
+
+  private:
+    uint32_t visits_{};
+    float worstUs_{};
+    float worst_[punchPartCount]{};
+};
+// The target scan's walks (the background watch's, every 250 ms) and the class table's waits, over a window.
+struct ScanCost {
+    uint32_t scans{}, classWaits{};
+    float meanMs{}, maxMs{}, classWaitMaxUs{};
+};
+// Both as the diag's line (within its 228 text characters).
+inline void scanCostLine(const PunchScanWindow::Account& a, const ScanCost& s, char* out, size_t size) {
+    int n = std::snprintf(out, size, "punch scan: longest %.0f us =", a.worstUs);
+    for (unsigned i = 0; i < punchPartCount && n > 0 && static_cast<size_t>(n) < size; ++i)
+        n += std::snprintf(out + n, size - static_cast<size_t>(n), " %s %.0f%s", punchPartName(i), a.worst[i],
+                           i + 1 < punchPartCount ? "," : ";");
+    if (n > 0 && static_cast<size_t>(n) < size)
+        std::snprintf(out + n, size - static_cast<size_t>(n),
+                      " target scans %u, mean %.1f ms, longest %.1f ms; class lock waits %u, longest %.0f us", s.scans,
+                      s.meanMs, s.maxMs, s.classWaits, s.classWaitMaxUs);
+}
 // The account as the diag's line (one per window).
 inline void costLine(const CostWindow::Window& w, char* out, size_t size) {
     std::snprintf(out, size,

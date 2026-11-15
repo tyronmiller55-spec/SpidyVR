@@ -617,6 +617,8 @@ const game_swing::SwingCostLive* swingCostLive{};
 const game_shooter::DropLive* shooterDrops{}; // SpidyShooterDrops: why web balls were dropped
 // Where that window's longest visit went (SpidySwingCostSections): the "game thread sections:" line.
 const game_swing::SwingCostSections* swingCostSections{};
+// The punch scan's parts and the target scan's cost (SpidySwingScanCost): the "punch scan:" line.
+const game_swing::SwingScanCost* swingScanCost{};
 // JUMP PULL (jump_pull.hpp): the ask the swing gets every frame (SpidyJumpPull: the gaze and the stick move) and what it did
 // (SpidyJumpPullLive); none in an older module (no pull).
 BridgeCall jumpPullCall{};
@@ -1239,6 +1241,7 @@ DWORD WINAPI run(void*) {
         view_yaw_lock::DodgeTail dodgeTail; // the turn after a dodge, whatever the fight's tail says
         uint32_t swingCostWindow = 0; // the last SpidySwingCostLive window logged
         uint32_t swingSectionsWindow = 0; // the last SpidySwingCostSections window logged
+        uint32_t swingScanWindow = 0;     // the last SpidySwingScanCost window logged
         hitch_guard::GameFrameClock gameFrameClock;
         hitch_guard::GameFrameClock::Lines gameFrameLines;
         // HEAD PROBE (off by default; head_probe.hpp): read only. Its numbers
@@ -5575,6 +5578,31 @@ DWORD WINAPI run(void*) {
                                     swingSectionsWindow = window;
                                     char line[420];
                                     hitch_guard::sectionLine(a, line, sizeof line);
+                                    diag_log::write(line);
+                                }
+                            }
+                        }
+                        // And the punch scan split into its parts, with the background target scan's walks and the
+                        // class table's waits (the 9790d67 playtest's 19-39 ms "punch scan" peaks).
+                        if (const volatile game_swing::SwingScanCost* sc = swingScanCost) {
+                            const uint32_t window = sc->window;
+                            if (window != swingScanWindow) {
+                                hitch_guard::PunchScanWindow::Account a;
+                                a.visits = sc->punchVisits;
+                                a.worstUs = sc->punchWorstUs;
+                                for (unsigned i = 0; i < hitch_guard::punchPartCount; ++i)
+                                    a.worst[i] = sc->punchParts[i];
+                                hitch_guard::ScanCost scans;
+                                scans.scans = sc->scans;
+                                scans.classWaits = sc->classWaits;
+                                scans.meanMs = sc->scanMeanMs;
+                                scans.maxMs = sc->scanMaxMs;
+                                scans.classWaitMaxUs = sc->classWaitMaxUs;
+                                MemoryBarrier();
+                                if (sc->window == window) {
+                                    swingScanWindow = window;
+                                    char line[320];
+                                    hitch_guard::scanCostLine(a, scans, line, sizeof line);
                                     diag_log::write(line);
                                 }
                             }
@@ -12051,6 +12079,11 @@ extern "C" __declspec(dllexport) DWORD WINAPI SpidyXrStart(void* input) {
         swingCostSections && (swingCostSections->magic != expected.magic ||
                               swingCostSections->version != expected.version || swingCostSections->bytes != expected.bytes))
         swingCostSections = nullptr;
+    swingScanCost = reinterpret_cast<const game_swing::SwingScanCost*>(GetProcAddress(rays, "SpidySwingScanCost"));
+    if (const game_swing::SwingScanCost expected;
+        swingScanCost && (swingScanCost->magic != expected.magic || swingScanCost->version != expected.version ||
+                          swingScanCost->bytes != expected.bytes))
+        swingScanCost = nullptr; // an older module has none: no "punch scan:" line
     jumpPullCall = reinterpret_cast<BridgeCall>(GetProcAddress(rays, "SpidyJumpPull"));
     jumpPullLive = reinterpret_cast<const game_swing::JumpPullLive*>(GetProcAddress(rays, "SpidyJumpPullLive"));
     if (const game_swing::JumpPullLive expected;

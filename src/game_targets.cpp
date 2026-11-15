@@ -144,14 +144,51 @@ uint32_t lookup(uintptr_t base, uintptr_t vtable) {
         known = classes.emplace(vtable, classify(base, vtable, types)).first;
     return known->second;
 }
+// The scan's cost since the last take (takeScanCost), under its own small lock.
+std::mutex costLock;
+game_targets::ScanCost scanCost;
+double scanTotalMs{};
 } // namespace
 
+game_targets::ScanCost game_targets::takeScanCost() {
+    std::lock_guard lock(costLock);
+    ScanCost c = scanCost;
+    c.meanMs = c.scans ? static_cast<float>(scanTotalMs / c.scans) : 0.f;
+    scanCost = {};
+    scanTotalMs = 0;
+    return c;
+}
+
 uint32_t game_targets::classOf(uintptr_t base, uintptr_t vtable) {
-    std::lock_guard lock(classesLock);
+    // Timed only when it has to wait: an uncontended lookup costs no clock.
+    if (!classesLock.try_lock()) {
+        const auto start = std::chrono::steady_clock::now();
+        classesLock.lock();
+        const float us = std::chrono::duration<float, std::micro>(std::chrono::steady_clock::now() - start).count();
+        std::lock_guard lock(costLock);
+        ++scanCost.classWaits;
+        scanCost.classWaitMaxUs = std::max(scanCost.classWaitMaxUs, us);
+    }
+    std::lock_guard lock(classesLock, std::adopt_lock);
     return lookup(base, vtable);
 }
 
+namespace {
+bool scanWalk(uintptr_t base, uint32_t kinds, std::vector<game_targets::Candidate>& out);
+}
 bool game_targets::scan(uintptr_t base, uint32_t kinds, std::vector<Candidate>& out) {
+    const auto start = std::chrono::steady_clock::now();
+    const bool found = scanWalk(base, kinds, out);
+    const double ms = std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - start).count();
+    std::lock_guard lock(costLock);
+    ++scanCost.scans;
+    scanTotalMs += ms;
+    scanCost.maxMs = std::max(scanCost.maxMs, static_cast<float>(ms));
+    return found;
+}
+namespace {
+bool scanWalk(uintptr_t base, uint32_t kinds, std::vector<game_targets::Candidate>& out) {
+    using namespace game_targets;
     out.clear();
     const auto table = pointer(base + registryTable);
     int32_t count{};
@@ -240,6 +277,7 @@ bool game_targets::scan(uintptr_t base, uint32_t kinds, std::vector<Candidate>& 
     }
     return true;
 }
+} // namespace
 bool game_targets::inPlay(const Candidate& c) {
     uint8_t stated{};
     return !c.machine || (read(c.machine + 0x80, &stated, 1) && stated && pointer(c.machine + 0x70));

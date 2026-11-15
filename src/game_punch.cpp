@@ -590,8 +590,38 @@ float game_punch::worldScale() {
         return 1;
     return static_cast<float>(std::clamp(clock, .05, 1.));
 }
+namespace {
+// THE PUNCH SCAN'S PARTS (the 9790d67 playtest: "punch scan" peaks of 19-39 ms in and out of fights): the last
+// update's time per part (game_punch::partName order: targets, sense, lock, punches, flow, strikes), in us.
+double punchParts[game_punch::partCount]{};
+struct PartClock {
+    LARGE_INTEGER last{}, hz{};
+    unsigned part = 0;
+    PartClock() {
+        std::fill(std::begin(punchParts), std::end(punchParts), 0.);
+        QueryPerformanceFrequency(&hz);
+        QueryPerformanceCounter(&last);
+    }
+    // The part so far ends here; `next` begins.
+    void lap(unsigned next) {
+        LARGE_INTEGER now{};
+        QueryPerformanceCounter(&now);
+        if (hz.QuadPart > 0 && now.QuadPart >= last.QuadPart && part < game_punch::partCount)
+            punchParts[part] += static_cast<double>(now.QuadPart - last.QuadPart) * 1e6 / static_cast<double>(hz.QuadPart);
+        last = now;
+        part = next;
+    }
+    ~PartClock() {
+        lap(part);
+    }
+};
+} // namespace
+void game_punch::lastParts(double (&out)[partCount]) {
+    std::copy(std::begin(punchParts), std::end(punchParts), out);
+}
 Opened game_punch::update(float seconds, const Input& in, const Player& player, const WorldQueries& world) {
     Opened opened;
+    PartClock parts; // targets until the first lap
     if (!enabled.load(std::memory_order_relaxed) || !TryAcquireSRWLockShared(&updating))
         return opened;
     struct Release {
@@ -679,14 +709,17 @@ Opened game_punch::update(float seconds, const Input& in, const Player& player, 
     }
     // The attacks the game has warned the player of, before any blow of this
     // sample lands: a blow during a warning counters it.
+    parts.lap(1);
     readSense(chest);
     // The enemy the next punch goes to: the one a blow locked the player
     // onto, else the one he looks at. A web that holds an enemy makes him
     // the one. And of those his blows landed on, the ones knocked out.
+    parts.lap(2);
     for (const uint64_t held : player.holds)
         lock.take(held);
     lock.update(seconds, head, in.look, enemies);
     knockouts(seconds);
+    parts.lap(3);
     events.clear();
     punches.update(seconds, hands, inReach, events);
     // PUNCH AUTO-TARGET: a throw is judged on its sample, against the enemy the ring marks (the lock's), never
@@ -733,6 +766,7 @@ Opened game_punch::update(float seconds, const Input& in, const Player& player, 
             live.events = live.events + 1;
         }
     }
+    parts.lap(4);
     flow.update(seconds);
     if (!fighter.combatVisuals || !flow.count())
         cues.clear();
@@ -744,6 +778,7 @@ Opened game_punch::update(float seconds, const Input& in, const Player& player, 
     }
     // Contact damage above is shared. Only original VR may acquire a remote
     // strike, dive, counter lunge or automated arrival blow below.
+    parts.lap(5);
     if (!fighter.contactOnly) {
     std::array<FightFist, 2> fists{};
     for (int i = 0; i < 2; ++i)

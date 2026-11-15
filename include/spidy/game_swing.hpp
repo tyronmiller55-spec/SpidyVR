@@ -679,6 +679,19 @@ struct SwingCostSections {
     float worst[8]{}, peak[8]{};
 };
 static_assert(sizeof(SwingCostSections) == 88);
+// SpidySwingScanCost: the punch scan split into its parts (hitch_guard::punchPartName: targets, sense, lock, punches,
+// flow, strikes) for the window's longest punch visit, and the background target scan (its walks, mean and longest,
+// and the game thread's waits on its class table), beside SpidySwingCostSections and on its window. New export: an
+// older module has none and XR logs no "punch scan:" line. `window` counts up last. Microseconds unless named.
+struct SwingScanCost {
+    uint32_t magic = 0x5357534e, version = 1, bytes = sizeof(SwingScanCost), window{};
+    uint32_t punchVisits{};
+    float punchWorstUs{}, punchParts[6]{};
+    uint32_t scans{}, classWaits{};
+    float scanMeanMs{}, scanMaxMs{}, classWaitMaxUs{};
+    uint32_t reserved[3]{};
+};
+static_assert(sizeof(SwingScanCost) == 80);
 // Side channel from XR (JUMP PULL, jump_pull.hpp, polish pass slice 8): sent every frame (the gaze and the stick move) to
 // SpidyJumpPull; an ask older than half a second is none. `flags` bit 0: jump_pull. `gaze`: where the view looks (world),
 // `stick`: the walk stick's world direction (zero when it is not held). Not a Command or Settings field (game_swing::Settings

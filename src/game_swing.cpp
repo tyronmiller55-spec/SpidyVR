@@ -11,6 +11,7 @@
 #include "spidy/web_line.hpp"
 #include "spidy/game_offers.hpp"
 #include "spidy/game_punch.hpp"
+#include "spidy/game_targets.hpp"
 #include "spidy/game_shooter.hpp"
 #include "spidy/game_throw.hpp"
 #include "spidy/game_warp.hpp"
@@ -47,6 +48,8 @@ __declspec(dllexport) SwingCostLive SpidySwingCostLive;
 __declspec(dllexport) JumpPullLive SpidyJumpPullLive;
 // Where the window's longest visit went (SwingCostSections), beside it.
 __declspec(dllexport) SwingCostSections SpidySwingCostSections;
+// The punch scan's parts and the target scan's cost (SwingScanCost), on the same window.
+__declspec(dllexport) SwingScanCost SpidySwingScanCost;
 // GRIP's account (GripLive), for XR's feel and log.
 __declspec(dllexport) GripLive SpidySwingGripLive;
 // HAND GRAB's account (HandGrabLive), for XR's log and feel.
@@ -83,6 +86,9 @@ double costSolverUs{}, costKickUs{};
 // tethers, 4 grip settings, 5 punch scan (the enemies), 6 kicks, 7 solver. The last two are costKickUs / costSolverUs.
 double costSection[hitch_guard::sectionCount]{};
 hitch_guard::SectionWindow sectionWindow;
+// The punch scan's parts per window (its longest visit) beside it, for SpidySwingScanCost.
+hitch_guard::PunchScanWindow punchScanWindow;
+static_assert(hitch_guard::punchPartCount == game_punch::partCount);
 // Times a stretch of visit() and adds it to `total` (microseconds).
 struct CostTimer {
     explicit CostTimer(double& total) : total_(total) {
@@ -156,6 +162,20 @@ struct VisitCost {
         }
         MemoryBarrier();
         sections.window = sections.window + 1;
+        const auto punch = punchScanWindow.take();
+        const auto scans = game_targets::takeScanCost();
+        volatile SwingScanCost& scan = SpidySwingScanCost;
+        scan.punchVisits = punch.visits;
+        scan.punchWorstUs = punch.worstUs;
+        for (unsigned i = 0; i < hitch_guard::punchPartCount; ++i)
+            scan.punchParts[i] = punch.worst[i];
+        scan.scans = scans.scans;
+        scan.classWaits = scans.classWaits;
+        scan.scanMeanMs = scans.meanMs;
+        scan.scanMaxMs = scans.maxMs;
+        scan.classWaitMaxUs = scans.classWaitMaxUs;
+        MemoryBarrier();
+        scan.window = scan.window + 1;
     }
     LARGE_INTEGER start_{};
 };
@@ -1237,6 +1257,11 @@ void visit(const native_rays::QueryContext& world) {
             punchClock.begin();
             const auto opened = game_punch::update(sampleSeconds, controllerAims(in), fighter, world);
             punchClock.end(costSection[5]);
+            {
+                double parts[game_punch::partCount]{};
+                game_punch::lastParts(parts);
+                punchScanWindow.add(parts);
+            }
             if (opened.strike) {
                 solver.releaseAll();
                 takeoffTransition.reset();

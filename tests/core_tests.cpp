@@ -32196,6 +32196,34 @@ int main() {
         check(clock.spikesTotal() == 9, "the 70 ms steps were not all counted");
         check(summary.find("over 50 ms") != std::string::npos, "the summary lost its over 50 ms count");
     });
+    test("hitch: the punch scan's parts keep its longest visit, and the scan line fits the diag", [&] {
+        hitch_guard::PunchScanWindow w;
+        w.add({100., 10., 5., 20., 1., 2.});
+        w.add({39000., 50., 5., 20., 1., 2.});
+        w.add({300., NAN, -4., 20., 1., 2.});
+        const auto a = w.take();
+        check(a.visits == 3 && std::abs(a.worstUs - 39078.f) < .5f && a.worst[0] == 39000.f, "the longest visit's parts");
+        check(w.take().visits == 0, "take starts a fresh window");
+        hitch_guard::ScanCost s;
+        s.scans = 40;
+        s.classWaits = 12;
+        s.meanMs = 3.3f;
+        s.maxMs = 41.5f;
+        s.classWaitMaxUs = 38000.f;
+        hitch_guard::PunchScanWindow::Account big = a;
+        for (auto& v : big.worst)
+            v = 999999.f;
+        big.worstUs = 9999999.f;
+        char line[320];
+        hitch_guard::scanCostLine(big, s, line, sizeof line);
+        check(std::string(line).rfind("punch scan: longest", 0) == 0 && std::strlen(line) <= 228,
+              "the punch scan line fits the diag's text");
+        hitch_guard::scanCostLine(a, s, line, sizeof line);
+        check(std::string(line).find("targets 39000,") != std::string::npos &&
+                  std::string(line).find("target scans 40, mean 3.3 ms, longest 41.5 ms") != std::string::npos &&
+                  std::string(line).find("class lock waits 12, longest 38000 us") != std::string::npos,
+              "the punch scan line names the parts, the scans and the class lock's waits");
+    });
     test("hitch: cost window reports the mod's share and the guards' fire counts", [&] {
         hitch_guard::CostWindow cost;
         const int64_t hz = 10'000'000;
