@@ -28,7 +28,7 @@ float stopTime(float speed, int hands, float press, float dt = .005f) {
     const Config c;
     float t = 0;
     while (speed >= c.stopSpeed && t < 60) {
-        speed = brakeSpeed(speed, hands * brakeDecel(press, c), dt);
+        speed = brakeSpeed(speed, brakeTotal(hands * brakeDecel(press, c), c), dt);
         t += dt;
     }
     return t;
@@ -38,14 +38,19 @@ float stopTime(float speed, int hands, float press, float dt = .005f) {
 int main() {
     const Config c;
     // The brake: friction on gravity and the press, capped.
-    check(near(brakeDecel(0), .9f * 9.81f), "no press: mu g");
-    check(near(brakeDecel(.05f), std::min(14.f, .9f * (9.81f + 2.f))), "press adds k d");
-    check(near(brakeDecel(.5f), 14.f) && near(brakeDecel(.15f), 14.f) && brakeDecel(.1f) < 14.f,
+    check(near(brakeDecel(0), 2.f * 9.81f), "no press: mu g (mu 2.0 since the grip stop pass)");
+    check(near(brakeDecel(.05f), std::min(30.f, 2.f * (9.81f + 2.f))), "press adds k d");
+    check(near(brakeDecel(.5f), 30.f) && near(brakeDecel(.15f), 30.f) && brakeDecel(.1f) < 30.f,
           "capped at aMax");
     check(near(brakeDecel(-1), brakeDecel(0)) && near(brakeDecel(NAN), brakeDecel(0)), "bad press is none");
-    // One hand stops 10 m/s in about 1.2 s, two in about 0.6 s (the plan's feel).
-    check(near(stopTime(10, 1, 0), 1.1f, .15f), "one hand stops 10 m/s in about 1.1 to 1.2 s");
-    check(near(stopTime(10, 2, 0), .55f, .1f), "two hands stop 10 m/s in about 0.6 s");
+    // THE GRIP STOP PASS (Nov 14, t71u; the b9b2196 session braked at 8.8 m/s^2, 25 m/s took 2.8 s): stronger, still a slide.
+    check(near(stopTime(25, 1, 0), 1.28f, .1f), "one hand, a light press: 25 m/s in about 1.3 s (it was 2.8 s)");
+    check(stopTime(25, 1, 0) > 1.15f && stopTime(25, 1, 0) < 1.5f, "inside the 1.2 to 1.5 s target");
+    check(near(stopTime(25, 1, .15f), .83f, .1f), "one hand, a hard press: 25 m/s in 0.8 s");
+    check(near(stopTime(25, 2, 0), .78f, .1f) && near(brakeTotal(2 * brakeDecel(0), c), 32.f),
+          "two hands: about 0.8 s, the sum capped at 32 m/s^2, not twice a hold");
+    check(stopTime(25, 1, 0) < 1.5f && stopTime(46, 1, 0) < 2.6f, "46 m/s stops in about 2.4 s (it was 5.2 s)");
+    check(near(brakeTotal(NAN, c), 0.f) && near(brakeTotal(-5, c), 0.f), "a bad sum is no brake");
     check(stopTime(10, 1, .1f) < stopTime(10, 1, 0), "a harder press stops sooner");
     check(near(brakeSpeed(3, 100, 1), 0) && near(brakeSpeed(0, 5, .1f), 0), "never below zero");
     check(near(brakeSpeed(3, 0, 1), 3) && near(brakeSpeed(3, 5, 0), 3) && near(brakeSpeed(3, NAN, .1f), 3),
@@ -55,8 +60,8 @@ int main() {
     check(grainHz(0) == 30.f && near(grainHz(12), 160.f) && near(grainHz(50), 160.f) && grainHz(6) > 90 &&
               grainHz(6) < 100,
           "grain 30 to 160 Hz by slide speed");
-    check(near(grainAmplitude(0), .15f) && near(grainAmplitude(14), .9f) && grainAmplitude(7) > .5f &&
-              grainAmplitude(7) < .6f,
+    check(near(grainAmplitude(0), .15f) && near(grainAmplitude(30), .9f) && grainAmplitude(15) > .5f &&
+              grainAmplitude(15) < .6f,
           "grain amplitude by braking force");
 
     // The fling's formula.

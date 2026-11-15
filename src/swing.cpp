@@ -803,6 +803,7 @@ void Swing::wallMotion(float dt, const Input& in) {
                 decel += grip::brakeDecel(c.press, grip_);
             }
             if (braking) {
+                decel = grip::brakeTotal(decel, grip_);
                 const float slower = grip::brakeSpeed(speed, decel, dt);
                 body_.velocity = slide * (slower / speed);
                 gripReport_.brakeHands = braking;

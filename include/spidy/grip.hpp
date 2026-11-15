@@ -4,9 +4,12 @@
 //
 // WALL BRAKE. On Spidy's wall, closing the physical grip with the palm at the wall (the hand climb's own
 // contact test) brakes the sliding body as friction does, instead of stopping it at once:
-//     a = min(aMax, mu * (g + k * pressed)),     mu 0.9, k 40 m/s^2 per m, aMax 14 m/s^2 per hand
-// (pressed: how far the tracked palm is past the wall's face, m). One hand stops 10 m/s in about 1.2 s, two
-// in about 0.6 s. Under 0.5 m/s the brake becomes the hand-climb hold as it was. The feel is grain pulses at
+//     a = min(aMax, mu * (g + k * pressed)),     mu 2.0, k 40 m/s^2 per m, aMax 30 m/s^2 per hand, 32 in all
+// (pressed: how far the tracked palm is past the wall's face, m). THE GRIP STOP PASS (Nov 14, t71u: "grip stop should be
+// stronger by default", then "stronger but still a slide", 25 m/s in about 1.2 to 1.5 s): the b9b2196 session's 22 brakes ran at
+// 8.8 m/s^2 (mu 0.9, light press: 25 m/s took 2.8 s and 35 m, 46 m/s 5.2 s; the old caps were 14 a hand). Now one hand at a light
+// press stops 25 m/s in 1.28 s and 16 m, a hard press 0.83 s and 10 m, two hands about 0.8 s: still a slide you feel, with
+// the press as the pedal. (Before the pass: one hand stopped 10 m/s in about 1.2 s, two in about 0.6 s.) Under 0.5 m/s the brake becomes the hand-climb hold as it was. The feel is grain pulses at
 // 30 to 160 Hz by the slide speed, strong by the braking force.
 //
 // GRIP FLING. With the physical grip closed on a surface (a wall, the ground, anything the palm meets
@@ -30,7 +33,7 @@
 namespace spidy::grip {
 struct Config {
     // Brake.
-    float mu = .9f, k = 40.f, aMax = 14.f, gravity = 9.81f, stopSpeed = .5f, maxPress = .15f;
+    float mu = 2.f, k = 40.f, aMax = 30.f, aTotal = 32.f, gravity = 9.81f, stopSpeed = .5f, maxPress = .15f;
     // Fling.
     float gain = 1.3f, vMax = 9.f, minHandSpeed = .5f, window = .06f;
     // The most a hand moves in a tracked frame that is believed (m/s); more is a tracking glitch.
@@ -45,6 +48,10 @@ struct Config {
 inline float brakeDecel(float pressed, const Config& c = {}) {
     const float p = std::isfinite(pressed) ? std::clamp(pressed, 0.f, c.maxPress) : 0.f;
     return std::min(c.aMax, std::max(0.f, c.mu) * (c.gravity + c.k * p));
+}
+// The summed deceleration of the braking hands, capped (two hands are firmer, not twice a hold).
+inline float brakeTotal(float summed, const Config& c = {}) {
+    return std::isfinite(summed) ? std::clamp(summed, 0.f, std::max(c.aTotal, c.aMax)) : 0.f;
 }
 // The speed after dt of the hands' summed deceleration; never below zero, never above `speed`.
 inline float brakeSpeed(float speed, float decel, float dt) {

@@ -1164,7 +1164,7 @@ Values sanitized(Values v) {
     // HANDSTAND (handstand.hpp).
     v.handstandPushGain = std::clamp(v.handstandPushGain, 100, 400);
     v.handstandPushMax = std::clamp(v.handstandPushMax, 2, 12);
-    v.wallBrakeMuPct = std::clamp(v.wallBrakeMuPct, 30, 150);
+    v.wallBrakeMuPct = std::clamp(v.wallBrakeMuPct, 30, 300);
     v.gripFlingGainPct = std::clamp(v.gripFlingGainPct, 50, 300);
     v.gripFlingMax = std::clamp(v.gripFlingMax, 3, 20);
     v.handGrabForce = std::clamp(v.handGrabForce, 400, 4000);
@@ -2795,7 +2795,7 @@ constexpr TabOnly tabOnly[] = {
     {"swing_kick_auto", &Values::swingKickAuto, nullptr},
     {"wall_brake", &Values::wallBrake, nullptr},
     {"grip_fling", &Values::gripFling, nullptr},
-    {"wall_brake_mu_pct", nullptr, &Values::wallBrakeMuPct},
+    {"grip_stop_pct", nullptr, &Values::wallBrakeMuPct}, // was wall_brake_mu_pct (90): a renamed key takes the new default
     {"grip_fling_gain_pct", nullptr, &Values::gripFlingGainPct},
     {"grip_fling_max", nullptr, &Values::gripFlingMax},
     {"hand_grab", &Values::handGrab, nullptr},

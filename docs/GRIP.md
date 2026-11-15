@@ -12,7 +12,7 @@ On Spidy's wall with HAND WALL CLIMBING on, squeezing a grip with your palm at t
 
 Feel: grain pulses in the braking hands, 30 Hz (slow) to 160 Hz (12 m/s and over) by the slide speed, strong by the braking force; MOVE HAPTICS scales it.
 
-`wall_brake_mu_pct` (90, 30 to 150) is the friction, in `spidy_vr.ini` only.
+`grip_stop_pct` (200, 30 to 300; it was `wall_brake_mu_pct`, 90, 30 to 150: a renamed key so a file that saved the old default takes the new one) is the friction, in `spidy_vr.ini` only. The per-hand cap is 30 m/s^2 and the two hands' sum 32 (was 14 a hand). From 25 m/s: one hand at a light press 1.28 s and 16 m, a hard press 0.83 s and 10 m, two hands 0.78 s (before: 2.8 s and 35 m).
 
 ## Grip fling (`grip_fling`)
 

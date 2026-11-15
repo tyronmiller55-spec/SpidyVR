@@ -563,11 +563,11 @@ struct Values {
     // setting, on as before: swing_kick_auto. Both can be on; the dive holds back during a manual kick.
     bool swingKickManual = false, swingKickAuto = true;
     // GRIP ACROSS THE GAME (G1, grip.hpp; November 14), EXPERIMENTAL: both off until set. wall_brake: on
-    // Spidy's wall a grip closed on a slide slows it as friction does (mu wall_brake_mu_pct, 90), then holds.
+    // Spidy's wall a grip closed on a slide slows it as friction does (mu grip_stop_pct, 200: the Nov 14 pass; it was wall_brake_mu_pct, 90, and files that saved that key keep their old default behind it), then holds.
     // grip_fling: a pull let go of while gripping a surface launches the body the other way (gain
     // grip_fling_gain_pct, 130; at most grip_fling_max m/s, 9), the ground included.
     bool wallBrake = false, gripFling = false;
-    int wallBrakeMuPct = 90, gripFlingGainPct = 130, gripFlingMax = 9;
+    int wallBrakeMuPct = 200, gripFlingGainPct = 130, gripFlingMax = 9;
     // HAND GRAB (G2, hand_grab.hpp; November 14), EXPERIMENTAL: off until set. hand_grab: a grip squeezed
     // with the palm within 35 cm of an enemy or a prop takes it by hand: held 45 cm ahead of the palm,
     // punched with the free fist, thrown or slammed on letting go. hand_grab_force: one hand's force in
