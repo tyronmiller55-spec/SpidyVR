@@ -167,7 +167,10 @@ bool game_targets::scan(uintptr_t base, uint32_t kinds, std::vector<Candidate>& 
     std::unordered_map<uint64_t, Tracker> trackers;
     std::unordered_map<uint64_t, bool> bots;
     const auto size = imageSize(base);
-    std::lock_guard lock(classesLock);
+    // HITCH (9790d67 playtest, game-vr-20261115-113027: "punch scan" held each 10 s window's longest game-thread visit in
+    // 96 of 154 windows, 18-40 ms, in fights and out of them alike): this walk used to hold classesLock for the whole
+    // registry, every 250 ms per watch, and the game thread's punch scan takes the same lock in classOf() (up(), held())
+    // for each bot, so it waited out the whole walk. The lock now covers one class lookup at a time.
     for (uint32_t i = 0; i < static_cast<uint32_t>(count); ++i) {
         struct Entry {
             uintptr_t address;
@@ -203,7 +206,7 @@ bool game_targets::scan(uintptr_t base, uint32_t kinds, std::vector<Candidate>& 
         }
         if (head.vtable - base >= size)
             continue;
-        const uint32_t bits = lookup(base, head.vtable);
+        const uint32_t bits = game_targets::classOf(base, head.vtable);
         if (bits & botHealthClass)
             healths[head.record] = entry.address;
         else if (bits & healthClass)
