@@ -84,8 +84,16 @@ struct Params {
     float catchGrace = .15f, leavingSeconds = .3f;
     // THE TOUCHDOWN CATCH (above).
     float touchdownGrace = .25f;  // s after SpidyVR's air a touchdown can still catch
-    float touchdownReach = 1.6f;  // m: palms this far over the floor at the touchdown count (the
-                                  // eyes' drop, .9, and an arm, .7: where the palms come to rest)
+    // ARMS UP (the user, Nov 14 t71u: "seems to activate even if my arms aren't up, and it pops me out"; the b9b2196 session:
+    // the touchdown counted a palm on the floor at 1.6 m, and the palms of the 173 judged touchdowns were 1.13 / 1.51 / 1.83 m
+    // over it, standing hand height, so 15 of 28 catches ended "missed" at the 0.6 s settle). Now a palm counts at the touchdown
+    // only when it is within touchdownReach (1.0 m: the eyes' drop, .9, and a little) AND clearly below the head (armsBelowHead,
+    // .2 m: the hands toward the floor, past the head, the way a handstand reaches), both for armsHoldSeconds (.12 s).
+    float touchdownReach = 1.0f;
+    float armsBelowHead = .2f, armsHoldSeconds = .12f;
+    // A LEAP IS A FRESH PUSH: a stick already held at the catch has to be let go of first, and A pressed before the catch is not
+    // a press now (9 of 11 leaps in that session came 0.01 s after the catch).
+    // (A pressed after the catch is already a fresh press: only a held A or stick is carried across it.)
     // THE LANDING CATCH, THE SECOND PASS (above).
     float entryKeep = .12f;       // share of the landing's horizontal speed the balance starts with
     float entrySpinKeep = .2f;    // share of the flip's spin it starts with
@@ -140,7 +148,7 @@ inline const char* refusalName(Refusal r) {
     case Refusal::spin:
         return "spinning too fast";
     case Refusal::palmsHigh:
-        return "palms too far over the floor";
+        return "palms too far over the floor or not below the head";
     default:
         return "none";
     }
@@ -378,6 +386,8 @@ class Handstand {
         bool grip{};           // either grip squeezed
         unsigned floorPalms{}; // bits: palms on a floor (HandCollision::floorContacts)
         Vec3 palms[2]{};       // placed palms, world
+        Vec3 head{};           // the head, world (the arms-up test: the palms below it)
+        bool headKnown{};
         Vec3 floorNormal{0, 1, 0};
         Vec3 bodyUp{0, 1, 0}; // the body's up in the world (the flip's tilt)
         Vec3 angular{};       // the flip's spin, rad/s
@@ -412,6 +422,8 @@ class Handstand {
         bool touchdownCatch{}; // this frame's catch was the touchdown's
         Refusal refused{};
         float inverted{}, spin{}, palmGap{}; // at the touchdown: degrees, rad/s, m (the higher palm)
+        float headGap{}, armsHeld{};         // at the touchdown: the head's height over the floor, m; how long the arms were up, s
+        bool armsUp{};                       // both palms low enough and below the head now (the touchdown's reach path)
         unsigned failed{};  // every gate that failed at the touchdown (refusalBit); 0: none or no touchdown
         bool gripCarried{}; // the catch took a squeezed grip: it lets go only after a release
         // The touchdown's inputs as judged (for the log of a landing that was not judged).
@@ -438,7 +450,10 @@ class Handstand {
         // LEAP INPUT: A's press (not a held one), the left stick held hard for leapStickSeconds.
         const bool jumpPress = in.jump && !jumpWas_;
         jumpWas_ = in.jump;
-        stickHeld_ = std::isfinite(in.stick) && in.stick >= p.leapStick ? stickHeld_ + dt : 0.f;
+        // A stick already held when the catch began has to come back below the line first (a fresh push).
+        if (std::isfinite(in.stick) && in.stick < p.leapStick)
+            stickFresh_ = true;
+        stickHeld_ = stickFresh_ && std::isfinite(in.stick) && in.stick >= p.leapStick ? stickHeld_ + dt : 0.f;
         // THE TOUCHDOWN CATCH: how long since SpidyVR's air, the touchdown's
         // first frame, and the palms' heights over the floor.
         airAge_ = in.vrAir || in.aloft ? 0.f : std::min(airAge_ + dt, 10.f);
@@ -447,6 +462,10 @@ class Handstand {
         touchdownBefore_ = in.touchdown && !in.vrAir;
         unsigned palmsDown = in.floorPalms & 3u;
         float palmGap = -10.f;
+        unsigned reachDown = 0;
+        const float headGap = in.headKnown && finite(in.head) && in.floorKnown && std::isfinite(in.floorY)
+                                  ? in.head.y - in.floorY
+                                  : 1e9f;
         // Only at a touchdown, or in a touchdown's catch: in the air the actor's
         // feet are no floor.
         const bool nearFloor = state_ == State::off ? touchdown : touchdownCaught_;
@@ -455,10 +474,22 @@ class Handstand {
                 const float gap = finite(in.palms[i]) ? in.palms[i].y - in.floorY : 1e9f;
                 palmGap = std::max(palmGap, gap);
                 const float reach = state_ == State::off ? p.touchdownReach : p.floorReach;
-                if (nearFloor && gap <= reach)
-                    palmsDown |= 1u << i;
+                if (nearFloor && gap <= reach) {
+                    // The touchdown's reach path also needs the palm clearly below the head (no head: no test).
+                    if (state_ != State::off || !in.headKnown || gap + p.armsBelowHead <= headGap)
+                        reachDown |= 1u << i;
+                }
             }
         }
+        // Held for armsHoldSeconds before the reach counts (a touch on the floor's own contact is no wait).
+        const bool reachBoth = (reachDown & 3u) == 3u;
+        if (state_ == State::off)
+            armsHeld_ = reachBoth && nearFloor ? std::min(armsHeld_ + dt, 10.f) : 0.f;
+        if (state_ != State::off || armsHeld_ >= p.armsHoldSeconds || ((in.floorPalms & 3u) == 3u))
+            palmsDown |= reachDown;
+        out.armsUp = reachBoth;
+        out.armsHeld = armsHeld_;
+        out.headGap = headGap < 1e8f ? headGap : 0.f;
         const bool both = (palmsDown & 3u) == 3u;
         // After an exit a new catch waits for the palms to come off the floor.
         if (!palmsDown)
@@ -481,7 +512,7 @@ class Handstand {
                          refusalBit(!armed_ ? Refusal::notArmed : Refusal::none) |
                          refusalBit(out.inverted < p.catchDegrees ? Refusal::upright : Refusal::none) |
                          refusalBit(spinNow > p.catchSpin ? Refusal::spin : Refusal::none) |
-                         refusalBit(!both ? Refusal::palmsHigh : Refusal::none);
+                         refusalBit(!both && !reachBoth ? Refusal::palmsHigh : Refusal::none);
             out.refused = Refusal::none;
             for (unsigned r = 1; r <= static_cast<unsigned>(Refusal::palmsHigh); ++r)
                 if (out.failed & (1u << r)) {
@@ -522,6 +553,10 @@ class Handstand {
             state_ = State::catching;
             age_ = 0;
             push_.reset();
+            // The leap is a fresh push: a stick held now does not count until it is let go of once.
+            stickFresh_ = !(std::isfinite(in.stick) && in.stick >= p.leapStick);
+            stickHeld_ = 0.f;
+            armsHeld_ = 0.f;
             out.caughtNow = true;
             break;
         }
@@ -640,7 +675,8 @@ class Handstand {
     Exit exit_{};
     bool armed_ = true;
     bool touchdownBefore_{}, touchdownCaught_{}, gripCarried_{}, reseedPending_{}, jumpWas_{};
-    float stickHeld_{};
+    float stickHeld_{}, armsHeld_{};
+    bool stickFresh_ = true;
     Vec3 centre_{};
     unsigned frame_{};
     float age_{};

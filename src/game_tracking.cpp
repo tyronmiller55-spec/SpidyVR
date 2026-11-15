@@ -1070,6 +1070,9 @@ GameMotionFrame GameTrackingRig::update(const XrFrame& f, Vec3 feet, Vec3 gameFo
         in.floorKnown = std::isfinite(handstandFloorY_);
         in.floorY = in.floorKnown ? handstandFloorY_ : 0.f;
         in.tracked = validTrackedPose(f.head) && handValid(f.hands[0]) && handValid(f.hands[1]);
+        in.headKnown = validTrackedPose(f.head);
+        if (in.headKnown)
+            in.head = placed.toWorld(f.head).position;
         in.grip = (handValid(f.hands[0]) && f.hands[0].squeeze > .6f) ||
                   (handValid(f.hands[1]) && f.hands[1].squeeze > .6f);
         in.floorPalms = handCollision_.floorContacts(out.grips);

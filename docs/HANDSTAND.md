@@ -93,3 +93,15 @@ Tests (`tests/handstand_tests.cpp`): a 137, 147, 155 and 167 degree catch surviv
 ## The balance pass and the leap (Nov 14, t67u)
 
 See CHANGELOG slice 9 and POLISH_PASS.md. Defaults now: support 18 cm, fall after 500 ms outside the support + 6 cm, 50 degree lean cap, assist 500%, damping 250%, 0.6 s with no fall test after the catch, push-off at 0.45 m/s; leap (A press, left stick at 0.9 for 0.15 s, or a push) = 5.5 m/s up + 4 m/s forward along the view. The log line is `handstand exit: fell|leap|other ...`.
+
+## Arms up (Nov 14, feat/air-takeover, t71u)
+
+"Seems to activate even if my arms aren't up, and it pops me out seeming on its own." The b9b2196 session (see
+[CHANGELOG](CHANGELOG.md), [VALIDATION](VALIDATION.md)): a touchdown counted a palm on the floor within 1.6 m, and the
+173 judged touchdowns had their palms 1.13 / 1.51 / 1.83 m over it (10th / median / 90th): the arms were never tested.
+The catch then had 0.6 s to bring them down, and 15 of 28 ended `missed` at 0.61 s. Now `touchdownReach` is 1.0 m
+(the eyes' drop, 0.9 m, and a little), a palm must also be `armsBelowHead` (0.2 m) under the head (both palms
+toward the floor, past the head), and both for `armsHoldSeconds` (0.12 s). A palm on a confirmed floor contact in
+SpidyVR's air (HandCollision) needs no wait. The leap is a fresh push: a stick held at the catch does not count until it is let
+go of once, and an A held through the catch is not a press. Logs: `handstand: no catch at the touchdown: ... head N m`,
+`handstand: catch at the touchdown`, `handstand exit:` (expect no `missed` after 0.61 s, no `leap` after 0.01 s).

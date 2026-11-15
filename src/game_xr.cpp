@@ -3678,8 +3678,8 @@ DWORD WINAPI run(void*) {
                             handstand::refusalList(hs.failed, failed, sizeof failed);
                             diag_log::writef(
                                 "handstand: no catch at the touchdown: %s (inverted %.0f deg, "
-                                "spin %.1f rad/s, palms %.2f m over the floor; every failing gate: %s)",
-                                handstand::refusalName(hs.refused), hs.inverted, hs.spin, hs.palmGap, failed);
+                                "spin %.1f rad/s, palms %.2f m over the floor, head %.2f m; every failing gate: %s)",
+                                handstand::refusalName(hs.refused), hs.inverted, hs.spin, hs.palmGap, hs.headGap, failed);
                         }
                         // THE CATCH'S GEOMETRY (G1 playtest): the first frames of a catch, to tell a lean from
                         // palms re-placed: the palm centre and how far it moved, the span, the centre of mass's

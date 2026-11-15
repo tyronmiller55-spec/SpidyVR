@@ -3,6 +3,12 @@
 Every build, newest first, with what changed, why, and what was measured.
 Per-check results are in [VALIDATION.md](VALIDATION.md).
 
+## Air takeover (Nov 14, branch `feat/air-takeover`, on 331a70b)
+
+The user, Nov 14 (t71u, t72u, t73u, then the answers to t73s656): handstand not holding or catching with the arms down, the body inverting in combat, a stronger grip stop that is still a slide, a point jump that shoots off along the eyes, an A-button upright over a second, and the air given to SpidyVR with takeoff and landing staying the game's animation. Analysis: the b9b2196 session (game-vr-20261114-164317), `/workspace/playtest-b9b2196/ANALYSIS.md`; plan: [AIR_TAKEOVER.md](AIR_TAKEOVER.md); numbers in [VALIDATION.md](VALIDATION.md), game facts in [REFERENCE.md](REFERENCE.md).
+
+- **1. Handstand catches only with your arms up (`handstand.hpp`, [HANDSTAND.md](HANDSTAND.md)).** In that session the touchdown counted a palm on the floor within 1.6 m, and the palms of the 173 judged touchdowns were 1.13 / 1.51 / 1.83 m over it (10th / median / 90th percentile): standing hand height. 15 of 28 catches then ended `missed` at the 0.6 s settle and 9 of 11 leaps came 0.01 s after the catch. Now a touchdown catch needs both palms within 1.0 m of the floor (was 1.6) AND at least 0.2 m below the head (the hands toward the floor), held for 0.12 s; a palm on a confirmed floor contact in SpidyVR's air needs no wait. A leap is a fresh push: a stick held at the catch is no leap until it is let go of once, and an A held through the catch is not a press. The refusal log gains `head N m`.
+
 ## Showtime and web fire (Nov 14, branch `feat/showtime`, on b9b2196)
 
 The user, Nov 14 (t70u): "I need a pass on firing webs from animation. Sometimes nothing happens, but I can see a switch to SpideyVR happening. We have to get the webs working from animation properly, it's getting hard to fire accurate web lines in combat." One commit per feature.

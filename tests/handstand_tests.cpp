@@ -41,6 +41,10 @@ Params on() {
     p.fallGrace = .15f;
     p.pushSpeed = .6f;
     p.leap = false;
+    // Before the arms-up pass (Nov 14): the touchdown counted a palm within 1.6 m with no wait and no head test.
+    p.touchdownReach = 1.6f;
+    p.armsBelowHead = -10.f;
+    p.armsHoldSeconds = 0.f;
     return p;
 }
 Params fresh() {
@@ -843,5 +847,105 @@ int main() {
               "balance pass: a file that has seen revision 3 keeps its own");
     }
     std::printf("handstand: %d checks passed\n", passed);
+    // ARMS UP (Nov 14 t71u; the b9b2196 session: palms 1.13 / 1.51 / 1.83 m over the floor at the touchdowns that caught, 15 of 28
+    // catches "missed" at the 0.6 s settle): a touchdown catch needs both palms within 1.0 m, clearly below the head, for 0.12 s.
+    {
+        const auto air = [](Handstand& h) {
+            auto a = inverted();
+            a.floorPalms = 0;
+            a.floorKnown = true;
+            a.floorY = 0;
+            a.palms[0] = {-.2f, -.5f, 0};
+            a.palms[1] = {.2f, -.5f, 0};
+            return h.update(a, fresh());
+        };
+        const auto landing = [](float palmY, float headY) {
+            auto in = inverted();
+            in.vrAir = false;
+            in.touchdown = true;
+            in.floorPalms = 0;
+            in.floorKnown = true;
+            in.floorY = 0;
+            in.headKnown = true;
+            in.head = {0, headY, 0};
+            in.palms[0] = {-.2f, palmY, 0};
+            in.palms[1] = {.2f, palmY, 0};
+            return in;
+        };
+        // Arms at his sides (palms 1.5 m, above the head at 0.8): never a catch, however long.
+        Handstand sides;
+        air(sides);
+        bool caught = false;
+        for (int i = 0; i < 40; ++i)
+            caught = caught || sides.update(landing(1.5f, .8f), fresh()).caughtNow;
+        check(!caught, "palms at standing hand height over the floor: no catch (they were counted at 1.6 m)");
+        // Palms within reach but above the head (hands toward the feet): no catch.
+        Handstand above;
+        air(above);
+        caught = false;
+        for (int i = 0; i < 40; ++i)
+            caught = caught || above.update(landing(.7f, .5f), fresh()).caughtNow;
+        check(!caught, "palms within reach but above the head: no catch");
+        // Both palms toward the floor, below the head: caught, but only after the hold.
+        Handstand up;
+        air(up);
+        const auto first = up.update(landing(.6f, 1.0f), fresh());
+        check(!first.caughtNow && first.armsUp, "palms toward the floor: not caught on the first frame, the hold is running");
+        int n = 1;
+        bool got = false;
+        for (; n < 40 && !got; ++n)
+            got = up.update(landing(.6f, 1.0f), fresh()).caughtNow;
+        check(got && n * dt >= .1f && n * dt < .2f, "arms up for 0.12 s: the catch");
+        // The hold starts over when the palms leave the reach.
+        Handstand flicker;
+        air(flicker);
+        for (int i = 0; i < 8; ++i)
+            flicker.update(landing(.6f, 1.0f), fresh());
+        flicker.update(landing(1.5f, 1.0f), fresh());
+        check(!flicker.update(landing(.6f, 1.0f), fresh()).caughtNow, "the hold starts over after palms drop out of reach");
+        // A palm on a real floor contact needs no wait.
+        Handstand real;
+        auto r = inverted();
+        r.floorKnown = true;
+        r.floorY = 0;
+        check(real.update(r, fresh()).caughtNow, "palms on a confirmed floor contact in SpidyVR's air: the catch, no wait");
+    }
+    // A LEAP IS A FRESH PUSH: the stick held at the catch is not a leap until it is let go of and pushed again.
+    {
+        auto caughtInput = [] {
+            auto in = inverted();
+            in.stick = 1.f;
+            return in;
+        };
+        Handstand h;
+        Params p = fresh();
+        p.armsHoldSeconds = 0.f;
+        check(h.update(caughtInput(), p).caughtNow, "caught with the stick held hard");
+        bool leapt = false;
+        for (int i = 0; i < 60; ++i) // 0.67 s with the stick still held
+            leapt = leapt || h.update(caughtInput(), p).exitNow == Exit::leap;
+        check(!leapt, "a stick held at the catch is no leap (9 of 11 leaps came 0.01 s after the catch)");
+        auto rel = inverted();
+        rel.stick = 0.f;
+        for (int i = 0; i < 5; ++i)
+            h.update(rel, p);
+        for (int i = 0; i < 20 && !leapt; ++i)
+            leapt = h.update(caughtInput(), p).exitNow == Exit::leap;
+        check(leapt, "let go and pushed again: the leap");
+        // A pressed before the catch is not a press now.
+        Handstand a;
+        auto held = inverted();
+        held.jump = true;
+        a.update(held, p);
+        bool leapA = false;
+        for (int i = 0; i < 20; ++i)
+            leapA = leapA || a.update(held, p).exitNow == Exit::leap;
+        check(!leapA, "A held through the catch is not a leap");
+        auto press = held;
+        press.jump = false;
+        a.update(press, p);
+        press.jump = true;
+        check(a.update(press, p).exitNow == Exit::leap, "a fresh A press leaps");
+    }
     return 0;
 }
