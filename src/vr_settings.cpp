@@ -374,6 +374,9 @@ static_assert(std::size(showtimeVignetteChoices) == std::size(showtimeVignetteSt
 constexpr int showtimeLatchSteps[] = {0, 1};
 constexpr const char* showtimeLatchChoices[] = {"OFF (DEFAULT)", "DOUBLE PRESS"};
 static_assert(std::size(showtimeLatchChoices) == std::size(showtimeLatchSteps));
+constexpr int airCorrectSteps[] = {400, 600, 800, 1000, 1500, 2000};
+constexpr const char* airCorrectChoices[] = {"0.4 S", "0.6 S", "0.8 S", "1 S (DEFAULT)", "1.5 S", "2 S"};
+static_assert(std::size(airCorrectChoices) == std::size(airCorrectSteps));
 // PHYSICAL WEB TETHERS (tether.hpp): the rope's points and its steps a frame.
 constexpr int tetherParticleSteps[] = {12, 16, 20, 24, 28, 32};
 constexpr const char* tetherParticleChoices[] = {"12", "16", "20", "24 (DEFAULT)", "28", "32"};
@@ -552,6 +555,8 @@ std::span<const int> steps(Item item) {
         return showtimeVignetteSteps;
     case Item::showtimeLatch:
         return showtimeLatchSteps;
+    case Item::airCorrect:
+        return airCorrectSteps;
     case Item::kickSpin:
         return kickSpinSteps;
     case Item::tetherParticles:
@@ -803,6 +808,8 @@ float numberOf(Item item, const Values& v) {
         return static_cast<float>(v.showtimeVignette);
     case Item::showtimeLatch:
         return static_cast<float>(v.showtimeLatch);
+    case Item::airCorrect:
+        return static_cast<float>(v.airCorrectMs);
     case Item::kickSpin:
         return static_cast<float>(v.kickSpinPct);
     case Item::tetherParticles:
@@ -1188,6 +1195,7 @@ Values sanitized(Values v) {
     v.showtimeFollow = std::clamp(v.showtimeFollow, 0, 2);
     v.showtimeVignette = std::clamp(v.showtimeVignette, 0, 2);
     v.showtimeLatch = std::clamp(v.showtimeLatch, 0, 1);
+    v.airCorrectMs = std::clamp(v.airCorrectMs, 300, 2500);
     v.kickSpinPct = std::clamp(v.kickSpinPct, 0, 100);
     v.tetherParticles = std::clamp(v.tetherParticles, 8, 32);
     v.tetherSubsteps = std::clamp(v.tetherSubsteps, 2, 16);
@@ -1203,9 +1211,9 @@ Values sanitized(Values v) {
     v.automaticHandThreshold = std::clamp(v.automaticHandThreshold, 50, 300);
     return v;
 }
-const std::array<Row, 217>& rows() {
+const std::array<Row, 218>& rows() {
     // The help fits the game's description column beside the rows.
-    static const std::array<Row, 217> all{{
+    static const std::array<Row, 218> all{{
         {Item::none, "WEBS", nullptr, {}},
         {Item::webStyle, "WEB STYLE",
          "Arcade: webs pass lamp posts, signs and cars, and swings stay above the street.", webStyleChoices},
@@ -1880,6 +1888,10 @@ const std::array<Row, 217>& rows() {
         {Item::handstandEyeDrop, "HANDSTAND VIEW DROP",
          "How far your view comes down when you are inverted. 90 cm by default.", handstandEyeDropChoices,
          Place::launcher},
+        {Item::airCorrect,
+         "AIR UPRIGHT TIME",
+         "A in the air rights you smoothly over this long (REALISTIC FLIPS). 1 s default.",
+         airCorrectChoices, Place::launcher},
     }};
     return all;
 }
@@ -1922,6 +1934,7 @@ const std::array<Screen, categoryCount>& screens() {
         Item::automaticStrength, Item::automaticSpeed, Item::automaticMinimumSpeed, Item::automaticReleaseFlip,
         Item::automaticResponse, Item::automaticHandStrength, Item::automaticFalloff, Item::automaticHandThreshold,
         Item::automaticAirBrake, Item::automaticCombat, Item::dodgeTumble, Item::flipReprojection,
+        Item::airCorrect,
     };
     static constexpr Item feedback[] = {
         Item::haptics, Item::moveHaptics, Item::reelHaptics, Item::swingHaptics, Item::bodyHaptics,
@@ -2530,6 +2543,9 @@ bool choose(Item item, int index, Values& v) {
     case Item::showtimeLatch:
         v.showtimeLatch = s[index];
         break;
+    case Item::airCorrect:
+        v.airCorrectMs = s[index];
+        break;
     case Item::kickSpin:
         v.kickSpinPct = s[index];
         break;
@@ -2879,6 +2895,7 @@ constexpr TabOnly tabOnly[] = {
     {"showtime_vignette", nullptr, &Values::showtimeVignette},
     {"showtime_slow_mo", &Values::showtimeSlowMo, nullptr},
     {"showtime_latch", nullptr, &Values::showtimeLatch},
+    {"air_correct_ms", nullptr, &Values::airCorrectMs},
     {"movement_defaults", nullptr, &Values::movementDefaults},
 };
 } // namespace

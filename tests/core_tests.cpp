@@ -24103,7 +24103,7 @@ int main() {
         // then (still November 14) HAND GRAB STRENGTH and HOLD COST, then AIR KICKS, AIM and SPIN.
         // then (still November 14) WEB TETHERS, TETHER POINTS and TETHER STEPS, then GROUND KICKS, ENEMY JOINTS and ENEMY LIMB ZONES.
         // Polish pass: HEADSET FIRST, ANIM HEAD RIDE and SHOULDER LIMIT (launcher rows) after those.
-        constexpr size_t rowsAfter = 62; // + PUNCH AUTO-TARGET (4 rows), JUMP PULL (5 rows) and the handstand balance (4 rows), SHOWTIME (3 rows, then 8, Nov 14)
+        constexpr size_t rowsAfter = 63; // (Nov 14: + AIR UPRIGHT TIME) + PUNCH AUTO-TARGET (4 rows), JUMP PULL (5 rows) and the handstand balance (4 rows), SHOWTIME (3 rows, then 8, Nov 14)
         check(all.size() == firstRealistic + std::size(realistic) + rowsAfter,
               "the realistic flips' rows are not the last but the appended ones");
         for (size_t i = 0; i < std::size(realistic); ++i)
@@ -24372,7 +24372,9 @@ int main() {
                 // ANGLE is STABLE's only (the in-game camera tab holds 20).
                 row.item == Item::viewYawSource || row.item == Item::turnInPlace ||
                 // November 13 (torso update on): launcher rows, no room in the in-game tabs.
-                (row.item >= Item::animatedTorsoTwist && row.item < Item::showtime);
+                (row.item >= Item::animatedTorsoTwist && row.item < Item::showtime) ||
+                // November 14 (air takeover): launcher rows.
+                row.item >= Item::airCorrect;
             check(row.place == (row.item == Item::view ? Place::page
                                 : launcherOnly           ? Place::launcher
                                                          : Place::tab),
@@ -24688,6 +24690,7 @@ int main() {
                   "showtime=0\nshowtime_while=0\nshowtime_fade_ms=150\nshowtime_body=0\nshowtime_chord=0\nshowtime_auto_dodge=0\n"
                   "showtime_auto_finish=0\nshowtime_distance_cm=250\nshowtime_height_cm=30\nshowtime_angle_deg=35\n"
                   "showtime_turn=0\nshowtime_follow=1\nshowtime_vignette=1\nshowtime_slow_mo=1\nshowtime_latch=0\n"
+                  "air_correct_ms=1000\n"
                   "movement_defaults=3\n",
               "the defaults' text");
         Values changed = defaults;
@@ -32026,7 +32029,7 @@ int main() {
     test("Native Animation: combined menu inventory and upstream-compatible v39 settings packet", [] {
         using namespace vr_settings;
         const auto& all = rows();
-        check(all.size() == 217 && static_cast<unsigned>(lastItem) < 256, "row/Item bounds");
+        check(all.size() == 218 && static_cast<unsigned>(lastItem) < 256, "row/Item bounds");
         std::array<unsigned, 256> seen{};
         size_t start = all.size();
         for (size_t i = 0; i < all.size(); ++i) {

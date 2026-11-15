@@ -14,3 +14,6 @@ settings file holds: they turn the view and the view guard turns it back, every 
 `facing_check::rearTurn` (120 deg): a calm landing (no fight, no dodge) with the view further than that behind him does not force
 the hero round. The turn itself cannot be eased: there is no facing write, and the game does not turn its actor in SpidyVR's air
 (hybrid_movement.hpp `airSyncStick`), so the 142 deg/s walk-turn is the game's. Fights and gaps under 120 deg are as before.
+
+## 5. A in the air
+`air_correct_ms` (1000; 400-2000 in the launcher, 300-2500 in the ini): REALISTIC FLIPS' A press turns the body from its tilt to level about the heading as one minimum-jerk turn (`RealisticFlipSettings::levelMs`). A half turn takes the whole time, a smaller tilt its share (floor 30%, 0.2 s). The old rule chased the error at up to `speed` deg/s. The turn is the body tilt only; it never writes the view, and the heading it takes (`takeHeading`) is unchanged.

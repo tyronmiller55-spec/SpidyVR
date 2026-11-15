@@ -888,7 +888,7 @@ RealisticFlipSettings realisticFlips(const vr_settings::Values& v) {
     return {v.realisticFlips,         v.automaticReleaseFlip,  v.automaticStrength,
             v.automaticSpeed,         v.automaticMinimumSpeed, v.automaticResponse,
             v.automaticHandStrength,  v.automaticFalloff,      v.automaticHandThreshold,
-            v.automaticAirBrake,      v.automaticCombat};
+            v.automaticAirBrake,      v.automaticCombat,       v.airCorrectMs};
 }
 DWORD WINAPI run(void*) {
     bool nativeStarted = false, gpuStarted = false, raysStarted = false, swingStarted = false, websStarted = false,

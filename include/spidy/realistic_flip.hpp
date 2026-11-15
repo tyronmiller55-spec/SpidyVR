@@ -21,6 +21,11 @@ struct RealisticFlipSettings {
     int responseMs = 500, handStrength = 100, falloffMs = 3000;
     int handThreshold = 100; // centimetres per second
     bool airBrake = true, inCombat = true;
+    // A IN THE AIR rights the player over this long, smoothly (the user, Nov 14 t71u: "gradually upright the player instead of
+    // jerk them, over a second or so"; air_correct_ms, 1000): a minimum-jerk turn from the tilt at the press to level about the
+    // heading. It was error / 0.18 s at up to `speed` degrees a second with a hard start (about 0.5 s for a full flip).
+    // A small tilt takes less (the angle's share of a half turn, never under 30% of this).
+    int levelMs = 1000;
     bool operator==(const RealisticFlipSettings&) const = default;
 };
 struct RealisticFlight {
@@ -124,7 +129,8 @@ class AutomaticHandMotion {
 // canned animation. Hand motion adds momentum; air drag removes it. A tether
 // supplies a smooth alignment torque while attached, and release carries spin.
 class RealisticFlip {
-    Quat tilt_{}, levelTarget_{};
+    Quat tilt_{}, levelTarget_{}, levelFrom_{};
+    float levelAge_{}, levelSeconds_ = 1.f;
     Vec3 angular_{}, momentum_{}, averageVelocity_{}, lastPull_{0, 1, 0};
     bool attached_{}, sampled_{}, airborne_{}, leveling_{}, brakeHeld_{};
     float missingTime_{}, lastRadius_ = 20, poseInertia_ = 1;
@@ -187,6 +193,7 @@ class RealisticFlip {
         const Quat back = Quat::yaw(-heading);
         tilt_ = unit(back * tilt_);
         levelTarget_ = unit(back * levelTarget_);
+        levelFrom_ = unit(back * levelFrom_);
         angular_ = back.rotate(angular_);
         momentum_ = back.rotate(momentum_);
         averageVelocity_ = back.rotate(averageVelocity_);
@@ -218,16 +225,34 @@ class RealisticFlip {
         const bool brake = controls.brake && settings.airBrake;
         if (brake && !brakeHeld_) {
             levelTarget_ = unit(arc(tilt_.rotate({0, 1, 0}), {0, 1, 0}) * tilt_);
+            levelFrom_ = tilt_;
+            levelAge_ = 0;
+            // The angle's share of a half turn, so a small tilt does not take a second.
+            const float angle = length(rotationVector(levelTarget_ * levelFrom_.conjugate()));
+            const float whole = std::clamp(settings.levelMs, 300, 2500) / 1000.f;
+            levelSeconds_ = std::max(.2f, whole * std::clamp(angle / 3.14159265f, .3f, 1.f));
             leveling_ = true;
         }
         brakeHeld_ = brake;
         if (brake || leveling_) {
-            // Finish an upright recovery even after a short button press.
-            // Preserve horizontal heading, and discard the old spin momentum.
+            // Finish an upright recovery even after a short button press, as a smooth turn (minimum jerk: no hard start,
+            // no hard stop). Preserve horizontal heading, and discard the old spin momentum.
             momentum_ = {};
-            const Vec3 error = rotationVector(levelTarget_ * tilt_.conjugate());
-            integrate(limited(error / .18f, autoRate), autoRate / .12f, dt);
-            if (length(error) < .001f && length(angular_) < .02f) {
+            levelAge_ += dt;
+            const float u = std::clamp(levelAge_ / levelSeconds_, 0.f, 1.f);
+            const float smooth = u * u * u * (u * (6 * u - 15) + 10);
+            const float rate = 30 * u * u * (1 - u) * (1 - u) / levelSeconds_;
+            const Vec3 whole = rotationVector(levelTarget_ * levelFrom_.conjugate());
+            const float angle = length(whole);
+            if (angle > 1e-6f) {
+                const Vec3 axis = whole / angle;
+                tilt_ = unit(Quat::around(axis, angle * smooth) * levelFrom_);
+                angular_ = axis * (angle * rate);
+            } else {
+                tilt_ = levelTarget_;
+                angular_ = {};
+            }
+            if (u >= 1.f) {
                 tilt_ = levelTarget_;
                 angular_ = {};
                 leveling_ = false;

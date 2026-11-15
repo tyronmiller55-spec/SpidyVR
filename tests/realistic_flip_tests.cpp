@@ -256,6 +256,56 @@ int main() {
         };
         check(decay(.75f) > decay(1.f) * 1.05f, "less pose drag did not keep more spin");
     }
+    // A IN THE AIR rights the player smoothly over air_correct_ms (the user, Nov 14 t71u): a minimum-jerk turn, no jerk at either end.
+    {
+        auto upright = [](const Quat& q) { return std::acos(std::clamp(q.rotate({0, 1, 0}).y, -1.f, 1.f)); };
+        auto run = [&](int levelMs, float& seconds, float& firstStep, float& worstStep, float& startAngle, bool& ended) {
+            RealisticFlipSettings cfg;
+            cfg.enabled = true;
+            cfg.strength = 100;
+            cfg.levelMs = levelMs;
+            RealisticFlip m;
+            RealisticFlight f{{}, {}, true, false, {3, 0, 0}};
+            for (int i = 0; i < 70; ++i)
+                m.update(f, true, false, 0, 1.f / 90, cfg);
+            f.handMomentum = {};
+            startAngle = upright(m.orientation());
+            RealisticControls brake;
+            brake.brake = true;
+            float before = upright(m.orientation());
+            seconds = 0;
+            firstStep = worstStep = 0;
+            ended = false;
+            for (int i = 0; i < 400; ++i) {
+                const Quat prev = m.orientation();
+                const Quat q = m.update(f, true, false, 0, 1.f / 90, cfg, i < 3 ? brake : RealisticControls{});
+                const float step = distance(q, prev);
+                if (i == 0)
+                    firstStep = step;
+                worstStep = std::max(worstStep, step);
+                seconds = (i + 1) / 90.f;
+                if (!m.recovering() && i > 3) {
+                    ended = upright(q) < .001f;
+                    break;
+                }
+                before = upright(q);
+            }
+        };
+        float sec = 0, first = 0, worst = 0, start = 0;
+        bool ended = false;
+        run(1000, sec, first, worst, start, ended);
+        check(start > 1.5f, "the test did not start from a flipped body");
+        check(ended, "the upright turn did not end upright");
+        const float expected = std::clamp(start / 3.14159265f, .3f, 1.f);
+        check(std::abs(sec - expected) < .06f, "the upright turn takes air_correct_ms for a half turn, less for a smaller tilt");
+        check(first < .004f, "the upright turn starts without a jerk");
+        const float mean = start / sec;
+        check(worst < mean * 2.1f, "the upright turn has no spike beyond a smooth profile");
+        float s4 = 0, f4 = 0, w4 = 0, st4 = 0;
+        bool e4 = false;
+        run(400, s4, f4, w4, st4, e4);
+        check(e4 && s4 < sec * .6f, "a shorter air_correct_ms rights faster");
+    }
     std::cout << "Momentum rotation: attach easing, rate/acceleration caps, stability, free heading, gesture "
                  "strength, full 360, no preset turn, drag, braking, sample loss, landing, common "
                  "translation, upward arms, tracking jumps, frame rate, heading taken into the yaw passed\n";

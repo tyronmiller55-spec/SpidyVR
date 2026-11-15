@@ -2415,6 +2415,10 @@ void App::options(ImVec2 origin, ImVec2 size) {
                    [&] { tabCombo("##handmomentum", Item::automaticHandStrength); });
         settingOption(Item::automaticAirBrake, "Air rotation brake", "A in the air stops the spin and brings you upright.", S(42),
                    [&] { tabToggle("##brake", Item::automaticAirBrake); });
+        settingOption(Item::airCorrect, "Air upright time",
+                   "How long A in the air takes to bring you upright, smoothly with no jerk at either end. "
+                   "Needs Realistic flips. 1 second by default.",
+                   S(150), [&] { tabCombo("##aircorrect", Item::airCorrect); });
         settingOption(Item::automaticCombat, "Flips in combat",
                    "Off: while enemies are near, and 3 s after, arms and webs stop turning you and you come "
                    "upright.",

@@ -680,6 +680,10 @@ struct Values {
     bool showtimeAutoFinish = false;
     // SHOWTIME's body (S3): 0 game pose with the head shown, 1 as in play (no head).
     int showtimeBody = 0;
+    // A IN THE AIR (the user, Nov 14 t71u; air_correct_ms): the upright turn takes this long, smoothly (realistic_flip.hpp
+    // RealisticFlipSettings::levelMs). REALISTIC FLIPS' A rights the player; it was a 0.18 s chase with a hard start.
+    int airCorrectMs = 1000;
+    // [air takeover pass settings]
     bool operator==(const Values&) const = default;
 };
 inline constexpr int eyeAimShots = 1, eyeAimZips = 2;
@@ -949,8 +953,9 @@ enum class Item : uint8_t {
     showtimeAutoDodge,
     showtimeAutoFinish,
     showtimeBody,
+    airCorrect,
 };
-inline constexpr Item lastItem = Item::showtimeBody;
+inline constexpr Item lastItem = Item::airCorrect;
 // SLOW-MO LENGTH's last step: no time limit (until L3 toggles it off).
 inline constexpr int slowMotionEndless = 91;
 // Real seconds a full meter lasts for a SLOW-MO LENGTH value; 0 = endless.
@@ -980,7 +985,7 @@ struct Row {
     Place place{};
 };
 // Stable row/setting numbers; categories below determine presentation order.
-const std::array<Row, 217>& rows();
+const std::array<Row, 218>& rows();
 const Row* rowFor(Item);
 // camera, shooters and legs (November 11, the user: "I can't find legs or
 // camera settings in any of the menus. Make sure it's clearly labeled"): tabs
