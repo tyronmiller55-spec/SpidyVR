@@ -424,6 +424,10 @@ class Handstand {
         float inverted{}, spin{}, palmGap{}; // at the touchdown: degrees, rad/s, m (the higher palm)
         float headGap{}, armsHeld{};         // at the touchdown: the head's height over the floor, m; how long the arms were up, s
         bool armsUp{};                       // both palms low enough and below the head now (the touchdown's reach path)
+        // Each palm's height over the floor this frame (left, right; m; NAN: no floor or no palm), and the floor's y
+        // (NAN: none): the catch's palm heights, every frame (the 9790d67 playtest: 3 catches all missed, the palms unseen).
+        float palmGaps[2]{NAN, NAN};
+        float floorY = NAN;
         unsigned failed{};  // every gate that failed at the touchdown (refusalBit); 0: none or no touchdown
         bool gripCarried{}; // the catch took a squeezed grip: it lets go only after a release
         // The touchdown's inputs as judged (for the log of a landing that was not judged).
@@ -470,9 +474,11 @@ class Handstand {
         // feet are no floor.
         const bool nearFloor = state_ == State::off ? touchdown : touchdownCaught_;
         if (in.floorKnown && std::isfinite(in.floorY)) {
+            out.floorY = in.floorY;
             for (unsigned i = 0; i < 2; ++i) {
                 const float gap = finite(in.palms[i]) ? in.palms[i].y - in.floorY : 1e9f;
                 palmGap = std::max(palmGap, gap);
+                out.palmGaps[i] = gap < 1e8f ? gap : NAN;
                 const float reach = state_ == State::off ? p.touchdownReach : p.floorReach;
                 if (nearFloor && gap <= reach) {
                     // The touchdown's reach path also needs the palm clearly below the head (no head: no test).

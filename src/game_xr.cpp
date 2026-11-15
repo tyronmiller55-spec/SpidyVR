@@ -3740,6 +3740,13 @@ DWORD WINAPI run(void*) {
                                 hs.xiOutside, static_cast<int>(hs.outsideSeconds * 1000 + .5f),
                                 hs.balance.leanDegrees,
                                 handstand::invertedDegrees(motion.flipTilt.rotate({0, 1, 0})));
+                        // The palms' heights through the catch (its own line: the geometry's is full): each palm over
+                        // the floor, the head, and the floor's y, every frame of the first 12 and every 6th after.
+                        if (hs.frame >= 0 && (hs.frame < 12 || hs.frame % 6 == 0))
+                            diag_log::writef("handstand: catch frame %d palms over the floor: left %.2f right %.2f m, "
+                                             "head %.2f m, floor y %.2f (%s)",
+                                             hs.frame, hs.palmGaps[0], hs.palmGaps[1], hs.headGap, hs.floorY,
+                                             handstand::stateName(hs.state));
                         handstandLogAge += std::isfinite(frame.seconds) ? std::clamp(frame.seconds, 0.f, .1f) : 0.f;
                         if (hs.state != handstandStateLogged ||
                             (hs.state == handstand::State::balance && handstandLogAge >= .5f)) {
@@ -3767,6 +3774,9 @@ DWORD WINAPI run(void*) {
                                              hs.heldSeconds, hs.balance.leanDegrees, hs.offBalanceSeconds * 1000.f,
                                              length(hs.lean), hs.launch.y,
                                              std::hypot(hs.launch.x, hs.launch.z));
+                            diag_log::writef("handstand exit: palms over the floor left %.2f right %.2f m, head %.2f m, "
+                                             "floor y %.2f",
+                                             hs.palmGaps[0], hs.palmGaps[1], hs.headGap, hs.floorY);
                             if (hs.exitNow == handstand::Exit::push || hs.exitNow == handstand::Exit::leap) {
                                 game_swing::PointJumpAsk ask;
                                 ask.serial = ++pointJumpSerial;

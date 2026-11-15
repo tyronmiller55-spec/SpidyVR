@@ -460,6 +460,20 @@ int main() {
         const auto ar = far.update(fa, on());
         check(!ar.caughtNow && ar.refused == Refusal::palmsHigh && ar.palmGap > 1.7f,
               "palms 1.8 m up at the touchdown: refused");
+        // Each palm's height over the floor, every frame (the catch log's palm heights).
+        Handstand gaps;
+        fly(gaps);
+        auto ga = touchdown();
+        ga.palms[0].y = ga.floorY + .3f;
+        ga.palms[1].y = ga.floorY + .05f;
+        const auto gr = gaps.update(ga, on());
+        check(std::abs(gr.palmGaps[0] - .3f) < 1e-4f && std::abs(gr.palmGaps[1] - .05f) < 1e-4f &&
+                  std::abs(gr.floorY - ga.floorY) < 1e-6f,
+              "each palm's height over the floor, left and right, and the floor's y");
+        ga.floorKnown = false;
+        const auto gn = gaps.update(ga, on());
+        check(std::isnan(gn.palmGaps[0]) && std::isnan(gn.palmGaps[1]) && std::isnan(gn.floorY),
+              "no floor: no palm heights");
         // The 22:24 playtest's refusal, palms 1.54 m over the floor at 121 degrees: reachable now.
         Handstand reach;
         fly(reach);
