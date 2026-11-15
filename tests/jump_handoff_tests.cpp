@@ -378,6 +378,106 @@ int main() {
                   std::strcmp(timedWhyName(TimedWhy::fall), "plain fall") == 0,
               "the rules are named for the log");
     }
+    // LANDING BLEND-IN's release (air_landing_release, unverified, off by default): the body goes to the animation before the
+    // touchdown, stays there to the landing, comes back to VR if no landing came; the touchdown handoff is unchanged without it.
+    {
+        auto flight = [&](bool release, float etaAt, int64_t& handAt, int64_t& off) {
+            Sim s(300 * ms);
+            s.ground();
+            s.takeoff(true, 7.f);
+            off = s.now;
+            s.run(340 * ms); // VR by the timer
+            s.run(300 * ms);
+            s.f.velY = -9;
+            s.f.state.grounded = false;
+            for (int i = 0; i < 100; ++i) {
+                s.f.landEta = etaAt - i * .02f;
+                s.f.landHandBack = release && s.f.landEta <= .2f && s.f.landEta >= 0;
+                s.run(20 * ms);
+                if (s.animEdges && handAt < 0)
+                    handAt = s.now;
+                if (s.f.landEta < 0)
+                    break;
+            }
+            return s.animEdges ? s.lastAnim : EnterAnim::none;
+        };
+        int64_t handAt = -1, off = 0;
+        check(flight(false, 1.f, handAt, off) == EnterAnim::none && handAt < 0, "without the release the air stays VR's to the touchdown");
+        handAt = -1;
+        check(flight(true, 1.f, handAt, off) == EnterAnim::predicted && handAt > 0, "with the release the animation has the body before the touchdown");
+        check(std::strcmp(enterAnimName(EnterAnim::predicted), "predicted-landing") == 0, "named for the log");
+        // It lands from there: the touchdown makes no second switch, and the next jump starts afresh.
+        {
+            Sim s(300 * ms);
+            s.ground();
+            s.takeoff(true, 7.f);
+            s.run(340 * ms);
+            s.run(300 * ms);
+            s.f.velY = -9;
+            s.f.landEta = .19f;
+            s.f.landHandBack = true;
+            s.run(40 * ms);
+            check(s.owner.domain == Domain::anim && s.lastAnim == EnterAnim::predicted, "handed back at 0.19 s to impact");
+            const int edges = s.animEdges;
+            s.f.landHandBack = false;
+            s.f.landEta = .1f;
+            s.run(150 * ms);
+            check(s.owner.domain == Domain::anim && s.vrEdges == 1, "kept to the landing");
+            s.ground();
+            check(s.owner.domain == Domain::anim && s.animEdges == edges, "no second switch at the touchdown");
+            s.takeoff(true, 7.f);
+            s.run(340 * ms);
+            check(s.owner.domain == Domain::vr, "the next jump is VR's again by its timer");
+        }
+        // Nothing to land on (a ledge's ray lost, a web took him up): back to VR.
+        {
+            Sim s(300 * ms);
+            s.ground();
+            s.takeoff(true, 7.f);
+            s.run(340 * ms);
+            s.run(300 * ms);
+            s.f.velY = -9;
+            s.f.landEta = .19f;
+            s.f.landHandBack = true;
+            s.run(40 * ms);
+            check(s.owner.domain == Domain::anim, "handed back");
+            s.f.landHandBack = false;
+            s.f.landEta = NAN;
+            s.run(500 * ms);
+            check(s.owner.domain == Domain::vr && s.owner.lastTimedWhy == TimedWhy::noLanding, "no landing came: VR's again");
+            check(std::strcmp(timedWhyName(TimedWhy::noLanding), "no landing came") == 0, "named for the log");
+        }
+        // Never in a fight, a zip or a handstand, and not before the owner's 0.25 s.
+        {
+            Sim s(300 * ms);
+            s.ground();
+            s.takeoff(true, 7.f);
+            s.run(340 * ms);
+            s.run(300 * ms);
+            s.f.state.fighting = true;
+            s.f.landEta = .15f;
+            s.f.landHandBack = true;
+            s.run(60 * ms);
+            check(s.owner.domain == Domain::vr, "no release in a fight");
+            s.f.state.fighting = false;
+            s.f.handSupport = true;
+            s.run(60 * ms);
+            check(s.owner.domain == Domain::vr, "no release while the hands hold him");
+        }
+        {
+            Sim s(300 * ms);
+            s.ground();
+            s.takeoff(true, 7.f);
+            s.run(310 * ms);
+            check(s.owner.domain == Domain::vr, "VR by the timer");
+            s.f.landEta = .1f;
+            s.f.landHandBack = true;
+            s.run(100 * ms);
+            check(s.owner.domain == Domain::vr, "the owner's minimum dwell: 0.25 s before it goes back");
+            s.run(200 * ms);
+            check(s.owner.domain == Domain::anim, "and then it does");
+        }
+    }
     // The settings.
     {
         using namespace vr_settings;

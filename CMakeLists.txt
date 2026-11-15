@@ -127,6 +127,10 @@ add_test(NAME handstand COMMAND spidy_handstand_tests)
 add_executable(spidy_point_bullet_tests tests/point_bullet_tests.cpp)
 target_link_libraries(spidy_point_bullet_tests PRIVATE spidy_core)
 add_test(NAME point_bullet COMMAND spidy_point_bullet_tests)
+# LANDING BLEND-IN (landing_blend.hpp): time to impact, the upright ramp, the release point, the touchdown report.
+add_executable(spidy_landing_blend_tests tests/landing_blend_tests.cpp)
+target_link_libraries(spidy_landing_blend_tests PRIVATE spidy_core)
+add_test(NAME landing_blend COMMAND spidy_landing_blend_tests)
 # LEG HOLD (leg_hold.hpp): Y+X chord, suppression, stick persistence, neutral cancel, easing (portable).
 add_executable(spidy_leg_hold_tests tests/leg_hold_tests.cpp)
 target_link_libraries(spidy_leg_hold_tests PRIVATE spidy_core)

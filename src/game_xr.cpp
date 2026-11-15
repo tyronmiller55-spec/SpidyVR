@@ -19,6 +19,7 @@
 #include "spidy/game_bridge_protocol.hpp"
 #include "spidy/dodge_tumble.hpp"
 #include "spidy/game_dodge.hpp"
+#include "spidy/landing_blend.hpp"
 #include "spidy/point_bullet.hpp"
 #include "spidy/point_jump.hpp"
 #include "spidy/sidestep.hpp"
@@ -1490,6 +1491,14 @@ DWORD WINAPI run(void*) {
         // POINT JUMP BULLET (point_bullet.hpp): the body takes the raw look on a launch; pbADown: A as of last frame.
         point_bullet::Bullet pointBullet;
         bool pbADown{};
+        // LANDING BLEND-IN (landing_blend.hpp): the downward ray's last reading (tag 8: m from the feet to the ground, when seen), the
+        // tracker and this frame's answer.
+        landing_blend::Tracker landingTracker;
+        landing_blend::Out landingOut;
+        float groundHeight{};
+        int64_t groundSeenAt = -1, landingOutAt = -1;
+        bool groundOk{};
+        uint32_t landingRays{}, landingSeen{}, landingReports{};
         const char* pointJumpSurface = "ground";
         // QUICK SIDESTEP (sidestep.hpp): the flick-then-A trigger, the bursts
         // sent, refused and denied, the swing's account read so far, B as it
@@ -4470,7 +4479,16 @@ DWORD WINAPI run(void*) {
                             const Vec3 up = motion.standing && finite(hold.normal) && length(hold.normal) > .5f
                                                 ? normalized(hold.normal)
                                                 : Vec3{0, 1, 0};
-                            const native_rays::Ray roof{feet + up * .1f, headroomReach, up, 7u};
+                            native_rays::Ray roof{feet + up * .1f, headroomReach, up, 7u};
+                            // LANDING BLEND-IN: in SpidyVR's air the roof over his feet means nothing; its slot reads the
+                            // ground under them instead (tag 8), for the time to impact.
+                            if (values.airLandingBlend && swingFresh && !swingState.grounded && swingState.wall == 0 &&
+                                ((values.animatedHybrid && values.animatedMoves) && (hybridOwner.domain == hybrid_owner::Domain::vr ||
+                                              hybridOwner.handedBack()))) {
+                                roof = {feet + Vec3{0, .1f, 0}, landing_blend::Params{}.maxHeight + .1f, {0, -1, 0}, 8u};
+                                headroomSeen = 0.f;
+                                ++landingRays;
+                            }
                             appendTrackingRays(aim, head, hands, roof, collisionRayPhase++);
                         }
                         check(submitRays(&aim), "Controller world rays");
@@ -4480,6 +4498,18 @@ DWORD WINAPI run(void*) {
                         if (rayResults) {
                             for (unsigned i = 0; i < native_rays::capacity && i < rayResults->count; ++i) {
                                 const auto& hit = rayResults->hits[i];
+                                if (hit.ray.tag == 8) {
+                                    // The ground under his feet from where the ray started (a tenth up).
+                                    if (native_rays::fixedSurface(hit) && std::isfinite(hit.fraction)) {
+                                        groundHeight = std::max(0.f, hit.fraction * hit.ray.distance - .1f);
+                                        groundSeenAt = frame.predictedDisplayTime;
+                                        groundOk = true;
+                                        ++landingSeen;
+                                    } else {
+                                        groundOk = false;
+                                    }
+                                    continue;
+                                }
                                 if (hit.ray.tag != 7)
                                     continue;
                                 // The surface over the feet, from where the ray
@@ -8776,6 +8806,40 @@ DWORD WINAPI run(void*) {
                                                : NAN;
                         // JUMP TO SPIDYVR: the midair animation's timer (0 stays to the landing).
                         hybridFrame.jumpHandoffNs = static_cast<int64_t>(values.jumpHandoffMs) * 1'000'000ll;
+                        // LANDING BLEND-IN: the time to impact in SpidyVR's air, from the ground ray and his vertical speed.
+                        {
+                            landing_blend::Params lbp;
+                            lbp.enabled = values.airLandingBlend;
+                            lbp.release = values.airLandingRelease && values.airLandingBlend;
+                            const bool held = motion.handstand.supporting || motion.handstand.holdVr ||
+                                              (swingFresh && (swingState.webs[0].attached || swingState.webs[1].attached));
+                            const bool inverted =
+                                values.handstand &&
+                                handstand::invertedDegrees(motion.flipTilt.rotate({0, 1, 0})) > 100.f;
+                            landing_blend::Input lbi;
+                            lbi.seconds = frame.seconds;
+                            lbi.air = swingFresh && !swingState.grounded && swingState.wall == 0 &&
+                                      (hybridOwner.domain == hybrid_owner::Domain::vr || hybridOwner.handedBack());
+                            const int64_t groundAgeNs = groundSeenAt >= 0 ? frame.predictedDisplayTime - groundSeenAt : -1;
+                            lbi.rayOk = groundOk && groundAgeNs >= 0 && groundAgeNs < 250'000'000;
+                            lbi.height = groundHeight;
+                            lbi.heightAge = lbi.rayOk ? static_cast<float>(groundAgeNs) * 1e-9f + .02f : 0.f;
+                            lbi.vy = swingFresh && std::isfinite(swingState.velocity.y) ? swingState.velocity.y : 0.f;
+                            lbi.keepTilt = held || inverted;
+                            landingOut = landingTracker.update(lbi, lbp);
+                            landingOutAt = frame.predictedDisplayTime;
+                            hybridFrame.landEta = landingOut.predicting ? landingOut.tti : NAN;
+                            hybridFrame.landHandBack = landingOut.handBack;
+                            if (const auto& r = landingTracker.report(); r.valid && std::isfinite(r.firstTti)) {
+                                ++landingReports;
+                                diag_log::writef(
+                                    "landing blend: first predicted %.0f ms at %.1f m, %.1f m/s down; touched down after "
+                                    "%.0f ms (error %+.0f ms), last prediction %.0f ms, upright %.0f%% at the touchdown%s",
+                                    r.firstTti * 1000, r.firstHeight, -r.firstVy, r.actual * 1000, r.errorMs,
+                                    std::isfinite(r.lastTti) ? r.lastTti * 1000 : -1.f, r.uprightAtTouch * 100,
+                                    values.airLandingRelease ? " (release on)" : "");
+                            }
+                        }
                         // AIR TAKEOVER: a slow-rising jump and a plain fall hand over inside that timer.
                         hybridFrame.takeoffDoneVel = hybrid_owner::takeoffDoneVel;
                         hybridFrame.takeoffMinNs = hybrid_owner::takeoffMinNs;
@@ -9979,6 +10043,11 @@ DWORD WINAPI run(void*) {
                             else if (wasLive)
                                 diag_log::writef("point bullet: let go (%s)", pointBullet.why());
                         }
+                        // LANDING BLEND-IN: the body comes upright over the last 0.3 s to impact (the body only: the view and the
+                        // heading are not touched), so the game's landing starts from upright.
+                        if (landingOut.upright > .001f && landingOutAt >= 0 &&
+                            frame.predictedDisplayTime - landingOutAt < 200'000'000)
+                            pose.tilt = hybrid_handoff::slerpQuat(pose.tilt, Quat{}, landingOut.upright);
                         // ANIMATED AIR SPIN (off by default; animated_air_spin.hpp):
                         // the flip tilt (+ momentum lean) turns the yielded anim
                         // skeleton about its head — SpidyVR-style spherical midair on

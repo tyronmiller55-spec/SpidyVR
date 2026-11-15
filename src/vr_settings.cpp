@@ -1026,6 +1026,10 @@ template <class V> auto switchOf(Item item, V& v) -> decltype(&v.aimMarkers) {
         return &v.showtimeSlowMo;
     case Item::pointJumpBullet:
         return &v.pointJumpBullet;
+    case Item::airLandingBlend:
+        return &v.airLandingBlend;
+    case Item::airLandingRelease:
+        return &v.airLandingRelease;
     case Item::groundKicks:
         return &v.groundKicks;
     case Item::enemyJoints:
@@ -1221,9 +1225,9 @@ Values sanitized(Values v) {
     v.automaticHandThreshold = std::clamp(v.automaticHandThreshold, 50, 300);
     return v;
 }
-const std::array<Row, 220>& rows() {
+const std::array<Row, 222>& rows() {
     // The help fits the game's description column beside the rows.
-    static const std::array<Row, 220> all{{
+    static const std::array<Row, 222> all{{
         {Item::none, "WEBS", nullptr, {}},
         {Item::webStyle, "WEB STYLE",
          "Arcade: webs pass lamp posts, signs and cars, and swings stay above the street.", webStyleChoices},
@@ -1910,6 +1914,14 @@ const std::array<Row, 220>& rows() {
          "FALL TO SPIDYVR",
          "A plain fall (no jump) hands to SpidyVR this long into the air. 150 ms.",
          fallHandoffChoices, Place::launcher},
+        {Item::airLandingBlend,
+         "AIR LANDING BLEND",
+         "Body comes upright over the last 0.3 s before you land; the landing is the game's.",
+         {}, Place::launcher},
+        {Item::airLandingRelease,
+         "AIR LANDING RELEASE (EXPERIMENTAL)",
+         "Hands the body to the game 0.2 s before landing. Unverified; needs the blend on.",
+         {}, Place::launcher},
     }};
     return all;
 }
@@ -1973,6 +1985,8 @@ const std::array<Screen, categoryCount>& screens() {
         Item::softLock,
         Item::animatedTorsoTwist,
         Item::fallHandoff,
+        Item::airLandingBlend,
+        Item::airLandingRelease,
     };
     // CAMERA & STABILIZATION (November 11): how much the animation moves the
     // view (amounts, HEAD ANGLE), then how smoothly (the response times).
@@ -2175,6 +2189,8 @@ const char* inactiveReason(Item item, const Values& v) {
     case Item::pointJumpPush:
     case Item::pointJumpBullet:
         return !v.pointJump ? "Turn POINT JUMP on first." : nullptr;
+    case Item::airLandingRelease:
+        return !v.airLandingBlend ? "Turn AIR LANDING BLEND on first." : nullptr;
     case Item::recordingSmoothing:
         return v.recordingFov == 0 ? "Enable Recording FOV first." : nullptr;
     case Item::passiveCoupling:
@@ -2922,6 +2938,8 @@ constexpr TabOnly tabOnly[] = {
     {"air_correct_ms", nullptr, &Values::airCorrectMs},
     {"point_jump_bullet", &Values::pointJumpBullet, nullptr},
     {"fall_handoff_ms", nullptr, &Values::fallHandoffMs},
+    {"air_landing_blend", &Values::airLandingBlend, nullptr},
+    {"air_landing_release", &Values::airLandingRelease, nullptr},
     {"movement_defaults", nullptr, &Values::movementDefaults},
 };
 } // namespace

@@ -1832,6 +1832,16 @@ void App::nativeAnimation(ImVec2 origin, ImVec2 size) {
                "into the air; there is no takeoff to wait for. With the jump timer: it waits for that. "
                "Default: 150 ms.",
                S(150), [&] { tabCombo("##nativefallhandoff", Item::fallHandoff); });
+        option("Air landing blend",
+               "Just before you land, your body comes upright over the last third of a second so the game's "
+               "own landing animation starts from upright; the landing itself is still the game's. Your view "
+               "never turns for it. The log says how well the landing was predicted. On by default.",
+               S(42), [&] { tabToggle("##nativelandingblend", Item::airLandingBlend); });
+        option("Air landing release (experimental)",
+               "Hands the body to the game's animation a fifth of a second before touchdown, in the air. "
+               "UNVERIFIED: it relies on the game keeping your speed and choosing its normal landing. Off by "
+               "default; needs Air landing blend.",
+               S(42), [&] { tabToggle("##nativelandingrelease", Item::airLandingRelease); });
         option("Hybrid speed",
                "How long 15 m/s in the air takes to switch to SpidyVR. Off disables speed takeover; "
                "webs, mid-air turns and wall runs still take over. Default: 200 ms.",

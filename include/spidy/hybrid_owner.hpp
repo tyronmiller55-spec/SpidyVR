@@ -93,11 +93,12 @@ constexpr int64_t handstandLandNs = 250'000'000;
 // should switch to Spidy VR after about a half of a second"; plain jumps, zip
 // launches, vaults and wall launches): which midair animation the timer ended.
 // What took a jump-timer handoff: the timer itself, a jump's vertical speed under takeoffDoneVel, or a plain fall.
-enum class TimedWhy : uint8_t { timer, slowRise, fall };
+enum class TimedWhy : uint8_t { timer, slowRise, fall, noLanding };
 inline const char* timedWhyName(TimedWhy w) {
     switch (w) {
     case TimedWhy::slowRise: return "vertical speed low";
     case TimedWhy::fall: return "plain fall";
+    case TimedWhy::noLanding: return "no landing came";
     default: return "timer";
     }
 }
@@ -175,6 +176,7 @@ enum class EnterAnim : uint8_t {
     ground,     // retired spelling of land (old logs)
     native,     // retired: the grip-cancel stay is gone
     runRelease, // a wall run from a Native Run, the stick let go on the wall
+    predicted,  // LANDING BLEND-IN (air_landing_release, unverified): the landing is about to happen; the game has the body before it
 };
 
 inline const char* enterAnimName(EnterAnim e) {
@@ -191,6 +193,8 @@ inline const char* enterAnimName(EnterAnim e) {
         return "native";
     case EnterAnim::runRelease:
         return "run-release";
+    case EnterAnim::predicted:
+        return "predicted-landing";
     default:
         return "none";
     }
@@ -225,6 +229,11 @@ constexpr int64_t airAnimMaxNs = 2'500'000'000;
 // AIR TAKEOVER (Nov 14): a jump's vertical speed under this, after this long in the air, takes the air early.
 constexpr float takeoffDoneVel = 4.f;
 constexpr int64_t takeoffMinNs = 250'000'000;
+// LANDING BLEND-IN's early hand-back (air_landing_release, unverified): no sooner than this after the owner changed (the owner's 0.25 s
+// minimum dwell), the animation keeps the body while the impact is predicted within landKeepEta; if the prediction is lost for
+// landLostNs, or no landing came in landHandBackMaxNs, SpidyVR takes the air again.
+constexpr int64_t minDwellNs = 250'000'000, landLostNs = 200'000'000, landHandBackMaxNs = 800'000'000;
+constexpr float landKeepEta = .45f;
 // November 11 23:39 (the user: "Jumps are in animation until it's broken with
 // a rotation, or grip cancel"): a midair animation no longer hands the air to
 // SpidyVR when it ends (anim-end); it plays through the fall to the landing
@@ -362,6 +371,10 @@ struct Frame {
     // AIR TAKEOVER: earlier takeovers inside the JUMP TO SPIDYVR timer (each 0 = off, as before): a jump whose vertical
     // speed is under takeoffDoneVel (m/s) once it has been takeoffMinNs in the air; a plain fall after fallHandoffNs.
     float takeoffDoneVel = 0;
+    // LANDING BLEND-IN (landing_blend.hpp): the time to impact in SpidyVR's air (s, NaN unknown), and whether the release is on and
+    // due (air_landing_release; false: the landing is the touchdown handoff, as always).
+    float landEta = NAN;
+    bool landHandBack{};
     int64_t takeoffMinNs = 0, fallHandoffNs = 0;
     // HANDSTAND (handstand.hpp, H1): the hands hold him on a floor (caught,
     // balancing, or just let go of): SpidyVR keeps the body, ground included;
@@ -520,6 +533,8 @@ struct HybridOwner {
     bool animEndSeen{};
     // JUMP TO SPIDYVR: what the timed handoff ended (on the frame of a
     // `timed` switch) and how long he had been in that air (ms).
+    // LANDING BLEND-IN: the animation has the body before the touchdown (air_landing_release).
+    bool handedBack() const { return handedBack_; }
     JumpKind lastJumpKind = JumpKind::none;
     int64_t lastJumpAirNs{};
     TimedWhy lastTimedWhy = TimedWhy::timer; // which rule took the last jump-timer handoff
@@ -662,6 +677,7 @@ struct HybridOwner {
         // takeoff the swing actually dispatched leaves VR there to leave.
         if (supported(f.state) || (f.perched && f.state.wall != surfaceWall)) {
             airAnimNs = fallNs = -1;
+            handedBack_ = false; // the landing came
             if (domain == Domain::vr && !f.groundAction && !f.pointJumpHold)
                 goAnim(nowNs, f.state.grounded || f.perched ? EnterAnim::land : EnterAnim::mount);
             if (f.zipPress || f.state.zipping) {
@@ -787,8 +803,17 @@ struct HybridOwner {
             }
         }
 
-        if (domain == Domain::vr)
+        if (domain == Domain::vr) {
+            // LANDING BLEND-IN: the impact is about to happen: the game has the body for its landing (never in a fight, a zip, a
+            // hold or a handstand).
+            if (f.landHandBack && !fighting && zipNs < 0 && !cancelHeldAir && !f.handSupport && !f.pointJumpHold &&
+                !f.strike && nowNs - sinceNs >= minDwellNs) {
+                handedBack_ = true;
+                lostNs_ = -1;
+                goAnim(nowNs, EnterAnim::predicted);
+            }
             return domain; // the air is SpidyVR's until he lands
+        }
 
         // A MIDAIR ANIMATION: the game's jump, launch, vault or fall plays
         // uninterrupted. The cancel, Spidy's wall (above) or a SpidyVR web
@@ -816,6 +841,20 @@ struct HybridOwner {
         }
         if (f.webRising || (f.state.webbed && f.state.owned)) {
             goVr(EnterVr::web, nowNs);
+            return domain;
+        }
+        // LANDING BLEND-IN: handed the body before the touchdown, the animation keeps it to the landing; the breaks above (a web, a
+        // grip cancel, a flip, a strike, a point jump) took it at once. Nothing came of the impact: the air is SpidyVR's again.
+        if (handedBack_) {
+            if (std::isfinite(f.landEta) && f.landEta <= landKeepEta)
+                lostNs_ = -1;
+            else if (lostNs_ < 0)
+                lostNs_ = nowNs;
+            const int64_t held = nowNs - sinceNs;
+            if ((lostNs_ >= 0 && nowNs - lostNs_ >= landLostNs && held >= minDwellNs) || held >= landHandBackMaxNs) {
+                lastTimedWhy = TimedWhy::noLanding;
+                goTimed(JumpKind::fall, held, nowNs);
+            }
             return domain;
         }
         if (std::isfinite(f.velY) && f.velY <= 0.f) {
@@ -889,6 +928,8 @@ struct HybridOwner {
         goVr(EnterVr::timed, nowNs);
     }
     JumpKind airKind_ = JumpKind::none;
+    bool handedBack_{};
+    int64_t lostNs_{-1};
     bool airRose_{}, prevSupported_{true}, prevRunRt_{};
     unsigned prevWall_{};
     int64_t jumpAskNs_{-1}, zipLaunchNs_{-1};
@@ -909,6 +950,7 @@ struct HybridOwner {
     }
     void goVr(EnterVr why, int64_t nowNs) {
         domain = Domain::vr;
+        handedBack_ = false;
         sinceNs = nowNs;
         enterVr = true;
         lastEnterVr = why;

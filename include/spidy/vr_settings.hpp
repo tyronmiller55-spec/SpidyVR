@@ -689,6 +689,12 @@ struct Values {
     // AIR TAKEOVER (fall_handoff_ms, 150): a plain fall (a ledge, a stumble; no jump press, never rose) hands to SpidyVR this long
     // into the air; 0 waits for JUMP TO SPIDYVR's timer (hybrid_owner.hpp Frame::fallHandoffNs).
     int fallHandoffMs = 150;
+    // LANDING BLEND-IN (air_landing_blend, default on; landing_blend.hpp): the time to impact in SpidyVR's air from a downward ray,
+    // the body coming upright over the last 0.3 s, and a per-landing account of the prediction. The touchdown handoff is as before.
+    bool airLandingBlend = true;
+    // The animation takes the body 0.2 s BEFORE the touchdown (air_landing_release, default OFF, UNVERIFIED: it needs the game to keep
+    // his velocity and pick its normal landing clip when the body is let go in the air). Needs AIR LANDING BLEND.
+    bool airLandingRelease = false;
     // [air takeover pass settings]
     bool operator==(const Values&) const = default;
 };
@@ -962,8 +968,10 @@ enum class Item : uint8_t {
     airCorrect,
     pointJumpBullet,
     fallHandoff,
+    airLandingBlend,
+    airLandingRelease,
 };
-inline constexpr Item lastItem = Item::fallHandoff;
+inline constexpr Item lastItem = Item::airLandingRelease;
 // SLOW-MO LENGTH's last step: no time limit (until L3 toggles it off).
 inline constexpr int slowMotionEndless = 91;
 // Real seconds a full meter lasts for a SLOW-MO LENGTH value; 0 = endless.
@@ -993,7 +1001,7 @@ struct Row {
     Place place{};
 };
 // Stable row/setting numbers; categories below determine presentation order.
-const std::array<Row, 220>& rows();
+const std::array<Row, 222>& rows();
 const Row* rowFor(Item);
 // camera, shooters and legs (November 11, the user: "I can't find legs or
 // camera settings in any of the menus. Make sure it's clearly labeled"): tabs

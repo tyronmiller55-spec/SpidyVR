@@ -23,3 +23,14 @@ the hero round. The turn itself cannot be eased: there is no facing write, and t
 
 ## 7. The air is SpidyVR's
 The takeoff animation plays; the air is VR's at the first of `jump_handoff_ms` (300), a jump's vertical speed under 4 m/s after the 0.25 s minimum dwell, or a plain fall after `fall_handoff_ms` (150). Web, grip, flip stick, Spidy's wall and a point jump still take it at once. Fights, dodges and zips keep the animation; the landing is the animation's. A fall has no takeoff animation, so the 0.25 s dwell applies to jumps only.
+
+## 8. Landing blend-in
+`air_landing_blend` (ON): a ground ray (native tag 8) takes the roof ray's slot while he is in SpidyVR's air; `landing_blend::timeToImpact` with the vertical speed gives the time to impact; the body comes upright over the last 0.3 s (body only, never the view or the heading); the touchdown handoff and the 180 ms eye blend are the fallback and are unchanged. One `landing blend:` log line per landing says how good the prediction was.
+
+`air_landing_release` (OFF, UNVERIFIED): at 0.2 s to impact the owner hands the animation the body (`EnterAnim::predicted`, "predicted-landing"). It stays there to the landing, and comes back to VR if the prediction is lost for 0.2 s or no landing came in 0.8 s. Never in a fight, a zip, a hold, a handstand or inside the owner's 0.25 s minimum dwell. No velocity is written.
+
+### The probe (what has to be true before the release is turned on)
+1. The game keeps his velocity when the body is let go in the air. A swing-owned body released with `air_landing_release` on should show `native swing` speed within a few percent across the `hybrid: vr->anim (predicted-landing)` line.
+2. The game's own landing clip is the normal one, not the hard landing, for a fall of 5-12 m/s down (look for `landing hero` lines and the animation's landing name in the sound/animation trace around the touchdown).
+3. The `landing blend:` error stays within 40 ms over at least 50 landings, so the release point is the right one.
+Run it with `air_landing_release=1` for a session; if 1 or 2 fail, leave it off. (Releasing a swing-owned body in mid-air is what `game_swing::AirYield` does for the game's own zip and strike, which suggests 1 holds, but that path only runs while the game has begun a move.)
