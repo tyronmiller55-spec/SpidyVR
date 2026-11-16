@@ -167,6 +167,26 @@ int main() {
         const float peakSpeed = peakSmootherstep * .6f / (glideMs(.6f, 250, 200, 700, peakSmootherstep) * .001f);
         check(peakSpeed <= 2.f + 1e-3f, "the peak speed stays under 2 m/s");
     }
+    // HANDOFF HEAD LEADS: the switch's angle at 0, the live view at 1, and head turns pass 1:1 in between.
+    {
+        using namespace hybrid_handoff;
+        const vr_settings::Values v{};
+        check(v.handoffHeadLeads && v.handoffAngleMs == 300, "defaults on, 300 ms");
+        const auto qdot = [](Quat a, Quat b) { return a.x * b.x + a.y * b.y + a.z * b.z + a.w * b.w; };
+        const Quat from = arc({0, 0, 1}, normalized(Vec3{0, -.6f, 1}));
+        const Quat to0 = Quat::yaw(0);
+        const Quat off = oriOffsetOf(from, to0);
+        const Quat a0 = headLeadOri(off, to0, 0);
+        check(std::abs(std::abs(qdot(a0, from)) - 1.f) < 1e-4f, "starts on the switch's view");
+        const Quat to1 = Quat::yaw(.5f);
+        const Quat a1 = headLeadOri(off, to1, 1);
+        check(std::abs(std::abs(qdot(a1, to1)) - 1.f) < 1e-4f, "ends on the live view");
+        // Mid-blend, a head turn changes the shown view by exactly that turn.
+        const Quat m0 = headLeadOri(off, to0, .5f), m1 = headLeadOri(off, to1, .5f);
+        const Quat turn = m1 * m0.conjugate();
+        const Quat want = to1 * to0.conjugate();
+        check(std::abs(std::abs(turn.w) - std::abs(want.w)) < 1e-4f, "a head turn mid-blend moves the view by the same angle");
+    }
     std::printf("next pass: %d checks passed\n", passed);
     return 0;
 }

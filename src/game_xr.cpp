@@ -1438,6 +1438,10 @@ DWORD WINAPI run(void*) {
             // (the blend then turns only their angle).
             int64_t durNs = hybrid_handoff::handoffNs;
             bool posFollowsEase{};
+            // HANDOFF HEAD LEADS / ANGLE TIME: the angle's own length (0: durNs) and the switch's angle, per eye.
+            int64_t angleNs{};
+            bool oriOffsetSet[2]{};
+            Quat oriOffset[2]{};
             bool delayArmsClear{};
             bool delayModelYaw{};
             float enterEyeDPos{};
@@ -9241,6 +9245,7 @@ DWORD WINAPI run(void*) {
                                 hybridBlend.active = true;
                                 hybridBlend.toTraversal = true;
                                 hybridBlend.startNs = handoffNs;
+                                hybridBlend.angleNs = static_cast<int64_t>(values.handoffAngleMs) * 1'000'000;
                                 // ONE HANDOFF BLEND: one length; with the view ease the blend turns only the angle.
                                 if (values.handoffOneBlend) {
                                     hybridBlend.durNs = takeoverEased
@@ -9437,6 +9442,7 @@ DWORD WINAPI run(void*) {
                                 hybridBlend.active = true;
                                 hybridBlend.toTraversal = false;
                                 hybridBlend.startNs = handoffNs;
+                                hybridBlend.angleNs = static_cast<int64_t>(values.handoffAngleMs) * 1'000'000;
                                 // ONE HANDOFF BLEND: the landing's eye blend as long as the takeovers' ease.
                                 if (values.handoffOneBlend) {
                                     hybridBlend.durNs = hybrid_handoff::oneBlendNs(true, values.airViewEaseMs);
@@ -10389,8 +10395,13 @@ DWORD WINAPI run(void*) {
                                            : hybridBlend.durNs;
                     const float eyeBlendW =
                         hybridBlend.active ? hybrid_handoff::blendAlphaFor(eyeBlendElapsed, hybridBlend.durNs) : 1.f;
-                    const bool hybridEyeBlend =
-                        hybridBlend.active && hybridBlend.fromValid && eyeBlendW < 1.f - 1e-4f && !flatScreen;
+                    // HANDOFF ANGLE TIME (handoff_angle_ms): the angle on its own clock (0: the blend's).
+                    const int64_t eyeBlendAngleNs = hybridBlend.angleNs > 0 ? hybridBlend.angleNs : hybridBlend.durNs;
+                    const float eyeBlendOriW =
+                        hybridBlend.active ? hybrid_handoff::blendAlphaFor(eyeBlendElapsed, eyeBlendAngleNs) : 1.f;
+                    const int64_t eyeBlendAllNs = (std::max)(hybridBlend.durNs, eyeBlendAngleNs);
+                    const bool hybridEyeBlend = hybridBlend.active && hybridBlend.fromValid &&
+                                                (std::min)(eyeBlendW, eyeBlendOriW) < 1.f - 1e-4f && !flatScreen;
                     // SMOOTHING filters the animated head the view sits on, not the
                     // headset. The render thread reads liveLevel in resolveScene.
                     // CAMERA SMOOTHING / STABILIZATION (headset_smoothing::fromValues):
@@ -11060,15 +11071,26 @@ DWORD WINAPI run(void*) {
                         // after the switch (the switch's own frame was placed before the ease began: the shown eyes).
                         const bool toTraversalEyes = !toHead && hybridBlend.toTraversal;
                         for (unsigned i = 0; i < 2; ++i) {
-                            const Pose blended = hybrid_handoff::blendEyeSplit(
+                            Pose blended = hybrid_handoff::blendEyeSplit(
                                 {hybridBlend.fromEyePos[i], hybridBlend.fromEyeOri[i]}, carry, to[i],
-                                hybridBlend.posFollowsEase && toTraversalEyes && eyeBlendElapsed > 0 ? 1.f : eyeBlendW, eyeBlendW);
+                                hybridBlend.posFollowsEase && toTraversalEyes && eyeBlendElapsed > 0 ? 1.f : eyeBlendW,
+                                eyeBlendOriW);
+                            // HANDOFF HEAD LEADS: the switch's angle fades; the head's turns since pass 1:1.
+                            if (values.handoffHeadLeads) {
+                                if (!hybridBlend.oriOffsetSet[i]) {
+                                    hybridBlend.oriOffset[i] =
+                                        hybrid_handoff::oriOffsetOf(hybridBlend.fromEyeOri[i], to[i].orientation);
+                                    hybridBlend.oriOffsetSet[i] = true;
+                                }
+                                blended.orientation =
+                                    hybrid_handoff::headLeadOri(hybridBlend.oriOffset[i], to[i].orientation, eyeBlendOriW);
+                            }
                             eyes.eyes[i].world =
                                 hybrid_handoff::eyeMatFromPose(blended.position, blended.orientation);
                         }
                         eyes.anchored = 1;
                     }
-                    if (hybridBlend.active && hybrid_handoff::blendDoneFor(eyeBlendElapsed, hybridBlend.durNs)) {
+                    if (hybridBlend.active && hybrid_handoff::blendDoneFor(eyeBlendElapsed, eyeBlendAllNs)) {
                         if (hybridBlend.delayArmsClear)
                             animatedArmsState = {};
                         hybridBlend.delayArmsClear = false;

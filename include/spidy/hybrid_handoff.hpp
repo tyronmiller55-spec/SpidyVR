@@ -236,6 +236,14 @@ inline bool shownYaw(const Shown& s, float& yaw) {
 inline Pose blendEyeSplit(Pose from, Vec3 carry, Pose to, float aPos, float aOri) {
     return {lerpVec(from.position + carry, to.position, aPos), slerpQuat(from.orientation, to.orientation, aOri)};
 }
+// HANDOFF HEAD LEADS (handoff_head_leads): the angle between the two views at the switch (from = offset * to), fading
+// out on its own weight `a` while `to` (the live view) passes every head turn through 1:1.
+inline Quat oriOffsetOf(Quat from, Quat to) {
+    return from * to.conjugate();
+}
+inline Quat headLeadOri(Quat offset, Quat to, float a) {
+    return slerpQuat(offset, Quat{}, a) * to;
+}
 inline Pose blendEye(Pose from, Vec3 carry, Pose to, float a) {
     return {lerpVec(from.position + carry, to.position, a), slerpQuat(from.orientation, to.orientation, a)};
 }

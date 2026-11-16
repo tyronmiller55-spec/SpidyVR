@@ -755,6 +755,13 @@ struct Values {
     int handoffGlideCmS = 200;
     // HANDOFF GLIDE LONGEST (handoff_glide_max_ms, 700): the longest a glide is stretched to by HANDOFF GLIDE SPEED.
     int handoffGlideMaxMs = 700;
+    // HANDOFF HEAD LEADS (handoff_head_leads, on): through a handoff's blend your head turns move the view 1:1; only
+    // the difference between the two views at the switch (the animation's pitch and roll, mostly) fades out. Off: the old
+    // blend from the switch's view to the live one, which follows head turns only partly until it ends.
+    bool handoffHeadLeads = true;
+    // HANDOFF ANGLE TIME (handoff_angle_ms, 300; 0: the blend's own length): how long the pitch and roll the animation's
+    // head gave the view take to fade out after a switch (the place glides on its own clock).
+    int handoffAngleMs = 300;
     // [next pass settings]
     bool operator==(const Values&) const = default;
 };

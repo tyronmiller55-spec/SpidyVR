@@ -24711,6 +24711,8 @@ int main() {
                   "handoff_ease_curve=1\n"
                   "handoff_glide_cm_s=200\n"
                   "handoff_glide_max_ms=700\n"
+                  "handoff_head_leads=1\n"
+                  "handoff_angle_ms=300\n"
                   "movement_defaults=3\n",
               "the defaults' text");
         Values changed = defaults;
