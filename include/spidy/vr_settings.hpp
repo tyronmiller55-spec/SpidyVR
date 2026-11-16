@@ -630,7 +630,7 @@ struct Values {
     bool pointJump = false, pointJumpInCombat = true;
     int pointJumpTrigger = 0, pointJumpChordMs = 50, pointJumpTapMs = 150, pointJumpFullMs = 1000;
     int pointJumpMinSpeed = 9, pointJumpMaxSpeed = 22, pointJumpCurve = 0, pointJumpNormalBias = 25;
-    int pointJumpMinOutDegrees = 10, pointJumpKeep = 25, pointJumpCoyoteMs = 120, pointJumpBufferMs = 150;
+    int pointJumpMinOutDegrees = 10, pointJumpKeep = 25, pointJumpCoyoteMs = 120, pointJumpBufferMs = 200; // buffer 150 until Nov 16 (movement defaults 4)
     int pointJumpCooldownMs = 250, pointJumpZipGuardMs = 400, pointJumpDodgeHoldMs = 250;
     // QUICK SIDESTEP (November 12, sidestep.hpp; approved by the user, on by
     // default): on the ground, a left-stick flick then A within sidestepAMs is
@@ -793,6 +793,10 @@ struct Values {
     // 0.9 s (up to 2.5 s) for the game to begin it. A press the game does not take (nothing to zip or strike) gives the
     // swing back after 0.4 s. Off: SpidyVR waits for the game to start the zip, as before.
     bool webZipInstant = true;
+    // POINT JUMP FIRES AT FULL CHARGE (point_jump_fire_full, on): held to CHARGE TIME the point jump launches by itself at
+    // full power, instead of waiting for you to let go (s165800: press to launch median 361 ms, p90 1.2 s, mostly the
+    // hold). A tap or a shorter hold still fires on the release. Off: only the release fires, as before.
+    bool pointJumpFireFull = true;
     // [next pass settings]
     bool operator==(const Values&) const = default;
 };
@@ -1151,7 +1155,7 @@ std::string tabOnlyText(const Values&);
 // key, or whose value is no whole number, is passed over.
 Values withTabOnly(Values, std::string_view text);
 // The movement defaults' revision (Values::movementDefaults) this build has.
-inline constexpr int movementDefaultsRevision = 3;
+inline constexpr int movementDefaultsRevision = 4;
 // November 12 movement cleanup: a settings file (that text) older than
 // movementDefaultsRevision gets the new movement defaults once - RUN CURVE
 // on, EARLY JUMP at least QUICK TAP - and is marked as having seen them; a

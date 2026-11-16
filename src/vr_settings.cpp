@@ -2990,6 +2990,7 @@ constexpr TabOnly tabOnly[] = {
     {"turn_push_pct", nullptr, &Values::turnPushPct},
     {"landing_body_hold_turn", &Values::landingBodyHoldTurn, nullptr},
     {"web_zip_instant", &Values::webZipInstant, nullptr},
+    {"point_jump_fire_full", &Values::pointJumpFireFull, nullptr},
     {"movement_defaults", nullptr, &Values::movementDefaults},
 };
 } // namespace
@@ -3066,6 +3067,13 @@ Values withMovementDefaults(Values v, std::string_view text) {
             v.handstandFallDegrees = fresh.handstandFallDegrees;
         if (v.handstandGainPct == 300)
             v.handstandGainPct = fresh.handstandGainPct;
+    }
+    if (seen < 4) {
+        // Revision 4 (the owner, Nov 16): the point jump's press buffer 150 -> 200 ms (s165800: 20 of 62 refusals
+        // were the buffer running out). Still at the old default is untuned; a value the player changed stays.
+        const Values fresh;
+        if (v.pointJumpBufferMs == 150)
+            v.pointJumpBufferMs = fresh.pointJumpBufferMs;
     }
     v.movementDefaults = movementDefaultsRevision;
     return sanitized(v);

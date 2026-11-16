@@ -2702,7 +2702,11 @@ DWORD WINAPI run(void*) {
                         chordIn.mode = pj.trigger;
                         chordIn.window = pj.chordSeconds;
                         chordIn.dodgeHold = pj.dodgeHoldSeconds;
+                        chordIn.fireAt = pj.fireAtFull ? pj.fullSeconds : 0.f; // POINT JUMP FIRES AT FULL CHARGE
                         const auto chord = pointChord.update(chordIn);
+                        if (chord.fullFire)
+                            diag_log::writef("point jump: full charge, fired without the release (%.0f ms held)",
+                                             chord.held * 1000.f);
                         frame.jump = chord.a;
                         frame.buttons = chord.b ? (frame.buttons | buttonB) : (frame.buttons & ~uint32_t(buttonB));
                         // Both pressed with the jump not allowed: why (the buttons went on as they were).

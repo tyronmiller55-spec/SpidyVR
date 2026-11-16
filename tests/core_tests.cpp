@@ -24981,7 +24981,7 @@ int main() {
                   "the movement defaults overrode a choice made after them");
             check(withMovementDefaults(withTabOnly({}, ""), "").runCurve,
                   "no file: not the movement defaults");
-            check(tabOnlyText(migrated).find("movement_defaults=3\n") != std::string::npos,
+            check(tabOnlyText(migrated).find("movement_defaults=4\n") != std::string::npos,
                   "the migration is not remembered");
         }
         {
@@ -25384,7 +25384,7 @@ int main() {
                   "point_jump=0\npoint_jump_trigger=0\npoint_jump_chord_ms=50\npoint_jump_tap_ms=150\n"
                   "point_jump_full_ms=1000\npoint_jump_min_speed=9\npoint_jump_max_speed=22\npoint_jump_curve=0\n"
                   "point_jump_normal_bias=25\npoint_jump_min_out_degrees=10\npoint_jump_keep=25\n"
-                  "point_jump_coyote_ms=120\npoint_jump_buffer_ms=150\npoint_jump_cooldown_ms=250\n"
+                  "point_jump_coyote_ms=120\npoint_jump_buffer_ms=200\npoint_jump_cooldown_ms=250\n"
                   "point_jump_zip_guard_ms=400\npoint_jump_dodge_hold_ms=250\npoint_jump_in_combat=1\n"
                   "headset_first=1\npunch_autotarget=1\npunch_track_cone_deg=45\npunch_track_range_m=6\npunch_view_snap=0\n"
                   "jump_pull=1\njump_pull_gaze_deg=20\njump_pull_stick_deg=25\njump_pull_range_m=12\njump_pull_cap_dmps=15\n"
@@ -25421,7 +25421,8 @@ int main() {
                   "turn_push_pct=55\n"
                   "landing_body_hold_turn=1\n"
                   "web_zip_instant=1\n"
-                  "movement_defaults=3\n",
+                  "point_jump_fire_full=1\n"
+                  "movement_defaults=4\n",
               "the defaults' text");
         Values changed = defaults;
         changed.recordingFov = 140;

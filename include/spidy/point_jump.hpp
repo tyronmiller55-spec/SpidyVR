@@ -52,6 +52,8 @@ struct Params {
     float coyoteSeconds = .12f, bufferSeconds = .15f, cooldownSeconds = .25f;
     float zipGuardSeconds = .4f, dodgeHoldSeconds = .25f;
     bool inCombat = true;
+    // POINT JUMP FIRES AT FULL CHARGE (point_jump_fire_full): a chord held to fullSeconds fires itself.
+    bool fireAtFull = true;
 };
 
 // The Values (vr_settings) a Params is read from; generic so this header stays
@@ -75,6 +77,7 @@ template <class V> Params paramsOf(const V& v) {
     p.zipGuardSeconds = std::clamp(v.pointJumpZipGuardMs, 0, 2000) / 1000.f;
     p.dodgeHoldSeconds = std::clamp(v.pointJumpDodgeHoldMs, 100, 600) / 1000.f;
     p.inCombat = v.pointJumpInCombat;
+    p.fireAtFull = v.pointJumpFireFull;
     return p;
 }
 
@@ -141,6 +144,7 @@ class Chord {
         int mode{};           // Params::trigger
         float window = .05f;  // Params::chordSeconds
         float dodgeHold = .25f; // Params::dodgeHoldSeconds
+        float fireAt{};         // > 0: a chord held this long fires itself (POINT JUMP FIRES AT FULL CHARGE)
     };
     struct Output {
         bool a{}, b{};         // what reaches the game (and the rest of the mod)
@@ -150,6 +154,7 @@ class Chord {
         float held{};          // the chord's time held (began..released)
         float gap{};           // the time between the two presses
         bool aFirst{};         // which came first (mode 0)
+        bool fullFire{};       // released by reaching fireAt (still held); the buttons stay swallowed till let go
     };
     enum class Phase { idle, waitA, waitB, chord, spent };
 
@@ -174,6 +179,9 @@ class Chord {
             out.held = held_;
             if (!in.a || !in.b) {
                 out.released = true;
+                phase_ = Phase::spent;
+            } else if (in.fireAt > 0.f && held_ >= in.fireAt) {
+                out.released = out.fullFire = true;
                 phase_ = Phase::spent;
             }
             break;
