@@ -1229,6 +1229,7 @@ Values sanitized(Values v) {
     v.punchCameraLockMs = std::clamp(v.punchCameraLockMs, 0, 1000);
     v.snapTapMs = std::clamp(v.snapTapMs, 60, 400);
     v.landingBodyEaseMs = std::clamp(v.landingBodyEaseMs, 100, 1500);
+    v.handoffEaseCurve = std::clamp(v.handoffEaseCurve, 0, 1);
     return v;
 }
 const std::array<Row, 222>& rows() {
@@ -2959,6 +2960,7 @@ constexpr TabOnly tabOnly[] = {
     {"landing_body_to_view", &Values::landingBodyToView, nullptr},
     {"landing_body_ease_ms", nullptr, &Values::landingBodyEaseMs},
     {"landing_rear_turn", &Values::landingRearTurn, nullptr},
+    {"handoff_ease_curve", nullptr, &Values::handoffEaseCurve},
     {"movement_defaults", nullptr, &Values::movementDefaults},
 };
 } // namespace

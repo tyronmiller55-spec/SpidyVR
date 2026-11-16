@@ -218,6 +218,33 @@ int main() {
         Ease none;
         check(none.begin({0, 0, .4f}, .25f) && !none.holding(), "no hold: as before");
     }
+    // HANDOFF EASE CURVE (handoff_ease_curve 1): at rest at both ends, no jolt in, no motion bleed; ends on time.
+    {
+        check(near(remainingGentle(0, .25f), 1.f) && near(remainingGentle(.25f, .25f), 0.f) &&
+                  near(remainingGentle(.125f, .25f), .5f),
+              "gentle: 1 at the start, 0 at the end, half at half time");
+        Ease g, q;
+        g.begin({0, 0, .32f}, .25f, 0, 0, true);
+        q.begin({0, 0, .32f}, .25f);
+        g.step(dt, {}, 0);
+        q.step(dt, {}, 0);
+        const float g1 = g.step(dt, {}, 0).z, q1 = q.step(dt, {}, 0).z;
+        check(g.gentle() && !q.gentle(), "the curve is kept");
+        check(.32f - g1 < .005f && .32f - q1 > .02f, "the first frame of the glide: gentle moves under 5 mm, quick over 2 cm");
+        Ease moving;
+        moving.begin({0, 0, .32f}, .25f, 0, 0, true);
+        float t = 0, worst = 0, last = .32f;
+        Vec3 feet{};
+        while (moving.active() && t < 1.f) {
+            feet.x += 20.f * dt;
+            const float z = moving.step(dt, feet, 0).z;
+            worst = std::max(worst, std::abs(last - z) / dt);
+            last = z;
+            t += dt;
+        }
+        check(t > .24f && t < .27f, "gentle at 20 m/s: no bleed, ends on its own time");
+        check(worst < 1.875f * .32f / .25f + .05f, "its peak speed: 1.875 x average (smootherstep)");
+    }
     std::printf("punch view ease: %d checks passed\n", passed);
     return 0;
 }

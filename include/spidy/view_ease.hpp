@@ -54,6 +54,14 @@ inline const char* endName(End e) {
 }
 
 // The ease's weight left (1 at the start, 0 at the end): (1 - t)^3.
+// HANDOFF EASE CURVE (handoff_ease_curve 1): what is left of the offset on a smootherstep - at rest at both ends, so the
+// glide never jolts in (the cubic ease-out starts at three times the average speed).
+inline float remainingGentle(float elapsed, float duration) {
+    if (!(duration > 0))
+        return 0.f;
+    const float u = std::clamp(elapsed / duration, 0.f, 1.f);
+    return 1.f - u * u * u * (u * (u * 6.f - 15.f) + 10.f);
+}
 inline float remaining(float elapsed, float duration) {
     if (!(duration > 0) || !std::isfinite(elapsed))
         return 0.f;
@@ -73,7 +81,7 @@ class Ease {
     // PUNCH CAMERA LOCK (punch_camera_lock_ms; the owner, Nov 15: "keep the camera locked"): `holdSeconds` holds the
     // whole offset (no bleed) before the ease starts, so a punch that lands back in the animation within it never
     // moves the view; the turn and teleport cancels still apply.
-    bool begin(Vec3 offset, float durationSeconds, float verticalSeconds = 0, float holdSeconds = 0) {
+    bool begin(Vec3 offset, float durationSeconds, float verticalSeconds = 0, float holdSeconds = 0, bool gentle = false) {
         if (active_)
             stop(End::handoff);
         if (!finite(offset) || !std::isfinite(durationSeconds) || durationSeconds <= 0)
@@ -94,6 +102,7 @@ class Ease {
         dir_ = lm > 1e-6f ? level / lm : Vec3{};
         start_ = magnitude_ = lm;
         duration_ = durationSeconds;
+        gentle_ = gentle;
         hold_ = std::isfinite(holdSeconds) ? std::clamp(holdSeconds, 0.f, 2.f) : 0.f;
         held_ = 0;
         elapsed_ = 0;
@@ -137,10 +146,13 @@ class Ease {
             return dir_ * magnitude_ + Vec3{0, vMagnitude_, 0};
         }
         // The first VR frame holds the shown eyes exactly (elapsed 0), then it eases.
-        const float curve = start_ * remaining(elapsed_, duration_);
-        const float vCurve = split_ ? vStart_ * remaining(elapsed_, vDuration_) : 0.f;
+        const auto left = gentle_ ? remainingGentle : remaining;
+        const float curve = start_ * left(elapsed_, duration_);
+        const float vCurve = split_ ? vStart_ * left(elapsed_, vDuration_) : 0.f;
         elapsed_ += dt;
-        const float bled = magnitude_ - (bleedBase + bleedPerSpeed * std::min(speed, 60.f)) * dt;
+        // The motion bleed only with the old curve (it would cut the gentle start short).
+        const float bled =
+            gentle_ ? curve : magnitude_ - (bleedBase + bleedPerSpeed * std::min(speed, 60.f)) * dt;
         magnitude_ = std::max(0.f, std::min(curve, bled));
         vMagnitude_ = vCurve;
         const bool levelDone = magnitude_ <= 1e-3f || elapsed_ >= duration_;
@@ -194,6 +206,9 @@ class Ease {
     float holdSeconds() const {
         return hold_;
     }
+    bool gentle() const {
+        return gentle_;
+    }
     // How the last ease ended, and how many have ended (to log each once).
     End lastEnd() const {
         return lastEnd_;
@@ -216,6 +231,7 @@ class Ease {
     bool active_{}, haveLast_{}, split_{};
     float vStart_{}, vMagnitude_{}, vDuration_{};
     float hold_{}, held_{};
+    bool gentle_{};
     Vec3 dir_{}, lastFeet_{};
     float start_{}, magnitude_{}, duration_{}, elapsed_{}, lastYaw_{}, turned_{};
     End lastEnd_ = End::none;

@@ -744,6 +744,10 @@ struct Values {
     // LANDING REAR TURN (landing_rear_turn, on): a calm landing with the view more than 120 degrees behind him turns him
     // onto it too (the facing check no longer keeps him facing away). Off: he stays, as before.
     bool landingRearTurn = true;
+    // HANDOFF EASE CURVE (handoff_ease_curve, 1; 0: the old quick start): how a takeover's view glide moves. 1 starts
+    // and stops at rest (smootherstep, no motion bleed): the camera never jolts into the glide. 0: the cubic ease-out with
+    // the motion bleed, which starts at three times the average speed (d591229: median 0.32 m in 250 ms, 3.8 m/s at once).
+    int handoffEaseCurve = 1;
     // [next pass settings]
     bool operator==(const Values&) const = default;
 };
