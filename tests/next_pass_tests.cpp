@@ -187,6 +187,12 @@ int main() {
         const Quat want = to1 * to0.conjugate();
         check(std::abs(std::abs(turn.w) - std::abs(want.w)) < 1e-4f, "a head turn mid-blend moves the view by the same angle");
     }
+    // LANDING BLEND: its own setting, defaulting to the old length.
+    {
+        const vr_settings::Values v{};
+        check(v.landingBlendMs == 250 && v.landingBlendMs == v.airViewEaseMs, "landing blend 250 ms, as before");
+        check(hybrid_handoff::oneBlendNs(true, v.landingBlendMs) == 250'000'000, "250 ms blend");
+    }
     std::printf("next pass: %d checks passed\n", passed);
     return 0;
 }

@@ -24713,6 +24713,7 @@ int main() {
                   "handoff_glide_max_ms=700\n"
                   "handoff_head_leads=1\n"
                   "handoff_angle_ms=300\n"
+                  "landing_blend_ms=250\n"
                   "movement_defaults=3\n",
               "the defaults' text");
         Values changed = defaults;

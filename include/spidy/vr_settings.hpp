@@ -762,6 +762,10 @@ struct Values {
     // HANDOFF ANGLE TIME (handoff_angle_ms, 300; 0: the blend's own length): how long the pitch and roll the animation's
     // head gave the view take to fade out after a switch (the place glides on its own clock).
     int handoffAngleMs = 300;
+    // LANDING BLEND (landing_blend_ms, 250; 0: air_view_ease_ms as before): how long a landing's view takes to glide
+    // onto the hero's head when the animation takes over (HANDOFF GLIDE SPEED stretches a long one). Was tied to
+    // air_view_ease_ms; now tunable on its own.
+    int landingBlendMs = 250;
     // [next pass settings]
     bool operator==(const Values&) const = default;
 };

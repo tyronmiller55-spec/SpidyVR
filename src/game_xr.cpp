@@ -9445,7 +9445,9 @@ DWORD WINAPI run(void*) {
                                 hybridBlend.angleNs = static_cast<int64_t>(values.handoffAngleMs) * 1'000'000;
                                 // ONE HANDOFF BLEND: the landing's eye blend as long as the takeovers' ease.
                                 if (values.handoffOneBlend) {
-                                    hybridBlend.durNs = hybrid_handoff::oneBlendNs(true, values.airViewEaseMs);
+                                    // LANDING BLEND (landing_blend_ms): its own length (0: air_view_ease_ms, as before).
+                                    hybridBlend.durNs = hybrid_handoff::oneBlendNs(
+                                        true, values.landingBlendMs > 0 ? values.landingBlendMs : values.airViewEaseMs);
                                     diag_log::writef("hybrid: one blend %.0f ms (onto the head)", hybridBlend.durNs / 1e6);
                                 }
                                 hybridBlend.fromEyes = fromEyes;

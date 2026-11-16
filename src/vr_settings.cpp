@@ -1233,6 +1233,7 @@ Values sanitized(Values v) {
     v.handoffGlideCmS = std::clamp(v.handoffGlideCmS, 0, 1000);
     v.handoffGlideMaxMs = std::clamp(v.handoffGlideMaxMs, 150, 2000);
     v.handoffAngleMs = std::clamp(v.handoffAngleMs, 0, 1500);
+    v.landingBlendMs = std::clamp(v.landingBlendMs, 0, 1500);
     return v;
 }
 const std::array<Row, 222>& rows() {
@@ -2968,6 +2969,7 @@ constexpr TabOnly tabOnly[] = {
     {"handoff_glide_max_ms", nullptr, &Values::handoffGlideMaxMs},
     {"handoff_head_leads", &Values::handoffHeadLeads, nullptr},
     {"handoff_angle_ms", nullptr, &Values::handoffAngleMs},
+    {"landing_blend_ms", nullptr, &Values::landingBlendMs},
     {"movement_defaults", nullptr, &Values::movementDefaults},
 };
 } // namespace
