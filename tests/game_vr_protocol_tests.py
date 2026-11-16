@@ -57,8 +57,8 @@ class ProtocolTests(unittest.TestCase):
         root = pathlib.Path(__file__).resolve().parents[1]
         header = (root / 'include/spidy/game_swing.hpp').read_text(encoding='utf-8')
         settings = header.split('struct Settings {', 1)[1].split('\n};', 1)[0]
-        self.assertRegex(settings, r'version = 40, bytes = sizeof\(Settings\)')
-        self.assertIn('sizeof(Settings) == 188', header)
+        self.assertRegex(settings, r'version = 42, bytes = sizeof\(Settings\)')
+        self.assertIn('sizeof(Settings) == 196', header)
         self.assertLess(settings.index('uint32_t webLines'), settings.index('uint32_t headProbe'))
         fields = ['headProbe', 'animatedMoves', 'animatedHead', 'animatedAir',
                   'animatedSteering', 'animatedArms', 'animatedTorso', 'animatedModelYaw']
@@ -70,7 +70,11 @@ class ProtocolTests(unittest.TestCase):
             self.assertRegex(producer, r's\.' + field + r' = (?:static_cast<uint32_t>\()?values\.' + field)
         self.assertIn('(s.version == 31 && s.bytes == settingsBytesV31)', header)
         self.assertIn('(s.version == 39 && s.bytes == settingsBytesV39)', header)
-        self.assertIn('(s.version == 40 && s.bytes == sizeof(Settings))', header)
+        # The 0.8.7 port: v41 appends Ilya's enemyTypes after the fork's v40; v42 the target scan interval.
+        self.assertIn('(s.version == 40 && s.bytes == settingsBytesV40)', header)
+        self.assertIn('(s.version == 41 && s.bytes == settingsBytesV41)', header)
+        self.assertIn('(s.version == 42 && s.bytes == sizeof(Settings))', header)
+        self.assertLess(settings.index('uint32_t enemyTypes'), settings.index('uint32_t targetScanIdleMs'))
 
     def test_wall_roll_flag_uses_version_5_and_does_not_change_legacy_commands(self):
         old = swing_command(1, (0, 0, 0))
