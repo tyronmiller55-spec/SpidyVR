@@ -99,12 +99,12 @@ int main() {
     {
         using namespace vr_settings;
         const Values d;
-        check(d.punchAutotarget && d.punchTrackConeDeg == 45 && d.punchTrackRangeM == 6 && !d.punchViewSnap,
+        check(d.punchAutotarget && d.punchTrackConeDeg == 60 && d.punchTrackRangeM == 8 && !d.punchViewSnap,
               "the defaults: on, 45 deg, 6 m, view snap off");
         const auto text = tabOnlyText(d);
         check(text.find("punch_autotarget=1\n") != std::string::npos &&
-                  text.find("punch_track_cone_deg=45\n") != std::string::npos &&
-                  text.find("punch_track_range_m=6\n") != std::string::npos &&
+                  text.find("punch_track_cone_deg=60\n") != std::string::npos &&
+                  text.find("punch_track_range_m=8\n") != std::string::npos &&
                   text.find("punch_view_snap=0\n") != std::string::npos,
               "the ini keys write");
         const auto read = withTabOnly({}, "punch_autotarget=0\npunch_track_cone_deg=90\npunch_track_range_m=10\npunch_view_snap=1\n");
@@ -117,8 +117,27 @@ int main() {
                   v.punchTrackRangeM == 10 && choose(Item::punchViewSnap, 1, v) && v.punchViewSnap &&
                   choose(Item::punchAutotarget, 0, v) && !v.punchAutotarget,
               "the rows set the values");
-        check(defaultChoice(Item::punchTrackCone) == 2 && defaultChoice(Item::punchTrackRange) == 2, "the default steps");
+        check(defaultChoice(Item::punchTrackCone) == 3 && defaultChoice(Item::punchTrackRange) == 3, "the default steps");
         check(inactiveReason(Item::punchTrackCone, v) != nullptr, "the cone waits for the switch");
+    }
+    // Nov 16 (the owner): 60 degrees and 8 m by default; an untuned 45 / 6 moves to them, a tuned value stays.
+    {
+        spidy::vr_settings::Values old;
+        old.punchTrackConeDeg = 45;
+        old.punchTrackRangeM = 6;
+        const auto moved = spidy::vr_settings::withMovementDefaults(old, "movement_defaults=4\n");
+        check(moved.punchTrackConeDeg == 60 && moved.punchTrackRangeM == 8, "the old defaults become 60 deg, 8 m");
+        old.punchTrackConeDeg = 30;
+        old.punchTrackRangeM = 4;
+        const auto kept = spidy::vr_settings::withMovementDefaults(old, "movement_defaults=4\n");
+        check(kept.punchTrackConeDeg == 30 && kept.punchTrackRangeM == 4, "tuned values stay");
+        Config wide;
+        wide.on = true;
+        wide.coneDeg = 60.f;
+        wide.rangeM = 8.f;
+        const float s50 = std::sin(50.f * 3.14159265f / 180.f), c50 = std::cos(50.f * 3.14159265f / 180.f);
+        check(decide(wide, true, head, {5 * s50, 0, -5 * c50}, {0, 1.6f, -7.f}).why == Why::tracked,
+              "50 deg off and 7 m away: tracked at the new defaults");
     }
     std::printf("punch track: %d checks passed\n", passed);
     return 0;

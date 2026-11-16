@@ -319,10 +319,10 @@ constexpr const char* kickSpinChoices[] = {"NONE", "10%", "20%", "30% (DEFAULT)"
 static_assert(std::size(kickSpinChoices) == std::size(kickSpinSteps));
 // PUNCH AUTO-TARGET (punch_track.hpp): the cone round the targeted enemy a punch must be thrown in, and the range.
 constexpr int punchTrackConeSteps[] = {15, 30, 45, 60, 90};
-constexpr const char* punchTrackConeChoices[] = {"15 DEG", "30 DEG", "45 DEG (DEFAULT)", "60 DEG", "90 DEG"};
+constexpr const char* punchTrackConeChoices[] = {"15 DEG", "30 DEG", "45 DEG", "60 DEG (DEFAULT)", "90 DEG"};
 static_assert(std::size(punchTrackConeChoices) == std::size(punchTrackConeSteps));
 constexpr int punchTrackRangeSteps[] = {3, 4, 6, 8, 10};
-constexpr const char* punchTrackRangeChoices[] = {"3 M", "4 M", "6 M (DEFAULT)", "8 M", "10 M"};
+constexpr const char* punchTrackRangeChoices[] = {"3 M", "4 M", "6 M", "8 M (DEFAULT)", "10 M"};
 static_assert(std::size(punchTrackRangeChoices) == std::size(punchTrackRangeSteps));
 // JUMP PULL (jump_pull.hpp): the gaze's cone, the stick's cone, the range, and the most a jump adds (tenths of a m/s).
 constexpr int jumpPullGazeSteps[] = {10, 15, 20, 30, 45};
@@ -3074,6 +3074,15 @@ Values withMovementDefaults(Values v, std::string_view text) {
         const Values fresh;
         if (v.pointJumpBufferMs == 150)
             v.pointJumpBufferMs = fresh.pointJumpBufferMs;
+    }
+    if (seen < 5) {
+        // Revision 5 (the owner, Nov 16): PUNCH TRACK CONE 45 -> 60 degrees and RANGE 6 -> 8 m (s165800: 136 of 176
+        // punches found no target, 99 outside the cone, 37 too far). Still at the old defaults is untuned.
+        const Values fresh;
+        if (v.punchTrackConeDeg == 45)
+            v.punchTrackConeDeg = fresh.punchTrackConeDeg;
+        if (v.punchTrackRangeM == 6)
+            v.punchTrackRangeM = fresh.punchTrackRangeM;
     }
     v.movementDefaults = movementDefaultsRevision;
     return sanitized(v);

@@ -662,7 +662,8 @@ struct Values {
     // him on that frame. The VIEW turns only with punchViewSnap (off by default: t66u, "it can be a switch"). Punches do the
     // same damage with all of it off. punch_autotarget, punch_track_cone_deg, punch_track_range_m, punch_view_snap.
     bool punchAutotarget = true, punchViewSnap = false;
-    int punchTrackConeDeg = 45, punchTrackRangeM = 6;
+    // Nov 16 (the owner; s165800: 99 of 136 untracked punches outside 45 degrees, 37 past 6 m): 60 degrees, 8 m.
+    int punchTrackConeDeg = 60, punchTrackRangeM = 8;
     // JUMP PULL (the polish pass, slice 8; the user, t65u: "a soft pull that gently pulls you toward enemies you jump toward"):
     // in SpidyVR's own air, with no web out, an enemy within jumpPullGazeDeg of where you look (or within jumpPullStickDeg of
     // the left stick's way while it is held) and jumpPullRangeM pulls a little (4 m/s^2, fading at the cone's edge and the
@@ -1155,7 +1156,7 @@ std::string tabOnlyText(const Values&);
 // key, or whose value is no whole number, is passed over.
 Values withTabOnly(Values, std::string_view text);
 // The movement defaults' revision (Values::movementDefaults) this build has.
-inline constexpr int movementDefaultsRevision = 4;
+inline constexpr int movementDefaultsRevision = 5;
 // November 12 movement cleanup: a settings file (that text) older than
 // movementDefaultsRevision gets the new movement defaults once - RUN CURVE
 // on, EARLY JUMP at least QUICK TAP - and is marked as having seen them; a

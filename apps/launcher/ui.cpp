@@ -2377,10 +2377,10 @@ void App::options(ImVec2 origin, ImVec2 size) {
                "tracked. Needs the enemy within the cone and range below.",
                S(42), [&] { tabToggle("##punchautotarget", Item::punchAutotarget); });
         settingOption(Item::punchTrackCone, "Punch track cone",
-               "How far off the targeted enemy a punch can be thrown and still track him (45 degrees by default).",
+               "How far off the targeted enemy a punch can be thrown and still track him (60 degrees by default).",
                S(150), [&] { tabCombo("##punchtrackcone", Item::punchTrackCone); });
         settingOption(Item::punchTrackRange, "Punch track range",
-               "How far away the targeted enemy can be and still be tracked (6 m by default).",
+               "How far away the targeted enemy can be and still be tracked (8 m by default).",
                S(150), [&] { tabCombo("##punchtrackrange", Item::punchTrackRange); });
         settingOption(Item::punchViewSnap, "Punch view snap",
                "A tracked punch turns your view onto the enemy too. Off by default: your view stays where you "
