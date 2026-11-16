@@ -93,6 +93,22 @@ inline constexpr std::string_view personalProfileSettings[] = {
     "forearm_aim_limit",
     "palm_shooters",
     "run_logs",
+    "head_probe",
+    "animated_moves",
+    "animated_head",
+    "animated_headset_smooth",
+    "run_speed_percent",
+    "slow_motion_seconds",
+    "soft_lock_metres",
+    "animated_air",
+    "animated_steering",
+    "animated_arms",
+    "animated_torso",
+    "animated_model_yaw",
+    "animated_only",
+    "animated_air_spin",
+    "animated_hybrid",
+    "animated_hybrid_speed_ms",
 };
 struct BuiltInProfile {
     Profile profile;

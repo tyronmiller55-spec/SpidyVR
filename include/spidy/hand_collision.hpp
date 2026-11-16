@@ -117,6 +117,24 @@ class HandCollision {
         }
         return rays;
     }
+    // HANDSTAND (handstand.hpp): which palms are on a floor (a face whose
+    // normal is within 40 degrees of up): contacts() limited to floors.
+    static constexpr float floorCos = .766f, floorKeepSeconds = 1.f, floorReach = .5f;
+    unsigned floorContacts(const std::array<Pose, 2>& placed) const {
+        unsigned mask = contacts(placed);
+        for (unsigned i = 0; i < 2; ++i)
+            if (!(planes_[i].normal.y >= floorCos))
+                mask &= ~(1u << i);
+        return mask;
+    }
+    // A floor's normal under a palm (zero: none).
+    Vec3 floorNormal(unsigned hand) const {
+        return hand < 2 && usable(hand) && planes_[hand].normal.y >= floorCos ? planes_[hand].normal : Vec3{};
+    }
+    // HANDSTAND: floors stay floorKeepSeconds without a new hit and count
+    // within floorReach of where they were sampled (the palms rest on them
+    // while the body leans); other faces as before.
+    void keepFloors(bool on) { keepFloors_ = on; }
     bool active() const { return active_; }
     Vec3 push() const { return push_; }
     void reset() { *this = {}; }
@@ -125,18 +143,20 @@ class HandCollision {
     struct Plane { Vec3 point{}, normal{}, sampled{}; float age = 1e9f; };
     bool usable(unsigned hand) const {
         const auto& p = planes_[hand];
-        if (!tracked_[hand] || p.age > keepSeconds || dot(head_ - p.point, p.normal) <= .01f)
+        const float keep = keepFloors_ && p.normal.y >= floorCos ? floorKeepSeconds : keepSeconds;
+        if (!tracked_[hand] || p.age > keep || dot(head_ - p.point, p.normal) <= .01f)
             return false;
         // The ray can meet a face above a deeply pushed palm. Locality is
         // measured from the sampled controller, not that oblique hit point.
         const Vec3 delta = raw_[hand].position - p.sampled;
-        return length(delta - p.normal * dot(delta, p.normal)) <= patchReach;
+        const float reach = keepFloors_ && p.normal.y >= floorCos ? floorReach : patchReach;
+        return length(delta - p.normal * dot(delta, p.normal)) <= reach;
     }
     std::array<Plane, 2> planes_{};
     std::array<Pose, 2> raw_{};
     std::array<bool, 2> tracked_{};
     Vec3 head_{}, push_{};
     uint64_t serial_{};
-    bool active_{};
+    bool active_{}, keepFloors_{};
 };
 } // namespace spidy

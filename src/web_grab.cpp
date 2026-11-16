@@ -25,6 +25,24 @@ TargetCommand* commandFor(std::vector<TargetCommand>& out, std::size_t first, st
 int rank(const TargetCommand& c) {
     return c.mode == TargetCommand::Mode::Rope ? 1 : 2;
 }
+// TETHERS: a rope's collision asks the world's fixed surfaces only (a prop is the target or a thing the rope may
+// lie on, and moves).
+struct TetherCollider : tether::Collider {
+    const WorldQueries& world;
+    explicit TetherCollider(const WorldQueries& w) : world(w) {}
+    bool ray(Vec3 from, Vec3 to, Vec3& point, Vec3& normal) const override {
+        const Vec3 d = to - from;
+        const float len = length(d);
+        if (!(len > 1e-4f) || len > 200.f)
+            return false;
+        const auto hit = world.raycast(from, d / len, len);
+        if (!hit || !hit->fixed)
+            return false;
+        point = hit->point;
+        normal = hit->normal;
+        return true;
+    }
+};
 } // namespace
 
 float rayMiss(Vec3 origin, Vec3 direction, float distance, Vec3 centre, float radius) {
@@ -137,6 +155,9 @@ std::optional<GrabTarget> WebGrab::preview(Pose aim, const WorldQueries& world,
     const float reach = wall ? length(wall->point - aim.position) + .75f : config_.maxRange;
     if (!target)
         target = targets.pick(aim.position, direction, std::min(reach, config_.maxRange), config_.aimCone);
+    if (!target && config_.softLock > 0)
+        target = targets.pick(aim.position, direction, std::min({reach, config_.maxRange, config_.softLock}),
+                              std::max(softLockCone, config_.aimCone));
     if (!target || !finite(target->position) || !finite(target->velocity) || target->mass > config_.maxMass ||
         !std::isfinite(target->radius) || target->radius < 0)
         return {};
@@ -154,6 +175,10 @@ void WebGrab::end(int i, GrabEventKind reason, Vec3 velocity) {
     h.reeling = h.yankUsed = h.launched = false;
     h.pullDistance = h.pullTime = h.obstructed = h.flight = h.stalled = 0;
     h.closest = std::numeric_limits<float>::infinity();
+    h.kept = false;
+    ropes_[i].reset();
+    spinners_[i].reset();
+    views_[i] = {};
 }
 void WebGrab::letGo(int i, const TargetQueries& targets, const Body& player, bool otherReleasing) {
     const auto& g = grabs_[i];
@@ -164,7 +189,10 @@ void WebGrab::letGo(int i, const TargetQueries& targets, const Body& player, boo
     }
     const auto& other = grabs_[1 - i];
     const bool stillHeld = other.phase == GrabPhase::Held && other.target == g.target && !otherReleasing;
-    if (g.phase != GrabPhase::Held || stillHeld) {
+    // TETHERS: a spinning target let go of is slung by the throw below.
+    const bool slinging = config_.tether.enabled && g.phase == GrabPhase::Tethered && !g.hand &&
+                          spinners_[i].active() && !stillHeld;
+    if ((g.phase != GrabPhase::Held && !slinging) || stillHeld) {
         // Only the web goes. A towed target keeps what the web gave it; a
         // yanked one flies on where it was going, as anything let go of
         // does: the arm's throw belongs to what the hand holds. Nor does
@@ -205,13 +233,53 @@ void WebGrab::letGo(int i, const TargetQueries& targets, const Body& player, boo
             launch = *aimed;
     }
     // Both hands letting go together throw it once. It keeps the spin it has.
+    // TETHERS: with the trigger held the line is kept, and pays out after the target (step()).
+    const bool keep = config_.tether.enabled && !g.hand && hands_[i].trigger >= config_.tether.payoutTrigger;
     if (std::none_of(pending_.begin(), pending_.end(),
                      [&](const TargetCommand& c) { return c.id == g.target; })) {
-        TargetCommand thrown{g.target, g.kind, TargetCommand::Mode::Launch, true};
+        TargetCommand thrown{g.target, g.kind, TargetCommand::Mode::Launch, !keep};
         thrown.velocity = launch;
         pending_.push_back(thrown);
     }
+    if (slinging) {
+        ++tether_.slings;
+        note(3, length(relative));
+    }
+    if (keep) {
+        auto& kept = grabs_[i];
+        kept.phase = GrabPhase::Tethered;
+        kept.length = std::max(kept.length, length(target->position - hands_[i].wrist) + config_.slack);
+        hands_[i].kept = true;
+        hands_[i].reeling = hands_[i].yankUsed = false; // the kept line takes a pull to yank it back
+        hands_[i].pullDistance = hands_[i].pullTime = 0;
+        ++tether_.throws;
+        note(4, length(relative));
+        events_.push_back({GrabEventKind::Throw, i, g.target, .45f, launch});
+        return;
+    }
     end(i, GrabEventKind::Throw, launch);
+}
+void WebGrab::note(std::uint32_t action, float speed) {
+    tether_.lastAction = action;
+    tether_.lastSpeed = std::isfinite(speed) ? speed : 0.f;
+    ++tether_.serial;
+}
+bool WebGrab::tether(const tether::Config& c) {
+    if (!tether::valid(c))
+        return false;
+    const bool wasOn = config_.tether.enabled;
+    config_.tether = c;
+    for (auto& r : ropes_)
+        r.configure(c);
+    if (wasOn && !c.enabled)
+        for (int i = 0; i < 2; ++i) {
+            if (hands_[i].kept)
+                end(i, GrabEventKind::Release);
+            ropes_[i].reset();
+            spinners_[i].reset();
+            views_[i] = {};
+        }
+    return true;
 }
 void WebGrab::handOver(int i) {
     if (i < 0 || i > 1)
@@ -223,6 +291,10 @@ void WebGrab::handOver(int i) {
     h.closest = std::numeric_limits<float>::infinity();
     h.sample = false;
     h.held = h.owned = true;
+    h.kept = false;
+    ropes_[i].reset();
+    spinners_[i].reset();
+    views_[i] = {};
 }
 void WebGrab::releaseAll() {
     for (int i = 0; i < 2; ++i) {
@@ -230,7 +302,196 @@ void WebGrab::releaseAll() {
         auto& h = hands_[i];
         h.sample = false;
         h.held = h.owned = true; // a grip already held is not a new shot
+        h.squeezed = true;
+        h.samples.clear();
     }
+}
+bool WebGrab::handGrab(const hand_grab::Config& c) {
+    if (!hand_grab::valid(c))
+        return false;
+    const bool wasOn = config_.hand.enabled;
+    config_.hand = c;
+    if (wasOn && !c.enabled)
+        for (int i = 0; i < 2; ++i)
+            if (grabs_[i].hand) {
+                end(i, GrabEventKind::Lost);
+                hands_[i].squeezed = true; // a squeeze still held is not a new grab
+            }
+    return true;
+}
+namespace {
+// The palm: the physical grip's place, the hand's own aim when that is far off.
+Vec3 palmOf(const HandInput& hand) {
+    if (finite(hand.wallPosition) && length(hand.wallPosition - hand.aim.position) < .5f)
+        return hand.wallPosition;
+    return hand.aim.position;
+}
+} // namespace
+// What a palm at `palm` takes: an enemy before a prop, the nearer before the farther.
+std::optional<GrabTarget> WebGrab::pickHand(Vec3 palm, const TargetQueries& targets) const {
+    const auto& cfg = config_.hand;
+    std::vector<GrabTarget> near;
+    if (finite(palm))
+        targets.within(palm, cfg.reach, near);
+    const GrabTarget* best{};
+    for (const auto& t : near) {
+        if (!t.id || !finite(t.position) || !finite(t.velocity) || !std::isfinite(t.radius) || t.radius < 0 ||
+            !std::isfinite(t.away) || t.away < 0 || t.away > cfg.reach || !std::isfinite(t.mass) ||
+            t.mass <= 0 || t.mass > config_.maxMass)
+            continue;
+        const auto rank = [](const GrabTarget& x) { return x.kind == TargetKind::Character ? 0 : 1; };
+        if (!best || rank(t) < rank(*best) || (rank(t) == rank(*best) && t.away < best->away))
+            best = &t;
+    }
+    return best ? std::optional<GrabTarget>(*best) : std::nullopt;
+}
+bool WebGrab::handClaims(int i, const HandInput& hand, const TargetQueries& targets) const {
+    if (!config_.hand.enabled || i < 0 || i > 1)
+        return false;
+    if (grabs_[i].hand)
+        return true;
+    const float squeeze = std::isfinite(hand.wallGrip) ? hand.wallGrip : 0.f;
+    return hand.tracked && !hands_[i].squeezed && squeeze > .65f && grabs_[i].phase == GrabPhase::None &&
+           pickHand(palmOf(hand), targets).has_value();
+}
+// A hand takes what is within reach of the palm.
+bool WebGrab::startHand(int i, const TargetQueries& targets) {
+    const auto& cfg = config_.hand;
+    auto& h = hands_[i];
+    const auto picked = pickHand(h.palm, targets);
+    const GrabTarget* best = picked ? &*picked : nullptr;
+    if (!best)
+        return false;
+    auto& g = grabs_[i];
+    const bool character = best->kind == TargetKind::Character;
+    g = {};
+    g.phase = GrabPhase::Held;
+    g.target = best->id;
+    g.kind = best->kind;
+    g.radius = best->radius;
+    g.wrist = h.palm;
+    g.end = best->position;
+    g.length = hand_grab::holdAhead(character, best->radius, cfg);
+    g.hand = true;
+    g.mass = std::max(best->mass, 1.f);
+    const auto& other = grabs_[1 - i];
+    if (other.phase == GrabPhase::Held && other.hand && other.target == best->id)
+        g.age = other.age; // two hands on one body share its hold
+    h.owned = true;
+    h.triggerReleased = h.reeling = h.yankUsed = false;
+    h.pullDistance = h.pullTime = h.obstructed = 0;
+    events_.push_back({GrabEventKind::Grab, i, best->id, .7f, {}});
+    ++report_.grabs;
+    ++(character ? report_.enemies : report_.props);
+    report_.lastAction = 1;
+    report_.lastKind = character ? 1 : 2;
+    report_.lastMass = g.mass;
+    report_.lastSpeed = 0;
+    ++report_.serial;
+    return true;
+}
+// A squeeze let go of: the body leaves with the hand's velocity (a throw), or a slam, or is only let
+// go of. The other hand still squeezing the same body keeps it.
+void WebGrab::letGoHand(int i, const TargetQueries& targets, bool otherReleasing) {
+    const auto& cfg = config_.hand;
+    const auto g = grabs_[i];
+    const auto target = targets.find(g.target);
+    if (!target || !finite(target->velocity)) {
+        end(i, GrabEventKind::Lost);
+        ++report_.lost;
+        return;
+    }
+    for (const auto& c : pending_)
+        if (c.id == g.target) {
+            end(i, GrabEventKind::Throw, c.velocity); // the other hand threw it a moment ago
+            return;
+        }
+    const auto& other = grabs_[1 - i];
+    const bool same = other.phase == GrabPhase::Held && other.hand && other.target == g.target;
+    if (same && !otherReleasing) {
+        end(i, GrabEventKind::Release);
+        return;
+    }
+    Vec3 hand = hands_[i].samples.velocity();
+    if (same)
+        hand = (hand + hands_[1 - i].samples.velocity()) * .5f; // both let go together
+    const auto thrown = hand_grab::release(hand, g.mass, cfg);
+    const bool character = g.kind == TargetKind::Character;
+    report_.lastAction = thrown.slam ? 3 : thrown.thrown ? 2 : 4;
+    report_.lastKind = character ? 1 : 2;
+    report_.lastMass = g.mass;
+    report_.lastSpeed = length(thrown.velocity);
+    ++report_.serial;
+    if (!thrown.thrown) {
+        ++report_.drops;
+        end(i, GrabEventKind::Release);
+        return;
+    }
+    ++(thrown.slam ? report_.slams : report_.throws);
+    TargetCommand launch{g.target, g.kind, TargetCommand::Mode::Launch, true};
+    launch.velocity = thrown.velocity;
+    pending_.push_back(launch);
+    end(i, GrabEventKind::Throw, thrown.velocity);
+}
+// The hold: the body follows a point ahead of the palm (both palms' middle for two hands) under the
+// spring, limited by what the grip's force can do against its mass; an enemy tires the hand.
+void WebGrab::stepHand(int i, float dt, const GrabTarget& target, std::vector<TargetCommand>& out,
+                       std::size_t first) {
+    const auto& cfg = config_.hand;
+    auto& g = grabs_[i];
+    const int j = 1 - i;
+    const bool both = grabs_[j].phase == GrabPhase::Held && grabs_[j].hand && grabs_[j].target == g.target;
+    g.end = target.position;
+    g.wrist = hands_[i].palm;
+    g.taut = false;
+    g.age += dt;
+    if (both && j < i) {
+        // The first hand's step set the command for both.
+        g.tension = grabs_[j].tension;
+        g.tired = grabs_[j].tired;
+        g.age = grabs_[j].age;
+        return;
+    }
+    const bool character = g.kind == TargetKind::Character;
+    const float lead = hand_grab::holdAhead(character, g.radius, cfg);
+    Vec3 place = hands_[i].palm + hands_[i].forward * lead, placeVelocity = hands_[i].palmVelocity;
+    int hands = 1;
+    if (both) {
+        place = (place + hands_[j].palm + hands_[j].forward * lead) * .5f;
+        placeVelocity = (placeVelocity + hands_[j].palmVelocity) * .5f;
+        hands = 2;
+        grabs_[j].age = g.age;
+    }
+    if (!finite(place) || length(target.position - place) > lead + cfg.shake) {
+        // Shaken off, or carried away from the hand by the world.
+        ++report_.lost;
+        if (both)
+            end(j, GrabEventKind::Lost);
+        end(i, GrabEventKind::Lost);
+        return;
+    }
+    g.tired = character ? hand_grab::tiredness(g.age, g.mass, cfg) : 1.f;
+    TargetCommand c{g.target, g.kind};
+    c.mode = TargetCommand::Mode::Follow;
+    c.carried = character;
+    c.maxAcceleration = hand_grab::holdAcceleration(g.mass, hands, g.tired, cfg);
+    c.velocity = hand_grab::holdVelocity(target.position, place, placeVelocity, dt, c.maxAcceleration, cfg);
+    if (!character) {
+        c.spins = true; // a held prop steadies in the hand
+        c.spin = {};
+        c.spinAcceleration = config_.webSpin;
+    }
+    const float cap = static_cast<float>(hands) * cfg.force * g.tired;
+    const Vec3 needed =
+        hand_grab::springForce(target.position, target.velocity, place, placeVelocity, g.mass, 1e9f, cfg) +
+        Vec3{0, g.mass * cfg.gravity, 0};
+    g.tension = std::clamp(length(needed) / std::max(cap, 1.f), 0.f, 1.f);
+    if (both)
+        grabs_[j].tension = g.tension, grabs_[j].tired = g.tired;
+    if (auto* existing = commandFor(out, first, g.target))
+        *existing = c;
+    else
+        out.push_back(c);
 }
 Input WebGrab::claim(float seconds, const Input& in, const WorldQueries& world, const TargetQueries& targets,
                      const Body& player, unsigned kept) {
@@ -250,8 +511,8 @@ Input WebGrab::claim(float seconds, const Input& in, const WorldQueries& world, 
     // go of one target together throw it.
     std::array<bool, 2> releasing{};
     for (int i = 0; i < 2; ++i)
-        releasing[i] = seconds > 0 && grabs_[i].phase != GrabPhase::None && in.hands[i].tracked &&
-                       !(in.hands[i].grip > .35f);
+        releasing[i] = seconds > 0 && grabs_[i].phase != GrabPhase::None && !hands_[i].kept && in.hands[i].tracked &&
+                       !((grabs_[i].hand ? in.hands[i].wallGrip : in.hands[i].grip) > .35f);
     for (int i = 0; i < 2; ++i) {
         const auto& hand = in.hands[i];
         auto& h = hands_[i];
@@ -266,6 +527,8 @@ Input WebGrab::claim(float seconds, const Input& in, const WorldQueries& world, 
                 end(i, GrabEventKind::Lost);
                 h.sample = false;
                 h.held = h.owned = true; // require a full release before the next shot
+                h.squeezed = true;
+                h.samples.clear();
             } else {
                 if (h.sample)
                     h.wristVelocity =
@@ -274,13 +537,35 @@ Input WebGrab::claim(float seconds, const Input& in, const WorldQueries& world, 
                     h.wristVelocity = {};
                 h.wrist = hand.aim.position;
                 h.forward = normalized(forward);
+                // HAND GRAB: the palm (the physical grip's place, the hand's own when that is far off)
+                // and the physical squeeze, which is not the web button's when the player swapped them.
+                const Vec3 palm = palmOf(hand);
+                h.palmVelocity =
+                    h.sample ? smooth(h.palmVelocity, (palm - h.palm) / seconds, seconds) : Vec3{};
+                h.palm = palm;
+                h.samples.push(seconds, palm);
+                const float squeeze = std::isfinite(hand.wallGrip) ? hand.wallGrip : 0.f;
+                const bool squeezed = h.squeezed ? squeeze > .35f : squeeze > .65f;
+                const bool handShoot = squeezed && !h.squeezed;
+                h.squeezed = squeezed;
                 const bool held = h.held ? hand.grip > .35f : hand.grip > .65f;
-                const bool shoot = held && !h.held;
+                bool shoot = held && !h.held;
                 h.held = held;
+                h.trigger = std::clamp(hand.trigger, 0.f, 1.f);
                 if (!held)
                     h.owned = false;
-                if (g.phase != GrabPhase::None && !held)
+                // TETHERS: a line kept after a throw is the trigger's, not the grip's: a new grip press lets it
+                // go and shoots anew; the target caught back at the hand ends it (it is in the hand's reach).
+                if (h.kept && (g.phase == GrabPhase::None || g.phase == GrabPhase::Held || shoot))
+                    end(i, GrabEventKind::Release);
+                if (g.phase != GrabPhase::None && g.hand && !squeezed)
+                    letGoHand(i, targets, releasing[1 - i]);
+                else if (g.phase != GrabPhase::None && !g.hand && !held && !h.kept)
                     letGo(i, targets, player, releasing[1 - i]);
+                // A squeeze with the palm on an enemy or a prop takes it by hand before any web or wall.
+                if (config_.hand.enabled && g.phase == GrabPhase::None && handShoot && !(kept >> i & 1) &&
+                    startHand(i, targets))
+                    shoot = false;
                 if (g.phase == GrabPhase::None && shoot && !(kept >> i & 1)) {
                     if (const auto target = preview(hand.aim, world, targets)) {
                         g.phase = GrabPhase::Tethered;
@@ -301,7 +586,7 @@ Input WebGrab::claim(float seconds, const Input& in, const WorldQueries& world, 
                     if (hand.trigger < .35f)
                         h.triggerReleased = true;
                     h.reeling = g.phase == GrabPhase::Tethered && h.triggerReleased && hand.trigger > .65f &&
-                                !(config_.yankOnlyCharacters && g.kind == TargetKind::Character);
+                                !h.kept && !(config_.yankOnlyCharacters && g.kind == TargetKind::Character);
                     // The zip gesture, aimed at a target instead of an anchor:
                     // fast and deliberate within a short window, measured from
                     // head-relative samples so travel and room-scale steps
@@ -346,9 +631,13 @@ Input WebGrab::claim(float seconds, const Input& in, const WorldQueries& world, 
 }
 Input WebGrab::forSwing(const Input& input) const {
     Input swing = input;
-    for (int i = 0; i < 2; ++i)
+    for (int i = 0; i < 2; ++i) {
         if (hands_[i].owned || grabs_[i].phase != GrabPhase::None)
             swing.hands[i].grip = swing.hands[i].trigger = 0;
+        // A hand holding a body by hand grips no wall.
+        if (grabs_[i].hand)
+            swing.hands[i].wallGrip = 0;
+    }
     return swing;
 }
 float WebGrab::planYank(Vec3 from, Vec3 hold, Vec3 holdVelocity, float speed, float radius,
@@ -398,8 +687,10 @@ void WebGrab::step(float dt, const WorldQueries& world, const TargetQueries& tar
         auto& g = grabs_[i];
         auto& h = hands_[i];
         g.tension = 0;
-        if (g.phase == GrabPhase::None)
+        if (g.phase == GrabPhase::None) {
+            views_[i] = {};
             continue;
+        }
         const auto target = targets.find(g.target);
         if (!target || !finite(target->position) || !finite(target->velocity)) {
             end(i, GrabEventKind::Lost);
@@ -408,6 +699,10 @@ void WebGrab::step(float dt, const WorldQueries& world, const TargetQueries& tar
         auto* existing = commandFor(out, first, g.target);
         if (existing && existing->thrown)
             continue; // the other hand threw it in this step
+        if (g.hand) {
+            stepHand(i, dt, *target, out, first);
+            continue;
+        }
         // Hand samples arrive slower than physics steps: the web leaves the
         // latest one, carried on at the hand's smoothed velocity through the
         // step.
@@ -440,6 +735,53 @@ void WebGrab::step(float dt, const WorldQueries& world, const TargetQueries& tar
         const float mass = std::max(target->mass, 1.f);
         // The most this web changes the target's velocity, per second.
         const float pull = config_.webForce / mass;
+        // PHYSICAL WEB TETHERS: a line kept after a throw is cut by the trigger let go of. The rope is stepped
+        // every step, with the hand's velocity relative to the player for the whip and the spin.
+        const auto& tcfg = config_.tether;
+        const bool tethers = tcfg.enabled && !(g.kind == TargetKind::Character && config_.yankOnlyCharacters);
+        tether::Rope::Result wave;
+        if (h.kept && h.trigger < tcfg.payoutTrigger) {
+            ++tether_.cuts;
+            note(5, 0);
+            end(i, GrabEventKind::Release);
+            continue;
+        }
+        if (tcfg.enabled) {
+            TetherCollider ground{world};
+            tether::Rope::Frame frame;
+            frame.dt = dt;
+            frame.hand = wrist;
+            frame.handVelocity = h.wristVelocity;
+            frame.handRelative = h.wristVelocity - playerVelocity_;
+            frame.hasRelative = true;
+            frame.end = p;
+            frame.endVelocity = v;
+            frame.length = std::max(g.length, .3f);
+            frame.world = &ground;
+            // A character near the line (not the target) is a capsule the line goes round: from his feet up,
+            // as StrikeConfig sizes him.
+            const StrikeConfig shape;
+            std::array<tether::Capsule, 6> capsules;
+            std::size_t standing = 0;
+            std::vector<GrabTarget> people;
+            targets.characters(people);
+            for (const auto& person : people)
+                if (person.id != g.target && finite(person.position) && length(person.position - wrist) < 25.f &&
+                    standing < capsules.size())
+                    capsules[standing++] = {person.position - Vec3{0, .5f * shape.characterHeight, 0},
+                                            shape.characterHeight, shape.characterRadius};
+            frame.capsules = std::span<const tether::Capsule>(capsules.data(), standing);
+            wave = ropes_[i].step(frame);
+            auto& view = views_[i];
+            view.active = ropes_[i].started();
+            view.kept = h.kept;
+            view.end = p;
+            view.tension = wave.tension;
+            view.count = static_cast<std::uint32_t>(
+                std::max(0, ropes_[i].draw(view.points.data(), tether::maxDrawn)));
+        } else {
+            views_[i] = {};
+        }
         const float brakeLimit = std::min(config_.arrivalDeceleration, pull);
         // How fast the target moves relative to the hand.
         const Vec3 relative = v - h.wristVelocity;
@@ -509,6 +851,14 @@ void WebGrab::step(float dt, const WorldQueries& world, const TargetQueries& tar
                 // Only a yank brings him: the web pays out, slack.
                 g.length = std::max(g.length, distance + config_.slack);
                 acts = rope(0);
+                break;
+            }
+            if (h.kept) {
+                // Thrown on a tether: the trigger's depth brakes the line as it pays out (tether::payout).
+                const auto pay = tether::payout(h.trigger, g.length, distance, tcfg);
+                g.length = pay.length;
+                acts = rope(0);
+                c.maxAcceleration = pull * pay.grip;
                 break;
             }
             if (h.reeling && caught()) {
@@ -583,6 +933,41 @@ void WebGrab::step(float dt, const WorldQueries& world, const TargetQueries& tar
             break;
         case GrabPhase::None:
             break;
+        }
+        // PHYSICAL WEB TETHERS: the hand's circling turns the target about it (Follow), and its snap sends the
+        // wave down the line to jerk the target (Launch), on a web that is neither being reeled nor yanked.
+        if (tethers && g.phase == GrabPhase::Tethered && !h.reeling) {
+            const auto before = spinners_[i].active();
+            const auto spin = spinners_[i].update(dt, h.wristVelocity - playerVelocity_, tcfg);
+            views_[i].spinning = spin.active && spin.gain > 0;
+            if (spin.active && spin.gain > 0) {
+                const float radius = std::clamp(distance, lever, std::max(g.length, lever));
+                c.mode = TargetCommand::Mode::Follow;
+                c.velocity = tether::orbitVelocity(wrist, h.wristVelocity, p, radius, spin.axis, spin.rate, spin.gain,
+                                                   tcfg);
+                c.maxAcceleration = pull;
+                c.ropeCount = 0;
+                acts = true;
+                c.spins = false;
+                g.taut = true;
+                if (!before) {
+                    ++tether_.spins;
+                    note(2, length(c.velocity - h.wristVelocity));
+                }
+            } else if (wave.whip) {
+                const Vec3 jerk = tether::whipJerk(wave.away, wave.whipSpeed, mass, config_.webForce, tcfg);
+                if (length(jerk) > .5f) {
+                    c.mode = TargetCommand::Mode::Launch;
+                    c.velocity = v + jerk;
+                    c.ropeCount = 0;
+                    c.spins = false;
+                    g.taut = acts = true;
+                    ++tether_.whips;
+                    note(1, length(jerk));
+                }
+            }
+        } else if (spinners_[i].active()) {
+            spinners_[i].reset();
         }
         if (!acts)
             continue;

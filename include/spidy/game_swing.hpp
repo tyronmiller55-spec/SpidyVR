@@ -4,9 +4,11 @@
 #include "swing.hpp"
 #include "swing_takeoff.hpp"
 #include <algorithm>
+#include <cmath>
 #include <cstddef>
 #include <cstdint>
 #include <limits>
+#include <type_traits>
 
 namespace spidy::game_swing {
 // Gravity and air steering are the strengths the October 4-5 test builds
@@ -126,7 +128,7 @@ struct Hand {
     float trigger{}, grip{};
 };
 struct Command {
-    uint32_t magic = 0x5357434d, version = 6, bytes = sizeof(Command), focused{};
+    uint32_t magic = 0x5357434d, version = 7, bytes = sizeof(Command), focused{};
     uint64_t serial{};
     uint32_t leaseMs = 100, jump{};
     Hand hands[2];
@@ -170,15 +172,21 @@ struct Command {
     // Version 4 (commandBytesV4) ends before them.
     Vec3 wallPositions[2]{};
     float wallGrips[2]{};
-    uint32_t wallRotate{}, padding5{}; // version 5 ended in these 4 bytes of padding
+    uint32_t wallRotate{}, actionMode{}; // version 5 ended in these 4 bytes of padding
     // Version 6, EYE AIM: where the eyes look (Input::gazeOrigin, gaze; gaze
     // zero: untracked, or EYE AIM off), and eyeAim bit 0: web balls go there
     // (Input::gazeShots). The aim previews say what the gaze meets (AimData::
     // gaze) whenever there is one. Version 5 (commandBytesV5) ends before them.
     Vec3 gazeOrigin{}, gaze{};
-    uint32_t eyeAim{}, reserved6{};
+    // Version 7 interprets these formerly reserved slots; their offsets keep
+    // the v6 prefix intact. Older versions never carry cancellation semantics.
+    uint32_t eyeAim{}, animationCancel{};
+    // Version 7: physical hand velocity stays measured in the tracking rig,
+    // then rotates into the displayed animation frame for contact damage.
+    // actionMode: bit0 contact-only animation; bits1/2 valid displayed L/R.
+    Quat physicalToContact[2]{};
 };
-constexpr uint32_t commandBytesV2 = 168, commandBytesV3 = 184, commandBytesV4 = 200, commandBytesV5 = 240;
+constexpr uint32_t commandBytesV2 = 168, commandBytesV3 = 184, commandBytesV4 = 200, commandBytesV5 = 240, commandBytesV6 = 272;
 // attached: 0 none, else bits: 1 a web; 2 both hands hold it (Swing::shared:
 // the other hand's web is the same one); 4 this hand took hold of it and did
 // not shoot it (Web::taken; it stays when the other hand lets go); 8 this
@@ -219,10 +227,24 @@ struct Data {
     float wallDistance{};
     uint32_t walls{}, wallJumps{}, mount{};
 };
-static_assert(sizeof(Config) == 64 && sizeof(Hand) == 52 && sizeof(Command) == 272 &&
+static_assert(sizeof(Config) == 64 && sizeof(Hand) == 52 && sizeof(Command) == 304 &&
               offsetof(Command, tilt) == commandBytesV2 && offsetof(Command, leap) == commandBytesV3 &&
               offsetof(Command, wallPositions) == commandBytesV4 && offsetof(Command, wallRotate) == 232 &&
-              offsetof(Command, gazeOrigin) == commandBytesV5);
+              offsetof(Command, gazeOrigin) == commandBytesV5 &&
+              offsetof(Command, actionMode) == 236 && offsetof(Command, animationCancel) == 268 &&
+              offsetof(Command, physicalToContact) == commandBytesV6 && sizeof(Quat) == 16);
+static_assert(std::is_standard_layout_v<Command> && std::is_trivially_copyable_v<Command>);
+constexpr uint32_t commandBytes(uint32_t version) {
+    switch (version) {
+    case 2: return commandBytesV2;
+    case 3: return commandBytesV3;
+    case 4: return commandBytesV4;
+    case 5: return commandBytesV5;
+    case 6: return commandBytesV6;
+    case 7: return sizeof(Command);
+    default: return 0;
+    }
+}
 // Let real custom wall velocity drive the momentum pose without also asking
 // the stock game to walk. Never suppress ground, vent or stale native input.
 inline bool momentumWallDrive(bool requested, bool fresh, const Data& d) {
@@ -271,7 +293,7 @@ inline bool gameOwnsGround(bool fresh, const Data& d) {
 // style as it is.
 // Version 23 appends webTie (off by default): the web tie's gesture, and a
 // webbed enemy who comes only on the yank (WEB TIE; web_tie.hpp).
-// Version 32 appends enemyTypes (off by default; the launcher's Enemy types):
+// Version 32 appends enemyTypes (off by default; the launcher's Enemy types) - in this fork version 41, after the fork's v32-v40:
 // 1, the enemy types that block in the base game (baton, shield, brute and
 // swordsman) guard against the base attacks until they are webbed or stunned
 // (game_guard::setEnemyTypes); 0, nobody guards. Version 31
@@ -320,7 +342,7 @@ inline bool gameOwnsGround(bool fresh, const Data& d) {
 // Version 8 appends handClimb without changing the upstream phone or arcade
 // fields. Older official settings keep their original layout and meaning.
 struct Settings {
-    uint32_t magic = 0x53575354, version = 32, bytes = sizeof(Settings), grab = 1;
+    uint32_t magic = 0x53575354, version = 41, bytes = sizeof(Settings), grab = 1;
     float maxSpeed = 32;
     uint32_t airWebs = 1;
     float gravity = 6;
@@ -353,7 +375,49 @@ struct Settings {
     uint32_t spidyRunStanding{};
     uint32_t webLandingSmooth{};
     float webLandingImpact = 24;
-    uint32_t webLines{};
+    uint32_t webLines{}; // Official version 31 prefix.
+    // Version 39 appends the community pose controls; v32-v38 fork packets are not accepted.
+    // HEAD PROBE, vr_settings::Values::headProbe): the read-only
+    // head-bone diagnostic is on. The swing module only accepts it; nothing in
+    // the swing reads or changes the body for it (head_probe.hpp).
+    uint32_t headProbe{};
+    // Version 32 (ANIMATED MOVES, vr_settings::Values::animatedMoves): the game's
+    // animation drives the body for ground parkour / vaults / mantles (NATIVE
+    // RUN). The swing only accepts it; game_xr / native_body gate the pose
+    // (animated_moves.hpp). Off by default.
+    uint32_t animatedMoves{};
+    // Version 33 (ANIMATED HEAD, vr_settings::Values::animatedHead): while a
+    // pose yield is active, Off|Level|Full head follow (0/1/2). The swing only
+    // accepts it; game_xr / game_fp gate the eyes (animated_moves.hpp). Off by
+    // default.
+    uint32_t animatedHead{};
+    // Version 34 (ANIMATED AIR, vr_settings::Values::animatedAir): pose yield
+    // for freefall / swing / web air. Physics stays with the swing; the module
+    // only accepts the switch (animated_moves.hpp). Off by default.
+    uint32_t animatedAir{};
+    // Version 35 (ANIMATED STEERING): while yielding, L-stick along actor
+    // facing. No model-yaw write. Off by default (animated_steering.hpp).
+    uint32_t animatedSteering{};
+    // Version 36 (ANIMATED ARMS): per-arm controller overlay while yielding.
+    // Off by default (animated_arms.hpp).
+    uint32_t animatedArms{};
+    // Version 37 (ANIMATED TORSO): with ANIMATED ARMS, bound waist→chest toward
+    // controller reaches. Off by default (animated_torso.hpp).
+    uint32_t animatedTorso{};
+    // Version 38 (ANIMATED MODEL YAW): R-stick hero turn via walk facing while
+    // yielding. Off by default (animated_model_yaw.hpp).
+    uint32_t animatedModelYaw{};
+    // Version 40 (RUN SPEED, vr_settings::Values::runSpeedPercent): 50 to 200,
+    // the speed SpidyVR's own ground run puts the body at (Swing::
+    // setRunSpeedPercent). 100 as before; a v39 packet keeps 100.
+    uint32_t runSpeedPercent = 100;
+    // Version 40 too (SOFT LOCK, vr_settings::Values::softLockMetres): 0 to
+    // 40 metres, GrabConfig::softLock (0 off). A v39 packet keeps it off.
+    uint32_t softLockMetres = 15;
+    // Version 41 (0.8.7's ENEMY TYPES, Ilya's version 32 field, vr_settings::Values::enemyTypes): 1, the enemy types
+    // that block in the base game guard against the base attacks until webbed or stunned (game_guard::setEnemyTypes);
+    // 0, nobody guards. Appended after the fork's v40 fields (the fork's v32-v40 are not Ilya's); a v40 packet
+    // (settingsBytesV40) ends before it and leaves the guards off.
     uint32_t enemyTypes{};
 };
 constexpr uint32_t settingsBytesV3 = 28, settingsBytesV4 = 32, settingsBytesV5 = 36, settingsBytesV6 = 40,
@@ -364,9 +428,12 @@ constexpr uint32_t settingsBytesV3 = 28, settingsBytesV4 = 32, settingsBytesV5 =
                    settingsBytesV22 = 104, settingsBytesV23 = 108, settingsBytesV24 = 112,
                    settingsBytesV25 = 120, settingsBytesV26 = 124, settingsBytesV27 = 128,
                    settingsBytesV28 = 132, settingsBytesV29 = 136, settingsBytesV30 = 144,
-                   settingsBytesV31 = 148;
+                   settingsBytesV31 = 148, settingsBytesV32 = 152, settingsBytesV33 = 156,
+                   settingsBytesV34 = 160, settingsBytesV35 = 164, settingsBytesV36 = 168,
+                   settingsBytesV37 = 172, settingsBytesV38 = 176, settingsBytesV39 = 180, settingsBytesV40 = 188;
 static_assert(
-    sizeof(Settings) == 152 && offsetof(Settings, walls) == settingsBytesV3 &&
+    sizeof(Settings) == 192 && offsetof(Settings, enemyTypes) == settingsBytesV40 && offsetof(Settings, runSpeedPercent) == settingsBytesV39 &&
+    offsetof(Settings, walls) == settingsBytesV3 &&
     offsetof(Settings, physical) == settingsBytesV4 && offsetof(Settings, noBlows) == settingsBytesV5 &&
     offsetof(Settings, arcade) == settingsBytesV6 && offsetof(Settings, handClimb) == settingsBytesV7 &&
     offsetof(Settings, webSlingshot) == settingsBytesV8 &&
@@ -388,7 +455,14 @@ static_assert(
     offsetof(Settings, softLanding) == settingsBytesV26 && offsetof(Settings, spidyRun) == settingsBytesV27 &&
     offsetof(Settings, spidyRunStanding) == settingsBytesV28 &&
     offsetof(Settings, webLandingSmooth) == settingsBytesV29 &&
-    offsetof(Settings, webLines) == settingsBytesV30 && offsetof(Settings, enemyTypes) == settingsBytesV31);
+    offsetof(Settings, webLines) == settingsBytesV30 && offsetof(Settings, headProbe) == settingsBytesV31 &&
+    offsetof(Settings, animatedMoves) == settingsBytesV32 &&
+    offsetof(Settings, animatedHead) == settingsBytesV33 &&
+    offsetof(Settings, animatedAir) == settingsBytesV34 &&
+    offsetof(Settings, animatedSteering) == settingsBytesV35 &&
+    offsetof(Settings, animatedArms) == settingsBytesV36 &&
+    offsetof(Settings, animatedTorso) == settingsBytesV37 &&
+    offsetof(Settings, animatedModelYaw) == settingsBytesV38);
 // SpidySwingWebTurns (WEB AIM: MODEL FOREARM, web_aim::ForearmAim): the turn
 // each hand's aim pose takes before WEB ANGLE and WRIST SHOOTERS, in the aim
 // pose's own frame, sent by the VR worker each frame while the setting is on
@@ -515,6 +589,284 @@ struct Bends {
     } hands[2];
 };
 static_assert(sizeof(Bends) == 200);
+// Side channel from XR: the visual tuck's inertia (1 = unchanged). Not a
+// Settings or Command field, and not versioned with those packets.
+struct PoseCoupling {
+    uint32_t magic = 0x53575043, version = 1, bytes = sizeof(PoseCoupling);
+    float inertia = 1;
+};
+static_assert(sizeof(PoseCoupling) == 16);
+// Side channel from XR (POINT JUMP, point_jump.hpp): launch at `velocity` on
+// the next step, from the ground or Spidy's wall (Swing::pointJump). `serial`
+// rises with each new launch; the same serial again is ignored. Not a Command
+// or Settings field and not versioned with them (an older swing module has no
+// SpidySwingPointJump export; XR then never fires). `normal`: the surface's,
+// for the diagnostics only.
+struct PointJumpAsk {
+    uint32_t magic = 0x5357504a, version = 1, bytes = sizeof(PointJumpAsk), serial{};
+    Vec3 velocity{}, normal{};
+};
+static_assert(sizeof(PointJumpAsk) == 40);
+inline bool validPointJump(const PointJumpAsk& a) {
+    return a.magic == 0x5357504a && a.version == 1 && a.bytes == sizeof(PointJumpAsk) && finite(a.velocity) &&
+           length(a.velocity) > .1f && length(a.velocity) <= 80.f && finite(a.normal);
+}
+// Side channel from XR (QUICK SIDESTEP, sidestep.hpp): a burst across the
+// ground at `velocity` (level, real m/s) for moveSeconds, then a hard stop
+// (zero speed across) for stopSeconds; the swing drives it while he stays
+// on the ground and stops it at an edge or a wall. `serial` rises with each
+// burst; the same serial again is ignored. flags bit 0: the game's dodge
+// (game_dodge, as a web's carry) answers the blows it warns of during the
+// burst. Not a Command or Settings field and not versioned with them (an
+// older swing module has no SpidySwingSidestep export; XR then never fires).
+struct SidestepAsk {
+    uint32_t magic = 0x53575353, version = 1, bytes = sizeof(SidestepAsk), serial{};
+    Vec3 velocity{};
+    float moveSeconds{}, stopSeconds{};
+    uint32_t flags{};
+};
+static_assert(sizeof(SidestepAsk) == 40);
+inline bool validSidestep(const SidestepAsk& a) {
+    return a.magic == 0x53575353 && a.version == 1 && a.bytes == sizeof(SidestepAsk) && finite(a.velocity) &&
+           std::abs(a.velocity.y) < 1e-3f && length(a.velocity) > 1.f && length(a.velocity) <= 25.f &&
+           std::isfinite(a.moveSeconds) && a.moveSeconds > .02f && a.moveSeconds <= .5f &&
+           std::isfinite(a.stopSeconds) && a.stopSeconds >= 0 && a.stopSeconds <= .2f;
+}
+// SpidySidestepLive: the swing's bursts, for XR's log (the swing has none).
+// `started` / `ended` count up (ended after the rest is written); for the
+// last one: its serial, why it ended (sidestep::Stop), how far it went
+// across (m) and for how long (ms), and whether the dodge was on.
+struct SidestepLive {
+    uint32_t magic = 0x5353544c, version = 1, bytes = sizeof(SidestepLive), serial{};
+    uint32_t started{}, ended{}, stop{}, iframes{};
+    float metres{}, ms{};
+};
+static_assert(sizeof(SidestepLive) == 40);
+// Side channel from XR (MANUAL SWING KICK, swing_kick.hpp): the settings and, on a flick, the ask. `flags`
+// bit 0: swing_kick_manual is on; bit 1: swing_kick_auto is OFF (the auto dive holds back); bit 2: the
+// legs are engaged (Y + X) now. `serial` rises with each flick; the same serial again is not a new
+// flick (the flags may be sent again with it). coneDegrees and ropeMetres are the kick's own (30 and
+// 1.2 by default). Not a Command or Settings field and not versioned with them (an older swing module has
+// no SpidySwingKick export; XR then never kicks, and the auto dive is as it was).
+struct SwingKickAsk {
+    uint32_t magic = 0x5357504b, version = 1, bytes = sizeof(SwingKickAsk), serial{};
+    uint32_t flags{};
+    float coneDegrees = 30.f, ropeMetres = 1.2f;
+    uint32_t reserved{};
+};
+static_assert(sizeof(SwingKickAsk) == 32);
+inline bool validSwingKick(const SwingKickAsk& a) {
+    return a.magic == 0x5357504b && a.version == 1 && a.bytes == sizeof(SwingKickAsk) && !(a.flags & ~7u) &&
+           std::isfinite(a.coneDegrees) && a.coneDegrees >= 5.f && a.coneDegrees <= 60.f &&
+           std::isfinite(a.ropeMetres) && a.ropeMetres >= 0.f && a.ropeMetres <= 3.f;
+}
+// SpidySwingKickLive: the kick's account for XR's log. `events` counts up last; for the latest event
+// (1 armed, 2 hit, 3 miss, 4 refused): its target (an actor record), the cone (degrees off the swing's
+// velocity), speed (real m/s) and distance (m) when it came, the rope assist used (m, signed) and the
+// steering used (m/s^2), and for a refusal swing_kick::Refusal. `state` is the kick's Phase now (0 idle,
+// 1 active, 2 fading); `point` where his middle was.
+struct SwingKickLive {
+    uint32_t magic = 0x53574b4c, version = 1, bytes = sizeof(SwingKickLive), state{};
+    uint32_t asked{}, armed{}, hits{}, misses{}, refused{}, blows{}, events{}, lastEvent{}, refusal{};
+    uint64_t target{};
+    Vec3 point{};
+    float cone{}, speed{}, distance{}, assist{}, steer{};
+    uint32_t autoOff{}, reserved{};
+};
+static_assert(sizeof(SwingKickLive) == 104);
+// SpidySwingCostLive: what the swing module cost the game thread, one account per 10 s window (hitch_guard.hpp
+// CostWindow), for XR's "game thread cost:" diag line. `window` counts up last (read it, then the rest, then
+// `window` again: a change in between means the account was being written). Times are microseconds.
+struct SwingCostLive {
+    uint32_t magic = 0x53574353, version = 1, bytes = sizeof(SwingCostLive), window{};
+    uint32_t visits{}, over1ms{}, over5ms{}, rejected{}, ignored{};
+    float seconds{}, meanUs{}, maxUs{}, solverMaxUs{}, kickMaxUs{};
+    uint32_t reserved[2]{};
+};
+static_assert(sizeof(SwingCostLive) == 64);
+// SpidySwingCostSections: where the longest visit of the window went (hitch_guard::SectionWindow), beside
+// SpidySwingCostLive (which keeps its 64 bytes): `window` counts up last, as there. Microseconds.
+struct SwingCostSections {
+    uint32_t magic = 0x53575343, version = 1, bytes = sizeof(SwingCostSections), window{};
+    float worstUs{}, restUs{};
+    float worst[8]{}, peak[8]{};
+};
+static_assert(sizeof(SwingCostSections) == 88);
+// SpidySwingScanCost: the punch scan split into its parts (hitch_guard::punchPartName: targets, sense, lock, punches,
+// flow, strikes) for the window's longest punch visit, and the background target scan (its walks, mean and longest,
+// and the game thread's waits on its class table), beside SpidySwingCostSections and on its window. New export: an
+// older module has none and XR logs no "punch scan:" line. `window` counts up last. Microseconds unless named.
+struct SwingScanCost {
+    uint32_t magic = 0x5357534e, version = 1, bytes = sizeof(SwingScanCost), window{};
+    uint32_t punchVisits{};
+    float punchWorstUs{}, punchParts[6]{};
+    uint32_t scans{}, classWaits{};
+    float scanMeanMs{}, scanMaxMs{}, classWaitMaxUs{};
+    uint32_t reserved[3]{};
+};
+static_assert(sizeof(SwingScanCost) == 80);
+// Side channel from XR (JUMP PULL, jump_pull.hpp, polish pass slice 8): sent every frame (the gaze and the stick move) to
+// SpidyJumpPull; an ask older than half a second is none. `flags` bit 0: jump_pull. `gaze`: where the view looks (world),
+// `stick`: the walk stick's world direction (zero when it is not held). Not a Command or Settings field (game_swing::Settings
+// stays v40): an older module has no export and XR then sends none.
+struct JumpPullAsk {
+    uint32_t magic = 0x5357504c, version = 1, bytes = sizeof(JumpPullAsk), serial{};
+    uint32_t flags{};
+    float gazeDeg = 20.f, stickDeg = 25.f, rangeM = 12.f, capMps = 1.5f;
+    float gaze[3]{}, stick[3]{};
+    uint32_t reserved{};
+};
+static_assert(sizeof(JumpPullAsk) == 64);
+// SpidyJumpPullLive: what the pull did. `events` counts up LAST (a pick began, changed or ended); `active` is 1 while a
+// pick is in force; `target` his record, `weight` 0..1, `angleDeg` off the picking line, `distance` to him (m), `added` what
+// this jump has had added (m/s), `byStick` whether the stick's cone picked him. `pulls` counts jumps that were pulled.
+struct JumpPullLive {
+    uint32_t magic = 0x5357504d, version = 1, bytes = sizeof(JumpPullLive), events{};
+    uint32_t pulls{}, picks{}, active{}, byStick{};
+    uint64_t target{};
+    float weight{}, angleDeg{}, distance{}, added{};
+    uint32_t reserved[2]{};
+};
+static_assert(sizeof(JumpPullLive) == 64);
+// Side channel from XR (AIR KICKS, air_kick.hpp, K2): the settings, sent whenever they change and again every
+// second, and on a flick the ask (`serial` new): `gesture` (air_kick::Gesture, 1 dive, 2 double, 3 roundhouse,
+// 4 freeform, 5 sweep: GROUND KICKS, K3), `side` (-1 left, +1 right) and `angle` (degrees from up) of the flick, the eyes' offset from the
+// feet and the gaze (both in the world's axes). `flags` bit 0: kicks is on; bit 1: the legs are engaged; bit 2: ground_kicks is on (GROUND KICKS,
+// ground_kick.hpp, K3: the same ask, standing and slow); bit 3: enemy_joints is on (R1: the swing reads the
+// joints of the enemies a kick may meet, enemy_joints.hpp); bit 4: enemy_limb_zones (the shins and forearms
+// too: only after probe_c0_skeleton.py).
+// gazeCone is kick_gaze_cone_deg (25). Not a Command or Settings field and not versioned with them (an older
+// swing module has no SpidyAirKick export; XR then sends none and no air kick happens).
+struct AirKickAsk {
+    uint32_t magic = 0x5357414b, version = 1, bytes = sizeof(AirKickAsk), serial{};
+    uint32_t flags{}, gesture{};
+    int32_t side{};
+    float gazeCone = 25.f;
+    Vec3 eyeOffset{0, 1.6f, 0}, gaze{0, 0, -1};
+    float angle{};
+    uint32_t reserved{};
+};
+static_assert(sizeof(AirKickAsk) == 64);
+inline bool validAirKick(const AirKickAsk& a) {
+    return a.magic == 0x5357414b && a.version == 1 && a.bytes == sizeof(AirKickAsk) && !(a.flags & ~31u) &&
+           a.gesture <= 5 && a.side >= -1 && a.side <= 1 && std::isfinite(a.gazeCone) && a.gazeCone >= 8.f &&
+           a.gazeCone <= 60.f && std::isfinite(a.angle) && std::isfinite(a.eyeOffset.x) &&
+           std::isfinite(a.eyeOffset.y) && std::isfinite(a.eyeOffset.z) && std::isfinite(a.gaze.x) &&
+           std::isfinite(a.gaze.y) && std::isfinite(a.gaze.z) && a.eyeOffset.y > 0.f && a.eyeOffset.y < 3.f &&
+           a.gaze.x * a.gaze.x + a.gaze.y * a.gaze.y + a.gaze.z * a.gaze.z > .25f;
+}
+// SpidyAirKickLive: the kick's account for XR's log, legs and feel. `events` counts up last; for the latest
+// event (1 started, 2 hit, 3 miss, 4 refused): its gesture, side, zone (air_kick::Zone), target (an actor
+// record), the foot's speed (real m/s) and the blow's strength (0..1), and for a refusal air_kick::Refusal.
+// `state` is the kick's Phase now (0 idle, 1 kicking, 2 recovering); `progress` 0..1 through the kick.
+struct AirKickLive {
+    uint32_t magic = 0x53574b4c, version = 3, bytes = sizeof(AirKickLive), state{};
+    uint32_t gesture{}, zone{}, refusal{}, lastEvent{};
+    int32_t side{};
+    uint32_t asked{}, started{}, hits{}, misses{}, refused{}, flies{}, events{};
+    uint64_t target{};
+    Vec3 point{};
+    float foot{}, strength{}, progress{}, angle{};
+    uint32_t reserved{};
+    // K3: the kick's foot from the player's feet while it runs (world axes, metres; XR poses a standing kick's
+    // leg to it) and the player's speed (m/s) the swing judged it by.
+    float footX{}, footY{}, footZ{}, speed{};
+    // R1 (ENEMY JOINTS): skeletons read, reads that gave no head and chest (the bands decided), blows whose
+    // zone came from the joints, and which roles the last rig read names (enemy_joints::Role bits), with its
+    // joint count, why the last failure was (game_joints::Failure) and the roles the last read got.
+    uint32_t jointReads{}, jointMisses{}, jointZones{}, jointNamed{}, jointCount{}, jointWhy{}, jointValid{}, jointPad{};
+};
+static_assert(sizeof(AirKickLive) % 8 == 0);
+// Side channel from XR (GRIP ACROSS THE GAME, grip.hpp): the settings, sent whenever they change and again
+// every second (a swing module started anew starts from none). `flags` bit 0: wall_brake, bit 1:
+// grip_fling. mu: the brake's friction (0.9); gain and vMax: the fling's (1.3, 9 m/s). Not a Command or
+// Settings field and not versioned with them (an older swing module has no SpidySwingGrip export; XR then
+// sends none and the grip is as it was).
+struct GripAsk {
+    uint32_t magic = 0x53574750, version = 1, bytes = sizeof(GripAsk), serial{};
+    uint32_t flags{};
+    float mu = .9f, gain = 1.3f, vMax = 9.f;
+};
+static_assert(sizeof(GripAsk) == 32);
+inline bool validGrip(const GripAsk& a) {
+    return a.magic == 0x53574750 && a.version == 1 && a.bytes == sizeof(GripAsk) && !(a.flags & ~3u) &&
+           std::isfinite(a.mu) && a.mu >= .3f && a.mu <= 1.5f && std::isfinite(a.gain) && a.gain >= .5f &&
+           a.gain <= 3.f && std::isfinite(a.vMax) && a.vMax >= 3.f && a.vMax <= 20.f;
+}
+// SpidySwingGripLive: the grip's account for XR's feel and log. `brakeHands` (bits) is the hands braking
+// now, with the slide speed (m/s) and the braking (m/s^2); `flings` counts up, and the last one's source
+// (1 ground, 2 wall, 3 air), speed (m/s) and velocity; `grips` the fling grips begun, `slow` the pulls
+// let go of too slowly, `refused` the flings with nowhere to go.
+struct GripLive {
+    uint32_t magic = 0x5357474c, version = 1, bytes = sizeof(GripLive), brakeHands{};
+    float brakeSpeed{}, brakeDecel{};
+    uint32_t brakes{}, grips{}, flings{}, groundFlings{}, wallFlings{}, airFlings{}, slow{}, refused{};
+    uint32_t source{};
+    float flingSpeed{};
+    Vec3 flingVelocity{};
+    uint32_t reserved{};
+};
+static_assert(sizeof(GripLive) == 80);
+// Side channel from XR (HAND GRAB, hand_grab.hpp, G2): the settings, sent whenever they change and again
+// every second. `flags` bit 0: hand_grab. force: hand_grab_force (N per hand, 1200); holdCost:
+// enemy_hold_cost (1). Not a Command or Settings field and not versioned with them (an older swing module has
+// no SpidySwingHandGrab export; XR then sends none and no hand takes anything).
+struct HandGrabAsk {
+    uint32_t magic = 0x53574847, version = 1, bytes = sizeof(HandGrabAsk), serial{};
+    uint32_t flags{};
+    float force = 1200.f, holdCost = 1.f;
+    uint32_t reserved{};
+};
+static_assert(sizeof(HandGrabAsk) == 32);
+inline bool validHandGrab(const HandGrabAsk& a) {
+    return a.magic == 0x53574847 && a.version == 1 && a.bytes == sizeof(HandGrabAsk) && !(a.flags & ~1u) &&
+           std::isfinite(a.force) && a.force >= 400.f && a.force <= 4000.f && std::isfinite(a.holdCost) &&
+           a.holdCost >= 0.f && a.holdCost <= 5.f;
+}
+// SpidySwingHandGrabLive: the hand grab's account for XR's log and feel. `holding` (bits) the hands holding
+// by palm now; the counts of bodies taken (`enemies`, `props`), thrown, slammed and only let go of, lost
+// (shaken off) and knocked into flight (`knocks`); the latest action (1 hold, 2 throw, 3 slam, 4 let go) on
+// what (1 enemy, 2 prop), with its mass (kg) and speed (m/s); `serial` counts up last.
+struct HandGrabLive {
+    uint32_t magic = 0x5357484c, version = 1, bytes = sizeof(HandGrabLive), holding{};
+    uint32_t grabs{}, enemies{}, props{}, throws{}, slams{}, drops{}, lost{}, knocks{};
+    uint32_t lastAction{}, lastKind{};
+    float lastMass{}, lastSpeed{};
+    uint32_t serial{};
+};
+static_assert(sizeof(HandGrabLive) == 68);
+// Side channel from XR (PHYSICAL WEB TETHERS, tether.hpp, W1): the settings, sent whenever they change and again
+// every second. `flags` bit 0: physical_tethers. particles: tether_particles (8 to 32, 24); substeps:
+// tether_substeps (2 to 16, 8). Not a Command or Settings field and not versioned with them (an older swing
+// module has no SpidyTether export; XR then sends none and the webs are as they were).
+struct TetherAsk {
+    uint32_t magic = 0x53575448, version = 1, bytes = sizeof(TetherAsk), serial{};
+    uint32_t flags{}, particles = 24, substeps = 8, reserved{};
+};
+static_assert(sizeof(TetherAsk) == 32);
+inline bool validTether(const TetherAsk& a) {
+    return a.magic == 0x53575448 && a.version == 1 && a.bytes == sizeof(TetherAsk) && !(a.flags & ~1u) &&
+           a.particles >= 8 && a.particles <= 32 && a.substeps >= 2 && a.substeps <= 16;
+}
+// SpidyTetherLive: each hand's line to draw and the account, for XR. `lines[i]`: `count` points past the ends
+// (at most 6: the game's rope takes 8 in all), `end` where it meets the target, `tension` 0 to 1; `flags` bit 0
+// the line is live, 1 the hand is spinning its target, 2 the line was kept after a throw. The counts: whips,
+// spins begun, slings, throws that kept the line, lines cut; the latest action (1 whip, 2 spin, 3 sling,
+// 4 throw on a tether, 5 cut) with its speed (m/s); `serial` counts up last.
+struct TetherLiveLine {
+    uint32_t count{}, flags{};
+    float tension{};
+    Vec3 end{};
+    Vec3 points[6]{};
+};
+struct TetherLive {
+    uint32_t magic = 0x5357544c, version = 1, bytes = sizeof(TetherLive), active{};
+    uint32_t whips{}, spins{}, slings{}, throws{}, cuts{}, lastAction{};
+    float lastSpeed{};
+    TetherLiveLine lines[2];
+    uint32_t serial{};
+};
+static_assert(sizeof(TetherLiveLine) == 96 && sizeof(TetherLive) == 240);
 // A web's edges as Bends hands them on: its anchor is the edge nearest the
 // hand, and each edge records the one before it, back to where it sticks.
 inline Bends::Hand edgesOf(const Web& w) {
@@ -562,7 +914,9 @@ inline bool validSettings(const Settings& s) {
             (s.version == 29 && s.bytes == settingsBytesV29) ||
             (s.version == 30 && s.bytes == settingsBytesV30) ||
             (s.version == 31 && s.bytes == settingsBytesV31) ||
-            (s.version == 32 && s.bytes == sizeof(Settings))) &&
+            (s.version == 39 && s.bytes == settingsBytesV39) ||
+            (s.version == 40 && s.bytes == settingsBytesV40) ||
+            (s.version == 41 && s.bytes == sizeof(Settings))) &&
            s.grab <= 1 && std::isfinite(s.maxSpeed) && s.maxSpeed > 0 && s.maxSpeed <= motionSpeedLimit &&
            s.airWebs <= 1 && std::isfinite(s.gravity) && s.gravity >= 0 && s.gravity <= maxGravity &&
            s.walls <= 4 && s.physical <= 1 && s.noBlows <= 3 && s.arcade <= 1 && s.handClimb <= 1 &&
@@ -578,7 +932,13 @@ inline bool validSettings(const Settings& s) {
            (s.version < 28 || s.spidyRun <= 1) && (s.version < 29 || s.spidyRunStanding <= 1) &&
            (s.version < 30 || (s.webLandingSmooth <= 1 && std::isfinite(s.webLandingImpact) &&
                                s.webLandingImpact >= 5 && s.webLandingImpact <= 100)) &&
-           (s.version < 31 || s.webLines <= 1) && (s.version < 32 || s.enemyTypes <= 1);
+           (s.version < 39 || s.headProbe <= 1) && (s.version < 39 || s.animatedMoves <= 1) &&
+           (s.version < 39 || s.animatedHead <= 2) && (s.version < 39 || s.animatedAir <= 1) &&
+           (s.version < 39 || s.animatedSteering <= 1) && (s.version < 39 || s.animatedArms <= 1) &&
+           (s.version < 39 || s.animatedTorso <= 1) && (s.version < 39 || s.animatedModelYaw <= 1) &&
+           (s.version < 31 || s.webLines <= 1) &&
+           (s.version < 40 || (s.runSpeedPercent >= 50 && s.runSpeedPercent <= 200 && s.softLockMetres <= 40)) &&
+           (s.version < 41 || s.enemyTypes <= 1);
 }
 static_assert(sizeof(WebState) == 28 && sizeof(Data) == 272 && offsetof(Data, wall) == 240);
 // The player is in the air: Spidy's own flight, or the game's jump or fall,
@@ -636,15 +996,20 @@ inline bool valid(const Command& c) {
     const auto& t = c.tilt;
     const float tilt = t.x * t.x + t.y * t.y + t.z * t.z + t.w * t.w;
     if (c.magic != 0x5357434d ||
-        !((c.version == 2 && c.bytes == commandBytesV2) || (c.version == 3 && c.bytes == commandBytesV3) ||
-          (c.version == 4 && c.bytes == commandBytesV4) || (c.version == 5 && c.bytes == commandBytesV5) ||
-          (c.version == 6 && c.bytes == sizeof(c))) ||
+        !commandBytes(c.version) || c.bytes != commandBytes(c.version) ||
         !std::isfinite(c.leap) || c.leap < 0 || c.leap > 1 || !finite(c.look) || length(c.look) > 1.01f ||
         !c.serial || c.focused > 1 || c.jump > 1 || c.leaseMs > 250 || (c.focused && !c.leaseMs) ||
         !finite(c.move) || length(c.move) > 1.001f || !std::isfinite(c.trackingYaw) || c.asks > 63 ||
         !std::isfinite(c.sampleSeconds) || c.sampleSeconds <= 0 || c.sampleSeconds > .1f ||
         (c.focused && !c.sampleTimeNs) || !std::isfinite(tilt) || tilt < .99f || tilt > 1.01f)
         return false;
+    if (c.version >= 7) {
+        if (c.actionMode > 7) return false;
+        for (const auto q : c.physicalToContact) {
+            const float n = q.x*q.x + q.y*q.y + q.z*q.z + q.w*q.w;
+            if (!std::isfinite(n) || std::abs(n-1.f) > .01f) return false;
+        }
+    }
     for (const auto& h : c.hands) {
         const auto q = h.aim.orientation;
         const float norm = q.x * q.x + q.y * q.y + q.z * q.z + q.w * q.w;
@@ -662,6 +1027,25 @@ inline bool valid(const Command& c) {
     return c.wallRotate <= 1 && finite(c.gazeOrigin) && finite(c.gaze) &&
            (gaze == 0 || std::abs(gaze - 1) < .01f) && c.eyeAim <= 1;
 }
+// The actual module ingress. `read` copies a prefix from the submitted pointer
+// with its platform's checked read; tests supply a bounded wire buffer. Default
+// initialize before copying old packets, and never read beyond their wire size.
+template<class Read> inline bool decodeCommand(Command& out, Read read) {
+    uint32_t header[3]{};
+    if (!read(header, sizeof(header)) || header[0] != 0x5357434d ||
+        !commandBytes(header[1]) || header[2] != commandBytes(header[1])) return false;
+    Command candidate;
+    if (!read(&candidate, header[2]) || candidate.bytes != header[2] || !valid(candidate)) return false;
+    if (candidate.version < 7) {
+        // v5 padding and v6 reserved bytes were not action policy. Normalize
+        // them even when an older producer populated them with nonzero data.
+        candidate.actionMode = candidate.animationCancel = 0;
+        candidate.physicalToContact[0] = candidate.physicalToContact[1] = {};
+    }
+    out = candidate;
+    return true;
+}
+
 class InputSampleClock {
   public:
     float consume(const Command& c) {

@@ -43,6 +43,15 @@ bool start(uintptr_t exeBase);
 // The XR worker, once per headset frame: a scene wants first person now.
 // Going false puts back everything this module hid.
 void want(bool on);
+// ANIMATED HEAD while ANIMATED MOVES yields: sample the hero's gameplay head
+// and shrink its mesh without the cutscene worker (want stays false; no pool
+// scan, stand-ins or theatre). The render thread resolves eyes with frame() /
+// frameLevel() the same way finishers do.
+void followHero(bool on);
+bool followingHero();
+// Re-latch frameLevel axes (as a cut): call when midair softlock begins so the
+// level forward settles to the current torso/head facing without a nausea pop.
+void relatchHeadFrame();
 // The XR worker, once per headset frame, with want(): what the view is where no head is found. 0: nothing,
 // the scene goes to the theatre screen. 1: the scene's own camera, where no head can be found (a head is
 // looked for all the same, and takes over when it is found). 2: the scene's own camera always (launcher:
@@ -74,24 +83,44 @@ bool otherCharacter(uint64_t asset);
 // are put on a head), so that the character in the shot can be told from one that is not. The tangents are
 // half the width and half the height of its picture (0: not known; a wide cone then stands for it).
 void camera(const Mat4& pose, float tangentHalfWidth = 0, float tangentHalfHeight = 0);
-// The render thread, once per game frame, only while wanted: carries out the
-// worker's hiding and samples the head. `head` is the head's pose in the world
-// as rows right, down, forward and the position, orthonormal (the same layout
-// as a native view's pose). False when no head can be placed this frame.
+// The render thread, once per game frame, while wanted or followHero: carries
+// out the worker's hiding (wanted only) and samples the head. `head` is the
+// head's pose in the world as rows right, down, forward and the position,
+// orthonormal (the same layout as a native view's pose). False when no head
+// can be placed this frame.
+// Gameplay (followHero, no first-person scene) with the FULL head lock on the
+// stable heading (view_yaw_lock::live, rotation desync Step B): the head's yaw
+// turned onto the lock's (its position, pitch and roll the head bone's).
 bool frame(Mat4& head);
+// As frame(), never turned by the view yaw lock: the head bone as the game
+// animates it (the stable heading's own input, diagnostics).
+bool heroHead(Mat4& head);
 // As frame(), for a scene whose head tracking is off: the head's place, but its axes are a level frame facing
 // where the character faced when the scene (or the cut to its next shot) began, so only where he is follows
 // him, not where he looks, and the viewer looks about freely from there.
 bool frameLevel(Mat4& head);
+// SHOWTIME (showtime.hpp): the XR thread publishes the outside camera's level frame (showtime::levelFrame: the rig's place, level,
+// facing the rig yaw) every frame while the view is out, and null when it comes back. While a frame was published in the last
+// 250 ms, frame() and frameLevel() hand the eyes THAT frame (never turned by the view yaw lock) instead of the hero's head;
+// nothing is hidden or shrunk by this call. showtimeActive(): one is current.
+void showtimeFrame(const Mat4* frame);
+bool showtimeActive();
+// SHOWTIME: the head shrink (shrinkHead) stands down while true is refreshed every frame (250 ms lease): his head is seen from outside.
+void showtimeHead(bool shown);
+// The game's own gameplay camera (the stock follow or combat camera, sampled every frame by the render thread): its place and where
+// it faces, yaw as the rig has it (0 facing -z). False when no sample is under half a second old. Read only: SHOWTIME reads its
+// distance behind him as the world's own limit on a camera back there.
+bool stockSeat(Vec3& position, float& yaw);
 // The heading the scene's view has in the world, for the play that follows it (the XR worker): the
 // character's head (`level` false) or frameLevel's frame (`level` true), yaw in radians as the rig has it (0
 // facing -z). False before one was sampled.
 bool sceneYaw(bool level, float& yaw);
 // The pose job's hook (native_body.cpp, writer), after the game wrote a character's model-space joints
-// (`joints`, 64 bytes a joint, from the rig `rig`): while a first-person scene wants it, the head joint of
-// the skeleton the view is on, and every joint under it, shrink to a point at the head joint, as SpidyVR's
-// own body does for the player: what is skinned to the head, its face, hair and eyes and the suit's mask and
-// lenses, is gone from inside the eyes, and the body stays. The head joint's place does not change.
+// (`joints`, 64 bytes a joint, from the rig `rig`): while a first-person scene wants it, or while
+// followHero is on for ANIMATED HEAD, the head joint of the skeleton the view is on, and every joint
+// under it, shrink to a point at the head joint, as SpidyVR's own body does for the player: what is
+// skinned to the head, its face, hair and eyes and the suit's mask and lenses, is gone from inside
+// the eyes, and the body stays. The head joint's place does not change.
 // True when it shrank the joints.
 bool shrinkHead(float* joints, uintptr_t rig);
 // The body's rig reading (native_body.cpp, solveHero), whenever it has the hero's rig: the character's

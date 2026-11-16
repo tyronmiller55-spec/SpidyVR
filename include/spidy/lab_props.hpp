@@ -29,6 +29,7 @@ class LabProps final : public TargetQueries {
     std::optional<GrabTarget> pick(Vec3 origin, Vec3 direction, float distance, float cone) const override;
     std::optional<GrabTarget> find(std::uint64_t id) const override;
     void characters(std::vector<GrabTarget>& out) const override;
+    void within(Vec3 point, float reach, std::vector<GrabTarget>& out) const override;
     // One physics step: a commanded prop moves as the command's law gives
     // it, the rest fall; all collide with the world and with each other.
     void step(float dt, std::span<const TargetCommand> commands, const World& world);

@@ -2,6 +2,7 @@
 #include "spidy/gadget_wheel.hpp"
 #include "spidy/overlay_text.hpp"
 #include "spidy/soft_shapes.hpp"
+#include "spidy/spherical_aim.hpp"
 #include "spidy/tech_marks.hpp"
 #include <string>
 
@@ -1255,7 +1256,13 @@ Vec3 AimMarkerMotion::aim(Vec3 direction, Quat turn) {
         const auto share = [dt = seconds_](float hz) { return dt / (dt + 1 / (2 * pi * hz)); };
         speed_ += ((raw - steady_) / seconds_ - speed_) * share(speedCutoffHz);
         const float cutoff = minCutoffHz + speedCutoff * std::max(length(speed_) - speedDeadband, 0.f);
-        steady_ = normalized(steady_ + (raw - steady_) * share(cutoff));
+        // Along the great circle (spherical_aim::toward), so a marker swung
+        // behind or over the head eases round, never through a near-zero mean.
+        // v3: the last holdDegrees of the way is held (a still hand's tremor).
+        const float off = spherical_aim::angleBetween(steady_, raw);
+        const float hold = holdDegrees * pi / 180;
+        if (off > hold)
+            steady_ = spherical_aim::toward(steady_, raw, share(cutoff) * (off - hold) / off);
     }
     return turn.rotate(steady_);
 }

@@ -20,7 +20,7 @@ foreach ($name in $modules + 'spidy_launcher.exe') {
 $tools = @('run_game_vr', 'vr_launcher', 'vr_display', 'xr_runtime', 'inspect_game', 'bridge_game', 'capture_game_state',
            'capture_movement', 'capture_stereo', 'observe_game', 'probe_game_grab', 'probe_game_screen',
            'probe_game_swing', 'probe_menu_pad', 'probe_native_motion', 'probe_native_rays', 'probe_render',
-           'probe_stereo', 'probe_stereo_gpu', 'game_freeze', 'vr_settings_persist')
+           'probe_stereo', 'probe_stereo_gpu', 'game_freeze', 'vr_settings_persist', 'session_summary')
 
 # Python 3.12.10 is the newest 3.12 with Windows binaries; its MD5 matches python.org's release page.
 $pythonVersion = '3.12.10'
@@ -36,7 +36,8 @@ if ((Get-FileHash -LiteralPath $pythonZip -Algorithm SHA256).Hash -ne $pythonHas
     throw "The Python download does not match the pinned hash. Delete $pythonZip and try again."
 }
 
-$name = "Spidy-$version"
+$shortCommit = (git -C $root rev-parse --short=7 HEAD).Trim()
+$name = "Spidy-$version-player-torso-$shortCommit"
 $dist = Join-Path $root 'dist'
 # Staged under build\, never dist\: players extract the zip into dist\Spidy-<version>
 # and play from there, and the line below would wipe that folder.
@@ -57,6 +58,22 @@ Expand-Archive -LiteralPath $pythonZip -DestinationPath (Join-Path $stage 'pytho
 # The embeddable Python ignores the script's folder; the tools import each other.
 Add-Content -LiteralPath (Join-Path $stage 'python\python312._pth') -Value '..\tools' -Encoding ascii
 Copy-Item -LiteralPath (Join-Path $root 'docs\PLAYERS.md') -Destination (Join-Path $stage 'README.txt')
+Copy-Item -LiteralPath (Join-Path $root 'docs\WEB_BALL_DIAGNOSTICS.md') -Destination (Join-Path $stage 'WEB_BALL_DIAGNOSTICS.txt')
+$sourceCommit = (git -C $root rev-parse HEAD).Trim()
+@(
+    "Native Animation ARM FEEDBACK CONSUMERS PLAYTEST, version $version, source $sourceCommit"
+    'New slice: held actual-hand emitters, coherent native look/gaze, actual-camera wrist/widget feedback.'
+    'Unmerged test build; no headset alignment/success claim. Read NATIVE_ARM_FEEDBACK_PLAYTEST.txt first.'
+    'Includes prior indicator/cancel/action-frame/punch repairs. Explicit authored air-spin torso policy preserved.'
+    'Matching Command v7 host/rays: extract entire archive into a NEW writable folder; never mix DLLs/tools.'
+    'Preserve older builds and back up shared %APPDATA%\Spidy settings/profiles before testing.'
+    'Read WEB_BALL_DIAGNOSTICS.txt for counter caveats; fired is not proof of a visible projectile or damage.'
+) | Set-Content -LiteralPath (Join-Path $stage 'ACTION_FRAME_BUILD.txt') -Encoding utf8
+Copy-Item -LiteralPath (Join-Path $root 'docs\ACTION_FRAME_PLAYTEST.md') -Destination (Join-Path $stage 'ACTION_FRAME_PLAYTEST.txt')
+Copy-Item -LiteralPath (Join-Path $root 'docs\FEEDBACK_CANCEL_PLAYTEST.md') -Destination (Join-Path $stage 'FEEDBACK_CANCEL_PLAYTEST.txt')
+Copy-Item -LiteralPath (Join-Path $root 'docs\PLAYER_UPPER_TORSO_PLAYTEST.md') -Destination (Join-Path $stage 'PLAYER_UPPER_TORSO_PLAYTEST.txt')
+Copy-Item -LiteralPath (Join-Path $root 'docs\NATIVE_ARM_FEEDBACK_PLAYTEST.md') -Destination (Join-Path $stage 'NATIVE_ARM_FEEDBACK_PLAYTEST.txt')
+Copy-Item -LiteralPath (Join-Path $root 'docs\PLAYER_UPPER_TORSO_CONTRACT.md') -Destination (Join-Path $stage 'PLAYER_UPPER_TORSO_CONTRACT.txt')
 Copy-Item -LiteralPath (Join-Path $root 'docs\LINUX.md') -Destination $stage
 Copy-Item -LiteralPath (Join-Path $root 'LICENSE') -Destination (Join-Path $stage 'LICENSE.txt')
 Copy-Item -LiteralPath (Join-Path $root 'THIRD_PARTY_NOTICES.md') -Destination $stage
@@ -72,7 +89,7 @@ if ($LASTEXITCODE -or "$check" -ne '42') { throw 'The packaged Python cannot loa
 
 # A fresh checkout (the release workflow's) has no dist\, and Compress-Archive will not make it.
 New-Item -ItemType Directory -Force $dist | Out-Null
-$zip = Join-Path $dist "$name-win64.zip"
+$zip = Join-Path $dist "Spidy-$version-win64.zip"
 if (Test-Path -LiteralPath $zip) { Remove-Item -LiteralPath $zip -Force }
 Compress-Archive -LiteralPath $stage -DestinationPath $zip -CompressionLevel Optimal
 if (-not $KeepFolder) { Remove-Item -LiteralPath $stage -Recurse -Force }

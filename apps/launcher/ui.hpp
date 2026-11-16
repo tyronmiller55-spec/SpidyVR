@@ -51,7 +51,7 @@ public:
     void importFile(const std::wstring& path);
 
 private:
-    enum class Tab { play, options, controls, about };
+    enum class Tab { play, options, nativeAnimation, controls, about };
     enum class Mark { ok, warning, error, busy, info };
     // A button in the red of the one thing to do, in the tip jar's yellow (Ko-fi), or plain.
     enum class Ink { plain, primary, support };
@@ -69,6 +69,7 @@ private:
     void tabs();
     void play(ImVec2 origin, ImVec2 size);
     void options(ImVec2 origin, ImVec2 size);
+    void nativeAnimation(ImVec2 origin, ImVec2 size);
     void controls(ImVec2 origin, ImVec2 size);
     void about(ImVec2 origin, ImVec2 size);
     // START VR, what the session does in words, and how far it got.

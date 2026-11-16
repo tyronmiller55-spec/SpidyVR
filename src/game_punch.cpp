@@ -12,6 +12,7 @@
 #include "spidy/game_time.hpp"
 #include "spidy/guard_pose.hpp"
 #include "spidy/native_bodies.hpp"
+#include "spidy/punch_track.hpp"
 #include "spidy/spider_sense.hpp"
 #include <algorithm>
 #include <atomic>
@@ -25,6 +26,8 @@ using namespace spidy::game_punch;
 extern "C" {
 __declspec(dllexport) Data SpidyPunchData;
 __declspec(dllexport) Strikes SpidyStrikeData;
+// PUNCH AUTO-TARGET's account (TrackLive), for XR.
+__declspec(dllexport) TrackLive SpidyPunchTrackLive;
 }
 namespace {
 // A street thug from the feet up (other bots by their size, as
@@ -66,6 +69,10 @@ Flow flow{FlowConfig{}};
 // sample (which way he sees the one he hits).
 Cues cues{CueConfig{}};
 Vec3 headAt{};
+// PUNCH AUTO-TARGET (punch_track.hpp): XR's settings, and each hand's throws.
+SRWLOCK trackLock = SRWLOCK_INIT;
+TrackAsk trackAsk{};
+punch_track::Throws trackThrows[2];
 // The enemy his next punch goes to: the one a blow locked him onto, else the
 // one he looks at within a strike's reach (web_strike.hpp's Lock).
 Lock lock{LockConfig{}};
@@ -540,6 +547,8 @@ void knockouts(float seconds) {
         it = out || !bot || it->age > struckSeconds ? struckLately.erase(it) : it + 1;
     }
 }
+// A manual swing kick's blow in progress (kickBlow): the flight it gives the one it hits.
+std::optional<Vec3> kickFlight;
 // One blow, a fist's or a strike's, into the flow and to the game.
 void land(PunchEvent e, bool byStrike) {
     uint64_t machine{};
@@ -621,6 +630,14 @@ void land(PunchEvent e, bool byStrike) {
         d.knockback = Knockback::Knockback;
         d.velocity = {};
     }
+    // MANUAL SWING KICK: a kinetic blow whose flight is the player's velocity's share.
+    if (kickFlight) {
+        d.kind = BlowKind::Heavy;
+        d.kinetic = d.fly = true;
+        d.knockback = Knockback::FlyBack;
+        d.velocity = *kickFlight;
+        kickFlight.reset();
+    }
     // A counter's blow (spider_sense.hpp): the one after a fist thrown at him
     // while his warning stood, or one that lands while it stands and so
     // counters him itself. It sends him flying, whatever the flow says.
@@ -690,7 +707,7 @@ void land(PunchEvent e, bool byStrike) {
             launches.push_back({e.target, machine, d.velocity});
     }
     // Off the ground and on no web, the player stays up for the next blow.
-    if (!fighter.grounded && !fighter.swinging)
+    if (!fighter.contactOnly && !fighter.grounded && !fighter.swinging)
         strike.hangOn(false);
     ++tally.blows;
     tally.heavies += d.kind == BlowKind::Heavy;
@@ -768,9 +785,39 @@ float game_punch::worldScale() {
         return 1;
     return static_cast<float>(std::clamp(clock, .05, 1.));
 }
+namespace {
+// THE PUNCH SCAN'S PARTS (the 9790d67 playtest: "punch scan" peaks of 19-39 ms in and out of fights): the last
+// update's time per part (game_punch::partName order: targets, sense, lock, punches, flow, strikes), in us.
+double punchParts[game_punch::partCount]{};
+struct PartClock {
+    LARGE_INTEGER last{}, hz{};
+    unsigned part = 0;
+    PartClock() {
+        std::fill(std::begin(punchParts), std::end(punchParts), 0.);
+        QueryPerformanceFrequency(&hz);
+        QueryPerformanceCounter(&last);
+    }
+    // The part so far ends here; `next` begins.
+    void lap(unsigned next) {
+        LARGE_INTEGER now{};
+        QueryPerformanceCounter(&now);
+        if (hz.QuadPart > 0 && now.QuadPart >= last.QuadPart && part < game_punch::partCount)
+            punchParts[part] += static_cast<double>(now.QuadPart - last.QuadPart) * 1e6 / static_cast<double>(hz.QuadPart);
+        last = now;
+        part = next;
+    }
+    ~PartClock() {
+        lap(part);
+    }
+};
+} // namespace
+void game_punch::lastParts(double (&out)[partCount]) {
+    std::copy(std::begin(punchParts), std::end(punchParts), out);
+}
 Opened game_punch::update(float seconds, const Input& in, const Player& player, const WorldQueries& world) {
     Opened opened;
-    if (!enabled.load(std::memory_order_relaxed) || seconds <= 0 || !TryAcquireSRWLockShared(&updating))
+    PartClock parts; // targets until the first lap
+    if (!enabled.load(std::memory_order_relaxed) || !TryAcquireSRWLockShared(&updating))
         return opened;
     struct Release {
         ~Release() {
@@ -780,6 +827,13 @@ Opened game_punch::update(float seconds, const Input& in, const Player& player, 
     if (!enabled)
         return opened;
     watch.current(bots);
+    if (fighter.contactOnly != player.contactOnly) {
+        punches.reset(); // no giant swept contact across the ownership edge
+        turnSeen = false;
+        strike.cancel();
+        counterWish = 0;
+        counterWishLeft = 0;
+    }
     fighter = player;
     // The guards (game_guard) from the bots as they stand: the hit points of the ones with a guard, the dodge
     // over them, and how fast each enemy comes at the hero (a runner guards), in the world's time - the
@@ -794,6 +848,10 @@ Opened game_punch::update(float seconds, const Input& in, const Player& player, 
             game_guard::dodgeBegan(player.feet);
         dodgesSeen = begun;
     }
+    if (fighter.contactOnly) strike.cancel();
+    // Ownership policy is immediate even if this is a repeated/zero-time
+    // sample. Do not leave an old original-VR flight armed until time advances.
+    if (!std::isfinite(seconds) || seconds <= 0) return opened;
     // The fist: the knuckles, fistAhead along the hand from its web shooter
     // (the swing input's aim, webShooter: the nozzle, 2.5 cm further back
     // since October 18, which this keeps the fist clear of); its motion
@@ -816,9 +874,11 @@ Opened game_punch::update(float seconds, const Input& in, const Player& player, 
     for (int i = 0; i < 2; ++i) {
         const auto& h = in.hands[i];
         hands[i] = {in.focused && h.tracked, h.aim.position + h.aim.orientation.rotate({0, 0, -fistAhead}),
-                    toWorld.rotate(h.gripRelativeToHead), ((player.busy >> i) & 1) != 0};
+                    toWorld.rotate(h.gripRelativeToHead), ((player.busy >> i) & 1) != 0,
+                    player.contactOnly ? player.physicalToContact[i] : Quat{}, player.contactOnly};
         if (hands[i].tracked) {
-            head += hands[i].fist - hands[i].relative;
+            head += hands[i].fist - (player.contactOnly
+                ? player.physicalToContact[i].rotate(hands[i].relative) : hands[i].relative);
             ++tracked;
         }
     }
@@ -857,16 +917,64 @@ Opened game_punch::update(float seconds, const Input& in, const Player& player, 
     }
     // The attacks the game has warned the player of, before any blow of this
     // sample lands: a blow during a warning counters it.
+    parts.lap(1);
     readSense(chest);
     // The enemy the next punch goes to: the one a blow locked the player
     // onto, else the one he looks at. A web that holds an enemy makes him
     // the one. And of those his blows landed on, the ones knocked out.
+    parts.lap(2);
     for (const uint64_t held : player.holds)
         lock.take(held);
     lock.update(seconds, head, in.look, enemies);
     knockouts(seconds);
+    parts.lap(3);
     events.clear();
     punches.update(seconds, hands, inReach, events);
+    // PUNCH AUTO-TARGET: a throw is judged on its sample, against the enemy the ring marks (the lock's), never
+    // against anyone else: nobody targeted is no tracking, and no punch's damage depends on any of this.
+    {
+        AcquireSRWLockShared(&trackLock);
+        const TrackAsk ask = trackAsk;
+        ReleaseSRWLockShared(&trackLock);
+        punch_track::Config tc;
+        tc.on = (ask.flags & 1u) != 0;
+        tc.coneDeg = ask.coneDeg;
+        tc.rangeM = ask.rangeM;
+        for (int i = 0; i < 2; ++i) {
+            if (!trackThrows[i].update(seconds, punches.speed(i), hands[i].tracked && !hands[i].busy))
+                continue;
+            bool found{};
+            Vec3 middle{};
+            if (const uint64_t id = lock.target())
+                for (const auto& e : enemies)
+                    if (e.id == id) {
+                        found = true;
+                        middle = e.middle();
+                        break;
+                    }
+            const auto verdict = punch_track::decide(tc, found, head, punches.velocity(i), middle);
+            volatile TrackLive& live = SpidyPunchTrackLive;
+            live.throws = live.throws + 1;
+            switch (verdict.why) {
+            case punch_track::Why::tracked: live.tracked = live.tracked + 1; break;
+            case punch_track::Why::noTarget: live.noTarget = live.noTarget + 1; break;
+            case punch_track::Why::tooFar: live.tooFar = live.tooFar + 1; break;
+            case punch_track::Why::outsideCone: live.outsideCone = live.outsideCone + 1; break;
+            default: live.off = live.off + 1; break;
+            }
+            live.lastHand = static_cast<uint32_t>(i);
+            live.lastWhy = static_cast<uint32_t>(verdict.why);
+            live.target = found ? lock.target() : 0;
+            live.towardX = verdict.toward.x;
+            live.towardY = verdict.toward.y;
+            live.towardZ = verdict.toward.z;
+            live.distance = verdict.distance;
+            live.angleDeg = verdict.angleDeg;
+            MemoryBarrier();
+            live.events = live.events + 1;
+        }
+    }
+    parts.lap(4);
     flow.update(seconds);
     if (!fighter.combatVisuals || !flow.count())
         cues.clear();
@@ -876,6 +984,10 @@ Opened game_punch::update(float seconds, const Input& in, const Player& player, 
         strike.spent(e.hand);
         land(e, false);
     }
+    // Contact damage above is shared. Only original VR may acquire a remote
+    // strike, dive, counter lunge or automated arrival blow below.
+    parts.lap(5);
+    if (!fighter.contactOnly) {
     std::array<FightFist, 2> fists{};
     for (int i = 0; i < 2; ++i)
         fists[i] = {hands[i].tracked, hands[i].fist, punches.velocity(i), !hands[i].busy, player.holds[i],
@@ -927,8 +1039,10 @@ Opened game_punch::update(float seconds, const Input& in, const Player& player, 
         tally.swung += strikeOpened->called;
         tally.held += strikeOpened->held;
         tally.distance = strikeOpened->distance;
-    } else if (const auto dove = strike.dive(player.velocity, player.grounded, head, player.feet, enemies, world,
-                                             wish.target, punches.config())) {
+    } else if (const auto dove = player.noDive
+                                     ? std::optional<WebStrike::Opening>{}
+                                     : strike.dive(player.velocity, player.grounded, head, player.feet,
+                                                   enemies, world, wish.target, punches.config())) {
         // His own flight into the marked enemy: a swing, a zip, a jump or a
         // fall that takes him at him fast, feet first (WebStrike::dive). The
         // webs let go; the rest of the way is the strike's.
@@ -939,6 +1053,7 @@ Opened game_punch::update(float seconds, const Input& in, const Player& player, 
     } else if (flying && strike.phase() == WebStrike::Phase::Idle) {
         ++tally.missed; // the player took no steps: perched, or held by the game
     }
+    } // !contactOnly
     publish([&](Data& d) {
         d.status = 2;
         ++d.samples;
@@ -964,10 +1079,100 @@ Opened game_punch::update(float seconds, const Input& in, const Player& player, 
     publishSense(2, chest);
     return opened;
 }
+game_punch::KickTarget game_punch::kickTarget() {
+    KickTarget out;
+    if (!enabled.load(std::memory_order_relaxed) || !TryAcquireSRWLockShared(&updating))
+        return out;
+    if (enabled && !fighter.contactOnly && lock.target()) {
+        for (const auto& e : enemies)
+            if (e.id == lock.target()) {
+                out = {true, e.id, e.feet, e.height, e.radius, e.airborne};
+                break;
+            }
+    }
+    ReleaseSRWLockShared(&updating);
+    return out;
+}
+bool game_punch::kickBlow(uint64_t target, Vec3 point, Vec3 direction, float playerSpeed, Vec3 enemyVelocity,
+                          Vec3 feet, bool grounded) {
+    if (!enabled.load(std::memory_order_relaxed) || !TryAcquireSRWLockShared(&updating))
+        return false;
+    struct Release {
+        ~Release() {
+            ReleaseSRWLockShared(&updating);
+        }
+    } release;
+    if (!enabled || fighter.contactOnly || !target || !finite(point) || !finite(direction) ||
+        !finite(enemyVelocity))
+        return false;
+    const Vec3 way = length(direction) > .5f ? normalized(direction) : Vec3{0, 0, -1};
+    const float strength = std::max(strike.diveStrength(playerSpeed), strike.config().minStrength);
+    auto e = punches.blow(way, speedOf(punches.config(), strength));
+    e.hand = WebStrike::diveHand;
+    e.target = target;
+    e.point = point;
+    fighter.feet = feet;
+    fighter.grounded = grounded;
+    kickFlight = enemyVelocity;
+    land(e, false);
+    kickFlight.reset();
+    return true;
+}
+size_t game_punch::kickCandidates(KickCandidate* out, size_t max, Vec3 feet) {
+    size_t count = 0;
+    if (!out || !max || !enabled.load(std::memory_order_relaxed) || !TryAcquireSRWLockShared(&updating))
+        return 0;
+    if (enabled && !fighter.contactOnly) {
+        for (const auto& e : enemies) {
+            if (!e.id || !finite(e.feet))
+                continue;
+            const KickCandidate c{e.id, e.feet, e.height, e.radius};
+            // Nearest first, the list kept at `max`.
+            size_t at = count;
+            while (at > 0 && length(out[at - 1].feet - feet) > length(c.feet - feet))
+                --at;
+            if (at >= max)
+                continue;
+            if (count < max)
+                ++count;
+            for (size_t i = count - 1; i > at; --i)
+                out[i] = out[i - 1];
+            out[at] = c;
+        }
+    }
+    ReleaseSRWLockShared(&updating);
+    return count;
+}
+bool game_punch::kickHit(uint64_t target, Vec3 point, Vec3 direction, float strength, bool fly, Vec3 enemyVelocity,
+                         Vec3 feet, bool grounded) {
+    if (!enabled.load(std::memory_order_relaxed) || !TryAcquireSRWLockShared(&updating))
+        return false;
+    struct Release {
+        ~Release() {
+            ReleaseSRWLockShared(&updating);
+        }
+    } release;
+    if (!enabled || fighter.contactOnly || !target || !finite(point) || !finite(direction) ||
+        !std::isfinite(strength) || (fly && !finite(enemyVelocity)))
+        return false;
+    const Vec3 way = length(direction) > .5f ? normalized(direction) : Vec3{0, 0, -1};
+    const float s = std::max(std::clamp(strength, 0.f, 1.f), strike.config().minStrength);
+    auto e = punches.blow(way, speedOf(punches.config(), s));
+    e.hand = WebStrike::diveHand;
+    e.target = target;
+    e.point = point;
+    fighter.feet = feet;
+    fighter.grounded = grounded;
+    if (fly)
+        kickFlight = enemyVelocity;
+    land(e, false);
+    kickFlight.reset();
+    return true;
+}
 bool game_punch::lifting(Vec3 feet) {
     if (!enabled.load(std::memory_order_relaxed) || !TryAcquireSRWLockShared(&updating))
         return false;
-    const bool up = strike.lifting(feet);
+    const bool up = !fighter.contactOnly && strike.lifting(feet);
     ReleaseSRWLockShared(&updating);
     return up;
 }
@@ -980,7 +1185,7 @@ Flight game_punch::fly(float seconds, Vec3 feet, bool grounded, bool waiting) {
             ReleaseSRWLockShared(&updating);
         }
     } release;
-    if (!enabled || strike.phase() == WebStrike::Phase::Idle)
+    if (!enabled || fighter.contactOnly || strike.phase() == WebStrike::Phase::Idle)
         return out;
     if (waiting && strike.phase() == WebStrike::Phase::Flying) {
         strike.wait(seconds);
@@ -1026,7 +1231,7 @@ Flight game_punch::fly(float seconds, Vec3 feet, bool grounded, bool waiting) {
 void game_punch::hangInAir(float seconds) {
     if (!enabled.load(std::memory_order_relaxed) || !TryAcquireSRWLockShared(&updating))
         return;
-    if (enabled && !fighter.grounded && !fighter.swinging)
+    if (enabled && !fighter.contactOnly && !fighter.grounded && !fighter.swinging)
         strike.hangOn(false, seconds);
     ReleaseSRWLockShared(&updating);
 }
@@ -1059,6 +1264,18 @@ extern "C" __declspec(dllexport) DWORD WINAPI SpidyPunchStart(void* input) {
         c.base != reinterpret_cast<uintptr_t>(GetModuleHandleW(nullptr)))
         return 9501;
     return game_punch::start(c.base);
+}
+// PUNCH AUTO-TARGET: XR's settings. 2001: not a TrackAsk; 0 taken. What it saw: SpidyPunchTrackLive.
+extern "C" __declspec(dllexport) DWORD WINAPI SpidyPunchTrack(void* input) {
+    TrackAsk a{};
+    if (!read(reinterpret_cast<uintptr_t>(input), &a, sizeof(a)) || a.magic != 0x5350544b || a.version != 1 ||
+        a.bytes != sizeof(a) || (a.flags & ~1u) || !std::isfinite(a.coneDeg) || a.coneDeg < 5.f || a.coneDeg > 120.f ||
+        !std::isfinite(a.rangeM) || a.rangeM < 1.f || a.rangeM > 30.f)
+        return 2001;
+    AcquireSRWLockExclusive(&trackLock);
+    trackAsk = a;
+    ReleaseSRWLockExclusive(&trackLock);
+    return 0;
 }
 extern "C" __declspec(dllexport) DWORD WINAPI SpidyPunchStop(void*) {
     return game_punch::stop();

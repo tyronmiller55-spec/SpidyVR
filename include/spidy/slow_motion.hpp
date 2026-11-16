@@ -1,4 +1,5 @@
 #pragma once
+#include <cmath>
 #include <cstdint>
 
 // Slow motion as Blade & Sorcery has it: a click of the left thumbstick slows
@@ -63,12 +64,23 @@ class SlowMotion {
     const SlowMotionTuning& tuning() const {
         return tuning_;
     }
+    // SLOW-MO LENGTH (vr_settings::Values::slowMotionSeconds): real seconds a
+    // full meter lasts; 0 (or not finite/positive) = endless, until a press
+    // ends it. Takes effect at once, a running slow motion included.
+    void setDrainSeconds(float seconds) {
+        endless_ = !(std::isfinite(seconds) && seconds > 0);
+        if (!endless_)
+            tuning_.drainSeconds = seconds;
+    }
+    bool endless() const {
+        return endless_;
+    }
     // A full meter in real time, as a session starts.
     void reset();
 
   private:
     SlowMotionTuning tuning_;
-    bool active_{};
+    bool active_{}, endless_{};
     float progress_{}; // 0..1 linear in time toward active_
     float focus_ = 1, meter_{};
     // Real seconds since slow motion ended (refill delay), since the last

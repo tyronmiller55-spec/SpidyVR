@@ -122,7 +122,35 @@ struct Player {
     // none): a flight of his into the marked enemy dives at him
     // (WebStrike::dive).
     Vec3 velocity{};
+    // Animation-owned hands: real swept contacts only, no web-strike/lunge,
+    // dive, remote counter or automatic hang. Original VR leaves this false.
+    bool contactOnly{};
+    Quat physicalToContact[2]{};
+    // The auto dive holds back: swing_kick_auto is off, or a manual swing kick is under way.
+    bool noDive{};
 };
+// PUNCH AUTO-TARGET (punch_track.hpp, the polish pass slice 7). Side channel from XR, beside game_swing::Settings (which stays
+// v40): SpidyPunchTrack takes the TrackAsk (sent when it changes and every second), SpidyPunchTrackLive is what the module
+// saw. `flags` bit 0: punch_autotarget. On a THROW (a free fist leaving rest) the verdict is taken on that sample: `events`
+// counts up LAST (read it, then the rest, then `events` again: a change in between means it was being written); `lastWhy`
+// is punch_track::Why, `lastHand` 0 left / 1 right, `target` the actor record of the targeted enemy (0: nobody), `toward`
+// the unit line from the head to his middle (zero unless tracked), `distance` (m) and `angleDeg` the throw's off it.
+struct TrackAsk {
+    uint32_t magic = 0x5350544b, version = 1, bytes = sizeof(TrackAsk), serial{};
+    uint32_t flags{};
+    float coneDeg = 45.f, rangeM = 6.f;
+    uint32_t reserved{};
+};
+static_assert(sizeof(TrackAsk) == 32);
+struct TrackLive {
+    uint32_t magic = 0x5350544c, version = 1, bytes = sizeof(TrackLive), events{};
+    uint32_t throws{}, tracked{}, noTarget{}, tooFar{}, outsideCone{}, off{};
+    uint32_t lastHand{}, lastWhy{};
+    uint64_t target{};
+    float towardX{}, towardY{}, towardZ{}, distance{}, angleDeg{};
+    uint32_t reserved[3]{};
+};
+static_assert(sizeof(TrackLive) == 88);
 // What a sample opened: a web strike, at the enemy the hand's own web held.
 // The swing lets its webs go, and the grab his.
 struct Opened {
@@ -131,6 +159,11 @@ struct Opened {
 // One input sample in the swing's callback (seconds since the previous one,
 // 0: the same sample again).
 Opened update(float seconds, const Input&, const Player&, const WorldQueries&);
+// The last update's time per part (microseconds; the swing module's "punch scan" section, split): targets (the
+// enemy list and its reads), sense, lock (the lock and knockouts), punches (and their tracking), flow (and flights),
+// strikes (the web strike, dives, counters). Same thread as update().
+inline constexpr unsigned partCount = 6;
+void lastParts(double (&out)[partCount]);
 // The web strike's say over the step of the player's mover about to be
 // asked for: `seconds` of real time after the one before, from `feet`.
 struct Flight {
@@ -143,6 +176,33 @@ Flight fly(float seconds, Vec3 feet, bool grounded, bool waiting = false);
 // The strike in flight goes up from `feet`: a player on the ground leaves it
 // by the game's jump first (WebStrike::lifting).
 bool lifting(Vec3 feet);
+// MANUAL SWING KICK (swing_kick.hpp): the enemy the ring marks (the lock's: the one the next punch and the
+// auto dive go to), where he stands now. valid is false when nobody is marked or he is out of the fight.
+struct KickTarget {
+    bool valid{};
+    uint64_t id{};
+    Vec3 feet{};
+    float height = 1.8f, radius = .3f;
+    bool airborne{};
+};
+KickTarget kickTarget();
+// The kick's foot met him: a kinetic blow as hard as the player was fast, his flight at `enemyVelocity`
+// (world, real m/s). `feet` and `grounded`: the player's, as fly() has them. False when nothing was sent.
+bool kickBlow(uint64_t target, Vec3 point, Vec3 direction, float playerSpeed, Vec3 enemyVelocity, Vec3 feet,
+              bool grounded);
+// AIR KICKS (air_kick.hpp): every enemy in the fight, where he stands now (at most `max`, nearest the
+// player's `feet` first); the count.
+struct KickCandidate {
+    uint64_t id{};
+    Vec3 feet{};
+    float height = 1.8f, radius = .3f;
+};
+size_t kickCandidates(KickCandidate* out, size_t max, Vec3 feet);
+// An air kick's foot met `target`: a blow of `strength` (0..1; the web strike's blows' scale). `fly`: a
+// kinetic blow sending him at `enemyVelocity` (world, real m/s), as every dive does; otherwise a plain hit.
+// False when nothing was sent.
+bool kickHit(uint64_t target, Vec3 point, Vec3 direction, float strength, bool fly, Vec3 enemyVelocity, Vec3 feet,
+             bool grounded);
 // The strike in progress ends with no blow (play stopped, the player changed).
 void cancelStrike();
 // A thug the web pulled to a player in the air has arrived beside him: the

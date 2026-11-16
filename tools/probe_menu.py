@@ -125,9 +125,9 @@ def main():
         press('up', 'up')
         press('a', wait=1.2)
         step('settings', tabs=before['tabs']+1, status=0)
-        # The seven VR tabs follow the game's tabs. Up from GAME wraps to
-        # Display, then Feedback, Flips, Movement, Swinging and Webs.
-        press('up', 'up', 'up', 'up', 'up', 'up', wait=.6)
+        # Eight VR tabs follow the game's tabs. Up from GAME wraps through
+        # Native Animation, Display, Haptics, Flips, Movement, Swinging and Webs.
+        press('up', 'up', 'up', 'up', 'up', 'up', 'up', wait=.6)
         press('a', wait=1.2)
         step('vr_webs', dict(arcade_webs=False, trigger_webs=False, aim_markers=True,
                              swing_speed=33.0, web_shooter=False, weight=80))

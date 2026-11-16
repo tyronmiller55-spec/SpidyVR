@@ -17,8 +17,10 @@ namespace {
 SRWLOCK lock = SRWLOCK_INIT;
 diag_log::Ring<diag_log::mainLines> mainRing;
 diag_log::Ring<diag_log::aimLines> aimRing;
+diag_log::Ring<diag_log::headLines> headRing;
 ULONGLONG firstTick{};
 std::atomic<bool> on{};
+diag_log::Throttle throttle;
 } // namespace
 
 void diag_log::enable(bool wanted) {
@@ -27,6 +29,19 @@ void diag_log::enable(bool wanted) {
 
 bool diag_log::enabled() {
     return on.load(std::memory_order_relaxed);
+}
+
+void diag_log::setSlow(bool slow) {
+    AcquireSRWLockExclusive(&lock);
+    throttle.slow(slow);
+    ReleaseSRWLockExclusive(&lock);
+}
+
+uint64_t diag_log::droppedLines() {
+    AcquireSRWLockShared(&lock);
+    const uint64_t n = throttle.dropped;
+    ReleaseSRWLockShared(&lock);
+    return n;
 }
 
 void diag_log::write(const char* text) {
@@ -38,9 +53,15 @@ void diag_log::write(const char* text) {
     if (!firstTick)
         firstTick = now;
     const double seconds = static_cast<double>(now - firstTick) / 1000.0;
+    if (!throttle.allow(text, seconds)) {
+        ReleaseSRWLockExclusive(&lock);
+        return;
+    }
     _snprintf_s(line, sizeof(line), _TRUNCATE, "[%8.3f] %s", seconds, text);
-    if (channelOf(text) == Channel::aim)
+    if (const auto channel = channelOf(text); channel == Channel::aim)
         aimRing.push(line);
+    else if (channel == Channel::head)
+        headRing.push(line);
     else
         mainRing.push(line);
     ReleaseSRWLockExclusive(&lock);
@@ -61,6 +82,8 @@ void diag_log::copyOut(Data& out) {
         out.main = mainRing;
     if (out.aim.written != aimRing.written)
         out.aim = aimRing;
+    if (out.head.written != headRing.written)
+        out.head = headRing;
     ReleaseSRWLockShared(&lock);
 }
 

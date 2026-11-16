@@ -1,3 +1,30 @@
+# SpidyVR Native Animation
+
+A modified community build on **Ilya Mezerowsky's SpidyVR 0.8.1 / main**.
+Insomniac's original animation suite keeps playing while SpidyVR controls,
+your headset and controller-tracked arms are layered over it. Inspired by
+**vrfloofy's first-person mod**. GPL-3.0; not an official Marvel or Insomniac product.
+
+Open **Spidy Launcher.exe** and select **Native Animation**, between Options and
+Controls. The headset has the same contiguous **NATIVE ANIMATION** settings block
+under SPIDY VR. New installations start in the recommended mode; existing saved
+settings and profiles retain their stored choices. [Player guide](docs/PLAYERS.md).
+
+Use this fork for community-build support:
+https://github.com/tyronmiller55-spec/SpidyVR . The original Spidy launcher name,
+author credits, Discord and Ko-fi links are retained; Native Animation bugs do
+not belong in upstream Spidy's bug tracker. Source is provided under GPL-3.0.
+
+Windows package: **Spidy-0.8.1-win64-native-animation.zip**. Extract into a writable
+folder outside the game install. Never copy the mod into the game's folder.
+
+---
+
+## Original Spidy README
+
+> [!NOTE]
+> **Community build — SpidyVR 0.8.0 + Native Run Beta.** This fork offers an unofficial beta with opt-in NATIVE RUN and other movement/web features: [download](https://github.com/tyronmiller55-spec/SpidyVR/releases/tag/v0.8.0-native-run-beta1) · [what it is & how to enable](docs/NATIVE_RUN_BETA.md). Not endorsed by Ilya; report bugs on [this fork's Issues](https://github.com/tyronmiller55-spec/SpidyVR/issues). The official Spidy is at [IlyaMez/SpidyVR](https://github.com/IlyaMez/SpidyVR).
+
 <p align="center">
   <a href="https://github.com/IlyaMez/SpidyVR/releases/latest"><img src="docs/images/readme/hero.jpg" alt="Spider-Man in full VR. Spidy is a free PC VR mod for Marvel's Spider-Man Remastered, recorded in the headset on Quest 3." width="100%"></a>
 </p>

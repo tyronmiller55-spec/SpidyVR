@@ -1,3 +1,4 @@
+#include "spidy/animation_cancel.hpp"
 // Swing prediction runs inside a native world-query lease. MoverStandard remains
 // responsible for body collision and committing the resulting position.
 #include "spidy/game_swing.hpp"
@@ -11,6 +12,7 @@
 #include "spidy/web_line.hpp"
 #include "spidy/game_offers.hpp"
 #include "spidy/game_punch.hpp"
+#include "spidy/game_targets.hpp"
 #include "spidy/game_shooter.hpp"
 #include "spidy/game_throw.hpp"
 #include "spidy/game_warp.hpp"
@@ -19,6 +21,10 @@
 #include "spidy/native_query_context.hpp"
 #include "spidy/native_rays.hpp"
 #include "spidy/web_aim.hpp"
+#include "spidy/sidestep.hpp"
+#include "spidy/air_kick.hpp"
+#include "spidy/game_joints.hpp"
+#include "spidy/swing_kick.hpp"
 #include <atomic>
 #include <cstring>
 #include <windows.h>
@@ -31,6 +37,26 @@ __declspec(dllexport) AimData SpidyAimData;
 // Physical webs' telemetry (Ropes); odd `sequence` while it changes.
 __declspec(dllexport) Ropes SpidyRopeData;
 __declspec(dllexport) ClimbData SpidyClimbData;
+// QUICK SIDESTEP's bursts (SidestepLive), for XR's log.
+__declspec(dllexport) SidestepLive SpidySidestepLive;
+// MANUAL SWING KICK's account (SwingKickLive), for XR's log and its legs.
+__declspec(dllexport) SwingKickLive SpidySwingKickLive;
+// AIR KICKS' account (AirKickLive), for XR's log, legs and feel.
+__declspec(dllexport) AirKickLive SpidyAirKickLive;
+// The swing module's cost to the game thread, per 10 s window (SwingCostLive), for XR's diag.
+__declspec(dllexport) SwingCostLive SpidySwingCostLive;
+// JUMP PULL's account (JumpPullLive), for XR's log.
+__declspec(dllexport) JumpPullLive SpidyJumpPullLive;
+// Where the window's longest visit went (SwingCostSections), beside it.
+__declspec(dllexport) SwingCostSections SpidySwingCostSections;
+// The punch scan's parts and the target scan's cost (SwingScanCost), on the same window.
+__declspec(dllexport) SwingScanCost SpidySwingScanCost;
+// GRIP's account (GripLive), for XR's feel and log.
+__declspec(dllexport) GripLive SpidySwingGripLive;
+// HAND GRAB's account (HandGrabLive), for XR's log and feel.
+__declspec(dllexport) HandGrabLive SpidySwingHandGrabLive;
+// PHYSICAL WEB TETHERS' lines and account (TetherLive), for XR.
+__declspec(dllexport) TetherLive SpidyTetherLive;
 }
 namespace {
 // Each hand's web's edges (Bends, SpidySwingBends), written with Data.
@@ -52,6 +78,108 @@ Swing solver;
 CrawlHands crawlHands;
 VentCrawlMode ventCrawlMode;
 InputSampleClock inputClock, grabInputClock;
+// WEBS SURVIVE HITCHES (hitch_guard.hpp): the mover's measured velocity, believed only off a normal step.
+hitch_guard::VelocityGuard velocityGuard;
+// What visit() costs the game thread (hitch_guard::CostWindow), published every 10 s as SpidySwingCostLive.
+hitch_guard::CostWindow costWindow;
+double costSolverUs{}, costKickUs{};
+// The visit's sections in microseconds (hitch_guard::sectionName): 0 lock waits, 1 crawl, 2 wall tests, 3 grab and
+// tethers, 4 grip settings, 5 punch scan (the enemies), 6 kicks, 7 solver. The last two are costKickUs / costSolverUs.
+double costSection[hitch_guard::sectionCount]{};
+hitch_guard::SectionWindow sectionWindow;
+// The punch scan's parts per window (its longest visit) beside it, for SpidySwingScanCost.
+hitch_guard::PunchScanWindow punchScanWindow;
+static_assert(hitch_guard::punchPartCount == game_punch::partCount);
+// Times a stretch of visit() and adds it to `total` (microseconds).
+struct CostTimer {
+    explicit CostTimer(double& total) : total_(total) {
+        QueryPerformanceCounter(&start_);
+    }
+    ~CostTimer() {
+        LARGE_INTEGER end{}, hz{};
+        QueryPerformanceCounter(&end);
+        QueryPerformanceFrequency(&hz);
+        if (hz.QuadPart > 0 && end.QuadPart >= start_.QuadPart)
+            total_ += static_cast<double>(end.QuadPart - start_.QuadPart) * 1e6 / static_cast<double>(hz.QuadPart);
+    }
+    double& total_;
+    LARGE_INTEGER start_{};
+};
+// A stretch of visit() timed by hand where it cannot be a scope: begin(), then end(section).
+struct SectionClock {
+    LARGE_INTEGER start_{};
+    void begin() {
+        QueryPerformanceCounter(&start_);
+    }
+    void end(double& total) const {
+        LARGE_INTEGER now{}, hz{};
+        QueryPerformanceCounter(&now);
+        QueryPerformanceFrequency(&hz);
+        if (hz.QuadPart > 0 && now.QuadPart >= start_.QuadPart)
+            total += static_cast<double>(now.QuadPart - start_.QuadPart) * 1e6 / static_cast<double>(hz.QuadPart);
+    }
+};
+// One visit's whole cost, from the lock's wait to the return (the game thread waits for all of it).
+struct VisitCost {
+    VisitCost() {
+        costSolverUs = costKickUs = 0;
+        std::fill(std::begin(costSection), std::end(costSection), 0.);
+        QueryPerformanceCounter(&start_);
+    }
+    ~VisitCost() {
+        LARGE_INTEGER end{}, hz{};
+        QueryPerformanceCounter(&end);
+        QueryPerformanceFrequency(&hz);
+        if (hz.QuadPart <= 0 || end.QuadPart < start_.QuadPart)
+            return;
+        const double us = static_cast<double>(end.QuadPart - start_.QuadPart) * 1e6 / static_cast<double>(hz.QuadPart);
+        costSection[6] = costKickUs;
+        costSection[7] = costSolverUs;
+        sectionWindow.add(us, costSection);
+        if (!costWindow.add(static_cast<uint64_t>(end.QuadPart), hz.QuadPart, us, costSolverUs, costKickUs,
+                            velocityGuard.rejected(), solver.hitchIgnored()))
+            return;
+        const auto& w = costWindow.done();
+        volatile SwingCostLive& live = SpidySwingCostLive;
+        live.visits = w.visits;
+        live.over1ms = w.over1ms;
+        live.over5ms = w.over5ms;
+        live.rejected = w.rejected;
+        live.ignored = w.ignored;
+        live.seconds = static_cast<float>(w.seconds);
+        live.meanUs = w.meanUs;
+        live.maxUs = w.maxUs;
+        live.solverMaxUs = w.solverMaxUs;
+        live.kickMaxUs = w.kickMaxUs;
+        MemoryBarrier();
+        live.window = live.window + 1;
+        const auto account = sectionWindow.take();
+        volatile SwingCostSections& sections = SpidySwingCostSections;
+        sections.worstUs = account.worstUs;
+        sections.restUs = account.restUs;
+        for (unsigned i = 0; i < hitch_guard::sectionCount; ++i) {
+            sections.worst[i] = account.worst[i];
+            sections.peak[i] = account.peak[i];
+        }
+        MemoryBarrier();
+        sections.window = sections.window + 1;
+        const auto punch = punchScanWindow.take();
+        const auto scans = game_targets::takeScanCost();
+        volatile SwingScanCost& scan = SpidySwingScanCost;
+        scan.punchVisits = punch.visits;
+        scan.punchWorstUs = punch.worstUs;
+        for (unsigned i = 0; i < hitch_guard::punchPartCount; ++i)
+            scan.punchParts[i] = punch.worst[i];
+        scan.scans = scans.scans;
+        scan.classWaits = scans.classWaits;
+        scan.scanMeanMs = scans.meanMs;
+        scan.scanMaxMs = scans.maxMs;
+        scan.classWaitMaxUs = scans.classWaitMaxUs;
+        MemoryBarrier();
+        scan.window = scan.window + 1;
+    }
+    LARGE_INTEGER start_{};
+};
 // The web tie's gesture (web_tie.hpp): a web on a surface in one hand, a
 // webbed-up enemy on the other's, hands together, the right stick's click.
 TieGesture tieGesture;
@@ -126,6 +254,7 @@ RunClock runClock;
 uint64_t stepRunMs{};
 // The game's own move out of the swing's flight, asked for (Command::asks).
 AirYield airYield;
+uint32_t acceptedCancel{}, appliedCancel{};
 InFlightStep inFlight;
 SRWLOCK lifecycle = SRWLOCK_INIT, control = SRWLOCK_INIT, output = SRWLOCK_INIT, simulation = SRWLOCK_INIT;
 std::atomic<bool> enabled{};
@@ -206,6 +335,87 @@ std::atomic<bool> wristShooters{};
 SRWLOCK webTurnsLock = SRWLOCK_INIT;
 WebTurns webTurns{};
 uint64_t webTurnsAt{};
+// POINT JUMP (SpidySwingPointJump): a launch waiting for the next step, when
+// it came, and the last serial taken. One older than pointJumpMaxAgeMs when
+// the step comes is dropped (the frame it was for is long gone).
+SRWLOCK pointJumpLock = SRWLOCK_INIT;
+PointJumpAsk pointJumpAsk{};
+uint64_t pointJumpAt{};
+uint32_t pointJumpSerial{};
+bool pointJumpWaiting{};
+constexpr uint64_t pointJumpMaxAgeMs = 250;
+// MANUAL SWING KICK (SpidySwingKick, swing_kick.hpp): the latest ask and settings, a flick waiting for the
+// next step and when it came (one older than kickMaxAgeMs is dropped), and the last serial taken; the
+// kick's state (the swing's thread alone); and whether the auto dive holds back (the input samples read it).
+SRWLOCK kickLock = SRWLOCK_INIT;
+SwingKickAsk kickAsk{};
+uint64_t kickAt{};
+uint32_t kickSerial{};
+bool kickWaiting{};
+constexpr uint64_t kickMaxAgeMs = 150;
+swing_kick::Kick kickState;
+// AIR KICKS (SpidyAirKick, air_kick.hpp): the latest ask and settings, a flick waiting for the next step and
+// when it came (one older than airKickMaxAgeMs is dropped), and the last serial taken; the kick's state (the
+// swing's thread alone).
+SRWLOCK airKickLock = SRWLOCK_INIT;
+AirKickAsk airKickAsk{}, airKickFlick{}; // the latest settings; the latest gesture's ask
+uint64_t airKickAt{};
+uint32_t airKickSerial{};
+bool airKickWaiting{};
+constexpr uint64_t airKickMaxAgeMs = 150;
+air_kick::Kick airKickState;
+// JUMP PULL (SpidyJumpPull, jump_pull.hpp): XR's latest ask (every frame) and when it came.
+SRWLOCK pullLock = SRWLOCK_INIT;
+JumpPullAsk pullAsk{};
+ULONGLONG pullAt{};
+uint64_t pullTarget{};
+float pullPeak{};
+// GRIP ACROSS THE GAME (SpidySwingGrip, grip.hpp): the latest settings (the swing's step applies them).
+SRWLOCK gripLock = SRWLOCK_INIT;
+GripAsk gripAsk{};
+// HAND GRAB (SpidySwingHandGrab, hand_grab.hpp): the latest settings (the sample callback applies them).
+SRWLOCK handGrabLock = SRWLOCK_INIT;
+HandGrabAsk handGrabAsk{};
+// PHYSICAL WEB TETHERS (SpidyTether, tether.hpp): the latest settings (the sample callback applies them).
+SRWLOCK tetherLock = SRWLOCK_INIT;
+TetherAsk tetherAsk{};
+std::atomic<bool> autoDiveOff{}, kickBusy{};
+// QUICK SIDESTEP (SpidySwingSidestep, sidestep.hpp): a burst waiting for the
+// next step, as the point jump's; and the burst under way (the swing's
+// thread alone): its velocity, its move and stop, its start (QPC), where it
+// began, and whether the game's dodge answers blows meanwhile (sidestepCarry,
+// read by the dodge's carry the next step).
+SRWLOCK sidestepLock = SRWLOCK_INIT;
+SidestepAsk sidestepAsk{};
+uint64_t sidestepAt{};
+uint32_t sidestepSerial{};
+bool sidestepWaiting{};
+constexpr uint64_t sidestepMaxAgeMs = 150;
+struct SidestepRun {
+    bool on{}, iframes{};
+    Vec3 velocity{}, from{};
+    double moveSeconds{}, stopSeconds{};
+    int64_t startQpc{};
+    uint32_t serial{};
+} sidestepRun;
+std::atomic<bool> sidestepCarry{};
+// A burst's end, for XR's log (SpidySidestepLive).
+void endSidestep(sidestep::Stop why, Vec3 at, double seconds) {
+    if (!sidestepRun.on)
+        return;
+    volatile SidestepLive& live = SpidySidestepLive;
+    live.serial = sidestepRun.serial;
+    live.stop = static_cast<uint32_t>(why);
+    live.iframes = sidestepRun.iframes ? 1u : 0u;
+    live.metres = finite(at) && finite(sidestepRun.from)
+                      ? std::hypot(at.x - sidestepRun.from.x, at.z - sidestepRun.from.z)
+                      : -1.f;
+    live.ms = static_cast<float>(seconds * 1000);
+    MemoryBarrier();
+    live.ended = live.ended + 1;
+    sidestepRun = {};
+    sidestepCarry = false;
+}
 // WEB LINES (Settings version 31): web lines run only with it on; off, the
 // lines there are go, and so does a player on one.
 std::atomic<bool> webLinesOn{};
@@ -243,6 +453,28 @@ void relinquishMotion() {
         submitMotion(&c);
     }
     owned = false;
+    // Drop in-flight prediction so the next ownership takes the game's current
+    // position/velocity (ANIMATED MOVES can move the actor far while unowned).
+    inFlight.reset();
+    predictedDt = 0;
+}
+// A swing kick's end with the swing or the play: nothing left of it.
+void endKick() {
+    if (kickState.busy()) {
+        volatile SwingKickLive& live = SpidySwingKickLive;
+        live.state = 0;
+    }
+    kickState.reset();
+    kickBusy = false;
+}
+// An air kick's end with the swing or the play: nothing left of it.
+void endAirKick() {
+    if (airKickState.busy()) {
+        volatile AirKickLive& live = SpidyAirKickLive;
+        live.state = 0;
+    }
+    airKickState.reset();
+    kickBusy = false;
 }
 // The swing alone: a perched player's webs are let go, a grab keeps its target.
 // keepWall: the player stays on the wall it is on (a paused game goes on from
@@ -255,6 +487,9 @@ void cancelSwing(bool keepWall = false) {
     relinquishMotion();
     game_punch::cancelStrike();
     strikeQpc = 0;
+    endSidestep(sidestep::Stop::cancelled, Vec3{NAN, NAN, NAN}, 0);
+    endKick();
+    endAirKick();
     coasting = false;
     takeoffTransition.reset();
     mountTakeoff.reset();
@@ -262,6 +497,7 @@ void cancelSwing(bool keepWall = false) {
     if (!keepWall)
         solver.leaveWall();
     inputClock.reset();
+    velocityGuard.reset();
     inFlight.reset();
     predictedDt = 0;
     AcquireSRWLockExclusive(&output);
@@ -474,8 +710,12 @@ void idleRopeInput(const Command& c, const Input& in, const native_rays::QueryCo
     ReleaseSRWLockExclusive(&output);
 }
 void visit(const native_rays::QueryContext& world) {
+    const VisitCost visitCost;
     // Stop waits for this lock before stopping the movement module.
-    AcquireSRWLockExclusive(&simulation);
+    {
+        const CostTimer wait(costSection[0]);
+        AcquireSRWLockExclusive(&simulation);
+    }
     struct Unlock {
         ~Unlock() {
             ReleaseSRWLockExclusive(&simulation);
@@ -498,6 +738,28 @@ void visit(const native_rays::QueryContext& world) {
     ReleaseSRWLockShared(&control);
     const uint64_t runMs = runClock.update(GetTickCount64());
     const bool focused = inputHold.update(c, live, runMs);
+    if (focused && c.version >= 7 && animation_cancel::consumeToken(c.animationCancel, appliedCancel)) {
+        // Action cleanup only: do NOT call cancel()/cancelSwing(), relinquish
+        // the mover, rebuild Body, or write pose/velocity/rotation here.
+        solver.releaseAll();
+        solver.leaveWall();
+        takeoffTransition.reset();
+        mountTakeoff.reset();
+        airYield.reset();
+        tieGesture.reset();
+        lineGesture.reset();
+        lineReady = false;
+        lineZip.stop();
+        lineAim.reset();
+        lineAimClick.reset();
+        lineLeaving = 0;
+        game_grab::tieArmed(false);
+        game_grab::cancel();
+        game_punch::cancelStrike();
+        strikeFlying = gameMoveFlying = false;
+        strikeQpc = 0;
+        grabInputClock.reset();
+    }
     native_movement::Data motion;
     if (sampleMotion(&motion)) {
         fault(3001);
@@ -512,6 +774,17 @@ void visit(const native_rays::QueryContext& world) {
     const bool fresh = idle < .05;
     if (fresh)
         stepRunMs = runMs;
+    // The step's measured velocity (a position change over the previous step's dt) is wrong
+    // over a hitch: one long frame read as 268 m/s while the body moved at 12, and the swing let
+    // go of both webs on it. Believed only off a normal step (hitch_guard::VelocityGuard); else
+    // the last believed one stands. Every use below (the body the swing predicts from, the
+    // sample's velocity, the takeoff and mount reads) sees the guarded value.
+    if (motion.status == 1 || motion.status == 2)
+        motion.achievedVelocity =
+            velocityGuard
+                .sample(motion.steps, motion.achievedVelocity, motion.dt,
+                        std::isfinite(idle) ? static_cast<float>(idle) : 1.f, solver.speedLimit() * 2)
+                .velocity;
     if (worldIdentity && worldIdentity != world.identity()) {
         cancel();
         worldIdentity = world.identity();
@@ -592,6 +865,8 @@ void visit(const native_rays::QueryContext& world) {
     // ordinary exposed building walls retain all outdoor run transitions.
     const bool nativeCrawl = length(crawlNormal) > .5f;
     bool handCrawl{};
+    SectionClock crawlClock;
+    crawlClock.begin();
     if constexpr (ventHandCrawl) {
         bool enclosed{};
         if (solver.handClimbEnabled() && !ventCrawlMode.active() && nativeCrawl)
@@ -606,7 +881,11 @@ void visit(const native_rays::QueryContext& world) {
     crawlHands.update(handCrawl, sampleSeconds, controllerAims(in), crawlNormal,
                       crawlPoint + crawlNormal * .4f, world, webHands, crawlPoint);
     if (handCrawl) solver.leaveWall(); // native crawl retains collision and scripted turns
-    AcquireSRWLockExclusive(&output);
+    crawlClock.end(costSection[1]);
+    {
+        const CostTimer wait(costSection[0]);
+        AcquireSRWLockExclusive(&output);
+    }
     if (handCrawl) {
         // Publish even at rest, before the native-physics early returns.
         InterlockedIncrement64(&SpidySwingData.sequence);
@@ -629,13 +908,41 @@ void visit(const native_rays::QueryContext& world) {
         if (crawlHands.contacts() & (1u << i)) ++SpidyClimbData.contacts[i];
     InterlockedIncrement64(&SpidyClimbData.sequence);
     ReleaseSRWLockExclusive(&output);
+    // HAND GRAB (hand_grab.hpp; off until XR sends hand_grab): the settings, and the hands whose squeeze
+    // belongs to a body in reach (an enemy or a prop before a wall): they grip no wall this sample.
+    SectionClock grabClock;
+    grabClock.begin();
+    {
+        AcquireSRWLockExclusive(&handGrabLock);
+        const HandGrabAsk ask = handGrabAsk;
+        ReleaseSRWLockExclusive(&handGrabLock);
+        game_grab::handGrab((ask.flags & 1u) != 0, ask.force, ask.holdCost);
+    }
+    // PHYSICAL WEB TETHERS (tether.hpp; off until XR sends physical_tethers).
+    {
+        AcquireSRWLockExclusive(&tetherLock);
+        const TetherAsk ask = tetherAsk;
+        ReleaseSRWLockExclusive(&tetherLock);
+        game_grab::tetherSettings((ask.flags & 1u) != 0, ask.particles, ask.substeps);
+    }
+    Input wallView = in;
+    if (focused)
+        for (unsigned i = 0; i < 2; ++i)
+            if (game_grab::handClaims(i, in))
+                wallView.hands[i].wallGrip = 0;
+    grabClock.end(costSection[3]);
+    SectionClock wallClock;
+    wallClock.begin();
     unsigned wallHands{};
     for (unsigned i = 0; i < 2; ++i)
-        if (focused && (in.wallRotate || (handCrawl ? (crawlHands.hands() & (1u << i))
-                                                    : solver.wallHand(i, controllerAims(in), world)))) {
+        if (focused &&
+            (in.wallRotate || (handCrawl ? (crawlHands.hands() & (1u << i))
+                                         : (solver.wallHand(i, controllerAims(wallView), world) ||
+                                            solver.gripHand(i, controllerAims(wallView), world))))) {
             wallHands |= 1u << i;
             in.hands[i].grip = in.hands[i].trigger = 0;
         }
+    wallClock.end(costSection[2]);
     // While either hand holds the wall, neither starts a web (Adrian's pull
     // request 24): no grab here, no shot (Swing::inputs), no web ball (the
     // shooter's busy below). Refused, not zeroed, so a button held on as the
@@ -651,7 +958,63 @@ void visit(const native_rays::QueryContext& world) {
         // A press with the hand on the other hand's web takes hold of that
         // web, whatever the hand points at.
         const unsigned onStrand = (solver.onStrand(0) ? 1u : 0u) | (solver.onStrand(1) ? 2u : 0u);
+        SectionClock claimClock;
+        claimClock.begin();
         game_grab::claim(sampleSeconds, in, world, player, onStrand | noNewWebs);
+        claimClock.end(costSection[3]);
+        {
+            // HAND GRAB's account for XR.
+            const auto hg = game_grab::handData();
+            volatile HandGrabLive& live = SpidySwingHandGrabLive;
+            live.holding = hg.holding;
+            live.grabs = hg.grabs;
+            live.enemies = hg.enemies;
+            live.props = hg.props;
+            live.throws = hg.throws;
+            live.slams = hg.slams;
+            live.drops = hg.drops;
+            live.lost = hg.lost;
+            live.knocks = hg.knocks;
+            live.lastAction = hg.lastAction;
+            live.lastKind = hg.lastKind;
+            live.lastMass = hg.lastMass;
+            live.lastSpeed = hg.lastSpeed;
+            MemoryBarrier();
+            live.serial = hg.serial;
+        }
+        {
+            // PHYSICAL WEB TETHERS' lines and account for XR.
+            const auto tt = game_grab::tetherData();
+            volatile TetherLive& live = SpidyTetherLive;
+            live.whips = tt.whips;
+            live.spins = tt.spins;
+            live.slings = tt.slings;
+            live.throws = tt.throws;
+            live.cuts = tt.cuts;
+            live.lastAction = tt.lastAction;
+            live.lastSpeed = tt.lastSpeed;
+            uint32_t active = 0;
+            for (unsigned i = 0; i < 2; ++i) {
+                const auto& src = tt.lines[i];
+                volatile TetherLiveLine& dst = live.lines[i];
+                dst.count = src.count;
+                dst.flags = src.flags;
+                dst.tension = src.tension;
+                dst.end.x = src.end.x;
+                dst.end.y = src.end.y;
+                dst.end.z = src.end.z;
+                for (unsigned k = 0; k < 6; ++k) {
+                    dst.points[k].x = src.points[k].x;
+                    dst.points[k].y = src.points[k].y;
+                    dst.points[k].z = src.points[k].z;
+                }
+                if (src.flags & 1u)
+                    active |= 1u << i;
+            }
+            live.active = active;
+            MemoryBarrier();
+            live.serial = tt.serial;
+        }
         // The web tie: the click (Command::asks bit 1) with the hands together,
         // one on a web stuck to a surface, the other on a webbed-up enemy.
         // Both webs go to the tie, which draws him over to the surface and
@@ -844,6 +1207,10 @@ void visit(const native_rays::QueryContext& world) {
             // On a web line, the line carries him: the game's dodge answers
             // the blows it warns of there too.
             webbed |= lineZip.phase() != LineZip::Phase::Idle;
+            // QUICK SIDESTEP (sidestep_iframes): the burst counts as a web's
+            // carry, so the game's own dodge answers the blows it warns of
+            // during it (no address of its own: game_dodge's hook as is).
+            webbed |= sidestepCarry.load(std::memory_order_relaxed);
             game_dodge::carry(config.record, webbed, motion.grounded == 0,
                               player.velocity * game_punch::worldScale());
         }
@@ -853,6 +1220,8 @@ void visit(const native_rays::QueryContext& world) {
         // Until October 11 any attached web kept its hand from punching:
         // in that day's 14:49 session both hands moved at 4.4 m/s with their
         // webs out and landed nothing.
+        // SOUND TRACE: the player's handle, for the trace's hero flag.
+        game_sound::hero(config.record);
         if (game_punch::running()) {
             const auto grab = game_grab::data();
             game_punch::Player fighter;
@@ -865,6 +1234,16 @@ void visit(const native_rays::QueryContext& world) {
             fighter.busy = noBlows.load(std::memory_order_relaxed);
             fighter.combatVisuals = combatVisuals.load(std::memory_order_relaxed);
             fighter.halfPunchDamage = halfPunchDamage.load(std::memory_order_relaxed);
+            fighter.contactOnly = c.version >= 7 && (c.actionMode & 1u);
+            // The auto dive is its own setting, and holds back while a manual kick is under way.
+            fighter.noDive =
+                autoDiveOff.load(std::memory_order_relaxed) || kickBusy.load(std::memory_order_relaxed);
+            if (fighter.contactOnly) {
+                for (unsigned i = 0; i < 2; ++i) {
+                    fighter.physicalToContact[i] = c.physicalToContact[i];
+                    if (!(c.actionMode & (2u << i))) fighter.busy |= 1u << i;
+                }
+            }
             for (unsigned i = 0; i < 2; ++i) {
                 const bool carried = solver.webs()[i].attached && (owned || !motion.grounded);
                 fighter.swinging |= carried;
@@ -875,7 +1254,15 @@ void visit(const native_rays::QueryContext& world) {
             }
             // A web strike is the player's whole motion: the webs let go, and
             // the web that held the one struck with them.
+            SectionClock punchClock;
+            punchClock.begin();
             const auto opened = game_punch::update(sampleSeconds, controllerAims(in), fighter, world);
+            punchClock.end(costSection[5]);
+            {
+                double parts[game_punch::partCount]{};
+                game_punch::lastParts(parts);
+                punchScanWindow.add(parts);
+            }
             if (opened.strike) {
                 solver.releaseAll();
                 takeoffTransition.reset();
@@ -909,10 +1296,10 @@ void visit(const native_rays::QueryContext& world) {
                 const auto grab = game_grab::data();
                 uint32_t busy{};
                 for (unsigned i = 0; i < 2; ++i)
-                    if (grab.hands[i].phase || solver.webs()[i].attached || solver.climbingHands() ||
-                        crawlHands.hands())
+                    if (handBusy(i, grab.hands[i].phase, solver.webs()[i].attached,
+                                 solver.climbingHands(), crawlHands.hands()))
                         busy |= 1u << i;
-                game_shooter::update(seconds, in, busy, config.record, feet, world);
+                game_shooter::update(seconds, in, busy, config.record, feet, world, c.serial);
             }
             if (enabled && !world.error())
                 previewAims(c, in, player, world);
@@ -1067,6 +1454,347 @@ void visit(const native_rays::QueryContext& world) {
         for (unsigned i = 0; i < 2; ++i)
             paid |= solver.webs()[i].attached && solver.webs()[i].length > before[i] + 1e-3f;
     }
+    // POINT JUMP: a launch XR sent since the last step (SpidySwingPointJump).
+    {
+        AcquireSRWLockExclusive(&pointJumpLock);
+        const bool waiting = pointJumpWaiting;
+        const PointJumpAsk ask = pointJumpAsk;
+        const uint64_t at = pointJumpAt;
+        pointJumpWaiting = false;
+        ReleaseSRWLockExclusive(&pointJumpLock);
+        if (waiting && focused && GetTickCount64() - at <= pointJumpMaxAgeMs)
+            solver.pointJump(ask.velocity);
+    }
+    // QUICK SIDESTEP: a burst XR sent since the last step (SpidySwingSidestep).
+    // Taken on the ground only, the swing not driving him already.
+    {
+        AcquireSRWLockExclusive(&sidestepLock);
+        const bool waiting = sidestepWaiting;
+        const SidestepAsk ask = sidestepAsk;
+        const uint64_t askedAt = sidestepAt;
+        sidestepWaiting = false;
+        ReleaseSRWLockExclusive(&sidestepLock);
+        if (waiting) {
+            volatile SidestepLive& live = SpidySidestepLive;
+            if (focused && GetTickCount64() - askedAt <= sidestepMaxAgeMs && motion.grounded && !owned &&
+                !sidestepRun.on) {
+                sidestepRun.on = true;
+                sidestepRun.iframes = (ask.flags & 1u) != 0;
+                sidestepRun.velocity = ask.velocity;
+                sidestepRun.from = at;
+                sidestepRun.moveSeconds = ask.moveSeconds;
+                sidestepRun.stopSeconds = ask.stopSeconds;
+                sidestepRun.startQpc = now.QuadPart;
+                sidestepRun.serial = ask.serial;
+                live.serial = ask.serial;
+                live.started = live.started + 1;
+            } else {
+                sidestepRun.on = true; // to end it at once, named
+                sidestepRun.serial = ask.serial;
+                sidestepRun.from = at;
+                endSidestep(sidestep::Stop::refused, at, 0);
+            }
+        }
+    }
+    // GRIP ACROSS THE GAME (grip.hpp; wall_brake and grip_fling, off until XR sends them: SpidySwingGrip):
+    // the settings reach the solver every step, and its account goes out for XR's feel.
+    {
+        const CostTimer gripTimer(costSection[4]);
+        AcquireSRWLockExclusive(&gripLock);
+        const GripAsk ask = gripAsk;
+        ReleaseSRWLockExclusive(&gripLock);
+        grip::Config gc;
+        gc.mu = ask.mu;
+        gc.gain = ask.gain;
+        gc.vMax = ask.vMax;
+        solver.gripSettings((ask.flags & 1u) != 0, (ask.flags & 2u) != 0, gc);
+    }
+    // MANUAL SWING KICK (swing_kick.hpp; the settings and flicks XR sent: SpidySwingKick). Arms on a flick
+    // while swinging with the legs engaged, at the ringed enemy within the cone of the velocity; steers the
+    // swing a little toward him, lands the foot's blow, and fades out on a miss. It adds no speed.
+    {
+        const CostTimer kickTimer(costKickUs);
+        AcquireSRWLockExclusive(&kickLock);
+        const SwingKickAsk ask = kickAsk;
+        const bool waiting = kickWaiting;
+        const uint64_t askedAt = kickAt;
+        kickWaiting = false;
+        ReleaseSRWLockExclusive(&kickLock);
+        volatile SwingKickLive& live = SpidySwingKickLive;
+        const auto setPoint = [&](Vec3 p) {
+            live.point.x = p.x;
+            live.point.y = p.y;
+            live.point.z = p.z;
+        };
+        swing_kick::Config kc;
+        kc.coneDegrees = ask.coneDegrees;
+        kc.ropeMetres = ask.ropeMetres;
+        kickState.configure(kc);
+        const float scale = game_punch::worldScale();
+        swing_kick::Kick::Frame kf;
+        kf.seconds = std::clamp(motion.dt / std::max(scale, .05f), 0.f, .1f);
+        kf.focused = focused;
+        kf.enabled = (ask.flags & 1u) != 0;
+        kf.legs = (ask.flags & 4u) != 0;
+        bool ready = false;
+        for (const auto& web : solver.webs())
+            ready |= web.ready();
+        kf.swinging = ready && !body.grounded && !solver.wall().on;
+        kf.feet = at;
+        kf.velocity = body.velocity * scale;
+        const auto kt =
+            (kf.enabled || kickState.busy()) ? game_punch::kickTarget() : game_punch::KickTarget{};
+        kf.target = {kt.valid, kt.id, kt.feet, kt.height, kt.radius};
+        swing_kick::Kick::Output ko;
+        const bool flicked = waiting && GetTickCount64() - askedAt <= kickMaxAgeMs;
+        if (flicked && !kickState.busy()) {
+            ko = kickState.ask(kf);
+            live.asked = live.asked + 1;
+            if (ko.event == swing_kick::Kick::Event::none) {
+                live.refused = live.refused + 1;
+                live.refusal = static_cast<uint32_t>(ko.refusal);
+                live.target = ko.target;
+                live.cone = ko.cone;
+                live.speed = ko.speed;
+                live.distance = ko.distance;
+                live.lastEvent = 4;
+                MemoryBarrier();
+                live.events = live.events + 1;
+            }
+        } else {
+            ko = kickState.update(kf);
+        }
+        using Event = swing_kick::Kick::Event;
+        if (ko.event == Event::armed) {
+            live.armed = live.armed + 1;
+            live.target = ko.target;
+            setPoint(kt.valid ? kickState.aim() : Vec3{});
+            live.cone = ko.cone;
+            live.speed = ko.speed;
+            live.distance = ko.distance;
+            live.assist = live.steer = 0;
+            live.lastEvent = 1;
+            MemoryBarrier();
+            live.events = live.events + 1;
+        } else if (ko.event == Event::hit || ko.event == Event::miss) {
+            bool blow = false;
+            if (ko.event == Event::hit) {
+                const Vec3 way = normalized(kf.velocity);
+                const Vec3 point = kf.target.middle() - way * kf.target.radius;
+                blow = game_punch::kickBlow(kt.id, point, way, length(kf.velocity), ko.enemy, at,
+                                            body.grounded != 0);
+                if (blow)
+                    solver.kickRecoil(kickState.config().keep);
+            }
+            const auto report = solver.kickReport();
+            live.assist = report.rope;
+            live.steer = report.steer;
+            live.target = ko.target;
+            setPoint(kickState.aim());
+            live.cone = ko.cone;
+            live.speed = ko.speed;
+            live.distance = ko.distance;
+            if (blow) {
+                live.hits = live.hits + 1;
+                live.blows = live.blows + 1;
+            } else {
+                live.misses = live.misses + 1;
+            }
+            live.lastEvent = blow ? 2u : 3u;
+            MemoryBarrier();
+            live.events = live.events + 1;
+        }
+        solver.kickAssist({ko.assist, ko.aim, ko.weight}, kickState.config());
+        kickBusy.store(kickState.busy(), std::memory_order_relaxed);
+        live.state = static_cast<uint32_t>(kickState.phase());
+        live.autoOff = autoDiveOff.load(std::memory_order_relaxed) ? 1u : 0u;
+    }
+    // AIR KICKS (air_kick.hpp; the settings and flicks XR sent: SpidyAirKick). A gesture off the ground with the
+    // legs engaged sends the legs out: the foot's swept sphere against every fighting enemy, the blow's strength
+    // from its speed. The swing kick (above) keeps the flick it armed on; this one is every other.
+    {
+        const CostTimer kickTimer(costKickUs);
+        AcquireSRWLockExclusive(&airKickLock);
+        const AirKickAsk ask = airKickAsk, flickAsk = airKickFlick;
+        const bool waiting = airKickWaiting;
+        const uint64_t askedAt = airKickAt;
+        airKickWaiting = false;
+        ReleaseSRWLockExclusive(&airKickLock);
+        volatile AirKickLive& live = SpidyAirKickLive;
+        air_kick::Config ac;
+        ac.gazeCone = ask.gazeCone;
+        // ENEMY JOINTS (R1; off by default): the zones from the enemies' own joints, the limb zones only with
+        // their own setting.
+        const bool readJoints = (ask.flags & 8u) != 0;
+        ac.limbZones = readJoints && (ask.flags & 16u) != 0;
+        airKickState.configure(ac);
+        const float scale = game_punch::worldScale();
+        air_kick::Kick::Frame af;
+        af.seconds = std::clamp(motion.dt / std::max(scale, .05f), 0.f, .1f);
+        af.focused = focused;
+        af.enabled = (ask.flags & 1u) != 0;
+        af.legs = (ask.flags & 2u) != 0;
+        af.ground = (ask.flags & 4u) != 0; // GROUND KICKS (ground_kick.hpp): standing, and slow
+        af.grounded = body.grounded != 0;
+        af.speed = finite(body.velocity) ? length(Vec3{body.velocity.x, 0.f, body.velocity.z}) * scale : 1e3f;
+        af.wall = solver.wall().on;
+        af.feet = at;
+        af.eyeOffset = {flickAsk.eyeOffset.x, flickAsk.eyeOffset.y, flickAsk.eyeOffset.z};
+        af.gaze = {flickAsk.gaze.x, flickAsk.gaze.y, flickAsk.gaze.z};
+        std::array<game_punch::KickCandidate, 12> candidates{};
+        std::array<air_kick::Kick::Target, 12> targets{};
+        size_t count = 0;
+        if (af.enabled || af.ground || airKickState.busy()) {
+            count = game_punch::kickCandidates(candidates.data(), candidates.size(), at);
+            for (size_t i = 0; i < count; ++i)
+                targets[i] = {candidates[i].id, candidates[i].feet, candidates[i].height, candidates[i].radius};
+        }
+        using Event = air_kick::Kick::Event;
+        air_kick::Kick::Output ao;
+        const bool flicked = waiting && flickAsk.gesture != 0 && GetTickCount64() - askedAt <= airKickMaxAgeMs;
+        // ENEMY JOINTS: read the nearest few enemies' joints only for a kick being asked or under way (not
+        // every step), within 3.5 m of the feet.
+        if (readJoints && (flicked || airKickState.busy())) {
+            size_t reads = 0;
+            for (size_t i = 0; i < count && reads < 6; ++i) {
+                if (length(targets[i].feet - at) > 3.5f)
+                    continue;
+                ++reads;
+                game_joints::Read joints;
+                game_joints::Failure why{};
+                const bool ok = game_joints::read(targets[i].id, ac.limbZones, joints, &why);
+                live.jointReads = live.jointReads + 1;
+                live.jointNamed = joints.named;
+                live.jointCount = joints.count;
+                live.jointValid = joints.joints.valid;
+                if (ok) {
+                    targets[i].joints = joints.joints;
+                } else {
+                    live.jointMisses = live.jointMisses + 1;
+                    live.jointWhy = static_cast<uint32_t>(why);
+                }
+            }
+        }
+        af.targets = {targets.data(), count};
+        if (flicked) {
+            live.asked = live.asked + 1;
+            // The swing kick armed (this step or before) keeps the flick.
+            if (!kickState.busy())
+                ao = airKickState.ask(af, {static_cast<air_kick::Gesture>(flickAsk.gesture), flickAsk.side, flickAsk.angle, 1.f});
+        } else {
+            ao = airKickState.update(af);
+        }
+        const auto account = [&] {
+            live.gesture = static_cast<uint32_t>(ao.gesture);
+            live.side = ao.side;
+            live.zone = static_cast<uint32_t>(ao.zone);
+            live.reserved = (live.reserved & ~2u) | (ao.byJoints ? 2u : 0u); // the event's zone: joints, not bands
+            live.target = ao.target;
+            live.foot = ao.foot;
+            live.strength = ao.strength;
+            live.point.x = ao.point.x;
+            live.point.y = ao.point.y;
+            live.point.z = ao.point.z;
+        };
+        if (ao.event == Event::started) {
+            live.started = live.started + 1;
+            account();
+            live.lastEvent = 1;
+            MemoryBarrier();
+            live.events = live.events + 1;
+        } else if (ao.event == Event::refused) {
+            live.refused = live.refused + 1;
+            account();
+            live.refusal = static_cast<uint32_t>(ao.refusal);
+            live.lastEvent = 4;
+            MemoryBarrier();
+            live.events = live.events + 1;
+        } else if (ao.event == Event::hit || ao.event == Event::miss) {
+            bool blow = false;
+            if (ao.event == Event::hit)
+                blow = game_punch::kickHit(ao.target, ao.point, ao.way, ao.strength, ao.fly, ao.enemy, at,
+                                           body.grounded != 0);
+            account();
+            if (blow) {
+                live.hits = live.hits + 1;
+                if (ao.byJoints)
+                    live.jointZones = live.jointZones + 1;
+                if (ao.fly)
+                    live.flies = live.flies + 1;
+            } else {
+                live.misses = live.misses + 1;
+            }
+            live.lastEvent = blow ? 2u : 3u;
+            MemoryBarrier();
+            live.events = live.events + 1;
+        }
+        live.state = static_cast<uint32_t>(airKickState.phase());
+        live.progress = airKickState.progress();
+        live.angle = airKickState.angle();
+        if (airKickState.busy()) {
+            live.gesture = static_cast<uint32_t>(airKickState.gesture());
+            live.side = airKickState.side();
+            // The kick's foot, from the player's feet (XR poses a standing kick's leg to it).
+            const Vec3 foot = airKickState.foot() - at;
+            live.footX = foot.x;
+            live.footY = foot.y;
+            live.footZ = foot.z;
+        }
+        live.speed = af.speed;
+        live.reserved = (live.reserved & ~1u) | (airKickState.busy() && airKickState.onGround() ? 1u : 0u);
+        kickBusy.store(kickState.busy() || airKickState.busy(), std::memory_order_relaxed);
+    }
+    // JUMP PULL (jump_pull.hpp; off until XR sends jump_pull): off the ground, the enemy the jump is aimed at (the gaze's
+    // cone, or the stick's while it is held) pulls a little; the swing's own air applies it, with no web out and a cap per
+    // jump, and the animation's air is never touched (the solver steps only SpidyVR's).
+    {
+        AcquireSRWLockShared(&pullLock);
+        const JumpPullAsk ask = pullAsk;
+        const bool fresh = GetTickCount64() - pullAt <= 500;
+        ReleaseSRWLockShared(&pullLock);
+        jump_pull::Config pc;
+        pc.on = fresh && (ask.flags & 1u) != 0 && focused && body.grounded == 0;
+        pc.gazeDeg = ask.gazeDeg;
+        pc.stickDeg = ask.stickDeg;
+        pc.rangeM = ask.rangeM;
+        pc.capMps = ask.capMps;
+        jump_pull::Pick pick;
+        if (pc.on && finite(Vec3{ask.gaze[0], ask.gaze[1], ask.gaze[2]})) {
+            std::array<game_punch::KickCandidate, 12> found{};
+            std::array<jump_pull::Candidate, 12> list{};
+            const size_t count = game_punch::kickCandidates(found.data(), found.size(), at);
+            for (size_t i = 0; i < count; ++i)
+                list[i] = {found[i].id, found[i].feet + Vec3{0, found[i].height * .5f, 0}};
+            pick = jump_pull::choose(pc, at + Vec3{0, 1.6f, 0}, {ask.gaze[0], ask.gaze[1], ask.gaze[2]},
+                                     {ask.stick[0], ask.stick[1], ask.stick[2]}, list.data(), count);
+        }
+        solver.jumpPull(pick.valid, pc, pick.aim, pick.weight);
+        volatile JumpPullLive& live = SpidyJumpPullLive;
+        const uint64_t target = pick.valid ? pick.id : 0;
+        const float added = solver.jumpPullAdded();
+        if (target != pullTarget) {
+            if (pullTarget && pullPeak > 0)
+                live.pulls = live.pulls + 1;
+            pullPeak = 0;
+            pullTarget = target;
+            if (target)
+                live.picks = live.picks + 1;
+            live.target = target;
+            live.active = target ? 1u : 0u;
+            live.byStick = pick.byStick ? 1u : 0u;
+            live.weight = pick.weight;
+            live.angleDeg = pick.angleDeg;
+            live.distance = pick.valid ? length(pick.aim - at) : 0.f;
+            live.added = added;
+            MemoryBarrier();
+            live.events = live.events + 1;
+        } else {
+            live.weight = pick.weight;
+            live.angleDeg = pick.angleDeg;
+            live.added = added;
+        }
+        pullPeak = std::max(pullPeak, added);
+    }
     // A press aimed at something a web can catch belongs to the grab: the
     // swing gets the input without that hand's grip.
     auto swingInput = focused ? game_grab::forSwing(in) : in;
@@ -1077,8 +1805,10 @@ void visit(const native_rays::QueryContext& world) {
         for (auto& hand : swingInput.hands) hand.wallGrip = 0;
     }
     const LineWorld webWorld(world, webLines);
-    const auto predicted = solver.predictNativeStep(motion.dt, swingInput, webWorld,
-                                                    body, inputSeconds);
+    const auto predicted = [&] {
+        const CostTimer timer(costSolverUs);
+        return solver.predictNativeStep(motion.dt, swingInput, webWorld, body, inputSeconds);
+    }();
     if (world.error()) {
         fault(world.error());
         return;
@@ -1092,12 +1822,39 @@ void visit(const native_rays::QueryContext& world) {
     for (const auto& event : solver.events()) {
         // A charged leap leaves the ground as a point launch does: by the
         // game's own jump, then at the leap's velocity.
-        pointLaunched |= event.kind == EventKind::PointLaunch || event.kind == EventKind::Leap;
+        // POINT JUMP takes off the same way (its own event: no point launch, no smoke).
+        pointLaunched |= event.kind == EventKind::PointLaunch || event.kind == EventKind::Leap ||
+                         event.kind == EventKind::PointJump;
         slingshotLaunched |= event.kind == EventKind::Slingshot;
         newAttachment |= event.kind == EventKind::Attach;
         zipped |= event.kind == EventKind::Zip;
     }
     pointLaunched |= slingshotLaunched || solver.gestureTakeoff();
+    {
+        // GRIP ACROSS THE GAME: a fling off the ground takes off as the point jump does (the game's jump,
+        // then the velocity); the account for XR.
+        for (const auto& event : solver.events())
+            pointLaunched |= event.kind == EventKind::GripFling;
+        const auto& gr = solver.gripReport();
+        volatile GripLive& live = SpidySwingGripLive;
+        live.brakeHands = gr.brakeHands;
+        live.brakeSpeed = gr.brakeSpeed;
+        live.brakeDecel = gr.brakeDecel;
+        live.brakes = gr.brakes;
+        live.grips = gr.grips;
+        live.groundFlings = gr.groundFlings;
+        live.wallFlings = gr.wallFlings;
+        live.airFlings = gr.airFlings;
+        live.slow = gr.slow;
+        live.refused = gr.refused;
+        live.source = gr.source;
+        live.flingSpeed = gr.flingSpeed;
+        live.flingVelocity.x = gr.flingVelocity.x;
+        live.flingVelocity.y = gr.flingVelocity.y;
+        live.flingVelocity.z = gr.flingVelocity.z;
+        MemoryBarrier();
+        live.flings = gr.flings;
+    }
     // Keep released flight and the short post-zip landing window. This lets
     // the solver issue a point launch before handing ordinary walking back.
     // Native gravity history is not a reliable midair handoff source.
@@ -1355,8 +2112,50 @@ void visit(const native_rays::QueryContext& world) {
         lineZip.stop();
         lineLeaving = 0;
     }
+    // QUICK SIDESTEP: the burst, driven on the ground as a web strike's
+    // flight is, in real time: across at its speed, then the hard stop.
+    // Ends early at an edge (no floor sidestep::edgeProbe ahead within
+    // edgeMaxDrop), at a wall (a body ray across the way at chest height),
+    // off the ground, or when anything else has him.
+    bool sidestepping{};
+    Vec3 sidestepVelocity{};
+    if (sidestepRun.on) {
+        const double t = static_cast<double>(now.QuadPart - sidestepRun.startQpc) / frequency.QuadPart;
+        auto stop = sidestep::Stop::none;
+        if (!focused || yielding || grasped || handing || gameRun || handCrawl || striking || lineDriving ||
+            !collidable || attached)
+            stop = sidestep::Stop::cancelled;
+        else if (!motion.grounded && t > .03)
+            stop = sidestep::Stop::air;
+        else if (t >= sidestepRun.moveSeconds + sidestepRun.stopSeconds)
+            stop = sidestep::Stop::time;
+        else if (t < sidestepRun.moveSeconds) {
+            const Vec3 way = normalized(Vec3{sidestepRun.velocity.x, 0, sidestepRun.velocity.z});
+            const Vec3 up{0, 1, 0};
+            const auto floor = world.bodyRaycast(at + way * sidestep::edgeProbe + up * .5f, -up,
+                                                 .5f + sidestep::edgeMaxDrop);
+            const auto wallHit = world.bodyRaycast(at + up * 1.f, way, sidestep::wallReach);
+            if (!floor || floor->normal.y < .6f)
+                stop = sidestep::Stop::edge;
+            else if (wallHit)
+                stop = sidestep::Stop::wall;
+        }
+        if (stop != sidestep::Stop::none) {
+            endSidestep(stop, at, t);
+        } else {
+            sidestepping = true;
+            // Across, then nothing across; down as the mover had him (held to the ground).
+            const float down = finite(body.velocity) ? std::min(body.velocity.y, 0.f) : 0.f;
+            sidestepVelocity = t < sidestepRun.moveSeconds ? sidestepRun.velocity + Vec3{0, down, 0}
+                                                           : Vec3{0, down, 0};
+            requested = limited(sidestepVelocity / timeScale,
+                                std::min(motionSpeedLimit * (1.f - 1e-6f),
+                                         .875f * native_movement::farthestStep / motion.dt));
+            sidestepCarry = sidestepRun.iframes && t < sidestepRun.moveSeconds;
+        }
+    }
     const bool drive = !handCrawl && !grasped && !handing && !gameRun && !yielding &&
-                       (striking || groundRun || (lineDriving && !lineWalking) ||
+                       (striking || sidestepping || groundRun || (lineDriving && !lineWalking) ||
                         (collidable && !body.grounded && !transition.waiting &&
                          (attached || owned || transition.resumed || wall.on)));
     if (solver.groundRunning() || solver.landCarrying()) {
@@ -1413,8 +2212,9 @@ void visit(const native_rays::QueryContext& world) {
         // speed cap and takeoff launch applied to it as to the request; a
         // strike's own in real time, at rest once it has arrived.
         inFlight.issued(request.serial, requested,
-                        striking      ? limited(flight.velocity, config.maxSpeed)
-                        : lineDriving ? limited(lineStep.velocity, solver.speedLimit())
+                        striking       ? limited(flight.velocity, config.maxSpeed)
+                        : sidestepping ? limited(sidestepVelocity, config.maxSpeed)
+                        : lineDriving  ? limited(lineStep.velocity, solver.speedLimit())
                                  : limited(predicted.velocity + requested - average, solver.speedLimit()),
                         native_movement::commandDistance(request));
         owned = true;
@@ -1584,6 +2384,45 @@ extern "C" __declspec(dllexport) DWORD WINAPI SpidySwingStart(void* input) {
         webTurns = {};
         webTurnsAt = 0;
         ReleaseSRWLockExclusive(&webTurnsLock);
+        AcquireSRWLockExclusive(&pointJumpLock);
+        pointJumpAsk = {};
+        pointJumpAt = 0;
+        pointJumpWaiting = false;
+        ReleaseSRWLockExclusive(&pointJumpLock);
+        AcquireSRWLockExclusive(&gripLock);
+        gripAsk = {};
+        ReleaseSRWLockExclusive(&gripLock);
+        AcquireSRWLockExclusive(&pullLock);
+        pullAsk = {};
+        pullAt = 0;
+        ReleaseSRWLockExclusive(&pullLock);
+        AcquireSRWLockExclusive(&handGrabLock);
+        handGrabAsk = {};
+        ReleaseSRWLockExclusive(&handGrabLock);
+        AcquireSRWLockExclusive(&tetherLock);
+        tetherAsk = {};
+        ReleaseSRWLockExclusive(&tetherLock);
+        AcquireSRWLockExclusive(&kickLock);
+        kickAsk = {};
+        kickAt = 0;
+        kickWaiting = false;
+        ReleaseSRWLockExclusive(&kickLock);
+        AcquireSRWLockExclusive(&airKickLock);
+        airKickAsk = {};
+        airKickFlick = {};
+        airKickAt = 0;
+        airKickWaiting = false;
+        ReleaseSRWLockExclusive(&airKickLock);
+        autoDiveOff = false;
+        endKick();
+        endAirKick();
+        AcquireSRWLockExclusive(&sidestepLock);
+        sidestepAsk = {};
+        sidestepAt = 0;
+        sidestepWaiting = false;
+        ReleaseSRWLockExclusive(&sidestepLock);
+        sidestepRun = {};
+        sidestepCarry = false;
         webLinesOn = false;
         started = true;
         solver = Swing(physicsConfig(config));
@@ -1617,6 +2456,7 @@ extern "C" __declspec(dllexport) DWORD WINAPI SpidySwingStart(void* input) {
         // last one's serial would have every new sample refused as old.
         AcquireSRWLockExclusive(&control);
         command = {};
+        acceptedCancel = appliedCancel = 0;
         inputDeadline = 0;
         ReleaseSRWLockExclusive(&control);
         inputHold.reset();
@@ -1689,6 +2529,183 @@ extern "C" __declspec(dllexport) DWORD WINAPI SpidySwingWebTurns(void* input) {
     ReleaseSRWLockExclusive(&webTurnsLock);
     return 0;
 }
+// POINT JUMP (point_jump.hpp): the VR worker's launch for the next step.
+// 2001: not a PointJumpAsk; 1004: the swing has not started; 0 taken (or the
+// same serial again, ignored).
+extern "C" __declspec(dllexport) DWORD WINAPI SpidySwingPointJump(void* input) {
+    PointJumpAsk a;
+    if (!input || !copy(&a, input, sizeof(a)) || !validPointJump(a))
+        return 2001;
+    AcquireSRWLockShared(&lifecycle);
+    const bool running = started;
+    ReleaseSRWLockShared(&lifecycle);
+    if (!running)
+        return 1004;
+    AcquireSRWLockExclusive(&pointJumpLock);
+    if (a.serial != pointJumpSerial) {
+        pointJumpSerial = a.serial;
+        pointJumpAsk = a;
+        pointJumpAt = GetTickCount64();
+        pointJumpWaiting = true;
+    }
+    ReleaseSRWLockExclusive(&pointJumpLock);
+    return 0;
+}
+// MANUAL SWING KICK (swing_kick.hpp): the VR worker's settings, and a flick when `serial` is new.
+// 2001: not a SwingKickAsk; 1004: the swing has not started; 0 taken (or the same serial again: the flags
+// are still taken, the flick is not). What it did: SpidySwingKickLive.
+extern "C" __declspec(dllexport) DWORD WINAPI SpidySwingKick(void* input) {
+    SwingKickAsk a;
+    if (!input || !copy(&a, input, sizeof(a)) || !validSwingKick(a))
+        return 2001;
+    AcquireSRWLockShared(&lifecycle);
+    const bool running = started;
+    ReleaseSRWLockShared(&lifecycle);
+    if (!running)
+        return 1004;
+    AcquireSRWLockExclusive(&kickLock);
+    const bool flick = a.serial != kickSerial;
+    kickSerial = a.serial;
+    kickAsk = a;
+    if (flick) {
+        kickAt = GetTickCount64();
+        kickWaiting = true;
+    }
+    ReleaseSRWLockExclusive(&kickLock);
+    autoDiveOff.store((a.flags & 2u) != 0, std::memory_order_relaxed);
+    return 0;
+}
+// AIR KICKS (air_kick.hpp): the VR worker's settings, and a gesture when `serial` is new. 2001: not an
+// AirKickAsk; 1004: the swing has not started; 0 taken (or the same serial again: the flags are still taken,
+// the gesture is not). What it did: SpidyAirKickLive.
+extern "C" __declspec(dllexport) DWORD WINAPI SpidyAirKick(void* input) {
+    AirKickAsk a;
+    if (!input || !copy(&a, input, sizeof(a)) || !validAirKick(a))
+        return 2001;
+    AcquireSRWLockShared(&lifecycle);
+    const bool running = started;
+    ReleaseSRWLockShared(&lifecycle);
+    if (!running)
+        return 1004;
+    AcquireSRWLockExclusive(&airKickLock);
+    const bool flick = a.serial != airKickSerial;
+    airKickSerial = a.serial;
+    airKickAsk = a;
+    if (flick) {
+        airKickFlick = a;
+        airKickAt = GetTickCount64();
+        airKickWaiting = true;
+    }
+    ReleaseSRWLockExclusive(&airKickLock);
+    return 0;
+}
+// JUMP PULL (jump_pull.hpp): XR's ask, every frame. 2001: not a JumpPullAsk; 1004: the swing has not started; 0 taken.
+// What it did: SpidyJumpPullLive.
+extern "C" __declspec(dllexport) DWORD WINAPI SpidyJumpPull(void* input) {
+    JumpPullAsk a;
+    if (!input || !copy(&a, input, sizeof(a)) || a.magic != 0x5357504c || a.version != 1 || a.bytes != sizeof(a) ||
+        (a.flags & ~1u) || !std::isfinite(a.gazeDeg) || a.gazeDeg < 5.f || a.gazeDeg > 90.f || !std::isfinite(a.stickDeg) ||
+        a.stickDeg < 5.f || a.stickDeg > 90.f || !std::isfinite(a.rangeM) || a.rangeM < 3.f || a.rangeM > 30.f ||
+        !std::isfinite(a.capMps) || a.capMps < .25f || a.capMps > 5.f)
+        return 2001;
+    AcquireSRWLockShared(&lifecycle);
+    const bool running = started;
+    ReleaseSRWLockShared(&lifecycle);
+    if (!running)
+        return 1004;
+    AcquireSRWLockExclusive(&pullLock);
+    pullAsk = a;
+    pullAt = GetTickCount64();
+    ReleaseSRWLockExclusive(&pullLock);
+    return 0;
+}
+// GRIP ACROSS THE GAME (grip.hpp): the VR worker's settings. 2001: not a GripAsk; 1004: the swing has not
+// started; 0 taken. What it did: SpidySwingGripLive.
+extern "C" __declspec(dllexport) DWORD WINAPI SpidySwingGrip(void* input) {
+    GripAsk a;
+    if (!input || !copy(&a, input, sizeof(a)) || !validGrip(a))
+        return 2001;
+    AcquireSRWLockShared(&lifecycle);
+    const bool running = started;
+    ReleaseSRWLockShared(&lifecycle);
+    if (!running)
+        return 1004;
+    AcquireSRWLockExclusive(&gripLock);
+    gripAsk = a;
+    ReleaseSRWLockExclusive(&gripLock);
+    return 0;
+}
+// HAND GRAB (hand_grab.hpp): the VR worker's settings. 2001: not a HandGrabAsk; 1004: the swing has not
+// started; 0 taken. What it did: SpidySwingHandGrabLive.
+extern "C" __declspec(dllexport) DWORD WINAPI SpidySwingHandGrab(void* input) {
+    HandGrabAsk a;
+    if (!input || !copy(&a, input, sizeof(a)) || !validHandGrab(a))
+        return 2001;
+    AcquireSRWLockShared(&lifecycle);
+    const bool running = started;
+    ReleaseSRWLockShared(&lifecycle);
+    if (!running)
+        return 1004;
+    AcquireSRWLockExclusive(&handGrabLock);
+    handGrabAsk = a;
+    ReleaseSRWLockExclusive(&handGrabLock);
+    return 0;
+}
+// PHYSICAL WEB TETHERS (tether.hpp): the VR worker's settings. 2001: not a TetherAsk; 1004: the swing has not
+// started; 0 taken. What it did: SpidyTetherLive.
+extern "C" __declspec(dllexport) DWORD WINAPI SpidyTether(void* input) {
+    TetherAsk a;
+    if (!input || !copy(&a, input, sizeof(a)) || !validTether(a))
+        return 2001;
+    AcquireSRWLockShared(&lifecycle);
+    const bool running = started;
+    ReleaseSRWLockShared(&lifecycle);
+    if (!running)
+        return 1004;
+    AcquireSRWLockExclusive(&tetherLock);
+    tetherAsk = a;
+    ReleaseSRWLockExclusive(&tetherLock);
+    return 0;
+}
+// QUICK SIDESTEP (sidestep.hpp): the VR worker's burst for the next step.
+// 2001: not a SidestepAsk; 1004: the swing has not started; 0 taken (or the
+// same serial again, ignored). Whether it ran: SpidySidestepLive.
+extern "C" __declspec(dllexport) DWORD WINAPI SpidySwingSidestep(void* input) {
+    SidestepAsk a;
+    if (!input || !copy(&a, input, sizeof(a)) || !validSidestep(a))
+        return 2001;
+    AcquireSRWLockShared(&lifecycle);
+    const bool running = started;
+    ReleaseSRWLockShared(&lifecycle);
+    if (!running)
+        return 1004;
+    AcquireSRWLockExclusive(&sidestepLock);
+    if (a.serial != sidestepSerial) {
+        sidestepSerial = a.serial;
+        sidestepAsk = a;
+        sidestepAt = GetTickCount64();
+        sidestepWaiting = true;
+    }
+    ReleaseSRWLockExclusive(&sidestepLock);
+    return 0;
+}
+extern "C" __declspec(dllexport) DWORD WINAPI SpidySwingPoseCoupling(void* input) {
+    PoseCoupling p;
+    if (!copy(&p, input, sizeof(p)) || p.magic != 0x53575043 || p.version != 1 ||
+        p.bytes != sizeof(PoseCoupling) || !std::isfinite(p.inertia))
+        return 2001;
+    AcquireSRWLockExclusive(&lifecycle);
+    DWORD result{};
+    if (!started)
+        result = 1004;
+    else {
+        AcquireSRWLockExclusive(&simulation);
+        solver.setPoseCoupling(p.inertia);
+        ReleaseSRWLockExclusive(&simulation);
+    }
+    ReleaseSRWLockExclusive(&lifecycle);
+    return result;
+}
 extern "C" __declspec(dllexport) DWORD WINAPI SpidySwingSettings(void* input) {
     // Version 3 to 6 settings (the probes') are shorter: read as many bytes as they say.
     Settings s;
@@ -1700,10 +2717,11 @@ extern "C" __declspec(dllexport) DWORD WINAPI SpidySwingSettings(void* input) {
          header[2] != settingsBytesV12 && header[2] != settingsBytesV13 && header[2] != settingsBytesV14 &&
          header[2] != settingsBytesV15 && header[2] != settingsBytesV16 && header[2] != settingsBytesV17 &&
          header[2] != settingsBytesV18 && header[2] != settingsBytesV19 && header[2] != settingsBytesV20 &&
-         header[2] != settingsBytesV21 && header[2] != settingsBytesV22 && header[2] != settingsBytesV23 &&
-         header[2] != settingsBytesV24 && header[2] != settingsBytesV25 && header[2] != settingsBytesV26 &&
-         header[2] != settingsBytesV27 && header[2] != settingsBytesV28 && header[2] != settingsBytesV29 &&
-         header[2] != settingsBytesV30 && header[2] != settingsBytesV31 && header[2] != sizeof(s)) ||
+         header[2] != settingsBytesV21 && header[2] != settingsBytesV22 && header[2] != settingsBytesV23 && header[2] != settingsBytesV24 &&
+         header[2] != settingsBytesV25 && header[2] != settingsBytesV26 && header[2] != settingsBytesV27 &&
+         header[2] != settingsBytesV28 && header[2] != settingsBytesV29 && header[2] != settingsBytesV30 &&
+         header[2] != settingsBytesV31 && header[2] != settingsBytesV40 &&
+         header[2] != sizeof(s)) ||
         !copy(&s, input, header[2]) || !validSettings(s))
         return 2001;
     AcquireSRWLockExclusive(&lifecycle);
@@ -1740,7 +2758,7 @@ extern "C" __declspec(dllexport) DWORD WINAPI SpidySwingSettings(void* input) {
         halfPunchDamage = s.version >= 21 && s.halfPunchDamage != 0;
         // The launcher's Enemy types (settings version 32): on only when it says so. An older sender leaves
         // the guards off.
-        game_guard::setEnemyTypes(s.version >= 32 && s.enemyTypes != 0);
+        game_guard::setEnemyTypes(s.version >= 41 && s.enemyTypes != 0); // the fork's v41 (Ilya's v32)
         solver.singleHandYankStrength((s.version >= 22 ? s.singleHandYankPercent : 100u) / 100.f);
         // WEB TIE: off (and in older packets) no gesture and no tie, and a
         // webbed enemy comes as before; switched off, the ties let go.
@@ -1755,6 +2773,8 @@ extern "C" __declspec(dllexport) DWORD WINAPI SpidySwingSettings(void* input) {
         solver.allowSoftLanding(s.version >= 27 && s.softLanding != 0);
         solver.allowGroundRun(s.version >= 28 && s.spidyRun != 0);
         solver.allowGroundRunFromStanding(s.version >= 29 && s.spidyRunStanding != 0);
+        solver.setRunSpeedPercent(s.version >= 40 ? static_cast<int>(s.runSpeedPercent) : 100);
+        game_grab::softLock(s.version >= 40 ? static_cast<float>(s.softLockMetres) : 0.f);
         solver.allowWebLandingSmooth(s.version >= 30 && s.webLandingSmooth != 0,
                                      s.version >= 30 ? s.webLandingImpact
                                                      : static_cast<float>(web_landing::impactDefault));
@@ -1826,23 +2846,22 @@ extern "C" __declspec(dllexport) DWORD WINAPI SpidySlingshotSample(void* destina
 extern "C" __declspec(dllexport) DWORD WINAPI SpidySwingSubmit(void* input) {
     // A version 2 or 3 command (the probes') is shorter: read as many bytes as it says.
     Command c;
-    uint32_t header[3]{};
-    if (!copy(header, input, sizeof(header)) ||
-        (header[2] != commandBytesV2 && header[2] != commandBytesV3 && header[2] != commandBytesV4 &&
-         header[2] != commandBytesV5 && header[2] != sizeof(c)) ||
-        !copy(&c, input, header[2]) || !valid(c))
+    if (!decodeCommand(c, [&](void* out, size_t bytes) { return copy(out, input, bytes); }))
         return 2001;
     AcquireSRWLockExclusive(&control);
     DWORD result{};
+    bool revoke{};
     if (!enabled || GetTickCount64() >= deadline)
         result = 2002;
     else if (c.serial <= command.serial)
         result = 2003;
     else {
+        revoke = c.version >= 7 && animation_cancel::consumeToken(c.animationCancel, acceptedCancel);
         command = c;
         inputDeadline = GetTickCount64() + c.leaseMs;
     }
     ReleaseSRWLockExclusive(&control);
+    if (revoke) game_shooter::invalidatePending(c.serial);
     return result;
 }
 extern "C" __declspec(dllexport) DWORD WINAPI SpidySwingSample(void* out) {

@@ -1,6 +1,8 @@
 // The game's own sounds for Spidy's blows (game_sound.hpp). Addresses are
 // image offsets in the supported Spider-Man.exe.
 #include "spidy/game_sound.hpp"
+#include "spidy/sound_trace.hpp"
+#include <MinHook.h>
 #include <algorithm>
 #include <atomic>
 #include <cstring>
@@ -9,6 +11,8 @@ using namespace spidy;
 using namespace spidy::game_sound;
 extern "C" {
 __declspec(dllexport) Data SpidySoundData;
+// SOUND TRACE (sound_trace.hpp): the game's sound calls, read by the headset's module.
+__declspec(dllexport) sound_trace::Ring SpidySoundTrace;
 }
 
 namespace {
@@ -69,6 +73,70 @@ using EntryData = uintptr_t (*)(const void*);
 
 uintptr_t base{};
 std::atomic<bool> enabled{}, wanted{true};
+// SOUND TRACE: a detour on the sound call (playRva, its entry bytes checked
+// in start()) that records each call and passes every argument on unchanged.
+// The call takes 13 (system, hash, handle, emitter pointer, then nine on the
+// stack, two of them floats in their 8-byte slots); the detour takes 16 plain
+// 64-bit values - the first four registers are integers and pointers, the
+// rest stack slots copied bit for bit - so even a caller passing more than
+// the 13 read gets them all through.
+using PlayAny = uintptr_t (*)(void*, uint64_t, uint64_t, uint64_t, uint64_t, uint64_t, uint64_t, uint64_t, uint64_t,
+                              uint64_t, uint64_t, uint64_t, uint64_t, uint64_t, uint64_t, uint64_t);
+PlayAny originalPlay{};
+void* traceTarget{};
+bool traceHooked{};
+std::atomic<bool> traceOn{}, traceWanted{true};
+SRWLOCK traceLock = SRWLOCK_INIT;
+thread_local bool ourPlay = false;
+uintptr_t playTraced(void* system, uint64_t hash, uint64_t handle, uint64_t a3, uint64_t a4, uint64_t a5,
+                     uint64_t a6, uint64_t a7, uint64_t a8, uint64_t a9, uint64_t a10, uint64_t a11, uint64_t a12,
+                     uint64_t a13, uint64_t a14, uint64_t a15) {
+    if (traceOn.load(std::memory_order_relaxed)) {
+        LARGE_INTEGER now{};
+        QueryPerformanceCounter(&now);
+        const auto h = static_cast<uint32_t>(handle);
+        const uint32_t hero = SpidySoundTrace.heroHandle.load(std::memory_order_relaxed);
+        sound_trace::record(SpidySoundTrace, now.QuadPart, static_cast<uint32_t>(hash), h,
+                            (hero && h == hero ? sound_trace::flagHero : 0u) |
+                                (ourPlay ? sound_trace::flagOurs : 0u));
+    }
+    return originalPlay(system, hash, handle, a3, a4, a5, a6, a7, a8, a9, a10, a11, a12, a13, a14, a15);
+}
+// The hook on or off as SOUND TRACE asks, once the build is known (base set).
+void applyTrace() {
+    AcquireSRWLockExclusive(&traceLock);
+    uint32_t error = 0;
+    const bool want = traceWanted.load() && enabled.load() && base;
+    if (want && !traceHooked) {
+        const auto s = MH_Initialize();
+        if (s != MH_OK && s != MH_ERROR_ALREADY_INITIALIZED)
+            error = 9810 + static_cast<uint32_t>(s);
+        else {
+            traceTarget = reinterpret_cast<void*>(base + playRva);
+            if (const auto c = MH_CreateHook(traceTarget, reinterpret_cast<void*>(&playTraced),
+                                             reinterpret_cast<void**>(&originalPlay));
+                c != MH_OK)
+                error = 9830 + static_cast<uint32_t>(c);
+            else
+                traceHooked = true;
+        }
+    }
+    if (traceHooked) {
+        if (want) {
+            traceOn = true;
+            if (const auto e = MH_EnableHook(traceTarget); e != MH_OK && e != MH_ERROR_ENABLED) {
+                traceOn = false;
+                error = 9850 + static_cast<uint32_t>(e);
+            }
+        } else {
+            traceOn = false;
+            MH_DisableHook(traceTarget);
+        }
+    }
+    SpidySoundTrace.error = error;
+    SpidySoundTrace.status = error ? 3u : traceOn.load() ? 1u : 0u;
+    ReleaseSRWLockExclusive(&traceLock);
+}
 // The queue and SpidySoundData, both under this lock.
 SRWLOCK lock = SRWLOCK_INIT;
 struct Pending {
@@ -158,6 +226,7 @@ uint32_t setSwitches(uintptr_t sources, const Blow& b) {
 // marks one struck who is not the player.
 uintptr_t play(uint32_t hash, uint32_t handle, bool mark) {
     uintptr_t sound{};
+    ourPlay = true; // SOUND TRACE marks the calls that are Spidy's own
     __try {
         uint32_t emitter = handle;
         sound = reinterpret_cast<Play>(base + playRva)(reinterpret_cast<void*>(base + systemRva), hash, handle, &emitter,
@@ -168,8 +237,9 @@ uintptr_t play(uint32_t hash, uint32_t handle, bool mark) {
                 *reinterpret_cast<uint64_t*>(sound + at) |= changed;
         }
     } __except (EXCEPTION_EXECUTE_HANDLER) {
-        return 0;
+        sound = 0;
     }
+    ourPlay = false;
     return sound;
 }
 // A blow sounded on the one struck: 1 played, 0 the game gave no sound back,
@@ -258,6 +328,12 @@ uint32_t game_sound::start(uintptr_t gameBase) {
         enabled = true;
     }
     ReleaseSRWLockExclusive(&lock);
+    if (known)
+        applyTrace();
+    else {
+        SpidySoundTrace.error = 9801;
+        SpidySoundTrace.status = 3;
+    }
     return known ? 0 : 9801;
 }
 void game_sound::stop() {
@@ -270,6 +346,7 @@ void game_sound::stop() {
     });
     queued = 0;
     ReleaseSRWLockExclusive(&lock);
+    applyTrace(); // off with the rest
 }
 void game_sound::sounding(bool on) {
     wanted = on;
@@ -326,6 +403,19 @@ void game_sound::frame() {
     });
     ReleaseSRWLockExclusive(&lock);
 }
+void game_sound::tracing(bool on) {
+    traceWanted = on;
+    applyTrace();
+}
+void game_sound::hero(uint64_t record) {
+    static std::atomic<uint64_t> last{};
+    if (!record || record == last.load(std::memory_order_relaxed))
+        return;
+    if (const uint32_t handle = handleOf(record)) {
+        SpidySoundTrace.heroHandle.store(handle, std::memory_order_relaxed);
+        last = record;
+    }
+}
 Data game_sound::data() {
     AcquireSRWLockShared(&lock);
     const Data out = SpidySoundData;
@@ -338,6 +428,12 @@ Data game_sound::data() {
 extern "C" __declspec(dllexport) DWORD WINAPI SpidySoundMode(void* mode) {
     game_sound::sounding(reinterpret_cast<uintptr_t>(mode) == 0);
     return 0;
+}
+// SOUND TRACE from the headset's module: non-null on, null off
+// (game_sound::tracing). Diagnostics only; no sound changes.
+extern "C" __declspec(dllexport) DWORD WINAPI SpidySoundTraceMode(void* on) {
+    game_sound::tracing(on != nullptr);
+    return SpidySoundTrace.error.load();
 }
 // A probe's look at the hero's impact manager (each impact entry's hit sound,
 // location and intensity), and a blow sounded on an actor or a sound played

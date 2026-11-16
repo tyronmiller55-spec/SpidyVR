@@ -1,4 +1,125 @@
+> **NEW FEEDBACK + CANCEL FOLLOW-UP PLAYTEST:** Read FEEDBACK_CANCEL_PLAYTEST.txt first. Native indicators restored and stale-input cancel bypass repaired; full upper-torso alignment work is NOT included yet. No headset outcome claimed. Historical action-frame and diagnostic notes below remain for context.
+
+> **NEW Native Animation action-frame gameplay playtest (0.8.5, unmerged).**
+> Read **ACTION_FRAME_BUILD.txt** for the exact source and **ACTION_FRAME_PLAYTEST.txt** before testing.
+> This is a new compiled hand/action-frame + no-shot grip + physical-contact punch repair, not the older diagnostic-only package.
+> Extract into a new folder; never mix v7 host/rays DLLs. Back up the shared %APPDATA%\Spidy settings/profiles.
+> Headset success is not claimed; the compatibility-build description below is retained as baseline history.
+
+> **Native Animation 0.8.5 compatibility playtest (modified community build).**
+> Preserves the four Nov 8 handoff/glove-frame/forearm-clamp fixes while integrating
+> upstream 0.8.5 presets and categorized settings. Native Animation has its own
+> launcher tab and in-game category. Presets preserve animation preferences;
+> resetting that category does not reset independent movement choices.
+> Extract the entire package to a writable folder outside the game installation,
+> preserving all subfolders, then run **Spidy Launcher.exe**. Headset behavior
+> still needs Quest Link playtesting. Report fork-specific issues at
+> https://github.com/tyronmiller55-spec/SpidyVR-NativeAnimation.
+
 SPIDY - VR for Marvel's Spider-Man Remastered
+
+## SpidyVR Native Animation community build
+
+This build is a community layer on **Ilya Mezerowsky's SpidyVR**, based on upstream
+main at `bdd4c9150f` (0.8.1 fixes, STEADY HUD, official NATIVE RUN and WEB LINES).
+Inspired by **vrfloofy's first-person mod**: keep Insomniac's animation suite while
+SpidyVR controls and your tracked arms sit on top. GPL-3.0. Not an official Marvel
+or Insomniac product. Community support/source: `tyronmiller55-spec/SpidyVR`.
+
+Use **Spidy Launcher.exe > Native Animation** (after Options), or the contiguous
+**NATIVE ANIMATION** block in the headset's SPIDY VR tab. Launcher changes apply
+on the next VR start; use the headset menu to change the running session.
+
+Fresh launch / missing keys: MOVES + HYBRID on, HEAD Full, ARMS + TORSO + MODEL YAW
+on, NATIVE RUN + SPIDY RUN on, HYBRID SPEED 200 ms. AIR, ONLY, STEERING and AIR SPIN
+start off and are ignored by Hybrid. No other personal-profile choices are copied.
+Saved `.ini` values and `.spidy` profiles win over defaults; this does not migrate
+or silently replace your stored settings. Import a previous profile to keep it.
+
+The **Native Animation** master represents MOVES + HYBRID, not every companion:
+- On applies MOVES + HYBRID, HEAD Full, ARMS, TORSO, MODEL YAW, NATIVE RUN and SPIDY RUN.
+- Off disables the animation stack, including legacy Air/Only/Steering/Air Spin,
+  but leaves your independent Native Run / Spidy Run, web and swing options alone.
+- You can turn Torso, Arms or another companion off without switching the mode off.
+- Head: Full follows animated pitch/roll; Level uses the existing level head anchor.
+- Smoothing: Off, Low, Medium, High or Max. Off (default) is the view you have
+  now. The others calm small jitter and bob on the animated head the view sits
+  on, while a vault, a jump or a real turn still comes through. Your headset
+  look and lean stay with you one to one, and travel stays with the body. On a
+  SpidyVR swing the filter does nothing. Turning Native Animation on or off
+  leaves this choice alone.
+- Arms: controllers share the headset's resolved animated-head frame; idle hands
+  remain tracked. Root, gait, head and legs remain authored; Torso is bounded reach assist.
+- Model Yaw: run with L and turn with R without reducing L strength.
+- Hybrid Speed: launcher 0–500 ms in 5 ms steps (0 = Off); headset nine choices
+  through 500 ms. This changes only speed takeover, not web/rotate/wall-run takeover.
+- Advanced Air/Only/Steering/Air Spin are legacy controls, inactive under Hybrid.
+
+Existing ownership remains: animation default; SpidyVR on a web, squeezing the
+web-hold button (grip by default, or trigger if you swapped Web button) at any
+time, mid-air rotation, sustained 15 m/s speed or real wall run. Web balls fire
+during any animation and do not take you out of it. While the animation owns,
+they leave from the same place as the gloves you see, and the aim markers point
+along that same line. The aim markers stay up whenever Native Animation and AIM
+MARKERS are on, including while an animation is playing. Ground parkour and hops stay animated. A real jump or leap you ask for - A from the ground, a charged leap,
+SPIDY RUN JUMP - now plays the game's takeoff and hands the body to SpidyVR on the
+frame you leave the ground, starting from exactly the pose the takeoff left him in:
+your arms are on the controllers from that first frame, the rest of the body eases
+in from his jump pose (no standing snap). The same snapshot now happens whenever
+SpidyVR takes over in the air — a web, grip, a mid-air turn or speed, a swing after
+a zip, a wall-run leap — so those no longer start from a standing reclaim. Once
+SpidyVR has you in the air — that adopted leap, or a swing after a web — his legs
+keep that pose and trail it
+with your speed and spin so they read as weight, not a freeze. Hold B (dodge - not
+trigger or grip) while SpidyVR has you in the air and his thighs ease against
+his abdomen, knees below the chin, like a gymnast's tuck; let go and they ease
+back. While those knees are in, an existing spin
+speeds up a little (like tucking as a diver) and dies off more slowly, and air
+steering answers a bit more; legs out keep the swing you already had. Kick, wall-run and
+crawl still use their own legs. The view uses the same 180 ms blend. You land back on the animation by the usual
+landing rules unless a web keeps you in SpidyVR. Parkour vaults and mantles, short
+hops, crawls, Y zips and fight launchers never do this, and a jump the game turns
+into a wall mount goes back to the animation for the climb. Web zips stay on the animation once the game starts them: Y in
+the air (a web strike, a car in a chase) and the game's zip to a point (right stick
+up), from a swing or Spidy's wall too. Nothing hands that zip to SpidyVR until it
+ends (you land, or the game gives you back to your webs), unless you squeeze
+the web-hold button, which leaves the animation and shoots a SpidyVR web. A press the game does
+not take (nothing to strike or zip to) leaves you in SpidyVR — no flip to the
+animation and back. Y on the
+ground or on a wall is still interact. Switching between SpidyVR and the
+animation (starting or ending a swing, a zip, landing) keeps the same 180 ms
+blend, now from exactly the view you were seeing to exactly the view that
+follows, moving with you at swing speed, so the view does not pop at either end or
+lag behind and catch up. Taking a swing over keeps the way you were looking; only
+the animated head's tilt eases out. Your view stays seated on the hero's neck while
+the animation owns him: every switch (SpidyVR and the animation trading the body,
+going from running to a hop, a zip, a crawl or a fight and back, a Y zip, a HEAD
+change, a headset recenter) glides the view back onto his head over the same
+180 ms, so steps and leans in your room during long parkour runs no longer add up
+into a head floating off the body. Where you look stays yours, and your hands move
+with the view. A lean farther than 20 cm is also brought back without waiting for a
+switch, and so is a weapon, gadget, phone or prompt change that has left the view
+off the neck. A glide already heading back does not restart, so rapid actions do
+not hitch the view. Switching also refreshes movement: the leftover camera-turn
+stick after a landing no longer runs you in circles until you jump. A climb or
+crawl on one hand no longer locks web balls on the other while an animation
+plays. When SpidyVR hands the body back to the animation (a landing, a Y zip), the
+SpidyVR body now eases into the animation over that same 180 ms with ARMS on, so the
+neck stays under your view instead of the body jumping ahead of it. A Y zip from a
+swing no longer nudges the hero toward where you were looking during the game's zip;
+only landings do that. Legs remain tabled.
+
+The launcher's existing updater still targets official Spidy releases, not this
+fork. Installing an official update replaces the community layer; use Native
+Animation packages from this fork when you want to keep this mode.
+
+For diagnostics enable **Options > Moving > Run logs**; off means no detailed diag
+stream, as in upstream #77. Head probe remains in Options as a read-only diagnostic.
+Use a fresh headset check after upgrading; this packaging merge is not headset-tested.
+The earlier hands/run-turn build was positively tested on Quest 3S / Meta Quest Link.
+No custom memory offsets: supported-build/rig evidence remains in
+[REFERENCE.md](REFERENCE.md) and [VALIDATION.md](VALIDATION.md).
+
 by Ilya Mezerowsky
 
 Support Spidy: https://ko-fi.com/ilyamezerowsky
@@ -681,6 +802,36 @@ in the launcher or Settings > VR FLIPS)
                          REALISTIC FLIPS keeps priority and its own controls
   FLIP SPEED ........... adjusts this mode too
 
+Leg control (advanced, first pass: off until LEG CONTROL (ADVANCED) is
+switched on in Settings > VR FLIPS; needs CONTROLLED FLIPS on and REALISTIC
+FLIPS off)
+  Where ................ only in the air: swinging or falling free. Never on
+                         the ground, a wall, a wall run, a crawl or parkour;
+                         the legs blend back to the animation in about 0.2 s
+                         on a landing or a wall
+  Right stick .......... poses the legs, blending smoothly: centre straight,
+                         forward a jackknife, left or right both legs swung
+                         that way, back a rearward splay. It does not turn
+                         you while it poses the legs
+  Strong push up/down .. waits a quarter second (it may be a double tap's
+                         first push), then poses the legs
+  Double tap up ........ the zip: hold the second push to aim (slow time),
+                         let go to zip
+  Double tap down ...... the heal; the second push held is the heal's hold
+  Loose legs ........... they swing with your swing and spins, and their
+                         swing turns your body back a little (a jackknife
+                         tips you nose down; tighter legs spin a flip faster)
+  LEG STIFFNESS ........ how firmly they hold the pose (100% unless you pick
+                         25 to 200%; lower swings more)
+  LEG DAMPING .......... how fast the swing settles (100%, 25 to 200%)
+  LEG COUPLING ......... how much the legs turn your body (50%, OFF to 100%)
+  spidy_vr.ini ......... leg_control, leg_stiffness_pct, leg_damping_pct,
+                         leg_coupling_pct, and leg_double_tap_ms (300 unless
+                         you set 150 to 600: the double tap's window). Kept
+                         with your own settings, not in shared profiles
+  Off, or not in the air: the right stick is as it always was (turn, zip,
+  heal)
+
 Realistic flips (experimental, off until you switch REALISTIC FLIPS on in
 Settings > VR FLIPS or "Realistic flips" in the launcher's options, where
 its ten settings show under it; VR FLIPS has six of them, and MINIMUM
@@ -891,6 +1042,18 @@ VR settings
                    RECORDING SMOOTHING (OFF unless you pick 10 to 100):
                    that view turns with your head more and more softly;
                    the headset's view never does.
+                   STABILIZATION (OFF unless you pick LIGHT or HEAVY) and
+                   CAMERA VERTICAL / HORIZONTAL / ANGLE (OFF unless you
+                   pick 25 to 500 ms): while an animation moves your view
+                   (Native Animation), soften how the animated camera
+                   rises and falls, slides sideways and turns. Your own
+                   head is never smoothed and your feet stay where they
+                   are; only the animation's sway is. LIGHT and HEAVY
+                   each have their own three times (LIGHT 75/50/75 ms,
+                   HEAVY 200/150/200 ms by default, 0 to 500 ms), used
+                   instead of the CAMERA rows while that level is on, and
+                   damp quick jolts more. A big jump (a cut, a
+                   teleport, over 45 degrees) is never smoothed.
   BODY ........... CALIBRATE BODY: set it to ON RESUME and resume, and the
                    T-pose panel asks for your measurements again. HEIGHT
                    (AUTO unless you pick one, 150 to 190 cm): your height.
@@ -1019,7 +1182,7 @@ VR settings
                    when the headset shows a picture twice. It lies
                    over everything, your hands too. Needs the HUD on.
                    Off by default, to compare.
-  NATIVE RUN       (off until you switch it on) on the ground, the left
+  NATIVE RUN       (on in Native Animation defaults) on the ground, the left
                    stick pushed past 70% holds the game's RT, its
                    parkour run: you sprint, vault cars and rails and run
                    up walls as on a pad. Under 50% you jog again. Never
@@ -1042,6 +1205,24 @@ VR settings
                    Spider-Man's shooters (and the films' natural webs) do:
                    along the forearm of the body you see when it can say,
                    else along the controller. WEB ANGLE tilts that line.
+                   (Before v6 this sent webs square out of the palm side:
+                   that was wrong, and is now PALM SHOOTERS.)
+  PALM SHOOTERS    (off until you switch it on) the old WRIST SHOOTERS:
+                   webs leave square to your hand, out of the palm side.
+  HEAD PROBE       (off until you switch it on; EXPERIMENTAL, after PALM
+                   SHOOTERS) diagnostics only, for a head lock to come: about
+                   10 times a second it writes "head probe:" lines with
+                   Spider-Man's head (as the game's animation moves it)
+                   against your headset, how fast it moves and turns, what
+                   you are doing (ground, air, swing, web, zip, wall,
+                   parkour, combat, cutscene) and whether the game's
+                   animation moves the head at all ("anim live"), with a
+                   summary per state when VR stops. Changes nothing in play.
+                   The lines go to the same game-vr-<time>-diag.log as RUN
+                   LOGS' (in their own part, so they push out nothing else).
+  NATIVE ANIMATION See the community-build section above: the launcher tab and
+                   headset block group Head, Arms, Torso, Model Yaw, Hybrid Speed,
+                   Native Run / Spidy Run, and the legacy Advanced controls.
                    (Square out of the palm side is PALM SHOOTERS.)
   PALM SHOOTERS    (off until you switch it on) the old WRIST SHOOTERS:
                    webs leave square to your hand, out of the palm side.
@@ -1084,7 +1265,7 @@ VR settings
   SOFT LANDING     (off until you switch it on) falling with no web, your
                    fall eases to about 9 m/s over the last 3 m before the
                    ground; your speed across is kept. Off: as before.
-  SPIDY RUN        (off until you switch it on) land faster than a sprint
+  SPIDY RUN        (on in Native Animation defaults) land faster than a sprint
                    (let go of a swing near the street) and you run on at
                    that speed, steering with the stick without losing it;
                    it eases to a sprint in a few seconds and the game's
@@ -1100,13 +1281,16 @@ VR settings
                    say (body off, a cutscene, an arm it cannot reach) they
                    go back to the controller's line. WEB ANGLE and WRIST
                    SHOOTERS still turn on top; punches keep the controller.
-                   The line is the forearm's own (elbow to wrist); FOREARM
-                   AIM LIMIT can hold it nearer the controller.
+                   The line is the forearm's own (elbow to wrist). Tilting
+                   a palm out never pulls it past that forearm; tilting
+                   inward angles it a little toward your midline (about 15
+                   degrees). It no longer snaps back to the controller when
+                   your wrist and forearm differ a lot.
   FOREARM BLEND    (100% until you change it) how much of the forearm's
                    line MODEL FOREARM takes, from 0% (the controller's).
-  FOREARM AIM LIMIT (NO LIMIT until you change it) how far MODEL FOREARM
-                   and WRIST SHOOTERS may turn your webs off the
-                   controller's line: 35 DEG, 60, 90 or NO LIMIT.
+  FOREARM AIM LIMIT (NO LIMIT until you change it) no longer pulls the
+                   line back toward the controller. The inward allowance
+                   is fixed (about 15 degrees).
   SMOOTH WEB LANDING (off until you switch it on) land while you hold a
                    web, slower than WEB LANDING IMPACT, and your fall eases
                    over the last metres, your speed carries on across the

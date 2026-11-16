@@ -1,5 +1,6 @@
 #pragma once
 #include "math.hpp"
+#include "spherical_aim.hpp"
 #include <algorithm>
 #include <cmath>
 #include <cstddef>
@@ -74,14 +75,20 @@ enum class Source : int { controller = 0, forearm = 1 };
 // had the forearm 35-77 degrees off the controller in 267 of its 394 active
 // samples, so the webs stayed clamped near the controller ("they keep
 // tracking my palm"): v6 takes the limit from the setting, none by default.
-constexpr float forearmClampDegrees = 35, forearmLimitDefault = 180, forearmSmoothSeconds = .08f,
-                forearmFallbackSeconds = .15f, forearmMiss = .1f;
+// ARM AIM FALLBACK (vr_settings anim_forearm_fallback_deg, default 60): in the animation, a forearm
+// more than this off the controller falls back to the controller's line, and returns to the
+// forearm once within forearmFallbackHysteresis degrees less than it (the Fallback::misaligned).
+constexpr float forearmFallbackHysteresis = 10.f;
+constexpr float forearmClampDegrees = 35, forearmLimitDefault = 180, forearmSmoothSeconds = .2f, forearmFallbackSeconds = .3f,
+                forearmMiss = .1f,
+                forearmAlignDegrees = 45.f;
 // A sample this many VR frames without a new solve is stale (v3-v5: 2; the
 // V5 session fell back as stale in 164 lines, mostly at 3; the forearm is
 // carried on the grip now, so a solve 100 ms old still points right).
 constexpr unsigned forearmStaleFrames = 8;
 // Why a hand's sample is not used (the log's reason).
-enum class Fallback : int { none, off, untracked, notSolved, wristMiss, stale, gameCamera, tilted };
+enum class Fallback : int { none, off, untracked, notSolved, wristMiss, stale, gameCamera, tilted,
+                            armsOverlay, misaligned };
 inline const char* fallbackName(Fallback f) {
     switch (f) {
     case Fallback::none:
@@ -100,6 +107,10 @@ inline const char* fallbackName(Fallback f) {
         return "game camera";
     case Fallback::tilted:
         return "flip tilt";
+    case Fallback::armsOverlay:
+        return "arms overlay";
+    case Fallback::misaligned:
+        return "misaligned";
     }
     return "?";
 }
@@ -153,6 +164,58 @@ inline Quat forearmTurn(Vec3 inGrip, Quat gripNow, Quat aimNow, float limitDegre
         return {};
     return clampTurn(arc({0, 0, -1}, local), std::clamp(limitDegrees, 0.f, 180.f) * 3.14159265f / 180);
 }
+// Native Animation forearm clamp: the web follows the world's elbow→wrist
+// (not a forearm stored on the grip, which turns with the wrist). Palm out
+// — toward that hand's palm axis, left +X / right -X — never goes past the
+// forearm. Palm in may follow the controller up to forearmInwardDegrees.
+// Positive signedPalmAngle is toward the palm and is treated as out; the
+// diag's "forearm sign:" line records it so a playtest can flip the sense
+// if tilting palm-out reads the other way.
+constexpr float forearmInwardDegrees = 15.f;
+inline float signedPalmAngle(Vec3 forearmWorld, Quat aimNow, int hand) {
+    const Vec3 F = normalized(forearmWorld);
+    const Vec3 C = unitOr(aimNow).rotate({0, 0, -1});
+    if (!finite(F) || !finite(C) || length(F) < .5f || length(C) < .5f)
+        return 0;
+    const float palmSign = hand == 0 ? 1.f : -1.f;
+    const Vec3 palm = unitOr(aimNow).rotate({palmSign, 0, 0});
+    const Vec3 out = normalized(palm - F * dot(palm, F));
+    if (!finite(out) || length(out) < .5f)
+        return 0;
+    return std::atan2(dot(C, out), dot(C, F));
+}
+inline Vec3 clampedForearmDir(Vec3 forearmWorld, Quat aimNow, int hand,
+                              float inwardDegrees = forearmInwardDegrees) {
+    const Vec3 F = normalized(forearmWorld);
+    if (!finite(F) || length(F) < .5f)
+        return {};
+    float s = signedPalmAngle(forearmWorld, aimNow, hand);
+    const float cap = std::clamp(inwardDegrees, 0.f, 90.f) * 3.14159265f / 180;
+    // SPHERICAL AIM: past 90 degrees the cap fades out (spherical_aim::
+    // inwardShare), so the angle's wrap at 180 cannot flip the web by it.
+    const float t = std::clamp(s, -cap, 0.f) * spherical_aim::inwardShare(s);
+    if (std::abs(t) < 1e-6f)
+        return F;
+    const float palmSign = hand == 0 ? 1.f : -1.f;
+    const Vec3 palm = unitOr(aimNow).rotate({palmSign, 0, 0});
+    const Vec3 out = normalized(palm - F * dot(palm, F));
+    if (!finite(out) || length(out) < .5f)
+        return F;
+    const Vec3 axis = normalized(cross(F, -out));
+    if (!finite(axis) || length(axis) < .5f)
+        return F;
+    return normalized(Quat::around(axis, -t).rotate(F));
+}
+inline Quat forearmWorldTurn(Vec3 forearmWorld, Quat aimNow, int hand,
+                             float inwardDegrees = forearmInwardDegrees) {
+    const Vec3 web = clampedForearmDir(forearmWorld, aimNow, hand, inwardDegrees);
+    if (!finite(web) || length(web) < .5f)
+        return {};
+    const Vec3 local = normalized(unitOr(aimNow).conjugate().rotate(web));
+    if (!finite(local) || length(local) < .5f)
+        return {};
+    return arc({0, 0, -1}, local);
+}
 // One "forearm aim:" line (the diagnostics and the report's timeline), from
 // named fields rather than a long printf list in game_xr. v6 (78a43ed) passed
 // the turn and target twice there, two arguments more than the format had: every
@@ -164,7 +227,7 @@ struct ForearmAimLine {
     bool right{}, active{}, modelForearm{}, wristShooters{}, clamped{}, tilted{};
     const char* reason = "";
     float turnDegrees{}, targetDegrees{}, limitDegrees{}, weight{}, handError{}, offDegrees{}, lagDegrees{},
-        palmX{}, jitterDegrees{};
+          palmX{}, jitterDegrees{};
     int blend{};
     unsigned stale{};
 };
@@ -173,20 +236,26 @@ inline int formatForearmAimLine(char* out, std::size_t size, const ForearmAimLin
         return 0;
     return std::snprintf(
         out, size,
-        "forearm aim: %s %s (%s), %s, turn %.1f deg (target %.1f), limit %.0f deg%s, weight %.2f, blend "
-        "%d%%, "
+        "forearm aim: %s %s (%s), %s, turn %.1f deg (target %.1f), limit %.0f deg%s, weight %.2f, blend %d%%, "
         "wrist miss %.3f, stale %u, forearm vs controller %.1f deg, grip lag %.1f deg, palm.x %+.2f, jitter "
         "%.2f deg%s",
         l.right ? "R" : "L", l.reason ? l.reason : "",
         l.active ? "active: the forearm's line" : "fallback: the controller's line",
-        l.modelForearm ? (l.wristShooters ? "MODEL FOREARM + WRIST SHOOTERS" : "MODEL FOREARM")
-                       : "WRIST SHOOTERS",
+        l.modelForearm ? (l.wristShooters ? "MODEL FOREARM + WRIST SHOOTERS" : "MODEL FOREARM") : "WRIST SHOOTERS",
         static_cast<double>(l.turnDegrees), static_cast<double>(l.targetDegrees),
         static_cast<double>(l.limitDegrees), l.clamped ? ", clamped" : ", not clamped",
         static_cast<double>(l.weight), l.blend, static_cast<double>(l.handError), l.stale,
         static_cast<double>(l.offDegrees), static_cast<double>(l.lagDegrees), static_cast<double>(l.palmX),
         static_cast<double>(l.jitterDegrees), l.tilted ? ", flip tilt" : "");
 }
+// WRIST MARKER SMOOTHING v2 (the user, November 13 t86u: "the markers are very jumpy and
+// difficult to track"). The turn is the forearm's offset from the controller's line, carried
+// on the controller's live pose, so the hand's own motion is never slowed by it; only the
+// solve's elbow (and the trust/fallback switches) move it. In the 5061b4a session (13:33)
+// that offset swung 4 -> 40 -> 50 -> 17 deg within seconds, and the spherical aim's trust
+// target flipped 0 <-> 1 about 1.2 times a second per hand (2584 times in 36 min) between
+// lines 32-106 deg apart, each eased over only 0.08-0.15 s: the markers' jumps. 0.2 s for
+// the offset and 0.3 s for a fallback fade glide those; the controller still leads.
 // One hand's forearm turn, smoothed, and how much of it is used (weight: 0
 // the controller's line, 1 the forearm's).
 struct ForearmAim {

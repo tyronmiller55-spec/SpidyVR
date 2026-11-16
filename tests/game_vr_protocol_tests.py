@@ -51,6 +51,27 @@ class Reader:
 
 
 class ProtocolTests(unittest.TestCase):
+    def test_native_animation_settings_keep_official_web_lines_prefix(self):
+        # No Python tool sends the new pose fields; old probe writers use <=v4.
+        # Guard the C++ producer/consumer contract alongside the binary-layout C++ tests.
+        root = pathlib.Path(__file__).resolve().parents[1]
+        header = (root / 'include/spidy/game_swing.hpp').read_text(encoding='utf-8')
+        settings = header.split('struct Settings {', 1)[1].split('\n};', 1)[0]
+        self.assertRegex(settings, r'version = 40, bytes = sizeof\(Settings\)')
+        self.assertIn('sizeof(Settings) == 188', header)
+        self.assertLess(settings.index('uint32_t webLines'), settings.index('uint32_t headProbe'))
+        fields = ['headProbe', 'animatedMoves', 'animatedHead', 'animatedAir',
+                  'animatedSteering', 'animatedArms', 'animatedTorso', 'animatedModelYaw']
+        for earlier, later in zip(fields, fields[1:]):
+            self.assertLess(settings.index('uint32_t ' + earlier), settings.index('uint32_t ' + later))
+        producer = (root / 'src/game_xr.cpp').read_text(encoding='utf-8')
+        self.assertIn('s.webLines = values.webLines;', producer)
+        for field in fields:
+            self.assertRegex(producer, r's\.' + field + r' = (?:static_cast<uint32_t>\()?values\.' + field)
+        self.assertIn('(s.version == 31 && s.bytes == settingsBytesV31)', header)
+        self.assertIn('(s.version == 39 && s.bytes == settingsBytesV39)', header)
+        self.assertIn('(s.version == 40 && s.bytes == sizeof(Settings))', header)
+
     def test_wall_roll_flag_uses_version_5_and_does_not_change_legacy_commands(self):
         old = swing_command(1, (0, 0, 0))
         self.assertEqual(len(old), 168)
@@ -1272,6 +1293,41 @@ class ProtocolTests(unittest.TestCase):
                          "Rendering 3072 x 3264 pixels per eye (100% of the headset's 3072 x 3264), without "
                          'anti-aliasing.')
 
+    def test_the_scene_is_rendered_at_half_by_default(self):
+        import run_game_vr
+        self.assertEqual(run_game_vr.DEFAULT_UPSCALE, 50)
+
+    def test_low_fps_is_said_once_after_a_minute_and_again_when_it_clears(self):
+        import run_game_vr
+        watch, said = {}, []
+
+        def run(seconds, fps, start):
+            frames = 0
+            for t in range(0, seconds + 1):
+                frames = int(fps * t)
+                result = run_game_vr.low_fps_watch(watch, dict(seconds=start + t, frames=frames))
+                if result:
+                    said.append((result, start + t))
+            return start + seconds
+        # a 36 fps game says nothing; the counter restarting (a new session) is not a rate
+        end = run(30, 36, 0)
+        self.assertEqual(said, [])
+        # 9 fps: said once, not before 60 s of it
+        end = run(50, 9, end)
+        self.assertEqual(said, [])
+        end = run(40, 9, end)
+        self.assertEqual([s[0] for s in said], ['slow'])
+        end = run(30, 9, end)
+        self.assertEqual([s[0] for s in said], ['slow'])
+        # back to 40 fps: said once, after two good windows
+        end = run(30, 40, end)
+        self.assertEqual([s[0] for s in said], ['slow', 'over'])
+        self.assertIn('close the game', run_game_vr.low_fps_advice(9, 60))
+        # a game that stopped (0 fps) is the freeze watch's
+        stopped = {}
+        for t in range(0, 200):
+            self.assertIsNone(run_game_vr.low_fps_watch(stopped, dict(seconds=t, frames=100)))
+
     def test_the_upscale_is_checked_before_anything_starts(self):
         import run_game_vr
         for argv in (['--upscale', '49'], ['--upscale', '101']):
@@ -2068,17 +2124,15 @@ class ProtocolTests(unittest.TestCase):
         """SpidyDiagData (diag_log.hpp): every new line goes to the console and reports/<session>-diag.log,
         the build first; a reader that fell behind says how many it lost; forearm aim has its own ring.
         November 2: four sessions' consoles had not one feature line, all of them in the report's timeline."""
-        from run_game_vr import diag_snapshot, DiagLog, diag_path, DIAG_BYTES, DIAG_MAIN_AT, DIAG_AIM_AT, DIAG_CHARS
-        self.assertEqual(DIAG_BYTES, 34696)
+        from run_game_vr import (diag_snapshot, DiagLog, diag_path, DIAG_BYTES, DIAG_MAIN_AT, DIAG_AIM_AT,
+                                 DIAG_HEAD_AT, DIAG_CHARS)
+        # Version 2 (HEAD PROBE): a third ring of 64 for "head probe:" lines, after the others.
+        self.assertEqual(DIAG_BYTES, 50064)
+        self.assertEqual(DIAG_HEAD_AT, 34696)
         self.assertEqual(diag_path(pathlib.Path('reports/game-vr-20261103-101500.json')).name,
                          'game-vr-20261103-101500-diag.log')
         raw = bytearray(DIAG_BYTES)
-        struct.pack_into('<3I', raw, 0, 0x47414944, 1, DIAG_BYTES)
-        game = Mock()
-        game.read = lambda address, size: bytes(raw[address-0x1000:address-0x1000+size])
-        # Never published (RUN LOGS off): nothing, and only the header read.
-        self.assertIsNone(diag_snapshot(game, 0x1000))
-        struct.pack_into('<Q', raw, 16, 2)
+        struct.pack_into('<3I', raw, 0, 0x47414944, 2, DIAG_BYTES)
         raw[24:24+len(b'Spidy 0.7.0 (commit abc1234)')] = b'Spidy 0.7.0 (commit abc1234)'
 
         def put(at, count, lines):
@@ -2089,6 +2143,9 @@ class ProtocolTests(unittest.TestCase):
                 raw[slot:slot+len(line)] = line.encode()
         put(DIAG_MAIN_AT, 128, ['[   1.000] run log: touchdown at 12.0 m/s across'])
         put(DIAG_AIM_AT, 16, [f'[   {i}.000] forearm aim: L none' for i in range(20)])
+        put(DIAG_HEAD_AT, 64, [f'[   {i}.100] head probe: ground body game move game' for i in range(3)])
+        game = Mock()
+        game.read = lambda address, size: bytes(raw[address-0x1000:address-0x1000+size])
         printed = []
         with tempfile.TemporaryDirectory() as folder:
             log = DiagLog(pathlib.Path(folder)/'game-vr-x-diag.log', echo=printed.append)
@@ -2097,12 +2154,13 @@ class ProtocolTests(unittest.TestCase):
             self.assertIn('diag [   1.000] run log: touchdown at 12.0 m/s across', printed)
             self.assertTrue(any('4 aim lines lost' in line for line in printed), printed)
             self.assertEqual(sum('forearm aim' in line for line in printed), 16)
+            self.assertEqual(sum('head probe: ground' in line for line in printed), 3)
             log.take(diag_snapshot(game, 0x1000))  # nothing new: nothing again
             self.assertEqual(len(printed), log.lines)
             written = (pathlib.Path(folder)/'game-vr-x-diag.log').read_text(encoding='utf-8').splitlines()
             self.assertEqual(written, printed)
         # A layout of another version is reported, never raised.
-        struct.pack_into('<I', raw, 4, 2)
+        struct.pack_into('<I', raw, 4, 1)
         self.assertIn('protocol_mismatch', diag_snapshot(game, 0x1000))
 
     def test_a_crashed_game_says_so_with_its_last_stage(self):
@@ -2121,7 +2179,7 @@ class ProtocolTests(unittest.TestCase):
             log = DiagLog(pathlib.Path(folder)/'x-diag.log', echo=lambda line: None)
             raw = {'build': 'b', 'main': (2, ['[   1.000] stage: headset active, the eye views not started',
                                               '[   2.000] stage: frames reaching the headset - the eye images']
-                                          + ['']*126), 'aim': (0, ['']*16)}
+                                          + ['']*126), 'aim': (0, ['']*16), 'head': (0, ['']*64)}
             log.take(raw)
             self.assertEqual(log.stage, 'frames reaching the headset - the eye images')
 

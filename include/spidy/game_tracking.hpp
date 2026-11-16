@@ -1,12 +1,15 @@
 #pragma once
 #include "head_clearance.hpp"
 #include "hand_collision.hpp"
+#include "handstand.hpp"
 #include "native_rays.hpp"
 #include "native_view.hpp"
 #include "realistic_flip.hpp"
 #include "recoil.hpp"
 #include "swing.hpp"
 #include "tracking.hpp"
+#include "view_ease.hpp"
+#include "vr_stabilize.hpp"
 #include "wall_roll.hpp"
 #include <algorithm>
 #include <cmath>
@@ -89,6 +92,13 @@ struct GameMotionFrame {
     bool climbTracking{};
     std::array<Vec3, 2> climbGrips{}; // tracking metres relative to the head at hold entry
     std::array<float, 2> climbHold{};
+    // HANDSTAND (handstand.hpp, H1): this frame's catch, balance and exit,
+    // and how far the inverted eyes came down toward the floor (m).
+    handstand::Handstand::Out handstand{};
+    float handstandDrop{};
+    // VR STABILIZATION (vr_stabilize.hpp): the view tilt off upright, degrees: as the rig wanted it, as
+    // shown.
+    float vrTiltRaw{}, vrTiltShown{};
     Quat bodyTilt(bool runningPose = false) const {
         // The travel-driven wall-run gait stays in the wall frame. The camera
         // may stand on that wall, but it must not select a different body pose.
@@ -264,6 +274,11 @@ class FlipMotion {
         Quat head{};
         float seconds{};
         bool stickTracked = true;
+        // LEG CONTROL (leg_control.hpp): the body's turn this frame from the
+        // legs' swing, radians about the head's level right (+ nose up) and
+        // forward axes, and the flip rate's scale from the legs' spread.
+        float legPitch{}, legRoll{};
+        float spinScale = 1;
     };
     Quat update(const Sample&);
     Quat tilt() const { return tilt_; }
@@ -299,6 +314,23 @@ class GameTrackingRig {
     // player's actor, the world's while it stands. airborne: the player is in
     // the air, so the basic flip can use the right stick. surface: the
     // wall or ceiling that holds the player.
+    // HYBRID's animated walk-facing owns R-stick yaw. Do not rotate a hidden
+    // tracking rig behind its head-locked view; VR resumes the ordinary turn path.
+    void animatedYawOwner(bool on) {
+        animatedYawOwner_ = on;
+    }
+    // LEG CONTROL owns the right stick (CONTROLLED FLIPS, in the air): it
+    // turns nothing, and a push held into the landing is no snap turn.
+    void legStick(bool on) {
+        legStick_ = on;
+    }
+    // The legs' turn on the body for the next update (FlipMotion::Sample's
+    // legPitch, legRoll, spinScale); used once.
+    void legCoupling(float pitch, float roll, float spinScale) {
+        legPitch_ = std::isfinite(pitch) ? std::clamp(pitch, -.1f, .1f) : 0.f;
+        legRoll_ = std::isfinite(roll) ? std::clamp(roll, -.1f, .1f) : 0.f;
+        spinScale_ = std::isfinite(spinScale) ? std::clamp(spinScale, .5f, 2.f) : 1.f;
+    }
     GameMotionFrame update(const XrFrame&, Vec3 playerFeet, Vec3 gameForward, bool gameplay,
                            Vec3 surfaceUp = {0, 1, 0}, bool airborne = false, const SurfaceHold& surface = {},
                            Vec3 gameUp = {0, 1, 0});
@@ -442,6 +474,26 @@ class GameTrackingRig {
     void flight(RealisticFlight sample) {
         flight_ = sample;
     }
+    // HANDSTAND (handstand.hpp, H1; REALISTIC FLIPS only): its settings, and
+    // whether SpidyVR has the body in its air for the next update (a catch
+    // starts only there).
+    void handstandSettings(handstand::Params p) {
+        handstandParams_ = p;
+    }
+    // THE TOUCHDOWN CATCH (handstand.hpp): SpidyVR owns him and the game
+    // reports ground this frame; the floor's height (the actor's feet).
+    void handstandTouchdown(bool ground, bool aloft, float floorY) {
+        handstandGround_ = ground;
+        handstandAloft_ = aloft;
+        handstandFloorY_ = floorY;
+    }
+    // VR STABILIZATION: the CAMERA rows, HORIZON LEVEL and the bank's ANGLE on the rig's view tilt.
+    void vrStabilization(const vr_stabilize::Settings& s) {
+        vrStab_ = s;
+    }
+    void handstandVrAir(bool vrAir) {
+        handstandVrAir_ = vrAir;
+    }
     void momentumWallRun(float distance, float tilt, float bank, float lean) {
         momentumView_.distance = std::isfinite(distance) ? std::clamp(distance, .4f, 1.6f) : .95f;
         momentumView_.tilt = std::isfinite(tilt) ? std::clamp(tilt, -.523599f, .523599f) : .17453293f;
@@ -463,9 +515,46 @@ class GameTrackingRig {
     void wallRunBody(bool enabled, unsigned supports, Vec3 velocity) {
         runViewEnabled_ = enabled; runViewSupports_ = supports; runViewVelocity_ = velocity;
     }
+    // ANIMATED MOVES handoff: snap the tracking origin over the actor's current
+    // feet before the next update, keeping yaw so independent HMD look stays.
+    // Clears lean / surface / head-drop offsets built up while the view followed
+    // the anim head (those are camera/latch state, not the actor's place).
+    // Call on yield exit before the first mod-owned eyes/body frame.
+    void adoptFeet(Vec3 feet, const Pose& head);
+    // ANIMATED HYBRID G→T: re-anchor tracking eyes onto the view the player is
+    // already seeing (anim-head resolve). Sets origin + yaw so tracking-owned
+    // eyes land on worldEyes at worldLookYaw. Keeps standOff / runViewOffset /
+    // surface / headDrop (no rested snap). Pitch/roll of the anim head are
+    // discarded — level settle is the 180 ms hybrid blend's job.
+    void adoptEyes(Vec3 worldEyes, float worldLookYaw, const Pose& head);
+    // POSITION LOCK (hybrid_handoff::lockedOrigin): ANIM -> VR. Yaw as
+    // adoptEyes (the look continues), origin over the actor's feet as
+    // adoptFeet (anim-view offsets cleared). Returns how far, across the
+    // ground, the old adoptEyes placement would have put the head from the
+    // feet (the offset now discarded); -1 when nothing was done.
+    float lockToFeet(Vec3 feet, Vec3 worldEyes, float worldLookYaw, const Pose& head);
+    // Across-ground distance of the tracked head's floor point from `feet`.
+    float residualAcross(const Pose& head, Vec3 feet) const;
+    // PUNCH VIEW EASE (view_ease.hpp): after lockToFeet, offset the whole
+    // tracked placement (eyes, head, hands, webs, body) so the eyes stay on
+    // `worldEyes` (what the last animated frame showed), easing to the lock
+    // over `seconds`. The lock (rig origin) is not changed. Returns whether
+    // an ease began; the offset is startOffset() of viewEase().
+    bool beginViewEase(Vec3 worldEyes, const Pose& head, float seconds, float verticalSeconds = 0, float holdSeconds = 0,
+                       bool gentle = false);
+    bool retimeViewEase(float seconds, float verticalSeconds) {
+        return viewEase_.retime(seconds, verticalSeconds);
+    }
+    void cancelViewEase(view_ease::End why) {
+        viewEase_.cancel(why);
+    }
+    const view_ease::Ease& viewEase() const {
+        return viewEase_;
+    }
     void reset();
 
   private:
+    bool pendingAdopt_{};
     RealisticFlipSettings autoSettings_{};
     RealisticFlight flight_{};
     RealisticFlip automatic_{};
@@ -476,10 +565,13 @@ class GameTrackingRig {
     Pose lastHead_{};
     Vec3 lastFeet_{}, standOff_{}, lastGameForward_{0, 0, -1};
     std::int64_t lastTime_{};
+    bool animatedYawOwner_{};
     bool initialized_{}, wasActive_{}, turnHeld_{}, pendingRecenter_{}, onSurface_{}, flips_{}, faceGame_{},
         sceneRuns_{}, facingValid_{};
     float facing_{}, activeFor_{};
     bool controlledFlips_{};
+    bool legStick_{};
+    float legPitch_{}, legRoll_{}, spinScale_ = 1;
     // The trigger webs, and the web button changed since the last frame of play.
     bool triggerWebs_{}, buttonsChanged_{};
     float snap_ = .5235988f, smooth_{};
@@ -515,6 +607,7 @@ class GameTrackingRig {
     float runCameraBank_{};
     unsigned runViewSupports_{};
     Vec3 runViewVelocity_{}, runViewOffset_{};
+    view_ease::Ease viewEase_;
     bool climbTrackingSet_{};
     Vec3 climbTrackingHead_{};
     float runIdleSeconds_{};
@@ -523,6 +616,18 @@ class GameTrackingRig {
     HeadClearance clearance_{};
     HandCollision handCollision_{};
     Recoil recoil_{};
+    // HANDSTAND: the state machine, its last output, the tilt at the catch,
+    // the eyes' drop and the palms' last tracked offsets from the head.
+    handstand::Params handstandParams_{};
+    handstand::Handstand handstand_{};
+    handstand::Handstand::Out handstandOut_{};
+    Quat handstandCatchTilt_{};
+    float handstandDrop_{};
+    vr_stabilize::Settings vrStab_{};
+    vr_stabilize::TiltFilter vrTilt_{};
+    bool handstandVrAir_{}, handstandSampled_{}, handstandGround_{}, handstandAloft_{};
+    float handstandFloorY_ = NAN;
+    std::array<Vec3, 2> handstandRel_{};
     Vec3 bodyCentre_{std::numeric_limits<float>::quiet_NaN(), 0, 0};
 };
 } // namespace spidy

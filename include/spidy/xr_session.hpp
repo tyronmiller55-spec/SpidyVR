@@ -2,10 +2,12 @@
 #include "controller_layout.hpp"
 #include "d3d12_renderer.hpp"
 #include "tracking.hpp"
+#include "xr_connect.hpp"
 #include "xr_timing.hpp"
 #include <algorithm>
 #include <cmath>
 #include <functional>
+#include <string>
 #include <openxr/openxr.h>
 #include <openxr/openxr_platform.h>
 
@@ -13,6 +15,27 @@ namespace spidy {
 class XrRuntime {
   public:
     ~XrRuntime();
+    // The connection's lines, for the player's logs (xr_connect.hpp): the
+    // runtime and its version, each step of the start with its result, how
+    // long a headset wait took, and every session state with its time. Set
+    // before initialize; also printed as before.
+    std::function<void(const std::string&)> log;
+    // While the runtime calls the headset unavailable at the start
+    // (XR_ERROR_FORM_FACTOR_UNAVAILABLE): the seconds waited so far and the
+    // attempt; false stops the wait. Up to headsetWait.limitSeconds; 0 (the
+    // default, for the probes) asks once, as before.
+    std::function<bool(double, unsigned)> waitingForHeadset;
+    xr_connect::Wait headsetWait{0};
+    // Why the runtime ended the session (LOSS_PENDING, EXITING, the instance
+    // lost), once it has; empty while it runs.
+    const std::string& endReason() const {
+        return endReason_;
+    }
+    // The runtime's name ("Meta Quest Link" or as it calls itself), once
+    // initialize has created the instance.
+    const std::string& runtimeName() const {
+        return runtimeName_;
+    }
     void initialize(D3D12Renderer& renderer, bool probeOnly = false);
     // The game adapter supplies its actual device and direct queue. The runtime
     // validates the OpenXR GPU/feature requirements and retains COM references.
@@ -45,6 +68,9 @@ class XrRuntime {
     // One pulse: 25 ms unless `seconds` says longer (up to half a second: a
     // landed blow's kick).
     void haptic(int hand, float strength, float seconds = .025f);
+    // MOVE HAPTICS (move_haptics.hpp): a pulse at its own strength, not
+    // scaled by the controller vibration setting (hapticStrength).
+    void hapticUnscaled(int hand, float amplitude, float seconds = .025f);
     // Scales every haptic pulse: 0 none, 1 as asked (the VR settings' controller vibration).
     void hapticStrength(float scale) {
         hapticScale_ = std::isfinite(scale) ? std::clamp(scale, 0.f, 1.f) : 1.f;
@@ -180,11 +206,16 @@ class XrRuntime {
     DXGI_FORMAT format_{};
     XrTime previousTime_{};
     bool running_{}, exit_{};
+    void note(const std::string& line);
+    std::string endReason_, runtimeName_;
+    // When the session was created, for the state changes' times.
+    double createdAt_{};
     bool lastFrameSubmitted_{};
     bool flatScreen_{}, stereoScreen_{}, headLocked_{};
     Pose screenPose_{};
     float screenAspect_ = 16.f / 9, screenWidth_ = 3.2f;
     float hapticScale_ = 1;
+    void pulse(int hand, float amplitude, float seconds);
     XrFrameTiming frameTiming_{};
     XrTime referenceChangeTime_{};
     XrReferenceSpaceType referenceType_ = XR_REFERENCE_SPACE_TYPE_STAGE;

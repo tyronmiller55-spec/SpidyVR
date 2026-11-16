@@ -132,9 +132,11 @@ void Punches::update(float seconds, const std::array<PunchHand, 2>& in, std::spa
             h = {};
             continue;
         }
-        if (!h.seen) {
+        if (!h.seen || h.physicalSweep != s.physicalSweep) {
             h = {};
             h.seen = true;
+            h.physicalSweep = s.physicalSweep;
+            h.physicalToContact = s.physicalToContact;
             h.fist = s.fist;
             h.relative = s.relative;
             continue;
@@ -144,13 +146,21 @@ void Punches::update(float seconds, const std::array<PunchHand, 2>& in, std::spa
         const float keep = config_.smoothing > 0 ? std::exp(-seconds / config_.smoothing) : 0.f;
         h.velocity = measured * (1 - keep) + h.velocity * keep;
         h.sinceHit += seconds;
-        const float speed = length(h.velocity);
+        h.physicalToContact = s.physicalToContact;
+        const Vec3 contactVelocity = s.physicalToContact.rotate(h.velocity);
+        const float speed = length(contactVelocity);
         if (!h.armed && (speed < config_.rearmSpeed || h.sinceHit > config_.rearmTime))
             h.armed = true;
-        const Vec3 from = h.fist, to = s.fist;
+        // Native head/body/frame changes are not part of the player's swing.
+        // Rebase the physical segment into THIS visible frame so authored
+        // motion cannot sweep through a distant target while the hand twitches.
+        const Vec3 from = s.physicalSweep
+            ? s.fist - s.physicalToContact.rotate(s.relative - h.relative) : h.fist;
+        const Vec3 to = s.fist;
         h.fist = s.fist;
         h.relative = s.relative;
-        if (!h.armed || s.busy || speed < config_.minSpeed)
+        if (!h.armed || s.busy || speed < config_.minSpeed ||
+            (s.physicalSweep && length(measured) < config_.minSpeed))
             continue;
         // The first character the fist meets on its way.
         const PunchTarget* hit{};
@@ -174,11 +184,11 @@ void Punches::update(float seconds, const std::array<PunchHand, 2>& in, std::spa
         for (const float share : {.6f, 1.f}) {
             const Vec3 aim = hit->feet + Vec3{0, std::max(hit->height * .6f, hit->height * share - .2f), 0};
             const Vec3 inward = normalized(aim - at);
-            into = std::max(into, length(inward) > .5f ? dot(h.velocity / speed, inward) : 1.f);
+            into = std::max(into, length(inward) > .5f ? dot(contactVelocity / speed, inward) : 1.f);
         }
         if (into < config_.minInward)
             continue;
-        auto e = blow(h.velocity, speed);
+        auto e = blow(contactVelocity, speed);
         e.hand = i;
         e.target = hit->id;
         e.point = at;

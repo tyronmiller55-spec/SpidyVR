@@ -253,6 +253,18 @@ class HeroTravel {
 // World offset the native views applied to the command rendered in a scene
 // generation. Overlays add it to their eye and hand poses for that image.
 bool renderOffset(uint64_t generation, Vec3& offset);
+// Resolved world eye poses actually submitted for a captured generation AND
+// command serial. Internal stereo-module feedback, not an exported wire ABI.
+bool renderEyes(uint64_t generation, uint64_t serial, std::array<Mat4,2>& eyes);
+// Existing overlay pipeline adds render travel to its eye matrices. Convert
+// absolute render-time eyes to that representation exactly once, preserving
+// rotation; do not use the unrelated tracking rig for native head-follow UI.
+inline std::array<Mat4,2> overlayEyes(std::array<Mat4,2> actual, Vec3 travel) {
+    for(auto& eye : actual) {
+        eye[12]-=travel.x;eye[13]-=travel.y;eye[14]-=travel.z;
+    }
+    return actual;
+}
 // First point of a hand's game rope in the frame a scene generation rendered.
 bool renderWebStart(uint64_t generation, unsigned hand, Vec3& start);
 // Largest distance, in one new image, from a tracked web shooter to the game

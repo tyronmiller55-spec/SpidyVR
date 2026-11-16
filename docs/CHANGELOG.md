@@ -99,6 +99,1098 @@ recoil, guard.txt), built on Linux. Not run: this version in the game, or built
 with MSVC. An earlier form of Enemy types was played in a PSVR2 through SteamVR.
 
 **Previous build (November 11): fixes from the players' reports on 0.8.5.**
+## Air takeover (Nov 14, branch `feat/air-takeover`, on 331a70b)
+
+The user, Nov 14 (t71u, t72u, t73u, then the answers to t73s656): handstand not holding or catching with the arms down, the body inverting in combat, a stronger grip stop that is still a slide, a point jump that shoots off along the eyes, an A-button upright over a second, and the air given to SpidyVR with takeoff and landing staying the game's animation. Analysis: the b9b2196 session (game-vr-20261114-164317), `/workspace/playtest-b9b2196/ANALYSIS.md`; plan: [AIR_TAKEOVER.md](AIR_TAKEOVER.md); numbers in [VALIDATION.md](VALIDATION.md), game facts in [REFERENCE.md](REFERENCE.md).
+
+- **1. Handstand catches only with your arms up (`handstand.hpp`, [HANDSTAND.md](HANDSTAND.md)).** In that session the touchdown counted a palm on the floor within 1.6 m, and the palms of the 173 judged touchdowns were 1.13 / 1.51 / 1.83 m over it (10th / median / 90th percentile): standing hand height. 15 of 28 catches then ended `missed` at the 0.6 s settle and 9 of 11 leaps came 0.01 s after the catch. Now a touchdown catch needs both palms within 1.0 m of the floor (was 1.6) AND at least 0.2 m below the head (the hands toward the floor), held for 0.12 s; a palm on a confirmed floor contact in SpidyVR's air needs no wait. A leap is a fresh push: a stick held at the catch is no leap until it is let go of once, and an A held through the catch is not a press. The refusal log gains `head N m`.
+- **2. The "inverting" in combat: head ride and shoulder limit stand down while your headset leads (`game_xr.cpp`, `direction_report.hpp`).** In the b9b2196 session 292 of 845 one-second windows (35%) imposed more than 1000 deg/s of view turn (1,027,780 deg in all; worst step 180 deg) and the arms/hands read a heading up to 180 deg from the view. The ini of that session still had `anim_head_ride=1` and `shoulder_limit=1` (the old defaults; the polish pass moved the defaults to off but the saved file kept them): both turn the view (to his head after a landing, to his shoulders), HEADSET FIRST's view guard takes that turn back on the rig's turn the same frame, and the two fight. Windows during a head ride were 46% thrash against 30% outside it; at a landing with the headset straight ahead the view slewed from -143 to +143 in a few frames while the hero turned. Now, with Headset first on (the default), the head ride and the shoulder limit stand down whatever the file says. The audit grows (`of the imposed turn the head ride had N deg and the shoulder limit N deg; body tilt worst N deg, N frames past 100`): it says who imposed a turn and rules a flip over or an upside-down body in or out. Not done: mapping the arms to the headset in animation (the arms already follow the published heading; the cause was the heading being fought over). If thrash stays high, the new audit names the writer.
+- **3. A calm landing with the view far behind him no longer spins him round (`facing_check.hpp`).** In the b9b2196 session 83 of 265 landings turned the hero more than 90 deg onto the view (median 61, 90th percentile 142), at the game's own walk-turn pace, about 142 deg/s (0.78 s for those); the polish pass's landing turn fixed the facing but not the spin. There is NO facing write (hybrid_movement.hpp: the game does not turn its actor from a walk stick in SpidyVR's air either, `airSyncStick` stays false), so the pace cannot be eased. What can change is whether the turn is forced: a landing with nothing fighting and the view more than 120 deg behind him (`rearTurn`) leaves the body as it is, the view stays yours, and the left stick or the turn in place brings him round when you move. A fight, a dodge, and gaps under 120 deg turn him as before. Log: `facing check: landing hero expected N got N (off, kept ...)`. Unverified and not done: a quarter-second ease of the turn itself (no facing write to do it with).
+- **4. Grip stop is stronger, still a slide (`grip.hpp`, [GRIP.md](GRIP.md)).** The b9b2196 session's 22 brakes ran at 8.8 m/s^2 (mu 0.9 at a light press; 14 m/s^2 at most a hand): 25 m/s took 2.8 s and 35 m, 46 m/s 5.2 s. The user, t73s656: "stronger but still a slide", 25 m/s in about 1.2 to 1.5 s. Now mu 2.0 (`grip_stop_pct`, 200), the per-hand cap 30 and the two-hand sum 32 m/s^2: one hand at a light press 1.28 s and 16 m, a hard press 0.83 s and 10 m, two hands 0.78 s; 46 m/s in 2.3 s. The press is still the pedal and the haptic grain scales with the stronger cap. The key is renamed (`wall_brake_mu_pct` to `grip_stop_pct`, range 30 to 300) because a file that saved 90 would otherwise keep it; `wall_brake` itself stays as the user has it. `game_swing::GripAsk` and Settings v40 are unchanged.
+- **5. A in the air rights you over a second, smoothly (`realistic_flip.hpp`, `air_correct_ms`, default 1000, AIR UPRIGHT TIME in the launcher's Flip controls).** The press used to chase the level at up to the spin's speed with a hard start (about 0.5 s for a full flip, a jerk the user felt). It is now one minimum-jerk (smootherstep) turn from the tilt at the press to level about the heading: zero speed and zero acceleration at both ends, `air_correct_ms` for a half turn and the angle's share of that for less (never under 30% of it, never under 0.2 s). Heading taken from the tilt (`takeHeading`) is carried across the turn. Test: a flip of 2.2 rad takes 0.70 s, first-frame step under 0.004 rad, worst step under 2.1x the mean; 400 ms rights in under 0.6x the 1 s time.
+- **6. Point jump shoots off like a bullet (`point_bullet.hpp`, `point_jump_bullet`, default on, BULLET BODY in the launcher's Point jump page).** The user, t71u/t73s656: "orient the body vertically in the direction of the eyes on launch ... like shooting off like a bullet. Let it take whatever angle the eyes had", including straight down. At the launch the body's long axis (feet to head) turns onto the RAW look (`pointJumpLook`, the actions' head, not the out-fixed way), eased over 120 ms (smootherstep); straight down is a half turn over about the heading's right. The velocity is unchanged (the 10 deg out-of-surface fix, the 25% surface push). The tilt is the body's only (the native body pose, in world axes, about the eyes): it never moves the view or the heading and writes no velocity. It lets go (0.35 s back to upright, 0.12 s on landing) on touchdown, a web, an A press, hands holding him, a body under 6 m/s after 0.4 s, or 4 s. Log: `point bullet: body to the look ... turn N deg, launch way pitch N deg (out-fix N deg)` and `point bullet: let go (landed|web|A|hands|slow|time)`. Of the 134 point jumps in the b9b2196 session the look pitch had median +40 deg, 10th percentile -10, 90th +74. Unverified in a headset: how the native body's joints and arms read under a body-only tilt of up to 180 deg (the numbers and the let-go rules are tested in `tests/point_bullet_tests.cpp`).
+- **7. The air is SpidyVR's from 0.3 s: takeoff stays animation (`hybrid_owner.hpp`, `jump_handoff_ms` 500 -> 300, new `fall_handoff_ms` 150).** The user, t71u/t73u/t73s656: "retire all animation jumps and give the air to SpidyVR completely ... leaving the ground for a jump is animation where it can be" and "take over 0.3 s after leaving the ground; vertical speed under 4 m/s, or an input that needs SpidyVR, can take over earlier". The takeoff animation plays, then the air is VR's at the first of: the timer (300 ms); a jump whose vertical speed is under 4 m/s once it has had a quarter second (the minimum dwell; a hop never reaches the timer); a plain fall (no jump press, never rose: a ledge or a stumble) after 150 ms, there being no takeoff to wait for; and, at once as before, the inputs that need SpidyVR (web, grip, flip stick, Spidy's wall, point jump). A fight, a dodge or a zip still keep the animation, and landing is still the animation's (VR -> ANIM on touchdown). The b9b2196 ini already had 300 ms saved, so the new default changes new files only; `fall_handoff_ms` is new and takes its default everywhere. Log: `jump handoff: <kind> after N ms (timer N ms, fall N ms; by timer|vertical speed low|plain fall)`. Check: VR stints under 0.5 s (112 in b9b2196) and `native body: air adopt` hips/legs offsets under 0.1 m (146 samples had a 3 cm hips / 6 cm legs median).
+- **8. Landing blend-in: the body comes upright before the game's landing (`landing_blend.hpp`, `air_landing_blend` default ON; `air_landing_release` default OFF, UNVERIFIED).** The user, t73u/t73s656: "landing ... is animation where it can be", "hand back to the game's landing animation just before touchdown (time-to-impact blend)", "keep the gate and the fallback". In SpidyVR's air the roof ray's slot (native ray tag 7, meaningless in the air; all 8 slots are used) reads the ground under the feet instead (tag 8, 14 m reach); with his vertical speed that gives the time to impact (`h + vy t - g t^2/2 = 0`, the reading brought up to now by the fall since it was taken). The body (only: the view and the heading are never touched) comes upright over the last 0.3 s (weight 0 at 0.30 s to impact, 1 at 0.10 s, smooth, never backing off), so the game's landing animation starts from upright; never while a handstand wants him inverted or hands or a web hold him. The landing itself is the touchdown handoff and the existing 180 ms eye blend (`hybrid_handoff.hpp`), unchanged: THAT IS THE FALLBACK AND WHAT SHIPS ON. The in-air release (the animation takes the body 0.2 s before touchdown, `EnterAnim::predicted`) is built and tested in the owner but gated behind `air_landing_release` (off), because it relies on the game keeping his velocity and picking its normal landing clip when the body is let go in mid-air, which cannot be known without a probe (docs/AIR_TAKEOVER.md, "the probe"); it keeps the body only in a fight-free, zip-free, hold-free fall, after the owner's 0.25 s minimum dwell, hands it back to VR if no landing came (0.2 s lost or 0.8 s), and writes no velocity. Log, one per landing: `landing blend: first predicted N ms at N m, N m/s down; touched down after N ms (error +/-N ms), last prediction N ms, upright N% at the touchdown`. Check: the error is within about 40 ms, the upright is 100%, headbone dPos at landing (1.13 m median in b9b2196 where logged) falls, and no hard-landing clip.
+- **9. Airborne moves by request stay animation handoffs, and the air goes back to SpidyVR after them only when no landing is near (`hybrid_owner.hpp`, `game_xr.cpp`).** The user, t71u: "airborne moves like web strikes, dodges, and finishers should still work as animation handoffs". A web strike (Y in the air) and a web zip already handed the body to the game when the game took it (`zipPress`, the swing's AirYield) and back to VR when the swing had him again; that is unchanged and tested again. New: any other move the game is asked for in flight (a finisher's or prompt's button, the dive it names: `walk.demand` / a named button on a rising edge, swing owned, not on a wall) now goes through the same hold, logged as `hybrid: airborne request noted (...)`; the owner leaves SpidyVR only if the game then takes him, so a press the game refuses changes nothing. And the return rule: after a request's move or a fall's start, the jump and fall timers no longer take the air back while the predicted time to impact is under 0.45 s (`Frame::landEta`, from the landing blend's ground ray, now read in the animation's air too): a short drop or a strike near the street stays the animation's to its landing and never switches twice. NOT wired: a dodge button pressed in VR's air (B is the sidestep and point jump's chord there, and the swing has no ask for it), and finishers by no button (there is no state flag for one; Showtime's classifier only logs them): both stay as before. Check the owner flips per minute (312 anim->VR / 308 VR->anim in b9b2196) and that no `hybrid: airborne request noted` is followed by a stuck anim owner.
+
+## Showtime and web fire (Nov 14, branch `feat/showtime`, on b9b2196)
+
+The user, Nov 14 (t70u): "I need a pass on firing webs from animation. Sometimes nothing happens, but I can see a switch to SpideyVR happening. We have to get the webs working from animation properly, it's getting hard to fire accurate web lines in combat." One commit per feature.
+
+- **Webs fired from animation always fire (`web_fire.hpp`, `tests/web_fire_tests.cpp`).** Root cause, from game-vr-20261114-104706 (55 grip cancels; see [WEB_FIRE.md](WEB_FIRE.md)): the midair grip was the air cancel and the cancel CONSUMED the press (`animation_cancel::Gate`: that hand's web stays blocked until both hands are let go), so the owner flipped to SpidyVR and no web came; a squeeze held on did nothing either, and the other hand's press during the wait was dropped too. The swing shoots on the rising edge it sees, so it never saw one. The cancel still flips the owner on that frame, but the press is queued through the handoff and given to the swing on the next frame as a fresh press, in whichever owner has the body then (the log's `vr->anim (land 0 ms)` flips back at once); a tap is held 200 ms. The shot's line is never more than 2.5 degrees off the controller's own current line (the marker's low-pass lagged a flick). `web fire:` on every press: hand, owner then and now, outcome (attached / missed / dropped / unanswered) with its reason, the aim error off the controller's current line, the rig's own error, the wait, and running totals. `wb drops:` splits the web-ball drops by reason (`SpidyShooterDrops`, a live export; `Data` stays v5): revoked in the queue, revoked at dispatch, refused at enqueue, the game's refusals by cause. No new setting: it is a bug fix.
+- **SHOWTIME S0 (EXPERIMENTAL, off by default; `showtime.hpp`, [SHOWTIME.md](SHOWTIME.md)).** Hold X+B (200 ms; X first swallows B, B first passes it, Y blocks) and the eyes step outside Spidey on a fade; release brings them back. Never writes the view heading authority; the rig yaw is the camera's own and starts at the headset's look heading. WATCH ONLY: nothing new starts while out. SHOWTIME / WHILE / FADE rows (`showtime`, `showtime_while`, `showtime_fade_ms`; `game_swing::Settings` stays v40). `D3D12Renderer::Grade` gained `vignette` and `fade`.
+- **SHOWTIME S1: the camera (`showtime_rig.hpp`).** A level frame that follows him on a critically damped spring (SOFT 4 / NORMAL 6 / TIGHT 9 rad/s, vertical 3.5, catch-up to 12, look-ahead 0.12 s); the right stick orbits (smooth, or 30 degree snaps under a blink) and sets the height; a speed-and-acceleration vignette (LIGHT 25 % / STRONG 45 %); black nearer than 0.8 m; the game's own camera as the only collision (the ray fan and the follow mover's query are gated, see [SHOWTIME.md](SHOWTIME.md)); KEEP CONTROL (left stick relative to the camera, A, B); SLOW-MO IN SHOWTIME (L3); LATCH. Eight new rows (DISTANCE, HEIGHT, ORBIT ANGLE, ORBIT TURN, FOLLOW, VIGNETTE, SLOW-MO IN SHOWTIME, LATCH).
+- **SHOWTIME S2: the automatic moments.** AUTO: DODGES (OFF / PERFECT ONLY / ALL; out for the dodge and 0.3 s after unless X+B is held), CHORD (HOLD X+B / AUTO ONLY), and AUTO: FINISHERS as a log-only classifier (default OFF, not ON as the plan has it: nothing yet tells a finisher from a cutscene, see [SHOWTIME.md](SHOWTIME.md)).
+- **SHOWTIME S3: the body from outside.** His head is shown while the camera is out (the head shrink stands down on a 250 ms lease; the native body drops `hideHead`), BODY (ADVANCED) to compare with the play look. Hands, webs and marks stay out of the picture. CORRECTED and RAW body modes, the pose-yield handling and the finisher carry-on are gated (see [SHOWTIME.md](SHOWTIME.md)).
+
+## Polish pass (Nov 14, branch `feat/polish-pass`, on 4d58169)
+
+The user, Nov 14 (t64u): "Landings, combat, and movement in general are having a problem with lag and immediacy ... Where the player looks takes full precedence, and everything else should be adjusting to it ... There should be a direction report from the headset that everything is answering to every moment." The plan, with the numbers from the 4d58169 logs, is `docs/POLISH_PASS.md`. One commit per slice.
+
+- **1. The direction report (no feel change).** `direction:` ten times a second and on every action edge (turn, realign, jump, land, dodge, handoff, web fire, punch): `hmd` (the headset's own turn off its latch), `shown` (the rig's turn), `view` (shown + hmd, where the player looks), `basis` (what the left stick is mapped from), `hero`, `bone`, `momentum` (the actor's travel direction from its position change) and the last action with its age. Once a second `direction audit:` gives the degrees the view turned that the player did not make (`imposed view turn`; today about 880 deg a minute, to be driven to 0 by slice 4) and, per consumer (eyes, hands, arms, stick), the worst skew from the published heading. The quiet log: the six noisy kinds (`head probe: cutscene`, `forearm sign:`, `shooter lock:`, `spherical aim:`, `animated hand:`/`points:`, `tracking lock:`, `vr stabilization: tilt`) are kept on a change of shape or every 2 s (about 40% of the 2.6 million lines of the last session).
+- **2. Everything re-syncs on every action (no feel change; it removes skew).** The published heading (`view_yaw_lock::publish`) is now one block read whole (a seqlock): the render thread's eyes, the XR hand/marker map and the arm IK can no longer take the yaw of one publish with the ride or limit of another. Each action edge (turn, realign, jump, land, dodge, handoff, web fire, punch) bumps an action serial, and the heading is published again on that frame, so every consumer reading from then on takes it. `direction audit:` now adds `behind the last action's heading in a/b/c of N frames (eyes/hands/arms)`: a consumer still on a serial older than the one published a whole frame earlier. Not done here: the web-ball drop reasons (the `web balls:` line still counts drops in total).
+- **3. The stick runs where you look when you press it (feel; `headset_first`, on by default, launcher Camera page, **Headset first**).** The left stick is mapped from a BASIS (`hybrid_steer::Basis`): at rest the live view; at the press, the view as it is at that moment (`stick basis: press #N latched at the view ...` in the diag, with the heading, the hero and the stick angle); while held, only what you do moves it, your head's own turn and the right stick's turn. It never reads the hero's facing, the heading the body is brought onto, or a turn in progress (the 4d58169 logs: the hero faced 45 deg or more away from where the stick pointed in 28% of held samples, 1,021 episodes). Pushing the stick back no longer snaps the view: it runs you backward, the body turns round, the view stays (`hybrid_movement::Gate::updateView`: straight on within 15 deg, a blend to 25, then the stick's own angle all the way round). Off: the old HYBRID heading and rear snap.
+- **4. Landings face where you look (feel; with Headset first).** The hero's turn onto the view after a landing now aims at where you look NOW (`hsViewNow`: the view plus your head's turn since), not at the heading's own yaw or the view as it was before the landing, and a hold arrives when he faces that (within 12 deg). A fight's 3 s tail no longer holds a landing's turn off. With the left stick held the turn is no longer logged as dropped: `facing check: landing hero turn handed to the left stick after N ms (it runs along your view)`, because the stick's basis (above) already sends the run along the view. Still no facing write (none exists); the game's own turn is what moves him. The air facing sync stick stays off (retired in 5061b4a).
+- **5. The view is yours (feel, large; with Headset first, on by default).** Animation never turns your view's yaw. Shown yaw = the rig's turn + your headset's: the rig's turn (the lock) changes only from your right stick, a snap realign tap, and the punch snap (below, off by default). In HYBRID: the heading no longer follows the hero's facing (`Heading::In::viewOwn`), the head bone's yaw sway weight is 0, the facing check measures the view and logs it as `off, kept (the view is yours)` but never puts it back (it put back 118 landings and 26 takeovers), an owner switch or a recenter starts the head reference afresh without moving the view (the heading takes over the headset's old turn), the facing check's hero turn no longer writes the heading, and no rear snap turns it. Pitch and roll still follow the animation's head (flips, dives, landings), with the 50%/25% levelling as it was (the user's answer). **Head ride and shoulder limit are off by default** and now have launcher rows (Camera page); on, they turn the view as before. A VIEW GUARD is the safety net: a turn of the view that was not yours on a frame that was not a handoff, realign, snap or latch is put back on the rig's turn and heading (`view guard: put back N turns ...`, once a second at most); `imposed view turn` in `direction audit:` is the number to watch. Every stick basis takes the view again after a jump, landing, dodge or handoff.
+- **6. Runtime, lag and loading (mostly no feel change; two defaults change).** (a) The `game thread cost` window is followed by `game thread sections:` — the longest visit's time split into lock waits, crawl, wall tests, grab and tethers, grip settings, the punch's enemy scan, kicks and the solver, with each section's peak and the part nothing times ("untimed"); until now 99% of the longest visit was unaccounted (new export `SpidySwingCostSections`; `SwingCostLive` and `Settings` v40 are untouched). (b) First-use starts over 20 ms are logged (`module start: native swinging took N ms`), to name the 750 ms stall in `prepare` that no line named. (c) LOW FPS: a game under 15 fps for a minute (the 4d58169 game sat at 8.7 fps for 104 minutes with a failing DLSS evaluate and the mod under 1% of the thread) puts the diagnostics in a quiet mode (`low_fps.hpp`, `diag_log::setSlow`; noisy kinds only on a change, other lines once per shape per 10 s), and the launcher says so: the session prints `WARNING: the game has run slowly ...` (`tools/run_game_vr.py low_fps_watch`), the Start panel shows **Game running slowly** with "close the game and start VR again" until `The game is back up to speed`. (d) The quiet log also covers `point jump: denied`, `sidestep: denied`, `handstand: no catch` and `hybrid: adopt never seeded` (a new reason is a new shape and is kept at once). (e) **Defaults (feel): the scene resolution is 50% (was 67%; `defaultEyeUpscale`, the launcher's Upscaling, `run_game_vr.py`, `launch-game-vr.ps1`; a launcher file that still has the old 67 takes 50 once, other choices stay); STEADY is 200/200/200 ms (was 350/300/450) with its speed terms .2/.2 (were .12/.12), so the view answers the head sooner (movement-defaults revision 2: STEADY saved at exactly the old defaults takes the new ones once; a tuned bank stays).** The built-in SMOOTHING and STABILIZATION are already off. Not done: owner-flip hysteresis, seeding `adopt never seeded` from the actor, and the stall's own fix (it needs the new `module start` line to name it).
+- **7. Punches track the enemy you have targeted (feel; `punch_autotarget` on, `punch_track_cone_deg` 45, `punch_track_range_m` 6, `punch_view_snap` off; launcher Movement page > Combat).** The user (t65u, then: "I only want punches to target enemies that are highlighted and targeted by the player. Punches always do damage, but tracking only happens on targeted enemies. If the player punches toward a targeted enemy, everything should immediately realign in that direction."; t66u: the view turning "can be a switch"). A THROW is a free fist leaving rest (speed past 2.2 m/s after it was under 1.2, the landed punch's own thresholds); it is judged on that sample against the one enemy the ring marks (the punch lock's target: the one you looked at or last struck, or the one a web holds), if the fist's direction is within the cone of the line head -> his middle and he is within the range. Nobody targeted, out of the cone or out of range: no tracking, and the punch does the same damage either way. A tracked throw turns the body onto him on that frame (the forced turn; a fight's 3 s tail no longer holds it off, for 0.6 s), re-syncs the aim and the icons through the action serial, and turns the VIEW only when PUNCH VIEW SNAP is on (through the right stick's realign path: heading, model, headset and filters together). New side channel `SpidyPunchTrack` / `SpidyPunchTrackLive` (`game_punch::TrackAsk` / `TrackLive`; `game_swing::Settings` stays v40); the enemy positions are the existing `game_targets::position` read (C0_FINDINGS 2.1), no new offsets and no velocity read. Log: `punch track: L hand tracked the targeted enemy (3.2 m, thrown 20 deg off him): body and aim turn to 130, view stays where you look ...`; a miss with a target logs why (`outside the cone`, `too far`).
+- **8. A soft pull toward the enemy you jump toward (feel, small; `jump_pull` on, `jump_pull_gaze_deg` 20, `jump_pull_stick_deg` 25, `jump_pull_range_m` 12, `jump_pull_cap_dmps` 15 = 1.5 m/s; launcher Movement page > Combat).** The user (t65u): "a soft pull that gently pulls you toward enemies you jump toward." In the air, with no web out, the enemy in the fight whose line from your head is within 20 degrees of where you LOOK (the headset's view heading and your head's pitch), or within 25 degrees of where the left stick points while it is held, and within 12 m, pulls you toward his middle at up to 4 m/s^2: full inside 40% of the cone and 60% of the range, fading to nothing at their edges, off inside 1.5 m (it never pulls you into him), halved vertically (a pull is not a lift), not for the first 0.15 s of a jump, and at most 1.5 m/s added per jump (reset by the ground or a wall). The nearer in angle wins when two qualify. It is applied by the swing solver's own air step only (`Swing::jumpPull`, next to the AIR KICKS steer), so it never writes the game's own jump or animation velocity: a plain game jump that the swing never takes over is not pulled (the log then says `added 0.00 m/s`), while flights the swing owns (a web let go, a zip, a slingshot, a wall jump, SPIDY RUN JUMP's air) are. New side channel `SpidyJumpPull` (the ask, every frame, stale after 0.5 s) / `SpidyJumpPullLive` (`game_swing::JumpPullAsk` / `JumpPullLive`; `game_swing::Settings` stays v40); enemy positions are the existing `game_punch::kickCandidates` read, no new offsets. Log: `jump pull: toward an enemy 6.2 m away, 8 deg off your gaze (pull weight 1.00; 3 picked, 1 jumps pulled so far)` and `jump pull: let go (added 0.84 m/s this jump; ...)`.
+- **9. Handstands are hard to fall out of and easy to leap out of (feel; launcher Legs page > Handstand).** The user (t67u): "give handstands a lot more balance. Make it hard to fall out of it, but easy to leap out of." The last session: 30 catches, a median hold of 0.27 s (the unsteered replay of the same catch lasts 0.28 s), falls at a 6 degree lean with the centre of mass 0.11 m off; the catch log also showed the palm centre re-placed 0.17 to 0.22 m every other frame, which the balance read as lean once the 0.15 s catching state was over. Balance: the support 0.12 -> 0.18 m around the palms (`handstand_support_cm` 18, was fixed 12); a fall needs the divergent component outside the support grown by 0.06 m for 0.5 s (`handstand_grace_ms` 500; was outside the support for 0.12 s); the lean cap 35 -> 50 degrees (`handstand_fall_degrees`); the assist's gain 300% -> 500% (`handstand_gain_pct`); the sway damped at 2.5 /s (`handstand_damping_pct` 250; was none); no fall test for the first 0.6 s of a catch (was 0.15 s); a palm centre that moves over 4 cm in a frame carries the centre of mass with it in either state (was only while catching). Unsteered, the same 172 degree catch now lasts 1.09 s instead of 0.28 s, and with the assist it holds for good (tests: 8 s with the palms re-placed 0.3 m every other frame). Leaving: `handstand_leap` (on): A pressed (a press, not an A held through the catch), the left stick held at 0.9 or more for 0.15 s, or a push off the palms (now 0.45 m/s into the floor, was 0.6) leaves at once, into a jump of 5.5 m/s up and 4 m/s forward along where you look (the head's level direction; straight up when it points up or down), through the point jump's channel as the push-off already did; the A that leaps does not also reach the swing as a second jump. Log: `handstand exit: fell|leap|other (why) after 1.20 s held (lean 7.1 deg, off balance 180 ms, com 0.12 m off the palms, launch 5.5 up 4.0 forward)` replaces `handstand: exit ...`; a leap also writes `handstand: leap-off (x, y, z) m/s`. Saved profiles still on the old fall angle (35) and gain (300%) move once (movement defaults revision 3); tuned values stay.
+
+## G1 playtest fixes (Nov 14, branch `feat/g1-playtest-fixes`, on bd68982)
+
+The user, Nov 14 (t63u): "Last test was Grip1 ... I saw an incredible amount of hitching, look into that ... Body/head orientation still aren't aligned during dodges and landings ... Handstands still don't activate" and, asked which fixes to build, "Build all of these fixes". The analysis is in the playtest notes (G1 logs, 20 minutes: the XR loop ran at about 69 fps with the scene at 67%; the game thread stalled over 100 ms about 1,100 times). One commit per fix, in this order.
+
+- **1. Hitch diagnostics (no feel change).** The mod's own share of a hitch could not be told from the render load, so the swing module now times itself: every 10 s the diag has `game thread cost: 10.0 s, N mod steps, mean N us, longest N us (solver N us, kicks N us), N over 1 ms, N over 5 ms; hitch guard: N velocity samples held, N over-limit frames ignored` (`hitch_guard::CostWindow`, written by `visit()` in `game_swing.cpp` into the new `SpidySwingCostLive` export, read by XR; an older swing module has no export and XR logs no line). Less volume: a game step over 100 ms (was 50) gets its own `game frame: spike` line, the 10 s summary still counts every step over 50 ms; the `vr stabilization:` line (twice a second, 2,500 lines in the test) is now on change (`vr_stabilize::LogGate`: when the rig starts working, on a 10 degree move, a 5 s heartbeat). Tests: 2 `hitch:` checks in `core_tests`, a `LogGate` block in `vr_stabilize_tests`.
+- **2. Hysteresis on the swing sample's freshness (feel: a game-thread stall no longer flips the pipeline).** `swingFresh` (the swing sample is under 100 ms old) fed every gate; a game-thread stall over 100 ms made it false, every state read as a cutscene (`head_probe::classify`: not playing or not fresh), and the hybrid air-facing gate, ANIM HEAD RIDE, the hero turn, the steerable and turn-in-place gates all dropped for the stall and came back after it. It now enters live on a sample under 100 ms old and stays live until it is 350 ms old (`hitch_guard::FreshHold`); a module that stopped (status 0) is not live at once, and a stall past 350 ms (a cutscene, a pause, a real stop) goes stale as before, 250 ms later than it used to. The one-shot actions (point jump, sidestep, ground kick stand, mount, the felt airborne flag) and the realistic-flip flight keep the plain 100 ms rule. New diag line, only when there was something to say, every 10 s: `swing sample: N game stalls carried as live (longest N ms), N ran past 350 ms and went stale`. Tests: `hitch: swing sample stays live ...` in `core_tests`.
+- **3. Landings (feel).** The hero's turn after a landing now waits for a standing frame instead of dying at 0.4 s: it stays pending up to 2.5 s (`view_yaw_lock::forceWaitSeconds`; the G1 logs: 36 and 30 of 110 and 129 landings had the turn dropped, as many as in the baseline, and only 29 and 35 were corrected). Fights, dodges, zips, the leg stick, a stale swing sample and the airborne frames only wait; **the player's own left stick wins** (held 0.25 s in a row it drops the turn: he is walking where he wants, as `FACING_CHECK.md` already said). A dropped turn now says why: `facing check: landing hero turn dropped after N ms (blocked by X, N ms of it)` (the gate that held longest; `view_yaw_lock::Block`). The hero's tolerance is **45 deg** (was 90): 46-50% of the G1 landings were over 45 off the expected facing, and 81 and 94 of them were logged "ok" under the old 90. Tests: facing_check_tests (pending through a fight, the 2.5 s drop and its reason, the stick winning, a tap not dropping it, the 45 deg edge).
+- **4. Dodges (feel).** After a dodge the turn that brings the body back to the view is no longer held off by the fight's 3 s tail: from 0.4 s after the dodge button is let go until 2.5 s, with the left stick idle (`view_yaw_lock::DodgeTail`; a dodge itself, the left stick and the other gates still block it). The head ride is eased by the gap: its 250 ms blend now lasts as long as the slew to the head bone needs at 240 deg/s peak (`camera_mode::HeadRide::enterSecondsFor`: under 40 deg as before, 90 deg about 560 ms, 130 deg about 810 ms, at most 1.2 s); 37-52% of the G1 landing rides started over 45 deg off. The `camera mode:` line shows the blend used. No new setting. Tests: camera_mode_tests (the blend by gap, the peak rate), view_yaw_lock_tests (`DodgeTail`).
+- **5. Handstand catch (bugfix; the feel is that a catch now holds).** The G1 logs had 8 catches in 189 touchdowns and all 8 fell within 0-156 ms (6 in one frame; the state never reached `balance`): the balance started with the centre of mass 0.2-0.65 m off the palms (2-5 times outside the 0.12 m support, from the landing's 137-167 degrees of inversion), and the support moved under it in the frame after the catch (the support tilt re-places the palms; the handoff re-origins the tracking space). Now the start is seeded over the palms (the offset at most 0.6 of the support's radius, its direction kept: `handstand::seedInside`), the centre of mass goes with the palms when they are re-placed (the first frame after the catch, and any move over 0.04 m in a frame while catching: `Balance::shift`), and the first `catchGrace` (0.15 s) of `catching` has no fall test (`Balance::forgive`). New diag: the first 12 frames of a catch log `handstand: catch frame N: palm centre ..., com ... off (landing ..., seeded ...), xi ... outside ..., lean ..., rig tilt ...`. No new setting; `touchdownReach` and `catchSpin` are unchanged (feel, not asked). Tests: handstand_tests (137-167 degree catches survive 0.5 s, a 0.5 m palm jump does not fall, no fall test in the grace, the geometry fields). Details: `HANDSTAND.md`.
+
+## R1: enemy joints (Nov 14, branch `feat/r1-enemy-joints`, on 7ff78b5)
+
+The plan's Pillar 5 and the C0 findings (section 2.1), milestone R1: **the reader only**. **Enemy joints (experimental), off by default** (`enemy_joints=0`; launcher Legs page, with **Enemy limb zones** `enemy_limb_zones=0` under it). With it on, a kick asked for (air or ground) reads the nearest six enemies' joints within 3.5 m by the chain C0 verified (record -> instance -> info -> rig -> `getJoint` at `0x1775a80` -> times the instance's matrix; the name hash is the game's CRC-32 variant), and the zone it aims at and the zone it hits come from his head and chest joints instead of the capsule's heights. The capsule bands are the fallback for any enemy whose names or read are missing. The **limb zones** (the legs from the shins, the arms from the forearms; a new `arms` zone) are gated off by their own setting until `probe_c0_skeleton.py` has been run on the game: only the head joint has been read on other characters. Read only: nothing is written to the game, no hook, no new offset; `AirKickAsk` flags bits 3 and 4, `AirKickLive` version 3 (counters and the roles seen); `game_swing::Settings` is unchanged. Diag: `enemy joints: a rig of N joints names [...] and lacks [...]` (on a change), the hit line's `zone=<z> (joints|bands)`. Not built: R2 (the overlay of an enemy's pose), Showtime, zones for web strikes and punches. See [ENEMY_JOINTS.md](ENEMY_JOINTS.md). Tests: `enemy_joints` (the hash, the roles in a table, a joint in the world, the zone geometry, the fallback and the gate, the kick's use), a settings check, the launcher exemption; 186 rows.
+
+## K3: ground kicks (Nov 14, branch `feat/k3-ground-kicks`, on 1446ff3)
+
+The plan's Pillar 5, milestone K3. **Ground kicks (experimental), off by default** (`ground_kicks=0`; launcher Legs page, next to Air kicks; **Air kick aim** applies to these too). Standing and slow (under 2 m/s), **Y + X** held and a flick of the right stick kicks: up a front kick, sideways a side kick (it waits up to 0.6 s for a sweep), a half circle across the bottom a **sweep** (the foot swings round the pelvis ankle-high, 180 degrees, and takes the legs). The same foot as the air kicks (the pelvis 0.9 m up, a 10 cm sphere against every fighting enemy's capsule, strength from the foot's speed) with no lunge; a ground blow knocks down (half the foot's speed, at most 6 m/s, 0.5 m/s up). The Y + X chord is the legs' engage on the ground too while this is on, so no web strike or zip with both held there. While the animation owns the body one leg is solved onto the modelled foot (headset-untested). Side channel: `AirKickAsk` flags bit 2 and gesture 5; `AirKickLive` version 2 adds the foot and the player's speed; `game_swing::Settings` is unchanged; no new game address. Not built: the torso (pelvis drop, lean, hand plant) and a ground leg in the VR-owned body, both listed in [GROUND_KICKS.md](GROUND_KICKS.md) with the reasons. Tests: `ground_kick` (the stick's flicks, side wait and half circle; the standing kick's gates, no lunge, sweep, knock-down, endings), a settings check, the launcher exemption; 184 rows.
+
+## W1: web tethers (Nov 14, branch `feat/w1-tethers`, on e8b6938)
+
+The plan's Pillar 3, milestone W1 (build order locked Nov 13; the user, Nov 14: "Keep moving through to R2, and pause at Showtime"). **Web tethers (experimental), off by default** (`physical_tethers=0`; launcher Walls page, with **Tether points** `tether_particles` 24 and **Tether steps** `tether_substeps` 8). Each web you hold on a prop or an enemy is a simulated rope (an XPBD rope per hand: 24 points, 8 substeps, tension only, pinned to the wrist and the target, collision against cached ray planes and nearby enemies, asleep when still), drawn through the game's own web as at most 6 bends past its two ends (the game's rope took no more than 8 points; the game's own drape is a canned straight line). Snap the hand back along a taut line to **whip** (a jerk toward you of the wave's speed, at most 14 m/s, less for a heavy target); **circle** the hand and the target **orbits** you (at most 18 m/s), let go and it is **slung** by the existing throw; let go of the grip with the **trigger held** and the line is **kept and pays out** after the thrown prop (the trigger's depth is the brake, 0.95 locks the length, letting go of the trigger cuts it, a pull yanks it back). New side channel `SpidyTether` / `SpidyTetherLive`; `game_swing::Settings` is unchanged; no new game address. Diag: `tethers: settings sent`, `tethers: whip|spin|sling|throw on a tether|cut`. Not built: the bola, whips through crowds, strikes from a kept throw's flight. See [TETHERS.md](TETHERS.md). Tests: `tether` (the rope's pins, sag, taut line, sleep, planes, capsules, drawn points; the whip, spin and payout laws; the web grab spinning, slinging, whipping and keeping a line), a settings and ini check in `core_tests`; settings catalog 183 rows.
+
+## K2: air kicks (Nov 14, branch `feat/k2-air-kicks`, on 1c8d0c9)
+
+The plan's Pillar 5, air part (build order locked Nov 13; the user, Nov 14: "Keep moving through to R2"). **Air kicks (experimental), off by default** (`kicks=0`; launcher Legs page, with **Air kick aim** `kick_gaze_cone_deg` 25 and **Air kick spin** `kick_spin_pct` 30). Off the ground with the legs engaged (Y+X), flick the right stick (under 0.3 to over 0.8 in 80 ms; a slow push is still the legs' pose): up is a two-leg dive, up-left or up-right a one-leg dive, a quarter circle from a side up to the top a spinning roundhouse (the foot sweeps in from that side), any other flick a lighter freeform blow. Your gaze picks the enemy and his head, chest or legs within 25 degrees and bends the foot toward it (at most 0.25 m or 15 degrees); a fast foot (10 cm sphere) that meets any fighting enemy lands a blow, none under 3 m/s and full at 10 m/s, and a hard one flies him. The legs' pose is a new top layer of the leg layers; its spin reaction on the body is scaled by KICK SPIN. The swing kick keeps its flick while swinging; the auto dive holds back during either. New side channel `SpidyAirKick` / `SpidyAirKickLive`; `game_swing::Settings` is unchanged; no new game address. Diag: `air kick: gesture`, `kick: <gesture> start|hit|miss|refused`. Not built (no verified structure or channel): the torso overlay and its setting, the spin vignette, the rebound, ground kicks (K3), enemy classes. See [AIR_KICKS.md](AIR_KICKS.md). Tests: `air_kick` (gestures, zone, gaze, bend, strength, timeline, leg poses, the kick against enemies), a settings and ini check in `core_tests`; settings catalog 180 rows.
+
+## Hand grab strength and hold cost are now in the launcher (Nov 14, branch `feat/g2-grip`)
+
+The user, Nov 14 (t62u): "Yep, add them" (the same call as the handstand rows: no setting only in the ini). The launcher's **Walls** page now has **Hand grab strength** (400 to 4000 N, 1200 N by default; one hand lifts 7.5% of it in kilograms) and **Hand grab hold cost** (none, 1, 2, 3 or 5; 1 by default) under the **Hand grab (experimental)** switch: the same keys `hand_grab_force` and `enemy_hold_cost`, the same defaults. Both wait for the switch (the row says "Turn HAND GRAB on first." and stays shown). Launcher-only rows: no change to the in-game menu or the swing's settings packet. Tests: a settings catalog check (steps span the ini range, the default is on a step, round trips through the values and the ini, the notes); settings catalog 177 rows.
+
+## G2: hand grab (Nov 14, branch `feat/g2-grip`, on bbb7b42)
+
+The plan's Pillar 4 (build order locked Nov 13; the user, Nov 14 pt60u: "Keep moving through to R2"). **Hand grab (experimental), off by default** (`hand_grab=0`; launcher Walls page). Squeeze the physical grip with the palm within 0.35 m of an up enemy or a prop and you take it by hand, before a wall (G1) or a web: an enemy first, then a prop, the nearer first. It rides 0.45 m ahead of the palm (a prop's radius + 15 cm) under a critically damped spring, `|F| <= 1200 N` per hand (`hand_grab_force`; 90 kg lifted per hand; two hands double it; a heavy sags or drags), on the web tie's Follow law with the game's flight and a 0.25 kinetic knock again 0.8 s after the last blow (a punch's too). Holding an enemy tires the hand slowly (`enemy_hold_cost`, 1; 0 never): to 75% over a minute for a standard enemy, faster for a heavy. Punch with the free fist as usual. Let go with the hand moving to throw: the least-squares slope of the last 5 hand samples x up to 1.6, at most 18 m/s; a hand moving down faster than 4 m/s slams, at least 8 m/s so the landing is a strike. Every grab passes the webs' filter (up, free to fight, not held by the game). New side channel `SpidySwingHandGrab` / `SpidySwingHandGrabLive`; `game_swing::Settings` is unchanged; no new game address. Diag: `hand grab: <enemy|prop> mass= hold|throw|slam|drop v=`. Not done (no verified flag): finisher-open rule, enemy classes (brute, armored, superpowered), real prop mass. See [GRIP.md](GRIP.md). Tests: `hand_grab` (113 checks: reach, mass, cost, spring and no overshoot, sag, least-squares slope, throw, slam, priority, two hands, switching off) and a settings and side-channel check in `core_tests`; settings catalog 175 rows.
+
+## Handstand settings are now in the launcher (Nov 14, branch `feat/g1-grip`)
+
+The user, Nov 14 (t61u/t62u): "Is there a setting for handstands?" ... "Yep, add them." Handstands were ini-only. The launcher's **Legs** page now has a **Handstand (experimental)** card with the switch, the balance assist, the fall angle (15 to 60 degrees), push-off strength (100% to 400%) and top speed (2 to 12 m/s), balance height (60 to 140 cm), assist strength (50% to 600%) and view drop (0 to 120 cm): the same eight keys (`handstand`, `handstand_assist`, `handstand_fall_degrees`, `handstand_push_gain`, `handstand_push_max`, `handstand_height_cm`, `handstand_gain_pct`, `handstand_eye_drop_cm`), same defaults (on; assist on; 35, 220, 7, 95, 300, 90). They need REALISTIC FLIPS (each row says so while it is off and stays shown) and the tuning rows wait for the HANDSTAND switch. Launcher-only rows: no change to the in-game menu or the swing's settings packet. Tests: a settings catalog check (ranges, steps and defaults of all eight, round trips through the values and the ini, the notes), 174 rows. See [HANDSTAND.md](HANDSTAND.md).
+
+## G1: wall brake and grip fling (Nov 14, branch `feat/g1-grip`, on b82e0cf)
+
+The plan's Pillar 2, first half (build order locked Nov 13; the user, Nov 14 pt60u: "Keep moving through to R2"). Both **experimental, off by default** (`wall_brake=0`, `grip_fling=0`; launcher Walls page). **Wall brake:** on Spidy's wall, a physical grip closed with the palm at the wall while sliding at 0.5 m/s or faster brakes the slide as friction does, `a = min(14, 0.9 * (9.81 + 40 * pressed))` m/s^2 per hand (one hand stops 10 m/s in about 1.2 s, two in about 0.6 s), then it is the hand-climb hold; grain pulses in the hands, 30 to 160 Hz by slide speed. **Grip fling:** grip a surface (wall, ground, anything the palm meets within 12 cm), pull and let go: you launch the other way at `min(9, 1.3 * mean hand speed over the last 60 ms)` m/s; under 0.5 m/s nothing; the history clears on a snap turn, tracking loss, long frame and re-grip; the other hand still holding means a stroke, not a throw; a palm on a surface starts no web. Works from the ground too (an approved ownership exception, docs/OWNERSHIP.md: the point jump's path and takeoff hold). Ini-only tuning: `wall_brake_mu_pct`, `grip_fling_gain_pct`, `grip_fling_max`. New side channel `SpidySwingGrip` / `SpidySwingGripLive`; `game_swing::Settings` is unchanged; no game address is used. Not done: brake in free air, the pinned-palm and web-smear visuals, prop and enemy grips (G2). See [GRIP.md](GRIP.md). Tests: `grip` (150 checks: brake feel, caps, history, clears, grip states) and three `grip:` swing checks in `core_tests` (brake on a wall, wall/air/ground fling, off by default); settings catalog 166 rows.
+
+## K1: manual swing kick (Nov 14, branch `feat/k1-swing-kick`, on ab4d60d)
+
+The plan's Pillar 4 (build order locked Nov 13; the user, Nov 14 pt59u: "Move on K1 while I test"). **Swing kick (experimental)**, off by default (`swing_kick_manual=0`): swinging at 9 m/s or faster with the legs engaged (Y + X), a flick of the right stick up (under 0.3 to over 0.8 within 80 ms; a slow push is still the jackknife pose) kicks at the ringed enemy 3 to 14 m away within 30 degrees of the swing's velocity (not the view). Each web's length moves toward his distance from its anchor (at most 1.2 m, 2 m/s) and the velocity turns toward him (at most 2.5 m/s^2); the turn keeps |v|, so nothing adds speed. The foot's swept 10 cm sphere meeting his capsule is a kinetic blow (his flight takes 70% of your velocity; you keep 60% and swing on); a miss fades the assist over 0.35 s. **Auto dive kick** (`swing_kick_auto=1`, today's `WebStrike::dive`) is its own switch and holds back while a hand kick is under way; both can be on. Logs: `swing kick: armed target= cone= speed=`, `swing kick: hit|miss assist= steer=`, `refused (<why>)`. New side channel `SpidySwingKick` / `SpidySwingKickLive` (an older swing module has neither: no hand kick, the dive as before); `game_swing::Settings` is unchanged. No game address is used. See [SWING_KICK.md](SWING_KICK.md). Tests: `swing_kick` (286 checks: arm gate, cone, flick, assist clamps, foot sweep, states, the swing's assist in a simulated web, settings).
+
+## STABILITY, ARMS, HANDSTAND pass from the c6a8279 session (46195f7, Nov 13 22:24 PT)
+
+The user, Nov 13 (pt55u): "the game is hitching heavily every few minutes, which drops my web lines ... handstands still don't work ... the arms are deforming terribly and preventing aiming the webshooters ... stronger stabilization and leveling across the board." Session `game-vr-20261113-222447` (46195f7, 20 min; diag 1196.9 s). One commit per fix on `feat/stability-arms-handstand`; notes in `playtest-c6a8279/NOTES.md`.
+
+- **Webs survive hitches (fix 1):** the XR loop was healthy (0.16% of frames over 33 ms; `wait_frame` max 155 ms, no session-state changes after the first 0.5 s); the game thread hitched (diag t 44.5 s: mod prepare 231 ms, then a 268 m/s swing velocity and web 1->0 at 44.703; t 643-647 s: 3 failed web shots). The mover's measured velocity (a position change over the previous step's dt) is now believed only off a normal step (no longer than 50 ms, not stale, under twice the swing's speed limit) - otherwise the last believed velocity stands for up to 0.5 s (`hitch_guard::VelocityGuard`, in `game_swing.cpp` where every use sees it). `Swing::predictNativeStep` lets go of the webs on a speed over twice the limit only after 3 valid over-limit frames or 50 ms (`hitch_guard::OverLimit`); one read, or any frame over 50 ms, never counts and the swing goes on from its own velocity. New diag lines `game frame: spike N ms between game steps ...` (each step over 50 ms with its length) and a `game frame:` summary every 10 s (the swing sample's stamp moves once per game step). Tests: 5 `hitch:` checks in `core_tests`.
+- **Torso update for arms in animations (fix 2):** SpidyVR turns its whole body to face the player (`body_ik` `fullTurn`/`upperTurn`), so its shoulders always face the hands; the overlay kept the animation's chest and turned it at most 40 degrees, while in the 22:24 session the chest sat a median 45 deg off the player (over 90 deg in 19% of overlay samples) and the forearm a median 43 deg (p90 73) off the controller. Now the chest subtree (spine, so clavicles, arms and head with it) turns toward the player by the largest yaw up to **TORSO TWIST** (`animated_torso_twist`, default 80, launcher row; 40 = the old cap) that keeps both wrists within reach (the crawl twist's reach bisection, evaluated through the spine chain); pelvis and legs stay animated; the yaw eases in over about 0.06 s (14 rad/s at most) so an animation cut does not snap the shoulders. The arm subtrees scale to the calibrated arm length (`s * arms`, SpidyVR's ~873 mm, clamped 0.75 to 1.5), the clavicle shrug starts earlier and shares more of the reach, and the elbow pole is built from the solved chest axes as `body_ik` does. **ARM AIM FALLBACK** (`anim_forearm_fallback_deg`, default 60, 0 = off, launcher row): in the animation, once the forearm is more than that off the controller the webs aim along the controller line (faded over the usual 0.3 s; back onto the forearm at 10 deg less). The `player torso:` diag line gains chest twist (needed, cap, reach share), arm scale and forearm-vs-controller angle per hand. Tests: settings catalog (157 rows), launcher profile, a rig test of the chest twist (70 deg of reach needs more than the old 40, pelvis/legs fixed).
+- **Handstand catch at landing (fix 3):** 28 touchdowns were judged out of 63 SpidyVR landings (18 not inverted, 8 grip held, 1 palms high, 1 untracked) and the one catch (161 deg) fell after 63 ms because the balance inherited the landing's 9.3 m/s. The balance now starts from damped speed and spin (12% and 20%, at most 0.5 m/s); a grip squeezed at the touchdown no longer refuses a catch with both palms down and is carried until released once; the palms count at the touchdown up to 1.6 m over the floor (was 1.0; the refusal had 1.54 m at 121 deg); the landing's hand-off to the animation leaves the catch its first 0.25 s (judged in the animation's domain too, and a catch there takes SpidyVR back: `EnterVr::handstand`, "handstand" in the owner log). diag lists every failing gate on each refusal and logs a landing handed over with no touchdown judged, with the inputs that kept it out. Tests: handstand (72 checks: damped seed, carried grip, reach, gate list, owner re-entry and its grace).
+- **Stabilization and leveling everywhere, plus STEADY (fix 4):** the stabilization rows only reached the animated head in Native Animation, so in SpidyVR (swing, air, combat, wall) they did nothing ("I'm not seeing much effect there"). New `vr_stabilize.hpp` applies HORIZON LEVEL and the chosen bank's ANGLE smoothing to the rig's view tilt (the yaw-local tilt, never the headset rotation, the heading or the position, so head turning adds no latency); a wall's tilt is eased but not levelled and a flip past 170 degrees passes whole; the tilt may trail by at most 25 degrees and a jump past 90 degrees (a recenter, a cut) is not eased. ANIM HEAD RIDE's yaw is held on harder (angle beta x0.4, snap at 90 degrees, only when a bank angle is set). New STABILIZATION bank STEADY (3): 350/300/450 ms vertical/horizontal/angle with the lowest speed betas (.12); response rows now reach 1000 ms (STEADY rows' own steps put 350/450 on a step); the lag caps go from .25/.35 to .4/.5 and the bob-removal caps from .15/.2 to .3/.35. New rows: STEADY VERTICAL/HORIZONTAL/ANGLE, HORIZON LEVEL (OFF-100%), VR STABILIZATION (on; changes nothing until a bank or amount is set). Old settings files stay valid (STABILIZATION 0-2 and every old ms keep their meaning; ranges only widened; new keys default). Bob/vertical/horizontal smoothing is deliberately not applied in SpidyVR (it would lag the player's own movement). Tests: `vr_stabilize` (35 checks) plus the catalog/defaults checks.
+
+## PLAYTEST FIXES from the 5061b4a session, ported onto c6a8279 (Nov 13)
+
+The user, Nov 13 (t54u): last night's fixes, re-checked against the camera-modes build (c6a8279) and ported one at a time, branch `feat/c6a8279-ports`. Left out: PUNCH LUNGE (punches stay as they are) and LANDING VIEW HOLD (HYBRID v2's kept heading and ANIM HEAD RIDE already removed the 56 degree snap). The landing hard turn is not ported: ANIM HEAD RIDE brings the view to his head instead of turning him to the view. Not headset-tested.
+
+- **Left-stick flip break needs a fresh push:** 111 jumps broke to SpidyVR about 0.02 s after takeoff because the run stick was still tilted, so JUMP TO SPIDYVR's timer almost never ran. A left stick already tilted at takeoff now breaks only after it has come back inside the dead zone, or has moved more than 60 deg from its takeoff direction. The right stick is unchanged. Tests: `flip_break` (FreshPush).
+- **Air crouch flicker:** 41% of the session's 523 air crouches ended inside 0.35 s (a third inside 0.3 s): falls past -7 m/s (191), spins past 2.5 rad/s (135), webs (111), landings (67). A crouch now stays at least 0.35 s, leaves only when its reason has lasted 0.12 s, and a fall starts it only above -5 m/s (it still goes at -7). Touching the ground ends it at once. Constants in `leg_layers.hpp`, no setting. Tests: `passive_legs`.
+- **Air facing sync stick retired:** in 170 syncs the game's facing did not move (median 0 deg; landings came down a median 57 deg off the view, 37 deg at the sync's start). The stick no longer goes out; the gate still logs, and its "off" line now prints the last real gap (it printed 0 once the gate was gone, which read as a sync that had worked). `hybrid_movement::airSyncStick`. The landing log line now says "air facing gap past 20 deg for N ms this stint (no sync stick)". The landing hard turn from the same commit is not ported (ANIM HEAD RIDE).
+
+## Camera modes: the animation's head ride, the shoulder limit, the 360 snap/realign (from 5c681de)
+
+Session game-vr-20261113-145500 (5c681de, 27 min; t97u "a very hitchy time ... landings and perches"): 174 landings, 15 zip arrivals. In the second after a landing the view's yaw sat a median 55 degrees off Spider-Man's head bone (p90 126, 193 of 340 samples over 45) while position, pitch and roll were the head's; 173 of 174 landings relatched the heading, 134 reseated the head (531 reseats in the session), 73 had a facing-check correction. The 90-degree rule held the view on 12,354 frames, 35 of its 80 windows with an excess of 180-270 degrees (it unwrapped the raw gap and ran away). Perches (a pole after a zip) are off the game's ground: they stayed SpidyVR's air, the view 95-119 degrees off the head, and the zip off them moved the eyes 1.2 m.
+
+- **ANIM HEAD RIDE (t97u):** one explicit camera mode (`camera_mode::HeadRide`, LOCOMOTION / ANIM HEAD RIDE). In a game animation - a landing (its first 0.6 s, 0.3 s whatever the stick), a perch, standing still - the view's yaw rides the head bone (`view_yaw_lock::State::ride`, on every anchor: eyes, hand map, arm IK), the headset on top to look around; 0.25 s eased entry, 0.2 s eased exit. Walking/running (stick past 0.3), fights, walls, the air and the right stick's turn stay Hybrid v2. Entering lets the held heading go (no forced turn onto an old view). Logs: `camera mode: ANIM HEAD RIDE (<why>) ...`, `camera mode: LOCOMOTION (<why>) ...`. `anim_head_ride=0` off.
+- **PERCH:** still (under 0.4 m/s, 0.25 s) off the game's ground with no web, wall, swing, zip or fight is a perch, the animation's as a landing is (`camera_mode::PerchWatch`, `hybrid_owner::Frame::perched`). Logs: `perch: still ...`, `perch: left (...)`. Off with `anim_head_ride=0`.
+- **SHOULDER LIMIT (t97u; replaces the 90-degree rule):** the view never turns past his shoulders - within 90 degrees of the animation's chest bone (read before the body's solve; his facing in SpidyVR's air or when the chest is over 100 degrees off it). One clamp on the published yaw, nothing fed back; unwrapped against the last SHOWN gap, so it changes shoulders only when the head is really round there (never more than 180 of correction). Global switch `camera_mode::viewLimitActive`; `shoulder_limit=0` off. Logs: `shoulder limit: held the view at his <side> shoulder ...` and a 10 s summary.
+- **SNAP REALIGN (t97u):** its own system. A right-stick tap left/right (SMOOTH TURN on: out and back within 0.25 s; a longer push still turns smoothly; without it: the flick) snaps the heading by SNAP TURN (45 when 0) from where the player looks, round the full 360, and every tap realigns: the hero is brought onto the heading, the headset's turn is zeroed on it (the head seat recenters), the gaze cone, the rear snap's arming, the shoulder limit and the hands' filters start afresh, the head ride ends. Callable `camera_mode::realignToHeading(yaw)`; `camera_mode::snapInputYielded` gives the stick to another system. Log: `snap realign: ...`. `snap_realign=0` off.
+- **Scene body:** a scene or menu froze the owner and the animation never "owned" it, so SpidyVR's body pose was switched on inside scenes (798 `head probe: cutscene body mod` lines; Nov 12 too). Now the game's own body while the game has the view; back in play a VR body is reseeded from the live pose. Log: `scene body: ...`.
+- Tests: `camera_mode` (94 checks).
+
+## Nov 13 playtest fixes: the 90-degree rule, aim steady, the touchdown catch (from 99b8154)
+
+Session game-vr-20261113-014127 (99b8154, 54 min): 0 handstand lines in 358 landings out of SpidyVR's air; the view 90+ degrees off the hero in 473 of 2,273 view samples (21%; 152 + 55 in fights, 129 on the ground; 72 mostly the headset itself, up to 137 degrees); markers riding the camera and every hand tremor.
+
+- **THE 90-DEGREE RULE (t90u):** the view (shown yaw + headset) is never more than 90 degrees off the hero's facing. The excess comes off the published anchor yaw for the frame only (`view_yaw_lock::ViewLimit`), so eyes, hand map and arm anchor keep it alike and nothing feeds back into the heading, the stick or the rear snap. Unwrapped against the frame before, so a gap through 180 keeps its side. Log: `view limit: held ... frames`.
+- **AIM STEADY (t90u):** in the animation the hands are mapped onto the head bone's anchor (its nod, roll, bob and sway), so the webs' line and its marker swung with the camera. The line is now turned onto a slow copy of the anchor (0.2 s, at most 5 degrees behind, a jump over 25 degrees taken at once; `aim_steady.hpp`): the camera's quick motion no longer moves it, a wall's tilt or a turn still does. Webs and markers share the line.
+- **Marker filter v3 (t90u):** the 1-euro filter's cutoff rises only past 0.35 rad/s (was 0.06) at 25 Hz per rad/s (60), and a still hand's last 0.2 degrees is held: a 0.5-degree 8 Hz tremor goes from 0.68 to 0.05 degrees on the marker.
+- **HANDSTAND touchdown catch (t90u):** the game's upright capsule touches the floor first, and that frame the swing is no longer airborne, so the catch (which needed SpidyVR's air) never ran and the landing handed him to the crouched landing. A catch is now also taken at the game's touchdown within 0.25 s of SpidyVR's air (palms within 1 m of the floor; 0.6 s to bring them down, 12 cm counts as on it). Catch spin limit 5 rad/s (was 3). Every touchdown that does not catch logs why: `handstand: no catch at the touchdown: <reason> (inverted, spin, palms)`.
+
+## EngineBot's 01-03 on HYBRID v2 (feat/hybrid-v2-handstand)
+
+- **01 movement cleanup** (EngineBot, rebased): RUN CURVE on, NATIVE RUN AT through the curve (sprint at 70% physical tilt), EARLY JUMP QUICK TAP, StickPush aside .35 / hold .20 s, one-time `movement_defaults` migration. Cleanup items 3 (hybrid view tau) and 4 (ANIMATED HEAD Level on the ground) stay dropped: HYBRID's view yaw is the heading (no tau) and its head lock needs FULL.
+- **02 quick sidestep** (EngineBot, rebased; on, `sidestep=0` off): left-stick flick from neutral then A within 120 ms, 2 m in 0.18 s. HYBRID v2 rule: sideways flicks only, 55-100 degrees off ahead either side (`Deny::notSideways`); diagonals are the free run starting and the rear is the rear snap's. EngineBot proposed 55-125; the top is held at the snap line (100) so a flick never both snaps the view and sidesteps off the turned heading.
+- **03 handstand H1** (EngineBot, rebased): REALISTIC FLIPS only. ON by default for this playtest build (`handstand=1`; `handstand=0` off; ini only, no menu row). Inverted eye drop up to 0.9 m while it is on.
+
+## HYBRID v2, wrist marker smoothing v2, parkour ahead (feat/hybrid-v2, from 5061b4a)
+
+- **HYBRID v2 movement (t79u/t86u):** the left stick's front half is free movement - he turns and runs where it points (to 90 degrees either side, 90-100 runs at 90), full speed, while the view keeps the heading (eye position, pitch and roll from the head bone). Within 15 degrees of forward the headset steers inside a fixed 30-degree window (heading +-15, gaze low-passed 0.1 s); 15-25 degrees blends gaze into the stick. The heading never follows the steered run (no feedback loop). Letting go leaves Spidey where he is and the view where it is (no turn-in-place back); a hold that times out on his feet keeps the heading (5061b4a rejoined the head bone: 17 swings of up to 158 degrees). The game's own turns (wall, air, parkour; not steerable for 0.25 s) are followed again. Logs: `hybrid stick: <zone>`, `hybrid heading: ... timed out on his feet`, `... it follows him again`.
+- **REAR SNAP TURN:** 200 ms eased head turn by default (INSTANT is the old frame switch). The ini key is now `rear_snap_turn_ms`, so a saved `rear_snap_ms=0` does not keep the cut.
+- **Wrist marker smoothing v2 (t86u):** the forearm's offset from the controller is smoothed over 0.2 s (was 0.08), its fallback fades over 0.3 s (0.15), the spherical aim's trust over 0.25 s (0.1); a marker's depth glides over 0.08 s (0.03) and a target ring over 0.07 s (0.035). The controller's own motion is not slowed (the offset rides its live pose).
+- **Parkour ahead (t86u):** SPIDY RUN (incl. RUN FROM STANDING) looks ahead 0.45 s of travel (0.8-3.5 m past the body) at three heights; a steep face across its way ends the run so the game's sprint (RT) meets it at speed and parkours it. Diagnostic `parkour RT:` every 5 s of stick-at-the-run ground frames: RT held % and why not (SPIDY RUN, grip/trigger held, buttons, fight, rising).
+
+## MOVEMENT MODE: HYBRID (default), STABLE, OLD; REAR SNAP TURN
+
+The user, Nov 12 (t75u, re-asked 07:34). Built on 2f867a8. Not headset-tested. Details: [HYBRID_MOVEMENT.md](HYBRID_MOVEMENT.md).
+
+- **HYBRID:** the view on the hero's head, yaw included; one right-stick heading he faces; the view holds it only while he is brought onto it (rear snap, R turn, landing), sway faded out and back in, 2.5 s give-up. Front half of the left stick runs straight along the heading at its forward share (the game has no strafe; side pushes do not turn him). Rear half: one snap past 100 deg to the stick's exact direction, re-arm under 80 deg or neutral, settle 60 ms; he runs that way.
+- **Landings in HYBRID:** the heading is set to the shown view on the vr->anim edge frame and held; facing check hero correction drives the walk stick. Replays: 31.70 s 177 deg plain vs 10 deg; 408.44 s 128 vs 11.
+- **Air facing sync (HYBRID):** a 0.3 walk stick toward the view in SpidyVR's air while the game facing is 20+ deg off; logged per landing.
+- **Settings:** MOVEMENT MODE (NATIVE ANIMATION; `movement_mode`), REAR SNAP TURN (CAMERA & STABILIZATION; `rear_snap_ms`). VIEW YAW SOURCE and TURN-IN-PLACE ANGLE moved to the launcher only (superseded / STABLE only; the camera tab holds 20 rows); ANIM YAW SWAY greyed outside STABLE.
+- Tests: `hybrid_movement` 79; core, launcher updated; ctest 19 of 19.
+
+## FACING CHECK on every ownership event, sway fade (on the legs build)
+
+The user, Nov 12 07:14 PST: "there are times where it turns me 180 on landing or launch. Maybe we need a check on each event." Built on bce7350. Not headset-tested. Details: [FACING_CHECK.md](FACING_CHECK.md).
+
+- **The cause (06:37 session, 319e734):** on a landing the game's animation plays on the actor's own facing, which SpidyVR's air never moves (it stayed within 10 deg for 32 of 75 VR stints, wandered for the rest) and is not where the player looks. At 52 of 199 yaw-lock latches the head bone (the SpidyVR body, under the view) and the actor were more than 135 deg apart; within ~0.3 s the animation turned the hero round onto the actor's facing. With the lock the view mostly held (the old head-bone view turned with him); the hero ended more than 90 deg off the view after 52 of 166 sampled landings, and TURN-IN-PLACE fixed only 8 (18 interrupted on the landing's frames, 26 never ran: moving, or under the angle's cooldown). The 20% sway also slid the view ~35 deg on each such landing (a fifth of a 180 gap, latched then lost).
+- **FACING CHECK:** each landing, point launch, jump handoff, anim re-entry and other takeover arms a check with the view the headset showed before it (for a point launch the launch direction when within 90 deg of the view; a backward wall launch keeps the view). Within 0.3 s: the view more than 45 deg off is turned back the same frame (the anim side's yaw lock, or SpidyVR's rig about the eyes); the hero more than 90 deg off, on the animation's side, gets a forced walk-stick turn to it (TURN-IN-PLACE's closed loop: any angle, waits up to 0.4 s for a standing frame, rides out 0.25 s gaps, kept through a lock relatch). No facing write, no guessed address.
+- **ANIM YAW SWAY fade:** the sway counts in full for a head within 45 deg of the hero's facing, fades out by 90 deg (100% is still the bone itself). No slide and no 72 deg wrap jump on a 180 gap.
+- Logs: `facing check: <event> view|hero expected X got Y (ok|corrected|off, not fixable here|not sampled)`, `facing check: <event> hero turn start|done|gave up|interrupted|dropped`.
+- No new setting, offsets or shared-struct version. Tests: `facing_check` (the 31.70 and 408.44 landings, the late latch, the sway slide and wrap, backward and forward point launches, the 1225.5 point jump and 41.70 handoff turns, tolerances, misses, the forced turn's wait/ride-out/drop/relatch).
+
+## PASSIVE LEGS, AIR CROUCH, REACH SPREAD, FLAIL (the legs build of the Nov 12 plan)
+
+The user, Nov 12 06:18 PST. Built on 319e734 (feat/stable-view-yaw). Not headset-tested. Details: [PASSIVE_LEGS.md](PASSIVE_LEGS.md).
+
+- **PASSIVE LEGS (default 60% shown):** in SpidyVR's air without LEG CONTROL engaged, the leg spring runs with no stick (swing, spin, deceleration). **PASSIVE COUPLING** is 15% of LEG COUPLING by default. No LEG CONTROL needed; the turn on the body applies with CONTROLLED or REALISTIC FLIPS. `passive_legs_pct`, `passive_coupling_pct`.
+- **AIR CROUCH** (on): upright within 30 deg, 0.45 s airborne or near the apex, under 1.5 rad/s, no web: the jump's midair crouch. **REACH SPREAD** (on): a hand below the pelvis between the thighs spreads and lifts the legs. `leg_air_crouch`, `leg_reach_spread`.
+- **FLAIL:** in the air with Y+X physically held, B plays a run cycle instead of the tuck. B is taken before the dodge, the tuck and the A+B point jump until it is released. Needs LEG CONTROL.
+- Priority stick > flail > auto poses > passive, through one spring (no pops). Logs: `legs: layer`, `legs: air crouch`, `legs: reach spread`, `legs: flail B`.
+- **Tests:** `spidy_passive_legs_tests` (56); core 918/918; launcher 43/43; ctest 17/17.
+
+## FULL HEAD LOCK ON THE STABLE HEADING, ANIM YAW SWAY, TURN-IN-PLACE (Step B of the Nov 12 plan)
+
+The user, Nov 12 05:56 PST. Built on edeba41 (feat/jump-handoff). Not headset-tested. Details: [STABLE_VIEW_YAW.md](STABLE_VIEW_YAW.md).
+
+- **Full head lock, stable yaw:** eye position, pitch and roll from the head bone; yaw from a lock heading that only the right stick turns (smooth rate or snaps). Eyes, the hand map (webs, balls, markers, shooter lock) and the arm IK anchor are turned the same way.
+- **ANIM YAW SWAY (0-100%, default 20%):** that share of the head's yaw sway (head bone vs hero facing) is added back. 100% = the old feel (lock off). `anim_yaw_sway_pct`.
+- **TURN-IN-PLACE ANGLE (OFF/20-90 deg, default 35):** standing, the hero turns to the heading via a closed loop on the walk stick (no facing write; there is no verified address). Replaces the open-loop standing R-stick turn request. `turn_in_place_deg`.
+- **Logs:** `view yaw lock:`, `view yaw:` (2 Hz), `view yaw divergence:` (10 s), `view turn:`, `turn in place:`.
+- **Tests:** `spidy_view_yaw_lock_tests` (58); core 918/918; launcher 43/43; ctest 16/16.
+
+## JUMP TO SPIDYVR, AIR VIEW EASE (build 2 of the Nov 12 plan)
+
+The user, Nov 12 05:41 PST. Built on 1008510 (feat/haptics-stable-yaw). Not headset-tested. Details: [JUMP_HANDOFF.md](JUMP_HANDOFF.md); rule in [OWNERSHIP.md](OWNERSHIP.md).
+
+- **JUMP TO SPIDYVR (STAY TO LANDING / 300 / 400 / 500 / 700 / 1000 ms, default 500):** plain jumps, falls, zip launches (from the rise), vaults and wall launches hand to SpidyVR after the timer (`jump-timer`; `jump handoff: <kind> after X ms`). Waits during combat, dodges and zips. Same-frame breaks, landing, point jump and swing releases unchanged. `jump_handoff_ms`.
+- **AIR VIEW EASE (OFF (SNAP) / 150-400 ms, default 250):** the punch hold-and-ease, same path, on the timer, flip break and grip cancel; landing cancels it. `air_view_ease_ms`.
+- **Legs:** Y+X engages during a midair animation so a hold carries across.
+- **Tests:** `spidy_jump_handoff_tests` (57); core 918/918; launcher 43/43; ctest 15/15.
+
+## MOVE HAPTICS, VIEW YAW SOURCE: STABLE, SOUND TRACE (build 1 of the Nov 12 plan)
+
+The user, Nov 12 05:07 PST (t70u): implement build 1 (move haptics, rotation desync Step A, sound trace). Built on 0a593c0. Not headset-tested. Details: [HAPTICS_STABLE_YAW.md](HAPTICS_STABLE_YAW.md).
+
+- **MOVE HAPTICS (0-200%, default 100%):** both controllers thump on a game jump, wall jump or zip launch (0.35 + 0.65 x speed/25 m/s), on an air zip launch, and on landings after 0.25 s+ in the air at 3 m/s+ (0.2 + 0.8 x (fall-4)/21; 0.7x onto a wall; step-downs skipped). Point jump: a double thump (1.0/70 ms, then 0.85/100 ms at +110 ms); its charge rumble too. Own strength: CONTROLLER VIBRATION no longer halves these. Over 100% caps amplitude at 1 and lengthens pulses up to 1.5x. `move_haptics_pct`; personal.
+- **VIEW YAW SOURCE: STABLE (default) / BODY (OLD):** HYBRID steering aims from a heading of its own: latched at the handoff, following where he looks while the left stick is idle, and while running changed only by the real HMD yaw, Level's R-stick turn or its own R-stick turn (smooth/snap) - never the head bone, which made held side pushes circle. The game camera follows the same heading; composeMove gets no second turn while running. `view_yaw_source`; personal.
+- **Yaw logging:** `yaw sync:` lines at 10 Hz while steering in animation, an event when hero-vs-steer crosses 45 deg (back under 40), and `RUNAWAY TURN` when the hero sweeps 90 deg+ in 1 s with a steady stick, R idle and no own turn.
+- **ANIM YAW SWAY:** deferred to Step B (Step A does not change what the eyes show).
+- **SOUND TRACE (default on):** a detour on the game's sound call 16d5e80 (already used, entry bytes checked; every argument forwarded unchanged) records id/handle/time into `SpidySoundTrace`; one `sound trace:` line per takeoff/landing/point jump with hero ids at ms offsets (-0.5..+1.0 s) and others within 150 ms. Diagnostics only; `sound_trace=0` disables the hook.
+- **Tests:** `spidy_move_haptics_tests` (47), `spidy_stable_yaw_tests` (44), `spidy_sound_trace_tests` (25); core 918/918; launcher 43/43; ctest 14/14.
+
+## Native Animation: LEG HOLD (Y+X engages the legs; replaces LEG TOGGLE)
+
+The user, Nov 12 01:33 PST: the thumb rest tap didn't work; legs on Y+X with no setting; web zip and the gadget menu off while both are held; legs stay while the right stick is moved after letting go; neutral cancels. Built on 694861c. Not headset-tested. Details: [LEG_HOLD.md](LEG_HOLD.md).
+
+- **Engage:** Y+X held (80 ms chord window for one pressed first; a lone button reaches the game late by at most 80 ms, or as a tap). Neither button reaches the game from the chord until both are let go of: no web strike/zip, no gadget wheel, no release edge.
+- **Persist / cancel:** let go, the legs stay while the right stick is deflected; under 0.18 for 80 ms (hysteresis to 0.30) disengages and the stick turns/zips/heals again that frame. Neutral while still holding Y+X keeps them.
+- **Engaged stick:** legs only, no turn/zip/heal (double tap removed). Gates, coupling, easing and flip-break rules as before; left stick click stays slow-mo.
+- **Removed:** thumb rest tap and its binding (Touch layout as before), LEG TOGGLE / `leg_toggle_input` (old lines ignored).
+- **Tests:** `spidy_leg_hold_tests` (183 checks); core 918/918; launcher 43/43; ctest 11/11.
+
+## Native Animation: PUNCH VIEW EASE (hold and ease)
+
+The user, Nov 12 01:13 PST: approved option 1 for the punch view jump (median 0.69 m at punch switches). Built on bec50c8. Not headset-tested. Details: [PUNCH_VIEW_EASE.md](PUNCH_VIEW_EASE.md).
+
+- **Hold and ease:** at a punch's ANIM -> VR switch the first VR frame shows the eyes where the last animated frame did; the offset to the position lock then eases out ((1-t)^3) over PUNCH VIEW EASE (250 ms default), never slower than 0.10 m/s + 0.2 x speed.
+- **Consistent:** applied to the tracked placement, so eyes, hands, webs and body move together; the lock over the feet is unchanged underneath.
+- **Cancels:** teleport, large turn, recenter, tracking reset, any other handoff, non-finite input.
+- **Setting:** PUNCH VIEW EASE (OFF (SNAP) / 150-400 ms) on VR CAMERA & STABILIZATION and the launcher Camera page; `punch_view_ease_ms`; personal.
+- **Scope:** punch switches only; other ANIM -> VR switches unchanged (flagged).
+- **Tests:** `spidy_view_ease_tests` (34 checks); core 918/918; launcher 43/43; ctest 11/11.
+
+## Native Animation: LEG TOGGLE (thumb rest tap, HOLD X+Y)
+
+The user, Nov 12 00:44-00:46 PST: with LEG CONTROL "I lose all of my other functionality, including the ability to rotate left and right"; toggle the legs in real time with the left thumb rest (a deliberate tap), never the left stick click (slow-mo), fallback HOLD X+Y. Built on c128662. Not headset-tested. Superseded by LEG HOLD (above).
+
+- **Toggle:** LEG CONTROL stays the master. New LEG TOGGLE (`leg_toggle_input`): THUMB REST TAP (default), HOLD X+Y, ALWAYS ON (as before). Legs start OFF each session; OFF the right stick turns, zips and heals as without LEG CONTROL everywhere, midair included; ON midair it poses the legs as before. Same-frame effect; haptic tick and `leg toggle:` log line.
+- **Thumb rest:** `/user/hand/left/input/thumbrest/touch` added to the Touch profile as an extra (retried without it if refused, so the Touch layout is never lost); a tap is 30-350 ms after 0.2 s untouched, left stick still and unclicked. No binding: THUMB REST TAP reads X+Y.
+- **HOLD X+Y:** 0.2 s; X and Y kept from the game and the gadget wheel while both are down; single X / Y untouched.
+- **Easing:** turned off midair the legs spring to straight (critically damped, 0.6 s) before the leg layer blends out.
+- **Flip break:** turns never break; right-stick pitch breaks only while legs are ON (OFF it is zip/heal), as 07447b8.
+- **Punch view jump:** not changed in this build (no option is clearly low risk and covers most of the jump).
+- **Tests:** `spidy_leg_toggle_tests` (108 checks); core 918/918; launcher 43/43; point jump 547.
+
+## Native Animation: POINT JUMP (milestone 1, experimental, off by default)
+
+The user, Nov 11: touching any surface, charge a jump that launches the way you look; a tap is a quick jump, up to a second a bigger leap; reuse the charged leap's timing and rumble and the takeoff path; never the game's point launch smoke. EngineBot's plan. Built on 07447b8 (feat/stabilization-wrist-lock). Not headset-tested. Details: [POINT_JUMP.md](POINT_JUMP.md).
+
+- **Trigger:** A+B together (50 ms window; A or B alone is held back at most that long, a warning sends B at once) or hold B, then A (B alone dodges on release or after 250 ms). Chord held: neither button reaches the game; letting go fires; a grip cancels. `ChargeJump::consume()` so a chord never becomes a leap or a late A.
+- **Launch:** 9 m/s tap rising (ease-out) to 22 m/s at 1 s; the look plus 25% of the surface normal, at least 10 degrees out of the surface; 25% of the speed across the launch kept, never into the surface. Sent to the swing by a new side channel (`SpidySwingPointJump`, no Command or Settings version change); the swing applies it on its next step from the ground or Spidy's wall as `EventKind::PointJump`, which takes off like a charged leap (the game's jump to unstick). Never `jumpQueued_`, never a point launch.
+- **Gate:** contact or 120 ms coyote time; a 150 ms buffer for a release in the air; 250 ms cooldown plus a fresh contact; off during prompts naming A or B, the pad layer, calibration, vents, web lines, the game's crawl and takeoffs. **Zip guard (Q1):** after a game zip, a release waits until 400 ms after he lands from it, so the takeoff's jump press is never the game's point launch.
+- **Ownership:** the approved ground exception: `point-jump` takes the ground animation on the launch frame with the feet locked, holds VR through the takeoff, the air is VR's, landing returns to the animation (OWNERSHIP.md).
+- **Menus:** new in-game tab VR POINT JUMP and launcher page Point Jump (POINT JUMP, TRIGGER, TAP SPEED, MAX SPEED, CHARGE TIME, SURFACE PUSH); ini-only `point_jump_*` keys; the player's own, not in profiles. Rows sit before REALISTIC FLIPS (which stay last).
+- **Punch view jump:** checked against the 22:38 session (d0584e7): punch switches discarded a median 0.38 m (max 0.60 m) of anim-view offset, but the eyes moved a median 0.69 m (max 1.31 m) at those switches, so keeping the offset would remove only about half of the jump. Not changed in this build (not clearly low risk).
+- **Tests:** `spidy_point_jump_tests` (chord both modes, dodge rules, spider-sense, tap pass-through, cancel, charge curve, direction blend incl. 200 random surfaces never under 10 degrees, no launch into the surface, coyote, buffer, cooldown and fresh contact, zip guard, consume, ownership exception and landing snap-back, the side channel's validation, rows, keys and launcher controls); core adds the swing's point jump (ground only, never a point launch); launcher 43/43.
+
+## Native Animation: camera motion amounts, HEAD ANGLE, SHOOTERS: LOCKED TO ARM, findable camera and legs
+
+The user, Nov 11 22:59-23:07 PST: Native Animation "moving too much", leveling "steals all of the feeling", model forearm wrist shooters "not working at all", "too many wrist settings", a head angle setting, and "I can't find legs or camera settings in any of the menus". Built on d0584e7. Not headset-tested. Details and the old-to-new mapping: [CAMERA_AND_SHOOTERS.md](CAMERA_AND_SHOOTERS.md).
+
+- **Camera motion:** CAMERA MOTION (FULL, LIGHT, HEAVY, COMFORT, CUSTOM) fills PITCH, ROLL, BOB UP/DOWN and BOB SIDE (0-100% of the animation's own motion that reaches your view), plus HEAD ANGLE (DOWN 30 to UP 30). Personal `camera_*` ini keys; the defaults return the head unchanged.
+- **Shooters:** one SHOOTERS row (CONTROLLER, LOCKED TO ARM, PALM) and LOCK STRENGTH replace WRIST SHOOTERS, WEB AIM, FOREARM BLEND, FOREARM AIM LIMIT and PALM SHOOTERS, reading and writing the same keys. Root cause of "not working": the visible arm was refused in Native Animation (2,972 of 5,768 aim lines `arms overlay`), learning was off there, and a fixed 15 degree inward clamp applied.
+- **Menus:** new tabs VR CAMERA & STABILIZATION, VR WEB SHOOTERS and VR LEGS (ADVANCED) in game, and the same pages in the launcher (which had no camera or leg controls at all), plus a camera card on the launcher's Native Animation tab. LEG rows explain what they need instead of being unusable; LEG CONTROL ON sets CONTROLLED FLIPS on and REALISTIC FLIPS off.
+- **Leg control with Realistic Flips (23:35):** available with CONTROLLED or REALISTIC FLIPS; with Realistic the legs' inertia and swing go into RealisticFlip's momentum model (see CAMERA_AND_SHOOTERS.md).
+- **Flip break and jumps (23:39, 23:41; OWNERSHIP.md):** a flip's pitch or tilt from either stick, or the grip cancel, breaks a midair animation on the frame it is read (position lock on the feet, momentum kept); right stick left / right never does. A jump no longer hands to SpidyVR at its end: it stays the animation's to the landing. Landing always returns to the animation.
+- **Camera frame:** stabilization levels about a supplied up (handstand-ready); HEAD ANGLE added once.
+- **Tests:** `spidy_flip_break_tests` (629 checks), `spidy_stabilization_shooter_tests` (747 checks: tilt and bob scaling, head angle sign, flip continuity, presets, ini round trip, old-key mapping, lock geometry, every new row reachable in game and present in the launcher); launcher 43/43; core 917/917 (built and run on Linux with a stub DXGI header; ownership tests updated for the new jump rule).
+
+## Native Animation: OpenXR connection, wait for an unavailable headset, connection log
+
+The user, Nov 11 12:06 PST: "VR is constantly dropping now, can't even get in ... only SpidyVR is dropping connection". Not headset-tested.
+
+- **What the logs showed:** five starts of 0e9436e between 11:41 and 11:46 PST stopped at the in-game `xrGetSystem` with `XrResult=-35` (XR_ERROR_FORM_FACTOR_UNAVAILABLE) about 19 s after the game started and seconds after the launcher's probe had found the Quest 3S on Meta Quest Link. No session was created, so it was neither a session loss nor the new leg code. `xr_session.cpp` is the same in ed4616e, 6ec06c4, 8cce51d, 0e9436e and upstream 0.8.6.
+- **The fix (`xr_connect.hpp`):** the OpenXR specification says -35 means the headset is supported but not available right now (asleep, off the head, Link not started) and that a later call may succeed; Meta's documentation says Link returns it while its connection is not available. Spidy gave up on the first one. It now asks again (0.25 s, 0.5 s, then each second) for up to two minutes, telling the player every 5 s; stopping VR ends the wait. The probes keep asking once.
+- **Connection log:** the runtime's name and version, the extensions enabled, each step's result (create instance, find headset with attempts and seconds, create session, begin and end session) and every session state change with its time since the session was created, on the launcher's console while VR starts and in the report's timeline (and RUN LOGS) throughout. Every OpenXR failure names its code (`XrResult=-35 (XR_ERROR_FORM_FACTOR_UNAVAILABLE)`); a session or instance lost says the runtime lost it; LOSS_PENDING, EXITING and an instance loss end VR with that reason in the status line. The old "connect Quest to Virtual Desktop first" text is gone for Link.
+- **Not done:** recreating a lost session in place (the swapchains, actions and spaces are rebuilt only by a new start).
+- **Tests:** the wait (found after refusals, gives up at the limit, stopping ends it, other codes not retried, a limit of 0 asks once) and the names. Core 917/917.
+
+## Native Animation: right-stick leg control (first pass)
+
+The user, Nov 10 (t41u): "procedural leg control on the right stick, but only when Controlled Flips is on ... an advanced feature ... smoothly blend between straight leg positions, jacknife for forward, left and right leg splays, and a rearward leg splay ... loosen the legs more so that momentum plays on them ... and we want momentum on them so that they affect rotation"; t42u "procedural legs are only in midair or during swinging"; t43u "Make zip and heal work in midair, but you have to double tap them". Built on 8cce51d. Not headset-tested.
+
+- **Setting:** LEG CONTROL (ADVANCED), Settings > VR FLIPS, off by default (`leg_control`). It is active only with CONTROLLED FLIPS on, REALISTIC FLIPS off, the body shown, and the body airborne or swinging free: the same gate as the air legs (no ground, wall, wall run, crawl, mount, landing or parkour).
+- **Blend (`leg_control.hpp`):** five authored poses (centre straight; forward jackknife, hips 83 deg; left/right both legs swung that way, the near leg wider; back a rearward splay, hips back 34 deg, legs apart, knees bent). The pose is linear per half-axis in the stick (after a 0.12 dead zone and an 80 ms stick filter), so it is continuous and diagonals mix.
+- **Loose legs:** a spring-damper per hip angle toward the stick's pose (1.6 Hz, damping 0.35 by default: it overshoots and swings). It is driven by the body's specific force (velocity change minus gravity: legs trail a pull, hang when hanging, float in a free fall), its angular acceleration (legs lag a turn) and its yaw rate (legs thrown apart). Semi-implicit substeps of 1/240 s with clamped angles and rates keep it stable at every setting (tested with wild input).
+- **Rotation coupling:** the legs' swing turns the body back by a share of it (angular momentum kept: 0.3 at full coupling, capped at 2 rad/s). Symmetric splays cancel. It is applied as the controlled flip's tilt, held, and comes upright on landing or A as a flip does. The legs' spread scales a controlled flip's spin by the inverse of the moment of inertia (jackknife faster, 0.75-1.5x).
+- **Tuning rows:** LEG STIFFNESS and LEG DAMPING (25-200%, default 100%), LEG COUPLING (OFF-100%, default 50%). Keys `leg_stiffness_pct`, `leg_damping_pct`, `leg_coupling_pct`, plus ini-only `leg_double_tap_ms` (300, 150-600). These are the player's own settings, not in shared profiles yet.
+- **Right stick in the mode:** it poses the legs. The tracking rig and the Level/model-yaw turns ignore it, the game receives it at rest, and a push held into the landing is no snap turn. `StickDoubleTap` is now wired: a double tap up zips (second push held = aim / slow time, release zips) and down heals, through the existing ZipPress/heal relays. A strong vertical push is withheld from the legs for up to 0.25 s as a possible first tap. When the mode is not active, StickPush is unchanged (it must see neutral first after the mode ends).
+- **Body:** body_ik places the feet from the angles (knee pole ahead of the leg), replacing the momentum trail while on. It eases in and out over 0.2 s (airLegBlendSeconds); a kick takes the legs at once. Arms, webs and ownership are untouched.
+- **Log:** `leg control: on (air)` / `off` on change, and `leg control: double tap up, zip` / `down, heal`.
+- **Tests:** blend shape and continuity, swing and settling, momentum response, stability sweep, coupling and inertia, the double tap's leg withholding, the flip's coupling and spin scale, the body's air-only gate and 0.2 s blend, settings and ini keys. Core 915/915, ctest 5/5.
+
+## Native Animation: spherical aim, camera smoothing, legs only in the air
+
+The user, Nov 10 20:54 PST: "When aiming high above/behind my head, or low near my legs, the web shooters break and the markers jump around... enable 360 degree spherical aiming", plus a camera smoothing option with Light and Heavy levels; Nov 10 21:03 PST: "procedural legs are only in midair or during swinging". Not headset-tested.
+
+- **Contorted aim, the causes:** (1) the arm solve's elbow pole is fixed, so with the hand high behind the head or low by the legs the solved forearm flips, the wrist misses its target and WRIST SHOOTERS falls back to the controller (wristMiss/notSolved: 227 of 4675 forearm lines in the Nov 9 log, 9 of 187 on Nov 10), and each switch between forearm and controller jumped the line and the marker by the angle between them. (2) The inward wrist clamp used a signed palm angle that wraps at 180 deg, so reaching behind flipped the clamp to the other side. (3) The shot and marker filters blended directions linearly, which collapses near-opposite directions (a fast swing behind).
+- **Fix, `spherical_aim.hpp`:** each hand learns its forearm's direction in the controller's own frame while the solve is trusted (wrist error under 3 cm and within 35 deg of the learned model). When the solve is untrusted the line follows the learned model on the live controller, so it keeps turning with the hand all the way round; trust eases in and out over 0.1 s, so there is no jump. The inward clamp fades out past 90-120 deg instead of wrapping. The shot and marker filters turn along the great circle. Hit picking was already by direction (a full sphere). `spherical_aim=0` in spidy_vr.ini restores the old fallbacks (ini-only, on by default).
+- **Camera smoothing (DISPLAY):** STABILIZATION OFF/LIGHT/HEAVY (default OFF), CAMERA VERTICAL/HORIZONTAL/ANGLE (default OFF, 0-500 ms in steps 25/50/75/100/150/200/300/500), LIGHT VERTICAL/HORIZONTAL/ANGLE (75/50/75 ms), HEAVY VERTICAL/HORIZONTAL/ANGLE (200/150/200 ms). With STABILIZATION OFF the CAMERA rows apply; LIGHT or HEAVY uses that level's own three rows instead, with stronger jolt damping (the existing head SMOOTHING level stays a floor on the angle). Only the animation-driven head parent is smoothed, as an offset from the feet (the feet stay exact; lag is capped at 0.25 m vertical, 0.35 m horizontal; a cut over 45 deg or a teleport resets it). The headset's own rotation and position stay 1:1, and the 180 ms eye blend uses the same smoothed head. Keys (spidy_vr.ini, personal, not in shared profiles): camera_stabilization, camera_vertical_ms, camera_horizontal_ms, camera_angle_ms, camera_light_vertical_ms, camera_light_horizontal_ms, camera_light_angle_ms, camera_heavy_vertical_ms, camera_heavy_horizontal_ms, camera_heavy_angle_ms.
+- **Legs only in the air:** the loose-leg momentum trail and the tuck now run only when airborne or swinging free: never on the ground, a wall run, a wall crawl, a vent or floor crawl, a kneel, a planted foot or a kick. They blend out over 0.2 s on landing or wall contact instead of snapping. Before, the momentum trail could override the wall-run legs.
+- **Midair zip and heal by double tap:** `StickDoubleTap` (game_pad.hpp) is built and tested: a double tap UP is zip (the second tap held aims, release zips), a double tap DOWN is heal (the second tap held heals), 0.3 s window (0.15-0.6 tunable), 0.85 deflection; single pushes go to the legs, and a possible first tap is withheld from the legs so its pose cannot fight the action. **It is not wired yet:** there is no right-stick leg control in this build (Controlled Flips uses the left stick), so the right stick's existing single push-and-hold zip and heal are unchanged.
+- **Tests:** spherical aim (learned model, trust blend, no jump on owner switch, full-sphere turn, wrap-free clamp), camera smoothing (headset 1:1, feet exact, axis times, levels, caps, cuts), legs only in the air (gate, ease in, 0.2 s ease out, wall run untouched), the double tap. Core 910/910, ctest 5/5.
+
+## Native Animation: arms review fixes (EngineBot review of d31887c)
+
+These fixes build on the full-arms build (d31887c), after EngineBot's independent review on Nov 9 23:01 PST. Not headset-tested.
+
+- **Glove lead (H1):** the hand's velocity is now estimated in tracking space, so a snap turn, a reference latch or a reseat never looks like hand motion. It is clamped to 5 m/s and restarts from rest on each new epoch: a snap turn, re-latch, recenter, reseat, owner change, frame-mode change, or tracking lost and found. Before, a 30 deg snap could read as about 45 m/s and throw the glove about a metre.
+- **One lead (M2):** the pose job's measured wait (smoothed, at most 25 ms) is the lead. It is applied the same way to the glove and to the hand the actions use, so the marker, line start and glove agree. The poses are already predicted to the frame's display time; the lead covers only the job's extra wait.
+- **Gaze (H2):** the eye gaze is moved onto the action head once, not twice. Gaze, its origin and EYE AIM are rebuilt from it. A frame with no action head now really clears gaze.
+- **This frame's turn (M1):** the Level R-stick turn and the level heading are read before the hands are mapped. The frame mode is still last frame's, because ownership is decided after input.
+- **Strike hold (M3/M4):** a FULL ARMS hold needs a fresh strike sample (within 100 ms) and lasts 4 s at most. A capped strike must go idle before another can hold. animated_full_arms stays ON by default and is frozen while a hold lasts. `full arms strike: enter` and `leave ended/stale/capped after N ms` lines are logged.
+- **Contact-only (M5):** with animated_full_arms=0, a hand counts for contact only when the glove has converged on it, as before.
+- **Kinematics log (M6, L1, L2, L4):** an issue must hold 3 frames to count and clears after 15 clean frames. Issue lines are at least 250 ms apart. An epoch id zeroes velocities. The glove-miss check is now fed. Any NaN, velocities included, is flagged.
+- **Actor matrix read (L6):** for the per-frame map it is read until two reads agree. A torn read falls back to the pose job's mapping.
+
+## Native Animation: full arms in animation, analog arm control, body kinematics
+
+**In an animation the arms are the player's SpidyVR arms: every web, ball, marker and punch leaves from where the controller is in the game, mapped every headset frame, and turns with the R stick.** The user, Nov 9 22:27 PST, after the b84b3a7 session (stamp b84b3a7 confirmed).
+
+- **Slow hands, the cause:** aims and gloves came only from the game's hero pose job, about 41 a second against the headset's 64-69, and that job used the previous loop's controller. **Fix:** the hands are mapped on the headset frame through the eyes' own map (`arm_frame.hpp`). The glove's target moves on by the hand's velocity for the job's wait (25 ms at most).
+- **Backwards webs after an R-stick turn, the cause:** a grip-held web skipped the animated hand and used the SpidyVR tracking rig, whose heading never sees the actor's model-yaw turn. **Fix:** every hand, grip held or not, uses the mapped pose, and the swing's tracking yaw is the map's heading each frame.
+- **Bent web lines in contorted poses, the cause:** MODEL FOREARM turned each web onto the animation's forearm, 39 deg off the controller (median), more than 90 deg in 173 lines. **Fix:** in an animation the line follows the tracked hand. The glove is solved onto that same pose, so marker, line start and hit agree. MODEL FOREARM still applies in SpidyVR.
+- **Full arms:** punches are no longer contact-only in an animation. A web strike (its lunge, its hang) takes SpidyVR (`punch`), even on the ground, and landing hands back. Switch: `animated_full_arms=0` in spidy_vr.ini restores contact-only. It is ini-only, has no menu row, and is on by default.
+- **Body kinematics** (`kinematics.hpp`): head, hands, aims, forearms, feet, yaws and their velocities, every frame. It checks reach, a head off its feet, speed, and a backward web, and writes a `kinematics:` line only on an owner or state change, a new mismatch, or every 5 s while one lasts.
+- **Tests:** map/turn, prediction, kinematics, and the punch owner rule. Not headset-tested.
+
+## Native Animation: ownership update
+
+**Animation owns the ground, parkour, jumps and landings. SpidyVR owns the air and wall runs. A point launch now plays as the game's own animation, from the Y press to the top of the launch.** The table is in [OWNERSHIP.md](OWNERSHIP.md).
+
+- **Point-launch turning, the cause:** the mod took the body on the takeoff frame (jump adopt), so the game's launch never played. It also pushed its own walk stick into the game during the move: launch facing toward the swing's velocity, plus the R-stick model-yaw turn. All three are removed.
+- **Grip on the ground** no longer leaves the animation. It only arms SpidyVR's webs, balls and punches on the animated arms.
+- **Grip in a midair animation** is the cancel: no shot, SpidyVR at once.
+- **Landings always come back to the animation.** A Native Run's wall run hands back when the stick is let go.
+- **Tests:** owner-table tests replace the cancel-stay, jump-adopt and launch-facing tests. Not headset-tested.
+
+## Native Animation: 0.8.5 compatibility playtest
+
+- Integrates upstream gameplay presets and category pages without replacing the
+  four Nov 8 handoff, visible-glove frame and forearm-clamp fixes.
+- Keeps animation profile preferences when selecting a built-in gameplay preset.
+- Adds a Native Animation headset category; category reset preserves independent
+  movement settings. Launcher navigation retains the dedicated animation tab.
+- Adds profile-preservation and category-reset regression tests. Windows CI and
+  headset validation must be reported for the exact build, not inferred from the
+  previous 0.8.1 playtest.
+
+
+## Native Animation: forearm-clamped web shooters
+
+**MODEL FOREARM stays on the world's elbow-to-wrist line. Tilting a palm out never pulls the web past it; tilting inward angles it a little toward your midline.**
+
+- The forearm was stored on the controller and re-applied as you moved, so the shot turned with your wrist. It also snapped back to the controller whenever the two lines differed by more than 45° — about a third of the Nov 8 session.
+- The web now follows the solved elbow→wrist in world space (it moves with the hand, not the wrist's rotation). Palm-out (toward that hand's palm) is clamped to the forearm. Palm-in may follow up to 15°. The old 45° snap is gone, and animation ownership no longer falls back just because the forearm and controller differ.
+- Diagnostics print a `forearm sign:` line with the signed palm angle (positive toward the palm, treated as out) so a tilt each way can confirm the sense. FOREARM AIM LIMIT no longer pulls the line back toward the controller.
+- Tests: neutral and a roll around the forearm stay put; left and right palm-out stay on the forearm; a 20° palm-in caps at 15°. Not headset-tested.
+
+## Native Animation: web balls aim from the gloves you see
+
+**While the animation owns, web balls and aim markers leave from the same place as the visible gloves.**
+
+- The gloves already sit in the hero's head-bone frame so they stay on your controllers in the view you are watching. Web balls and aim markers still aimed from the tracking rig, which at a takeover sat a median 0.82 m and 45° away from that view — so a ball left beside the thug you were looking at. They now use the same mapped grip the overlay placed, then the usual web-shooter offset on top.
+- Squeezing the web-hold button (grip by default) still leaves the animation and shoots a SpidyVR web from the tracking-rig controller, not from the remapped glove.
+- Diagnostics print a `web balls:` line about once a second: requested, fired, targeted, resolved, webbed, collisions, pushed, dropped, empty pulls, and each hand's shot count. That survives a crash that cuts off the launcher's closing summary.
+- Tests: a mapped grip's shooter matches mapping the shooter itself; a free hand's aim moves onto that displayed shooter; a web-hold keeps the rig aim. Not headset-tested.
+
+## Native Animation: no mid-air round trip on a Y the game doesn't take
+
+**Leave SpidyVR for a web zip only once the game actually starts it.**
+
+- A Y in the air or a zip to a point, pressed while swinging or on Spidy's wall, used to flip to the animation on the press itself. If the game refused that press (nothing to strike or zip to), SpidyVR took you back about 0.4 s later — a visible round trip. Those presses now stay in SpidyVR until the swing yields (the game began the move). A press it never takes never leaves.
+- A zip pressed while already on the animation, or during a speed or rotate flight with no swing to watch, still goes to the animation on the press, so the game can play the move. A fresh grip is still the way out of an animation zip. Ownership otherwise unchanged.
+- Tests: a swing or wall press stays in SpidyVR until the game takes it; a refused press never leaves; a speed flight with no swing still yields on the press. Not headset-tested.
+
+## Native Animation: air adopt on every mid-air takeover
+
+**Taking over in the air now starts from the pose the animation left, the way a jump already did.**
+
+- A web, grip, mid-air turn or speed, a swing after a zip, or a wall-run leap used to reclaim SpidyVR from a standing blend with no air flag, so the body could hitch or plant the legs for a moment. Those takeovers now use the same snapshot and seed as a jump: the first SpidyVR frame is the live pose, the arms go to the controllers at once, and the legs stay airborne until you land.
+- A grounded takeover (a web from the ground, a wall run you start on the wall) still reclaims without a seed. Ownership rules are unchanged.
+- Diag: `hybrid: air adopt seeded from the live pose ...` for those takeovers; jumps still log `jump adopt seeded`. `hybrid: adopt never seeded` if the animation took him back before a body frame.
+- Tests: every mid-air reason adopts; a grounded web or wall run does not; a jump still adopts even if the ground flickers. Not headset-tested.
+
+## Native Animation: handoff polish
+
+**State switches reseat the head more often, refresh movement after each handoff, and no longer lock the free hand's webs.**
+
+- The head-locked view now reseats on the neck for weapon, gadget, phone and prompt changes as well as owner, move, zip, HEAD and recenter edges. The drift backstop is 20 cm (was 35 cm), so a walk in the room is brought back sooner. A glide already heading onto the neck chases a small headset move without restarting its 180 ms clock, so rapid actions do not hitch the view.
+- Every SpidyVR ↔ animation handoff resets the view-yaw filter and the camera-look / camera-pitch sticks, then holds CameraLook off through the blend and until you release a held run. Landing and keeping forward no longer orbits you until you jump.
+- Web balls treat climb and crawl as per-hand busy flags. A leftover climb or crawl on one hand no longer marks both triggers busy during midair animations. Web balls still do not change owner; grip is still how you leave the animation.
+- Tests: glide follow without restart; 20 cm backstop; action diag name; CameraLook reset drops a leftover turn; one-hand climb does not busy the other; handoff look-hold until the run stick is released. Not headset-tested.
+
+## Native Animation: web balls, grip-out, and always-on aim markers
+
+**Shoot web balls during any animation; squeeze grip to leave it; keep the aim
+markers up.**
+
+- Web balls (trigger by default, or the other button if you swapped Web button)
+  fire from the tracked controllers during any animation. They no longer take
+  you out of the animation. A temple scan, the suit power, drawing the phone,
+  or a prompt that has claimed a button still keep those buttons.
+- Grip (the web-hold button) is how you leave the animation, at any time: on
+  the ground, in the air, in a fight, or during a Y-zip. It shoots a SpidyVR
+  web from the controller, not a fist. If a web attaches you stay in SpidyVR
+  as now; if you let go on the ground with no web, the existing landing
+  handoff returns you to animation.
+- The ownership path was watching the web-ball button, so shooting a ball in
+  the air could pull you out after a short delay. It now watches the web-hold
+  button instead.
+- The aim markers stay up whenever Native Animation is on and AIM MARKERS is
+  on, including while an animation is playing (they were hidden with the rest
+  of the overlay whenever the view sat on the animated head). Turning AIM
+  MARKERS off still hides them. Real first-person cutscenes and the flat
+  screen stay bare.
+- A Y-zip stays the game's zip if you do not grip. Tests: a ground, air or
+  fight grip leaves on that press; a fresh grip leaves a Y-zip; a grip held
+  through a Y-zip does not; speed, spin and a web still do not steal a zip.
+  Not headset-tested.
+
+## Native Animation: gymnast knees-to-chest tuck
+
+**Hold B now folds the thighs against the abdomen, with the knees below the chin.**
+
+- The visual tuck (hold B, dodge) was aiming each foot out in front of the
+  hip and bending the knee forward, so the thighs sat out like a chair,
+  perpendicular to the torso. The new target keeps the feet near the hips
+  and lifts the knees toward the chest, so each thigh rests against the
+  abdomen and the knees sit below the chin.
+- Same button, same quarter-second ease, and the same rule: only while
+  SpidyVR owns the air. Kick, wall-run, crawl and grounded legs stay as
+  they are. Physics coupling still reads the same fold weight, so a deeper
+  tuck also spins up a bit more.
+- Tests: a held tuck still raises the knees and eases in and out at arm
+  speed; the thighs now point up the torso more than forward; the feet
+  finish near the hips; kick and grounded plants stay put. Not headset-tested.
+
+## Native Animation: smoothing calms animation wobble
+
+**SMOOTHING now filters the animated head, not your headset look.**
+
+- The same Off / Low / Medium / High / Max row (default Off). It no longer
+  eases the headset. That lag was making the view wobble worse the higher you
+  turned it, and it never touched the animation's own noise.
+- While Native Animation owns the view, it calms small jitter and bob on the
+  hero's animated head. Your headset look and lean stay one to one. Travel
+  stays with the body, so the camera should not trail through you or a wall.
+  A vault, jump, or real turn still comes through. Snap turns, a recenter,
+  and a large cut jump through.
+- On a SpidyVR swing the filter does nothing (the view already follows the
+  headset). Hands and body stay on the live headset. Recording's SMOOTHING is
+  unchanged.
+- Not a Settings or Command field: the running session reads the launcher
+  value live. Turning the Native Animation master on or off leaves this
+  choice alone.
+- Tests: Off is identity; travel (position) stays on the target at every
+  level; oscillating yaw jitter is reduced; a large snap and a distant cut
+  take the target at once; the menu row, defaults, saved `.ini` and master
+  on/off keep the value. Not headset-tested.
+
+## Native Animation: five-level headset look smoothing
+
+**Ease how quickly the view follows your headset look, without locking it down.**
+
+- A new Native Animation row, SMOOTHING, with Off, Low, Medium, High and Max.
+  Off (the default) is the view you already have. The other levels ease the
+  headset's look toward where you are pointing; leaning and travel stay with
+  you, so the camera cannot trail through the body or a wall. Your headset
+  still moves the view. Snap turns and a large recenter jump through.
+- The same ease applies while Native Animation is on, whether the view is
+  sitting on the animated head or following the headset in a swing. Body IK
+  and your hands stay on the live headset. Recording's own SMOOTHING is
+  unchanged (recordings only).
+- Not a Settings or Command field: the running session reads the launcher
+  value live. Turning the Native Animation master on or off leaves this
+  choice alone.
+- Tests: Off is identity; one High frame eases a small look rather than
+  taking it; the look settles; a 90-degree snap takes the target at once;
+  the menu row, defaults, saved `.ini` and master on/off keep the value.
+  Not headset-tested.
+
+## Native Animation: tuck and legs feed swing spin and drag
+
+**When the knees come in, the swing spins up; legs out keep today's drag.**
+
+- The visual tuck (hold B) now also feeds the swing's existing spin and air
+  steering. Knees in lower rotational inertia, so an existing spin speeds up
+  like a diver tucking, angular drag eases off so that spin lasts a bit longer,
+  and air / free-hand steering gets a little more responsive. Letting go eases
+  those scales back with the knees. An untucked pose is identity: the swing
+  you already have does not change.
+- Realistic Flips use the same scales on their angular drag and on angular
+  momentum (Iω). The pendulum solver gets the steering half through a side
+  channel (`SpidySwingPoseCoupling`); no Settings or Command version bump, and
+  no new launcher row. Gains live in `swing_coupling.hpp` and can be set to 0
+  to disable either half.
+- Kick, wall-run, crawl and grounded plants still snap the visual tuck off, so
+  they also send an unchanged pose (inertia 1). Animation-owned hops, vaults,
+  zips and fights never raise the tuck.
+- Tests: an untucked pose leaves scales at 1 and air steering untouched;
+  a full tuck lowers inertia, eases angular drag and steers more in the air;
+  folding into a tuck speeds an existing Realistic Flip spin; less pose drag
+  keeps more of that spin. Not headset-tested.
+
+## Native Animation: hold B to tuck the knees in the air
+
+**Bring the knees up to the chest on a hold that does not steal the web.**
+
+- While SpidyVR owns the air - a swing after a web, or a real jump/leap that
+  handed over from its takeoff - holding B (the dodge button) eases the same
+  thigh-shin-foot chains toward a knees-to-chest fold. Letting go eases them
+  back. The ease matches the arms taking weight (about a quarter of a second).
+- Triggers and grips stay shoot / fist / air-web. B on the ground is still
+  dodge; the pad layer still uses the face buttons when it is latched. Kick,
+  wall-run, crawl and grounded plants ignore the hold, and animation-owned
+  hops, vaults, zips and fights never see it (they never raise `airborne`).
+- The hold arrives as a side channel (`native_body::setTuck` from B in XR).
+  No new launcher setting, offsets or shared-struct version. Physics coupling
+  (feeding the tuck into swing weight, drag and spin) is not started.
+- Tests: the first blended frame still matches the jump snapshot; a held tuck
+  raises the knees toward the chest and eases in rather than snapping; releasing
+  eases back; a kick still aims the feet; a grounded plant ignores the hold.
+  Not headset-tested.
+
+## Native Animation: midair legs trail swing and leap momentum
+
+**Give midair swinging (and an adopted leap) legs that follow your speed and spin.**
+
+- When SpidyVR owns the air - a swing after a web, or a real jump/leap that
+  handed over from its takeoff - the existing thigh-shin-foot chains keep the
+  pose they already have (the game's air pose, or the jump they were left in)
+  and trail it with the hero's linear velocity and a simple turning rate, so
+  they read as weight instead of staying frozen or snapping to a standing plant.
+- The trail is damped (about 0.12 s) and capped (about 28 cm): a 15 m/s swing
+  leans the feet back, a rise tucks them a little, a fall lets them extend,
+  and a spin shifts them opposite the turn. Kick, wall-run, crawl and grounded
+  plants are unchanged. Animation-owned hops, vaults, zips and fights never
+  see this (they never raise `airborne`).
+- Velocity arrives as a side channel (`native_body::setAirMomentum` from
+  `swingState.velocity` in XR). No new launcher setting, offsets or shared-struct
+  version. Tuck and physics coupling (T/P) are not started: the legs do not yet
+  feed swing weight, drag or spin.
+- Tests: a forward dash trails the feet behind the frozen air pose; the first
+  blended frame still matches the jump snapshot; airborne without velocity keeps
+  the jump's knees; a kick still aims the feet; a grounded plant ignores the
+  trail. Not headset-tested.
+
+## Native Animation: jumps hand over from their own pose
+
+**Pick up real jumps and leaps in SpidyVR from the pose the animation left you in.**
+
+- A real jump or leap the player asks for on the ground - A (`Command::jump`), the
+  game's A, a charged leap let go of (`Command::leap`, RUNNING LEAP), SPIDY RUN JUMP
+  (`Command::asks` bit 3) - plays the game's takeoff and goes to SpidyVR on the frame
+  he leaves the ground, within 0.5 s of the ask (`hybrid_owner::EnterVr::jump`).
+- Never on the game's own moves: parkour vaults, mantles and wall runs (no ask, or
+  `head_probe::State::parkour` as he leaves), short hops, the floor crawl (3) and the
+  game's crawl (2), any wall, Y zips (held on the animation for the whole zip), fights
+  and combat-sticky launcher hops. Earlier "any leave-ground" logic yanked parkour
+  into SpidyVR; this keys on the player's own ask.
+- A jump the game's crawl mounts onto a wall (no web on the way) goes back to the
+  animation at once (`EnterAnim::mount`). Landing returns by the existing confirmed
+  landing (250 ms, 500 ms VR minimum) unless a web keeps SpidyVR.
+- On the first SpidyVR pose job the pose writer snapshots the hero's live pose as
+  the takeoff left it and seeds the body from it (`native_body::beginJumpAdopt`,
+  `body::seedFromPose`): the body's heading is the snapshot hips' (no hip turn), its
+  weight starts at 0 (the first frame is the snapshot), the arms take the
+  controllers at full weight at once, and the legs keep the jump's shape in the air
+  (`body::Targets::airborne` until he lands). The view uses the existing eye
+  re-anchor and 180 ms blend. Diag: `hybrid: anim->vr (jump)` and `hybrid: jump adopt
+  seeded from the live pose ... hips / legs off it, wrists from the controllers`.
+- No new setting, offsets or shared-struct version (pose writer per docs/REFERENCE.md,
+  docs/VALIDATION.md; side channel like the arms overlay). Momentum legs, tuck and
+  physics (L/T/P) not started. Tests: jump / leap / SPIDY RUN JUMP adopt on the
+  leave-ground frame; vault, mantle, hop, crawls, zips, combat, wall mount stay
+  animation; landing rules; first frame = snapshot with the arms on the controllers,
+  legs in the jump's shape all the way in. Not headset-tested.
+
+## Native Animation: one system across the switches
+
+**Keep the body under your view when the animation takes it back.**
+
+- Error / state-change pass over the stacked hybrid slices (intent owner, Y zip hold,
+  swing-blend endpoints, head seat). Owner rules and every timing unchanged.
+- SpidyVR -> animation with ANIMATED ARMS on (Native Animation default): the arms
+  overlay solves on the game's own pose and never ramped the full body's weight, so the
+  OG body vanished on the first animation frame while the view still took 180 ms to
+  glide onto the head - for that glide the neck was not under the view (and the body's
+  weight stayed stuck at full for the whole lock). New `body::fadeOut`: the full body
+  now blends out over the same 180 ms (`hybrid_handoff::handoffSec`) on its last
+  targets before the overlay, the way it already did with ARMS off. The head lock
+  resolves the posed head, so view and neck travel together and arrive together.
+- A Y zip from a swing reused the landing blend's facing seed: for 180 ms an idle left
+  stick was pushed (0.42) toward your last VR look during the game's own zip. Only a
+  landing seeds the facing now (`hybrid_owner::seedsFacing`).
+- Diagnostics: `hybrid: vr->anim (land N ms)` always said 0 ms (read after the edge
+  reset its clock); it is the VR stint now. `headbone dPos` always said 0.00 m (the
+  head is not sampled yet on the edge frame); it says `n/a` then.
+- No new setting, offsets or shared-struct version (pose writer per docs/REFERENCE.md,
+  docs/VALIDATION.md). Tests: fade continuity / 180 ms end / stale weight; zip edge
+  seeds nothing; VR stint kept. Not headset-tested.
+
+## Native Animation: head stays on the neck
+
+**Keep your view seated on the hero's neck through parkour and every switch.**
+
+- While the animation owns the body, the head-locked view (HEAD Full or Level) is
+  the headset's movement since a reference latched when the lock began, put on the
+  hero's head joint (the same resolve as first-person finishers; pose writer and
+  name-resolved head per docs/REFERENCE.md, no new offsets). Turning the head is
+  the player's, but each step or lean in the room since that latch also moved the
+  eyes off the head, and under the intent owner one lock can last through minutes
+  of parkour, zips, crawls and fights. The offset grew until the view floated off
+  the neck.
+- New pure `head_seat.hpp`: an owner switch or a headset recenter starts the lock
+  afresh, on the neck; a move change while it lasts (running, a hop, a zip, a
+  crawl, a fight), a Y zip press and a HEAD mode change glide the reference's
+  place to the headset over the handoff's 180 ms smoothstep. Its heading (where
+  the player looks) is kept, and the hands share the reference, so they stay with
+  the eyes. Under 2 cm nothing moves; past 35 cm (more than a lean) it reseats
+  without waiting for a switch. Diag: `head seat: back on the neck (...)`.
+- Hybrid only; legacy ANIMATED MOVES unchanged. Owner rules, Y zip hold, swing
+  blend endpoints, hands, run+turn and combat sticky untouched; no new setting.
+- New reseat, no-accumulation-over-200-switches, mid-glide and threshold tests.
+  Not headset-tested.
+
+## Native Animation: smoother swing blends
+
+**Smooth the view between SpidyVR swings and the animation, with no cuts.**
+
+- HYBRID handoffs keep the existing 180 ms smoothstep (nothing lengthened) and fix
+  its endpoints. The blend starts from the view the headset last showed (a blend
+  still under way included, so a quick land-then-web no longer restarts from a
+  different place) and ends on the view the new owner shows next: into the
+  animation, the head-locked eyes as the render thread puts them on the head, with
+  the head reference latched at the blend's first frame instead of after it (the
+  old end swapped tracked orientation for the head's in one frame).
+- The source travels with the player (native_eyes anchor travel, the same 20 m
+  teleport limit), so at swing speed the view no longer trails the hero and
+  catches up.
+- Taking a swing over, tracking adopts the shown view's place and look yaw rather
+  than the actor's facing: no yaw swing in the blend (logs had a 63 degree median),
+  and the tracked head and hands continue from the head-locked frame they were in.
+  Only the head lock's pitch/roll eases out. Combat, parkour and finisher head lock
+  unchanged; no new setting.
+- New blend endpoint, travel, re-edge continuity and adoption regressions. Not
+  headset-tested.
+
+## Native Animation: web zips stay on the animation from the press
+
+**Keep Y-button web zips on the animation from the frame you press them.**
+
+- HYBRID: a web zip you ask the game for - Y in the air or in flight (its web
+  strike; a car's in a chase) and its zip to a point (right stick up, LT + RT) -
+  makes the animation the owner on the press frame itself, from a swing or Spidy's
+  wall too (no land confirm, no VR minimum, no flash to SpidyVR and back).
+- That zip keeps the animation: the swing's web, speed, a mid-air turn or the wall
+  it leaves do not take it over until it lands, the swing has the hero again, or
+  3 s pass (game_swing::AirYield's own yield limit). A press the game refuses
+  gives the swing back after AirYield's 400 ms ask window. No new setting or
+  feel number; Y on the ground or on a wall stays interact.
+- `hybrid: web zip pressed, owner …` and `hybrid: vr->anim (zip …)` lines; new
+  owner regressions. Not headset-tested.
+
+## Native Animation 0.8.1 community package
+
+- Merge upstream main `bdd4c9150f`: 0.8.1 fixes, STEADY HUD, official #77 run
+  implementation and WEB LINES. The animation/hybrid/head/hands/run-turn layer
+  stays above the official locomotion code; no new custom game offsets.
+- New launcher Native Animation tab and matching contiguous headset block.
+  Keep Spidy Launcher.exe, Ilya Mezerowsky's credits/Discord/Ko-fi; credit
+  inspiration from vrfloofy's first-person mod. Modified community build, GPL-3.0.
+- Fresh defaults enable MOVES/HYBRID, HEAD Full, ARMS/TORSO/MODEL YAW and both
+  run options. Legacy AIR/ONLY/STEERING/AIR SPIN stay off. Existing saved values
+  survive; missing keys receive defaults. Master on applies the recommended set;
+  off disables animation paths without changing independent run/web/swing choices.
+- Settings inventory: 108 rows, 103 in the headset tab, maximum nine choices.
+  Swing Settings v39 / 180 bytes retains the official v31 WEB LINES wire prefix
+  and appends community pose fields. Producer/consumer ship together; older
+  ambiguous community v32–38 wire packets are rejected (saved settings unaffected).
+- Packaging merge not headset-tested. No Y-zip ownership or new swing-blend
+  smoothing, legs, or known 0xC0000409 investigation.
+
+### Earlier community implementation history
+
+The entries below describe the individual development slices in their original
+order; historical opt-in defaults/row placements are superseded by this package.
+
+**ANIMATED HYBRID: keep your run speed when you turn with the right stick.**
+
+- Head-locked ANIM composes L movement and R walk-facing once in world space,
+  preserves active L magnitude, and shares the heading with ground SPIDY RUN and
+  the vanilla pad (the pad keeps its existing run curve). Opposing requests that
+  nearly cancel retain L heading. Partial L no longer disappears in projection.
+- R response starts continuously at the existing .20 deadzone; turn-in-place is
+  still bounded by .42. View steering keeps its .3 s filter, run thresholds and
+  speeds are unchanged. Native web/wall/air physical velocities are untouched.
+- MODEL YAW owns ANIM R-turn, not a second hidden tracking-rig turn. OG rig turn
+  resumes in VR; menu/crawl/legacy paths remain unchanged. CameraLook retains
+  clear-on-active-R policy. Both actor-yaw diagnostics now use the same convention;
+  a new throttled line shows desired/native/final pad vectors and look before/after.
+- New magnitude/sign/deadzone/cancellation, shared-heading/run-curve and rig-yaw
+  regressions. Existing walk-facing evidence: [VALIDATION.md](VALIDATION.md),
+  “The hero under the left stick”; no new memory offsets. Not headset-tested.
+  Immediate Y-zip ownership and blend/view-smoothing slices remain unimplemented.
+
+**ANIMATED HYBRID: track your hands with the headset while animations play.**
+
+- HYBRID + ARMS + HEAD Full/Level resolves controllers through the same
+  HMD-reference/turn/head frame as the eyes. The pose job uses its unmodified,
+  name-resolved animation head and existing eye offset; Full retains pitch/roll,
+  Level uses the existing latched view yaw. Arms-only IK leaves animated root,
+  head and legs in place; bounded TORSO remains available.
+- Tracked hands stay at full overlay weight when idle, with the existing 12/s
+  entry and 6/s loss/exit ramps; no extra controller filter or new rest pose.
+  Already view-mapped targets bypass legacy chest remapping and duplicate weight
+  smoothing. Non-HYBRID and VR full-body policies are unchanged.
+- Internal hand-frame data travels under the body command lock with its serial;
+  no exported Command/Forearms layout or protocol version changed. Diagnostics
+  distinguish overlay/solver weights and log same-solve target/actual wrists,
+  clamp status and position/orientation residuals. Tracking angles use mapped aim.
+- Evidence: [REFERENCE.md](REFERENCE.md) (supported executable, pose writer/rig)
+  and [VALIDATION.md](VALIDATION.md) (existing body/rig/calibration checks).
+  New transform/weight/arm-only regression tests; not tried in a headset.
+  Zip ownership and view-blend endpoint/smoothing changes are **not included**.
+
+**ANIMATED HYBRID: steer parkour with the left stick toward the view.**
+
+- **Why.** With ANIMATED STEERING on, `animated_steering::actorRelativeForward`
+  kept only the stick's magnitude and re-aimed it along the hero's facing, so
+  parkour ran one way and the left stick could never turn him (`0063b5e`
+  session: most common sent stick `L(0.0, 1.0)`). MODEL YAW also cleared the
+  game's CameraLook every frame, so the follow camera stopped tracking the view.
+- **Change.** Under HYBRID while the animation owns and the view is head-locked
+  (not on a crawl surface), the left stick's direction is taken relative to the
+  view the player sees (headbone yaw + HMD turn since the view latched + the
+  Level R-stick turn, low-passed τ 0.3 s) and put into the game camera's walk
+  axes with the vanilla walk's magnitude (`hybrid_steer.hpp`). ANIMATED
+  STEERING is bypassed there (kept for non-HYBRID). CameraLook is cleared only
+  while the R-stick turns past MODEL YAW's deadzone; otherwise the game camera
+  is steered toward the view. VR owner: OG stick unchanged. Diag once a second:
+  `hybrid steer: stick(…) viewYaw … actorYaw … sent L(…)`.
+
+**ANIMATED HYBRID: stay on animations until you grab, spin, or pick up speed.**
+
+- **Why.** Headset on `0063b5e`: the handoff blend felt good, but ownership
+  flipped 169 times each way in ~7 minutes (median 0.64 s in OG VR): 115
+  `wall` edges (124 of the wall rises were the floor-crawl flag `0->3` lit by
+  rooftop parkour), 31 jumps, 14 game zips. Head follow also dropped on 21
+  airborne frames with no owner edge at all (the per-frame classify in
+  `yielding()`), which skipped the blend.
+- **Change.** Under HYBRID only, the owner (`hybrid_owner.hpp`) is now
+  animation-default (`anim`) with intent-only `vr`: web attach, airborne
+  trigger/grip web press (not on the ground, not fighting), mid-air R-stick
+  |x| >= 0.5 held 150 ms or a >= 90° tracked HMD turn within 0.5 s, airborne
+  measured (feet position-delta) speed >= 15 m/s held for the new ANIMATED
+  HYBRID SPEED time (`animated_hybrid_speed_ms`, OFF or 5–500 ms, 200 by
+  default; the launcher slides in 5 ms steps), or Spidy's own
+  wall run (`Surface::wall`). Jumps, hops, game zips, the game's crawl and the
+  floor-crawl flag stay `anim`. Back to `anim` after 250 ms grounded and at
+  least 500 ms in VR; a zip while in VR stays VR until it lands; combat sticky
+  kept. Yield and head follow now come from `animOwns()` (owner domain only,
+  no classify drop), so every view change goes through the existing blend. AIR
+  SPIN is ignored at the stick under HYBRID too. Diag:
+  `hybrid: anim->vr (web|air-web|rotate|speed|wallrun) speed … rot …, G->T (…)`,
+  `hybrid: vr->anim (land … ms), T->G (…)`.
+- **Not in this patch.** Parkour left-stick steering (entry above); longer blend
+  window; Slice 4 immersion; legs.
+
+**ANIMATED HYBRID handoff: smooth takeoff and landing (Slices 2+3).**
+
+- **Why.** Slice 1 ownership worked on headset, but every G→T still ran the old
+  reclaim (`followHero(false)` + `resyncAfterYield` `state={}` + arms wipe) —
+  a view/body snap. R-stick MODEL YAW was also inverted vs OpenXR −Z ahead.
+- **Change.** Under HYBRID only: G→T calls `GameTrackingRig::adoptEyes` (keeps
+  stand-off / run-view offsets), `native_body::beginReclaim` (warm IK, no full
+  wipe), 180 ms eye pos+yaw blend, arms overlay crossfade; T→G blends eyes
+  back to the headbone, seeds actor facing from rig yaw, delays MODEL YAW for
+  180 ms, skips `adoptFeet`. MODEL YAW sign: +R → hero turns right. Diag:
+  `hybrid: G->T (…) eyes dPos … dYaw …, ikWarm 1, overlay->body 180 ms`,
+  `hybrid: T->G (land …) eyeBlend 180 ms, headbone dPos … dAng …`.
+- **Not in this patch.** Slice 4 immersion polish; crash `0xC0000409`.
+
+**ANIMATED HYBRID: ground anims, OG SpidyVR in the air (opt-in, off).**
+
+- **Why.** Headset on hands-webs (`3ddbe36`): fighting/running feel good on the
+  animated stack; jump/swing are a mess (anim head pitch p50 43–50° midair,
+  forearm offs ~70–79°, softlock only band-aids the view latch). User: keep
+  Native Run / Spidy Run anims on the ground; all air moves = OG SpidyVR.
+- **Change.** ANIMATED HYBRID (`animated_hybrid`, off): with MOVES on, a domain
+  FSM (`hybrid_owner.hpp`) yields the game pose only on the ground (and sticky
+  combat that started there). Jump (120 ms + rise), web, zip, wall and
+  swing-took switch to traversal (OG body); land needs 250 ms confirmed ground.
+  AIR / AIR SPIN / midair softlock stay inactive under Hybrid. Diag:
+  `hybrid: G->T (web|zip|wall|jump|swing-took)`, `hybrid: T->G (land)`,
+  `hybrid: bounce suppressed (…)`.
+- **Not in this patch.** Immersive OG air body polish (Slice 4+); legs.
+  Handoff Slices 2–3 landed in the entry above.
+
+**ANIMATED ARMS / WEB AIM: softlock remap + healthy forearm weblines.**
+
+- **Why.** Causal chain: stable view frame → remapGripToChest 1:1 → drop
+  armsOverlay controller-line aim → weblines from shooters. Softlock/headbone
+  eyes must feed remap; do not lift forearm fallback early.
+- **Change.** `native_body::setViewSoftlock` while HEAD follow + ARMS: armsOnly
+  remap uses anim head/chest-forward as playerEyes/playerLook. Tracking-lock
+  diag adds `softlock 0/1`; actorYaw prints -1 when actor ahead invalid.
+  Forearm aim: ANIMATED ARMS yield keeps `arms overlay` fallback unless that
+  arm's overlay weight > 0.85 and forearm-vs-controller ≤ align threshold —
+  then MODEL FOREARM / shooter path may run.
+- **Not in this patch.** Legs; headset p50 offs proof; early overlay drop.
+
+**ANIMATED HEAD midair torso softlock (automatic while HEAD ≠ Off).**
+
+- **Why.** Full headbone midair put eyes on the flailing anim head; chest/arms
+  remapping fought the HMD. User (2026-11-05): midair view softlocks to a
+  perch-like torso-forward frame (chest ahead/below chin, free HMD) —
+  supersedes “Full must follow anim head midair.” Not a silent Full→Level lie.
+- **Change.** `headFollowForYield` returns effective `softlock` while yielding
+  airborne (air/swing/web/zip/parkour/combat, not ground/wall). Eyes use
+  anchored 4 / `frameLevel` (level axes, free HMD); `followHero` stays on so the
+  character still holds the camera (shrinkHead). Relatch on softlock enter/exit.
+  Ground/perch keep Full or Level as set. Diag: `view softlock: midair …`,
+  `animated moves: head follow softlock|full|level|off (state)`.
+- **Not in this patch.** Perch eyes-from-chest offset capture (uses head place
+  with level axes for now); legs; hands/webline zip.
+
+**ANIMATED MODEL YAW / AIR SPIN: dedicated yaw ownership (opt-in paths).**
+
+- **Why.** With REALISTIC FLIPS, `basicFlipControls` is false midair, so MODEL YAW
+  kept eating R-stick X while AIR SPIN applied `worldFlip(bodyTilt, trackingYaw)`.
+  Dual ownership made yaw feel opposite / fought SpidyVR takeHeading yaw.
+- **Change.** `animated_air_spin::ownsRightStick` while yielding airborne with AIR
+  SPIN on; `animated_model_yaw::ownsStick` idles MODEL YAW then. CameraLook cleared
+  while either owns the stick. Ground / wall / perch MODEL YAW unchanged (sign
+  already matches SpidyVR `copysign(..., -stickX)` → +R turns right). Diag:
+  `model yaw: stickX … → L(…) actorYaw … state …` and
+  `model yaw: idle (air spin owns R-stick, …)`.
+- **Not in this patch.** Midair torso softlock; legs; headset sign re-check if
+  ground still feels mirrored after this gate.
+
+**ANIMATED ONLY + ANIMATED AIR SPIN: no OG body reclaim; spherical + momentum midair (opt-in, off).**
+
+- **Why.** Headset logs on 1e805e1 (tracking lock): 50 yield entries and 29
+  "mod body again … adopt+ik resync" reclaims in ~170 s, every one on a wall
+  (26) or combat (3) state flip, with "moved 12–76 m since yield"; each one
+  turned head follow off (anim head → rig eyes), re-anchored the tracking rig
+  at the actor's feet and reset the arm overlay (Lw 0.17 ramp) — the user's
+  "desyncing of my location and head/torso/hand tracking when the game
+  switches to SpidyVR mode intermittently". User: keep it off, use the
+  animation system, spherical midair + momentum go.
+- **Change.** ANIMATED ONLY (tab switch, `animated_only`): with MOVES/AIR on,
+  `yieldsBody` keeps every non-cutscene state (wall, zip, parkour wall-run,
+  combat) and drops the freefall web interrupt; `StayLatch` keeps an active
+  yield (and the head follow while playing) through cutscene/stale blips for
+  1.5 s, so no bodyOn / adoptFeet mid-play. Steering/model-yaw gates are
+  unchanged (not on walls). ANIMATED AIR SPIN (`animated_air_spin` OFF / FLIPS
+  / FLIPS + MOMENTUM): while yielding airborne, the RealisticFlip tilt (the
+  quaternion the OG body takes) plus an optional velocity lean/bank turns the
+  game's animated skeleton about its head in the armsOnly pose job
+  (`native_body::setYieldTilt` → `body::Targets::yieldTilt`); ARMS targets are
+  un-tilted first so arms solve level and turn with the body. Visual/view
+  only — actor transform, physics and collision untouched. Diag:
+  `animated only: A -> B, game anim keeps body`, `animated only: kept yield
+  through …`, `air spin: … flip … lean … body … deg`.
+- **Not in this patch.** Legs redesign (tabled). Not headset-verified; lean
+  limits, grace and smoothing provisional.
+
+**ANIMATED ARMS tracking lock: soft floor + chest-frame grips (opt-in path).**
+
+- **Why.** Headset logs on 3df38b1 (MODEL YAW cumulative): IRL arms vs model
+  mismatched through yields/rotations (`forearm vs controller` often 55–140°+
+  while overlay weight sat at 0 — idle game-anim bones). Soft floor + chest
+  frame keep controllers driving arms every frame while yielding.
+- **Change.** Behind existing ANIMATED ARMS (still off by default): tracked idle
+  arms keep a provisional soft weight floor (~0.55) instead of decaying to 0;
+  intent/motion still reach 1. `body_ik` armsOnly remaps grips from the HMD/eye
+  frame into the anim chest/shoulder frame each solve (yaw-aware). Dense
+  `tracking lock:` diag (~10 Hz) logs overlay weights, forearm vs controller,
+  actor/chest/player yaw, HMD vs anim head ypr. Forearm aim lines log every
+  0.2 s while ARMS yield (was 2 s). Full head policy unchanged (no silent
+  Level). Aim keeps controller fallback while overlay active. Legs tabled.
+- **Not in this patch.** Spherical midair (A); momentum bridge onto animated
+  character (B). Not headset-verified; floor/remap provisional.
+
+**ANIMATED MODEL YAW: R-stick turns hero via walk facing (opt-in, off).**
+
+- **Why.** User wants right stick to rotate the whole character while yielding,
+  with left magnitude along actor facing. No proven actor-facing RVA write
+  exists (`native_movement::Command` is velocity-only). CameraLook / tracking
+  yaw turn the **view/camera**, not the model.
+- **Validated route.** docs/VALIDATION.md (hero under left stick turns player
+  matrix row-2) and InteractStep / DEVELOPMENT.md (0.15 s left stick toward look
+  turns the hero). This setting asks for that same game-native walk-facing turn
+  from right-stick X while a pose yield is active; CameraLook is cleared on that
+  stick so view yaw is not double-applied. HMD free look stays OpenXR. Full head
+  stays Full. Basic flips keep right-stick ownership.
+- **Not.** No raw actor transform write; no guessed facing RVA; midair spherical
+  aim still out of scope. Midair turn rate provisional (ground turn measured;
+  air not headset-checked). Not headset-verified.
+
+**ANIMATED TORSO: bounded waist→chest while ANIMATED ARMS (opt-in, off).**
+
+- **Why.** Headset feedback on the cumulative arms build: midair aim needs the
+  upper body to contort toward wild controller directions; arm-only IK left the
+  torso rigid at the shoulders. Legs redesign stays tabled; Full head stays Full.
+- **Change.** New SPIDY VR switch ANIMATED TORSO (default off). With ANIMATED
+  ARMS on a pose yield: distribute bounded spine yaw/pitch (provisional ~40° /
+  ~25°) from waist toward chest by per-arm activity, then re-solve arms from the
+  moved shoulders/clavicles. Idle weights leave the game pose exact. Head world
+  position preserved by pivoting spine turns through the head; head orientation
+  compensated after. Pelvis/feet/legs untouched. Tracking loss / zero weights
+  smooth back. Both-arm opposition cancels yaw. Starts from the game pose each
+  solve (no cumulative anim-base mutation). Web aim keeps controller fallbacks
+  from the control-fixes patch while overlay is active.
+- **Plumbing.** `animated_torso` in tab/ini; game_swing Settings v37
+  (`animatedTorso`); `native_body::setTorsoAssist` side channel (no Command
+  layout change).
+- **Not in this patch.** Whole-model R-stick yaw (queued; no proven facing
+  write). Not headset-verified. Limits provisional.
+
+**Animated control fixes: aim coherence + handoff debounce (opt-in paths).**
+
+- **Why (headset logs on abed22f).** With ANIMATED ARMS + MODEL FOREARM + Full
+  head: `forearm vs controller` 55–134° while wrist miss ~0 — webs steered toward
+  arm-only IK forearms. Freefall web intent tore pose yield down then back
+  (`mod body again (air)`), and early peek `adoptFeet` ran every frame on that
+  flicker — location/head felt wrong on VR↔anim switches. Wrist shooter markers
+  followed the same bad web turns.
+- **Aim.** While yielding with ANIMATED ARMS, MODEL FOREARM falls back to the
+  controller (`arms overlay`); WRIST SHOOTERS still turn that controller line.
+  Also `misaligned` if forearm vs aim &gt; 45° (provisional). Chosen
+  wrist/forearm settings preserved with documented fallback.
+- **Handoff.** Freefall web interrupt does not exit pose yield when ANIMATED ARMS
+  is on (arms handle aim). Exit `adoptFeet`/IK resync debounced (~200 ms);
+  brief re-enter cancels. Removed speculative early-peek adoptFeet while still
+  yielding. Full head stays Full (no Level force).
+- **Not in this patch (at control-fixes).** Whole-model R-stick yaw still queued;
+  torso landed as ANIMATED TORSO above. Legs still tabled. Not headset-verified.
+
+**ANIMATED HEAD: stop forcing Full→Level in air (user override).**
+
+- **Why.** Headset logs on ANIMATED AIR showed `head follow level (air|swing)`
+  while the setting was Full (`head-follow was full` on exit). User: either the
+  body anim owns the head or SpidyVR tracking does — no silent artificial level.
+- **Change.** `headFollowForYield` returns the user's Off|Level|Full choice in
+  every yield state. Full uses anchored=2 (anim pitch/roll) in air too. Level
+  only when Level is selected. Outside yield, existing VR tracking unchanged.
+- **Docs/UI.** PLAYERS, NATIVE_RUN_BETA, launcher help, tests updated. Legs
+  blend while yielding left tabled (no change this commit).
+- **Not headset-verified** in this change.
+
+**ANIMATED ARMS: per-arm controller overlay while yielding (opt-in, off by default).**
+
+- **Why.** During pose yield the game drives the whole figure; the player wants
+  Assetto-style arms that follow controllers when active and return to anim when
+  idle, without destroying torso/legs/head animation.
+- **ANIMATED ARMS** (`animated_arms`, off; tab after ANIMATED STEERING; swing
+  settings version 36). While MOVES/AIR yields: `native_body::armsOverlay` +
+  `body::Targets::armsOnly` solve only clavicle→hand chains on the current game
+  pose. Per-arm weights with provisional hysteresis (speedOn 0.35 m/s, speedOff
+  0.12, hold 0.35 s, blend in/out 12/6). Grip motion is relative to the actor
+  root so travel/swing alone is not "active". Fist/shoot/web button raise weight
+  immediately. Tracking loss clears the held latch (returns to game anim, not a
+  frozen arm). Full `bodyOn` stays off.
+- **Tradeoffs.** Finger bones stay on the game anim (no `restHand` in overlay) so
+  idle return keeps authored hands; controller fist/shoot still feed web systems.
+  Thresholds are scaffolding — not headset-validated.
+- **Still unresolved.** Right-stick whole-model yaw / midair spherical (no proven
+  actor orientation write). Research target only; do not guess RVAs.
+- **Tests.** Settings/ini; motion-vs-root; per-arm; web intent; tracking loss;
+  armsOverlay flag mask. Not headset-verified.
+
+**ANIMATED STEERING: while yielding, left-stick magnitude runs along Spidey's facing (opt-in, off by default).**
+
+- **Why.** During pose yield the game's stick is camera-relative; the player asked
+  for tank-style "any left stick = forward relative Spidey" with right-stick
+  whole-model yaw. Actor facing is readable from `game.player`;
+  `native_movement::Command` has velocity only — no proven facing write.
+- **ANIMATED STEERING** (`animated_steering`, off; tab after ANIMATED AIR; swing
+  settings version 35). While MOVES/AIR yields: remap L-stick so magnitude
+  drives along the actor's horizontal forward (camera stick axes). Deadzone
+  0.15. Skips dodge / non-gameplay mapping. Outside yield: unchanged (no
+  double-apply).
+- **Not implemented (honest).** Right-stick whole-model yaw; midair spherical
+  orientation. Do not fake with CameraLook or GameTrackingRig view yaw. Headset
+  free look and ANIMATED HEAD (Full includes air; Level only if chosen) unchanged.
+- **Tests.** Remap along ±Z/±X, deadzone, NaN/vertical refuse, active gate;
+  settings/ini. Not headset-verified.
+
+**ANIMATED AIR: game anim drives the body in freefall/swing/web air (opt-in, off by default).**
+
+- **Why.** After ground ANIMATED MOVES + HEAD, unlock air traversal poses without
+  handing physics to unproven root-motion. Pose ownership ≠ movement ownership:
+  clear `bodyOn` for air/swing/web classify; swing / native movement keep
+  direction and velocity.
+- **ANIMATED AIR** (`animated_air`, off; tab after ANIMATED HEAD; swing settings
+  version 34, `Settings::animatedAir`). Yields freefall, swing, and web-hold air.
+  Zip, wall-run, combat stay with the mod body. Perch remains ground yield
+  (ANIMATED MOVES). Point-jump air uses this gate once ungrounded. Freefall web
+  aim interrupts immediately so VR can reclaim the body; attached webs keep the
+  swing pose. No cutscene worker (`game_fp::want`).
+- **Head follow.** ANIMATED HEAD Full is Full in air too (pitch/roll from the
+  anim head). Level only when the user picks Level — see the later Unreleased
+  correction that removed the air Full→Level force.
+- **Handoff.** Existing enter/exit resync (IK + adoptFeet) covers the new states.
+- **Not in this slice.** Right-stick whole-model steering; controller arm blend
+  while yielding. Native swing physics path unchanged (hybrid pose only).
+- **Risks.** Not headset-verified here. Game air anims vary; web visual arms stay
+  on game anim until the arms slice.
+
+**ANIMATED MOVES handoff: resync actor/IK/tracking when the body returns from game anim (opt-in path only).**
+
+- **Why.** Headset test of ANIMATED HEAD: full character anim + independent HMD
+  look worked, but yield exit desynced — the VR body flipped back to the
+  pre-animation location. Cause (code + logs): while `bodyOn` was off, IK
+  `actorHeading` kept twisting residual state through parkour rotations; head
+  follow ignored tracking lean then snapped back; in-flight swing prediction
+  survived relinquish. Camera-only masking would not fix ownership.
+- **Fix.** On yield enter/exit: `native_body::resyncAfterYield` clears IK +
+  heading latches. On exit (and early peek before tracking update):
+  `GameTrackingRig::adoptFeet` snaps origin over the current actor feet,
+  keeping yaw (independent HMD). `relinquishMotion` clears `InFlightStep`.
+  Diag distinguishes actor move since yield vs head-follow latch; head-follow
+  exit logs `off` (not the setting name). Default-off behavior unchanged.
+- **Tests.** Handoff edge / rapid toggles; adoptFeet over a moved actor without
+  yaw rewrite. Not headset-verified in this change.
+- **Deferred.** Air/swing unlock, right-stick model steering, controller arms —
+  separate slices (pose ownership ≠ physics ownership).
+
+**ANIMATED HEAD: view follows the gameplay head while ANIMATED MOVES yields (opt-in Off|Level|Full, default Off).**
+
+- **Why.** Step three after ANIMATED MOVES body yield. Parkour anims play, but the
+  view stayed HMD/feet-anchored (`anchored=1`) so the head looked disconnected
+  (~1 m / ~45° typical on ground). Finishers already lock the view with
+  `anchored` 2/4 → `resolvedOnHead`; reuse that path on the **hero gameplay
+  head**, without turning on the cutscene worker (`game_fp::want`).
+- **ANIMATED HEAD** (`animated_head`, Off|Level|Full, default Off; the tab's
+  EXPERIMENTAL after ANIMATED MOVES; swing settings version 33,
+  `Settings::animatedHead`). Only active while `animated_moves::yieldsBody` is
+  true. **Level** (`anchored=4`): place follows, axes stay level (look freely;
+  stick turn as cutscenes). **Full** (`anchored=2`): turns with the anim head
+  like finishers. Off leaves today's body-only yield unchanged.
+- **Mechanism.** `game_fp::followHero` samples the hero head joint
+  (`0x37519912`, same as finishers / REFERENCE) and shrinks the head mesh
+  without pool scan / stand-ins / theatre. `stereo_probe::resolveScene` keeps
+  calling `frame` / `frameLevel`. HEAD PROBE stays usable for residual offset.
+- **Deferred.** Swing hybrid (anim drives direction+velocity only; mod keeps
+  view rotation) is a later PR — not this one.
+- **Risks.** Full can nausea on roll-heavy ground anims (summaries hit ~180°
+  roll) — prefer Level first. Enter/exit yield can pop. Shrink without
+  `want` is new; vault/mantle parkour classify was rare in the Step 2 headset
+  log (mostly ground yield).
+
+**ANIMATED MOVES: the game's parkour animation drives the body for vaults, mantles and ground parkour (opt-in, off by default).**
+
+- **Why.** Step two after HEAD PROBE. Today the mod's body IK owns the pose on
+  the ground too, so NATIVE RUN's vaults and mantles (and the game's ground
+  parkour) fight the IK or look wrong. An opt-in lets the game's animation
+  drive those states first; swing / web / zip / wall-run stay with the mod
+  (hybrid later). Play-feel change: keep OFF by default; upstream merge needs
+  Ilya's yes.
+- **ANIMATED MOVES** (`animated_moves`, off; the tab's EXPERIMENTAL after HEAD
+  PROBE; swing settings version 32, `Settings::animatedMoves`, accepted and
+  not read by the swing). When on, `game_xr` clears `native_body::bodyOn` for
+  `head_probe::State::ground` and for vault/mantle parkour (`State::parkour`
+  with no wall, via NATIVE RUN RT). The pose writer blends back to the game's
+  joints. Wall-run under NATIVE RUN, swing, web, zip, combat and cutscenes do
+  not yield. NATIVE RUN's RT unlock is untouched.
+- **Tradeoff.** While yielding, VR hand IK does not drive the body (the game's
+  anim hands show). Headset check: with NATIVE RUN + ANIMATED MOVES on, vault
+  a car or mantle a ledge and look for `animated moves: game anim drives body`
+  in the diag log.
+- **Reuse.** `animated_moves::yieldsBody` shares `head_probe::classify` /
+  `StateInputs` so the gated states match HEAD PROBE's.
+
+**HEAD PROBE: Spider-Man's head bone against the headset, per state, in the diagnostics (read only).**
+
+- **Why.** Step one of letting the game's own parkour and swing animations
+  play in VR with the view locked to Spider-Man's head: before any lock, the
+  numbers that say whether it would be comfortable and whether the game's
+  animation even moves the head in those states.
+- **HEAD PROBE** (`head_probe`, off; the tab's EXPERIMENTAL after PALM
+  SHOOTERS; swing settings version 31, `Settings::headProbe`, accepted and
+  not read by the swing). While on, the pose writer's hook (native_body)
+  notes the `head` bone (found by name as the body's own, with its neck and
+  parent chain) as the game's animation wrote it and as the body left it,
+  the hero's root and the headset the body was given - read only, nothing
+  written to the pose, the camera or the movement; no allocation in the
+  pose job, its own small lock (a copy, as MODEL FOREARM's).
+- **Its lines** (`head_probe::Probe`, every one from named fields with a
+  compiler-checked format, tested at their widest): `head probe:` about 10 a
+  second (state, who owns the body and its movement, the head's position and
+  yaw/pitch/roll, the headset's, the offset between them, head speed, speed
+  against the root, angular speed, roll and pitch over the last second, the
+  parent chain, `anim live`), a line at once on each state or owner change,
+  `anim live: yes/no/unknown` when it changes (the game's head in model space
+  against the body's root), a summary of the current state every 2 s
+  (p50/p95/max speed and angular speed, max roll and pitch, stable or not),
+  and one `head probe: session` line per state when VR stops. `head bone:
+  not found` once per rig, with which of the probe's candidate names the rig
+  has.
+- **The diagnostics** (`diag_log::Data` version 2): a third ring of 64 lines
+  for `head probe:` alone, so it can push out neither the main ring nor
+  `forearm aim:`; run_game_vr.py reads it into the console and
+  `reports\game-vr-<time>-diag.log` with the rest.
+**Latest build (November 6): pull request #79 by HaNToP - WEB LINES, a
+
+**Latest build (November 11): fixes from the players' reports on 0.8.5.**
 
 - **The suit power takes hands held out before the chest.** Five players on
   0.8.1 and 0.8.5 got no suit power at all; one: "after many attempts in one

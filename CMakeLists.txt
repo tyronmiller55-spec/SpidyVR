@@ -48,6 +48,168 @@ enable_testing()
 add_executable(spidy_realistic_flip_tests tests/realistic_flip_tests.cpp)
 target_include_directories(spidy_realistic_flip_tests PRIVATE include)
 add_test(NAME realistic_flips COMMAND spidy_realistic_flip_tests)
+# Portable action-frame regression: no Windows SDK or headset required.
+add_executable(spidy_action_frame_tests tests/action_frame_tests.cpp)
+target_link_libraries(spidy_action_frame_tests PRIVATE spidy_core)
+add_test(NAME action_frame COMMAND spidy_action_frame_tests)
+add_executable(spidy_web_fire_tests tests/web_fire_tests.cpp)
+target_include_directories(spidy_web_fire_tests PRIVATE include)
+add_test(NAME web_fire COMMAND spidy_web_fire_tests)
+add_executable(spidy_showtime_tests tests/showtime_tests.cpp)
+target_include_directories(spidy_showtime_tests PRIVATE include)
+add_test(NAME showtime COMMAND spidy_showtime_tests)
+add_executable(spidy_showtime_rig_tests tests/showtime_rig_tests.cpp)
+target_include_directories(spidy_showtime_rig_tests PRIVATE include)
+add_test(NAME showtime_rig COMMAND spidy_showtime_rig_tests)
+add_executable(spidy_solved_hand_frame_tests tests/solved_hand_frame_tests.cpp)
+target_link_libraries(spidy_solved_hand_frame_tests PRIVATE spidy_core)
+add_test(NAME solved_hand_frame COMMAND spidy_solved_hand_frame_tests)
+# CAMERA MOTION, SHOOTERS: LOCKED TO ARM and where their rows are (portable).
+add_executable(spidy_stabilization_shooter_tests tests/stabilization_shooter_tests.cpp)
+target_link_libraries(spidy_stabilization_shooter_tests PRIVATE spidy_core)
+target_compile_definitions(spidy_stabilization_shooter_tests PRIVATE SPIDY_SOURCE_DIR="${CMAKE_SOURCE_DIR}")
+add_test(NAME stabilization_shooter COMMAND spidy_stabilization_shooter_tests)
+# FLIP BREAK and the November 11 ownership rules (portable).
+add_executable(spidy_flip_break_tests tests/flip_break_tests.cpp)
+target_link_libraries(spidy_flip_break_tests PRIVATE spidy_core)
+add_test(NAME flip_break COMMAND spidy_flip_break_tests)
+# POINT JUMP (point_jump.hpp): chord, charge, direction, gate, ownership, settings (portable).
+add_executable(spidy_point_jump_tests tests/point_jump_tests.cpp)
+target_link_libraries(spidy_point_jump_tests PRIVATE spidy_core)
+target_compile_definitions(spidy_point_jump_tests PRIVATE SPIDY_SOURCE_DIR="${CMAKE_SOURCE_DIR}")
+add_test(NAME point_jump COMMAND spidy_point_jump_tests)
+
+# VR STABILIZATION (vr_stabilize.hpp), STEADY and HORIZON LEVEL (portable).
+add_executable(spidy_vr_stabilize_tests tests/vr_stabilize_tests.cpp)
+target_link_libraries(spidy_vr_stabilize_tests PRIVATE spidy_core)
+add_test(NAME vr_stabilize COMMAND spidy_vr_stabilize_tests)
+
+# AIR KICKS (air_kick.hpp): gestures, zone and gaze, the foot's bend, strength, timeline, leg poses and the kick
+# against enemies (portable).
+add_executable(spidy_air_kick_tests tests/air_kick_tests.cpp)
+target_link_libraries(spidy_air_kick_tests PRIVATE spidy_core)
+add_test(NAME air_kick COMMAND spidy_air_kick_tests)
+
+# GROUND KICKS (ground_kick.hpp): the stick's flicks and half circle, the kick standing (portable).
+add_executable(spidy_ground_kick_tests tests/ground_kick_tests.cpp)
+target_link_libraries(spidy_ground_kick_tests PRIVATE spidy_core)
+add_test(NAME ground_kick COMMAND spidy_ground_kick_tests)
+
+# ENEMY JOINTS (enemy_joints.hpp): the name hash, the roles in a joint table, a joint in the world, the zones from
+# joints with the bands as the fallback and the limb zones gated (portable).
+add_executable(spidy_enemy_joints_tests tests/enemy_joints_tests.cpp)
+target_link_libraries(spidy_enemy_joints_tests PRIVATE spidy_core)
+add_test(NAME enemy_joints COMMAND spidy_enemy_joints_tests)
+
+# PHYSICAL WEB TETHERS (tether.hpp): the XPBD rope, whip, spin, payout and the web grab's use of them (portable).
+add_executable(spidy_tether_tests tests/tether_tests.cpp)
+target_link_libraries(spidy_tether_tests PRIVATE spidy_core)
+add_test(NAME tether COMMAND spidy_tether_tests)
+# MANUAL SWING KICK (swing_kick.hpp): the arm gate, cone, flick, assist clamps, foot sweep (portable).
+add_executable(spidy_swing_kick_tests tests/swing_kick_tests.cpp)
+target_link_libraries(spidy_swing_kick_tests PRIVATE spidy_core)
+add_test(NAME swing_kick COMMAND spidy_swing_kick_tests)
+
+# GRIP ACROSS THE GAME (grip.hpp): the brake, the fling's math, history and grip states (portable).
+add_executable(spidy_grip_tests tests/grip_tests.cpp)
+target_link_libraries(spidy_grip_tests PRIVATE spidy_core)
+add_test(NAME grip COMMAND spidy_grip_tests)
+
+# HAND GRAB (hand_grab.hpp): the reach, hold, cost, release and slam math, and WebGrab holding bodies by hand.
+add_executable(spidy_hand_grab_tests tests/hand_grab_tests.cpp)
+target_link_libraries(spidy_hand_grab_tests PRIVATE spidy_core)
+add_test(NAME hand_grab COMMAND spidy_hand_grab_tests)
+
+add_executable(spidy_handstand_tests tests/handstand_tests.cpp)
+target_link_libraries(spidy_handstand_tests PRIVATE spidy_core)
+add_test(NAME handstand COMMAND spidy_handstand_tests)
+# POINT JUMP BULLET (point_bullet.hpp): the body takes the raw look, eased, and lets go.
+add_executable(spidy_point_bullet_tests tests/point_bullet_tests.cpp)
+target_link_libraries(spidy_point_bullet_tests PRIVATE spidy_core)
+add_test(NAME point_bullet COMMAND spidy_point_bullet_tests)
+# LANDING BLEND-IN (landing_blend.hpp): time to impact, the upright ramp, the release point, the touchdown report.
+add_executable(spidy_landing_blend_tests tests/landing_blend_tests.cpp)
+target_link_libraries(spidy_landing_blend_tests PRIVATE spidy_core)
+add_test(NAME landing_blend COMMAND spidy_landing_blend_tests)
+# LEG HOLD (leg_hold.hpp): Y+X chord, suppression, stick persistence, neutral cancel, easing (portable).
+add_executable(spidy_leg_hold_tests tests/leg_hold_tests.cpp)
+target_link_libraries(spidy_leg_hold_tests PRIVATE spidy_core)
+add_test(NAME leg_hold COMMAND spidy_leg_hold_tests)
+
+add_executable(spidy_sidestep_tests tests/sidestep_tests.cpp)
+target_link_libraries(spidy_sidestep_tests PRIVATE spidy_core)
+add_test(NAME sidestep COMMAND spidy_sidestep_tests)
+# DIRECTION REPORT (direction_report.hpp) and the QUIET LOG (diag_log.hpp Throttle): rates, imposed view turn, skew,
+# momentum, the dedupe (portable).
+add_executable(spidy_direction_report_tests tests/direction_report_tests.cpp)
+target_link_libraries(spidy_direction_report_tests PRIVATE spidy_core)
+add_test(NAME direction_report COMMAND spidy_direction_report_tests)
+# POLISH PASS, slice 6: the longest visit's sections, the LOW FPS watch, the quiet log's new kinds, the new defaults.
+add_executable(spidy_polish_runtime_tests tests/polish_runtime_tests.cpp)
+target_link_libraries(spidy_polish_runtime_tests PRIVATE spidy_core)
+add_test(NAME polish_runtime COMMAND spidy_polish_runtime_tests)
+# PUNCH AUTO-TARGET (punch_track.hpp, polish pass slice 7): the throw, the verdict, the cone, the range, the settings.
+add_executable(spidy_punch_track_tests tests/punch_track_tests.cpp)
+target_link_libraries(spidy_punch_track_tests PRIVATE spidy_core)
+add_test(NAME punch_track COMMAND spidy_punch_track_tests)
+add_executable(spidy_jump_pull_tests tests/jump_pull_tests.cpp)
+target_link_libraries(spidy_jump_pull_tests PRIVATE spidy_core)
+add_test(NAME jump_pull COMMAND spidy_jump_pull_tests)
+
+# HEADSET FIRST (hybrid_steer::Basis, hybrid_movement::viewRunDirection, Gate::updateView): the stick's basis, the whole circle runs him,
+# the setting (portable).
+add_executable(spidy_headset_first_tests tests/headset_first_tests.cpp)
+target_link_libraries(spidy_headset_first_tests PRIVATE spidy_core)
+add_test(NAME headset_first COMMAND spidy_headset_first_tests)
+
+# PUNCH VIEW EASE (view_ease.hpp): hold and ease at a punch's switch, cancels, rig offset, setting (portable).
+add_executable(spidy_view_ease_tests tests/view_ease_tests.cpp)
+target_link_libraries(spidy_view_ease_tests PRIVATE spidy_core)
+add_test(NAME view_ease COMMAND spidy_view_ease_tests)
+# NEXT PASS (Nov 15): handoff smoothing, body yaw, snap realign, dodge re-face, handstand catch (portable).
+add_executable(spidy_next_pass_tests tests/next_pass_tests.cpp)
+target_link_libraries(spidy_next_pass_tests PRIVATE spidy_core)
+add_test(NAME next_pass COMMAND spidy_next_pass_tests)
+# MOVE HAPTICS (move_haptics.hpp): takeoffs, landings, the point jump's double thump, the scale (portable).
+add_executable(spidy_move_haptics_tests tests/move_haptics_tests.cpp)
+target_link_libraries(spidy_move_haptics_tests PRIVATE spidy_core)
+add_test(NAME move_haptics COMMAND spidy_move_haptics_tests)
+# VIEW YAW SOURCE: STABLE (stable_yaw.hpp): the closed loop, the heading, the yaw watch (portable).
+add_executable(spidy_stable_yaw_tests tests/stable_yaw_tests.cpp)
+target_link_libraries(spidy_stable_yaw_tests PRIVATE spidy_core)
+add_test(NAME stable_yaw COMMAND spidy_stable_yaw_tests)
+# SOUND TRACE (sound_trace.hpp): the ring and the event lines (portable).
+add_executable(spidy_sound_trace_tests tests/sound_trace_tests.cpp)
+target_link_libraries(spidy_sound_trace_tests PRIVATE spidy_core)
+add_test(NAME sound_trace COMMAND spidy_sound_trace_tests)
+# JUMP TO SPIDYVR (hybrid_owner.hpp) and AIR VIEW EASE: the timer, kinds, breaks, eases, settings (portable).
+add_executable(spidy_jump_handoff_tests tests/jump_handoff_tests.cpp)
+target_link_libraries(spidy_jump_handoff_tests PRIVATE spidy_core)
+add_test(NAME jump_handoff COMMAND spidy_jump_handoff_tests)
+# FULL head lock on the stable heading, ANIM YAW SWAY, TURN-IN-PLACE (view_yaw_lock.hpp; portable).
+add_executable(spidy_view_yaw_lock_tests tests/view_yaw_lock_tests.cpp)
+target_link_libraries(spidy_view_yaw_lock_tests PRIVATE spidy_core)
+add_test(NAME view_yaw_lock COMMAND spidy_view_yaw_lock_tests)
+# CAMERA MODES (camera_mode.hpp): the head ride, the shoulder limit, the snap/realign, the perch (portable).
+add_executable(spidy_camera_mode_tests tests/camera_mode_tests.cpp)
+target_link_libraries(spidy_camera_mode_tests PRIVATE spidy_core)
+add_test(NAME camera_mode COMMAND spidy_camera_mode_tests)
+# PASSIVE LEGS, AIR CROUCH, REACH SPREAD, FLAIL (leg_layers.hpp; portable).
+add_executable(spidy_passive_legs_tests tests/passive_legs_tests.cpp)
+target_link_libraries(spidy_passive_legs_tests PRIVATE spidy_core)
+add_test(NAME passive_legs COMMAND spidy_passive_legs_tests)
+add_executable(spidy_facing_check_tests tests/facing_check_tests.cpp)
+target_link_libraries(spidy_facing_check_tests PRIVATE spidy_core)
+add_test(NAME facing_check COMMAND spidy_facing_check_tests)
+add_executable(spidy_hybrid_movement_tests tests/hybrid_movement_tests.cpp)
+target_link_libraries(spidy_hybrid_movement_tests PRIVATE spidy_core)
+add_test(NAME hybrid_movement COMMAND spidy_hybrid_movement_tests)
+
+find_package(Threads REQUIRED)
+add_executable(spidy_action_protocol_tests tests/action_protocol_tests.cpp)
+target_link_libraries(spidy_action_protocol_tests PRIVATE spidy_core Threads::Threads)
+add_test(NAME action_protocol COMMAND spidy_action_protocol_tests)
+set_tests_properties(action_protocol PROPERTIES TIMEOUT 30)
 add_executable(spidy_tests tests/core_tests.cpp)
 target_link_libraries(spidy_tests PRIVATE spidy_core)
 if(WIN32)
@@ -122,7 +284,7 @@ if(SPIDY_BUILD_OBSERVER)
   add_library(spidy_ray_bridge SHARED src/native_rays.cpp src/game_swing.cpp src/game_targets.cpp
               src/game_grab.cpp src/native_bodies.cpp src/game_punch.cpp src/game_shooter.cpp
               src/game_warp.cpp src/game_offers.cpp src/game_sense.cpp src/game_focus.cpp
-              src/game_sound.cpp src/game_throw.cpp src/game_dodge.cpp src/game_guard.cpp)
+              src/game_sound.cpp src/game_throw.cpp src/game_dodge.cpp src/game_guard.cpp src/game_joints.cpp)
   target_include_directories(spidy_ray_bridge PRIVATE include)
   target_compile_definitions(spidy_ray_bridge PRIVATE WIN32_LEAN_AND_MEAN NOMINMAX)
   target_compile_options(spidy_ray_bridge PRIVATE /W4 /permissive-)

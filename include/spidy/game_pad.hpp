@@ -204,6 +204,42 @@ inline bool nativeRunAllowed(const NativeRunGate& g, const Walk& w) {
            !g.onSurface && !g.onCrawl && g.gameOwnsGround && g.handsIdle() && !w.jump && !w.interact &&
            !w.zip && !w.aim && !w.pull && !w.heal && !w.demand.any() && !(g.steady && g.fighting);
 }
+// Why NATIVE RUN's RT is not allowed now (the first gate that says no), for the
+// "parkour RT:" diagnostic (t86u: parkour iffy): nullptr when it is allowed.
+enum class RunBlock : int { none, setting, notPlaying, calibrating, padLayer, mounting, vent, surface, crawl,
+                            notGameGround, hands, button, fight, count };
+inline RunBlock nativeRunBlock(const NativeRunGate& g, const Walk& w) {
+    if (!g.setting) return RunBlock::setting;
+    if (!g.playing) return RunBlock::notPlaying;
+    if (g.calibrating) return RunBlock::calibrating;
+    if (g.padLayer) return RunBlock::padLayer;
+    if (g.mounting) return RunBlock::mounting;
+    if (g.ventCrawl) return RunBlock::vent;
+    if (g.onSurface) return RunBlock::surface;
+    if (g.onCrawl) return RunBlock::crawl;
+    if (!g.gameOwnsGround) return RunBlock::notGameGround;
+    if (!g.handsIdle()) return RunBlock::hands;
+    if (w.jump || w.interact || w.zip || w.aim || w.pull || w.heal || w.demand.any()) return RunBlock::button;
+    if (g.steady && g.fighting) return RunBlock::fight;
+    return RunBlock::none;
+}
+inline const char* runBlockName(RunBlock b) {
+    switch (b) {
+    case RunBlock::setting: return "setting off";
+    case RunBlock::notPlaying: return "not playing";
+    case RunBlock::calibrating: return "calibrating";
+    case RunBlock::padLayer: return "pad layer";
+    case RunBlock::mounting: return "mounting";
+    case RunBlock::vent: return "vent";
+    case RunBlock::surface: return "on a surface";
+    case RunBlock::crawl: return "game crawl";
+    case RunBlock::notGameGround: return "not the game's ground (SPIDY RUN/carry/swing)";
+    case RunBlock::hands: return "grip or trigger held";
+    case RunBlock::button: return "A/Y/zip/aim/pull/heal/prompt";
+    case RunBlock::fight: return "fight";
+    default: return "none";
+    }
+}
 // A held on the ground: a charged leap, Spidy's own. The game has one, its
 // Charge Jump ("Hold RT + A while running or standing to build up charge,
 // then release A for a huge leap"), but as a Webslinger skill: a hero
@@ -309,6 +345,15 @@ class ChargeJump {
             break;
         }
         return {};
+    }
+    // POINT JUMP (point_jump.hpp): a chord took this press. Whatever A was
+    // doing here (waiting for its tap, charging a leap) ends unsent: the
+    // chord never becomes a leap or a late A. Held on, A is spent until it is
+    // let go of.
+    void consume() {
+        phase_ = down_ ? Phase::spent : Phase::idle;
+        time_ = 0;
+        leap_ = 0;
     }
     // A is held and a leap charges.
     bool charging() const {
@@ -630,7 +675,10 @@ class StickPush {
         spent_ = true;
         held_ = lapse_ = 0;
     }
-    static constexpr float pushed = .75f, aside = .45f, released = .5f, holdSeconds = .15f,
+    // November 12 movement cleanup: aside .45 -> .35 and holdSeconds .15 ->
+    // .2, so a turn's flick (snap or smooth, up to 70 degrees off the side)
+    // is spent instead of becoming a zip or a heal while standing turns.
+    static constexpr float pushed = .75f, aside = .35f, released = .5f, holdSeconds = .2f,
                            graceSeconds = .25f;
     enum class Way { none, down, up };
     // seconds: since the previous update. play: the controllers play VR.
@@ -674,6 +722,158 @@ class StickPush {
     Way way_{};
     bool spent_{};
     float held_{}, lapse_{};
+};
+// MIDAIR ZIP AND HEAL BY DOUBLE TAP (the user, November 10 21:06: "Make zip
+// and heal work in midair, but you have to double tap them"). For when a leg
+// control owns the right stick in the air (swinging or falling, CONTROLLED
+// FLIPS on, its setting on): single pushes and holds are the legs'; two quick
+// strong pushes the same way are the zip (up) or the heal (down), and the
+// second push held is the hold StickPush gives - the zip's aim and slow time
+// until it is let go, the heal's hold - so the zip and heal relays downstream
+// work unchanged. Outside that mode StickPush stays exactly as it is.
+//   - A tap: past `strong` within `aside` of the vertical, back under
+//     `released` within tapSeconds. Held longer it is a leg hold, never a tap.
+//   - The second tap must start within doubleTapSeconds of the first one's
+//     release, the same way. The other way, a diagonal or a late one starts
+//     over (that push is the legs').
+//   - legY(): the stick's vertical for the legs - zero from the moment a tap
+//     could still become a double tap's action through to the action's end,
+//     and actionBegan() once when it starts, so the caller eases the first
+//     tap's leg pose back out instead of fighting the zip or heal.
+// Pure; tunable through the constructor (window seconds).
+class StickDoubleTap {
+  public:
+    using Way = StickPush::Way;
+    static constexpr float strong = .85f, aside = .45f, released = .5f, tapSeconds = .25f,
+                           defaultWindowSeconds = .3f;
+    explicit StickDoubleTap(float windowSeconds = defaultWindowSeconds)
+        : window_(std::isfinite(windowSeconds) ? std::clamp(windowSeconds, .15f, .6f) : defaultWindowSeconds) {}
+    float windowSeconds() const {
+        return window_;
+    }
+    void reset() {
+        const float w = window_;
+        *this = StickDoubleTap(w);
+    }
+    // seconds since the previous update; active: the leg control owns the
+    // stick now (when false everything resets and nothing is reported); x, y
+    // the right stick, -1..1, y up. Returns the action held now (none, up the
+    // zip, down the heal).
+    Way update(float seconds, bool active, float x, float y) {
+        const Way way = step(seconds, active, x, y);
+        // The stick's sideways for the legs: withheld with legY (a tap that
+        // may still be a double tap's, or the action, or its settling).
+        const float sx = std::isfinite(x) ? x : 0.f, sy = std::isfinite(y) ? y : 0.f;
+        legX_ = (legY_ == 0 && sy != 0) ? 0.f : sx;
+        return way;
+    }
+    // The stick's sideways the legs may use this frame.
+    float legX() const {
+        return legX_;
+    }
+    Way step(float seconds, bool active, float x, float y) {
+        began_ = false;
+        const float dt = std::isfinite(seconds) ? std::clamp(seconds, 0.f, .1f) : 0.f;
+        const bool bad = !std::isfinite(x) || !std::isfinite(y);
+        if (bad)
+            x = y = 0;
+        legY_ = y;
+        if (!active) {
+            reset();
+            legY_ = y;
+            return Way::none;
+        }
+        const bool rest = std::hypot(x, y) < released;
+        const bool strongPush = std::abs(y) >= strong && std::abs(x) <= aside;
+        const Way way = y < 0 ? Way::down : Way::up;
+        switch (phase_) {
+        case Phase::idle:
+            if (strongPush) {
+                phase_ = Phase::first;
+                way_ = way;
+                time_ = 0;
+                legY_ = 0; // might become a double tap: the legs wait
+            }
+            break;
+        case Phase::first:
+            time_ += dt;
+            if (rest) {
+                phase_ = Phase::gap;
+                time_ = 0;
+                legY_ = 0;
+            } else if (time_ > tapSeconds || (std::abs(x) > aside) || way != way_) {
+                phase_ = Phase::legs; // a hold or a turn: the legs', until neutral
+            } else {
+                legY_ = 0;
+            }
+            break;
+        case Phase::gap:
+            time_ += dt;
+            if (time_ > window_) {
+                phase_ = rest ? Phase::idle : Phase::legs;
+            } else if (strongPush && way == way_) {
+                phase_ = Phase::action;
+                began_ = true;
+                ++actions_;
+                legY_ = 0;
+                return way_;
+            } else if (!rest && (std::abs(x) > aside || way != way_ || !strongPush)) {
+                // A softer push inside the window waits for strength; another
+                // way or a diagonal starts over as the legs'.
+                if (std::abs(x) > aside || way != way_)
+                    phase_ = Phase::legs;
+                else
+                    legY_ = 0;
+            } else {
+                legY_ = 0;
+            }
+            break;
+        case Phase::action:
+            if (rest) {
+                phase_ = Phase::idle; // let go: the zip goes, the heal ends
+                return Way::none;
+            }
+            legY_ = 0;
+            if (way != way_ || std::abs(y) < released) {
+                phase_ = Phase::settle; // rolled off the line: over, back to neutral first
+                return Way::none;
+            }
+            return way_;
+        case Phase::settle:
+            // After an action the stick must come back to neutral before the
+            // legs take it again.
+            legY_ = 0;
+            if (rest)
+                phase_ = Phase::idle;
+            break;
+        case Phase::legs:
+            if (rest)
+                phase_ = Phase::idle;
+            break;
+        }
+        return Way::none;
+    }
+    // The stick's vertical the legs may use this frame (see above).
+    float legY() const {
+        return legY_;
+    }
+    // A double tap's action started this frame.
+    bool actionBegan() const {
+        return began_;
+    }
+    uint32_t actions() const {
+        return actions_;
+    }
+
+  private:
+    enum class Phase { idle, first, gap, action, settle, legs };
+    float legX_{};
+    float window_ = defaultWindowSeconds;
+    Phase phase_{};
+    Way way_{};
+    float time_{}, legY_{};
+    bool began_{};
+    uint32_t actions_{};
 };
 // The right stick held up (StickPush) as the game's LT + RT, and what letting
 // go of it does. The two going down at once are the game's zip to a point,
@@ -843,6 +1043,10 @@ class CameraLook {
     uint32_t turns() const {
         return turns_;
     }
+    void reset() {
+        error_ = 0;
+        turning_ = false;
+    }
 
   private:
     float error_{};
@@ -890,6 +1094,10 @@ class CameraPitch {
     }
     uint32_t turns() const {
         return turns_;
+    }
+    void reset() {
+        error_ = 0;
+        turning_ = false;
     }
 
   private:

@@ -1,4 +1,6 @@
 #pragma once
+#include "hand_grab.hpp"
+#include "tether.hpp"
 #include "swing.hpp"
 #include <vector>
 
@@ -13,6 +15,8 @@ struct GrabTarget {
     TargetKind kind = TargetKind::Object;
     Vec3 position{}, velocity{}; // centre, world metres and metres per second
     float mass = 20, radius = .4f;
+    // within() only: how far the query's point is from its surface, metres.
+    float away{};
 };
 class TargetQueries {
   public:
@@ -25,14 +29,30 @@ class TargetQueries {
     virtual std::optional<GrabTarget> find(std::uint64_t id) const = 0;
     // Characters a throw may be aimed at.
     virtual void characters(std::vector<GrabTarget>&) const {}
+    // The targets with a surface within `reach` metres of `point` (HAND GRAB, hand_grab.hpp), each with
+    // `away` set and its `mass` what one hand has to hold; only targets a hand may take. Nothing by
+    // default: a source of targets that offers none cannot be taken by hand.
+    virtual void within(Vec3 /*point*/, float /*reach*/, std::vector<GrabTarget>&) const {}
     // The target a surface of the world belongs to, if any. A prop's own
     // bodies are where a web strikes it, never a wall in front of it.
     virtual std::optional<std::uint64_t> owner(std::uint64_t /*surface*/) const {
         return {};
     }
 };
+// SOFT LOCK (the user, November 8 21:58): when a grip web's aim ray takes no
+// target in the normal narrow cone (GrabConfig::aimCone), a second pick in this
+// wider cone, only within GrabConfig::softLock metres, takes the best target by
+// lockScore: the angle off the ray and the distance both count, so a closer one
+// wins over a farther one at a similar angle. The marker (the grab's preview)
+// and the press use the same pick, so the marker is where the web goes.
+constexpr float softLockCone = .21f; // about 12 degrees
+// Lower is better: `miss` radians off the ray (of `cone`), `away` metres (of `distance`).
+inline float lockScore(float miss, float cone, float away, float distance) {
+    return miss / std::max(cone, 1e-4f) + away / std::max(distance, 1e-3f);
+}
 struct GrabConfig {
     float maxRange = 60, aimCone = .07f, maxMass = 400;
+    float softLock = 0; // SOFT LOCK distance in metres; 0 is off
     // Every web is a rope: it only pulls, and the target keeps its weight. A
     // held target hangs from the wrist on a web this much longer than its
     // radius, below the hand, and swings as the hand moves. Until October 6
@@ -103,6 +123,12 @@ struct GrabConfig {
     // past its length, lets go.
     float obstructionTime = .3f, breakStretch = 6;
     float gravity = 9.81f, fixedStep = 1.0f / 120.0f;
+    // HAND GRAB (G2, hand_grab.hpp): off until enabled. A grip closed with the palm on a target takes it by
+    // hand, held by a spring at the palm instead of hanging on a web.
+    hand_grab::Config hand{};
+    // PHYSICAL WEB TETHERS (W1, tether.hpp): off until enabled. A simulated rope on each web, with a whip, a
+    // spin and a throw that keeps its line.
+    tether::Config tether{};
 };
 enum class GrabPhase : std::uint8_t { None, Tethered, Yanked, Held };
 struct Grab {
@@ -118,6 +144,10 @@ struct Grab {
     // (webForce): a hanging trash can about 0.12, one swung hard or a target
     // too heavy to lift 1. A yank's jerk is 1.
     float tension{};
+    // HAND GRAB: held by the palm (phase Held): `mass` kg, `age` seconds held, and the share of the grip's
+    // force left (`tired`).
+    bool hand{};
+    float mass{}, age{}, tired = 1;
 };
 enum class GrabEventKind { Grab, Yank, Catch, Throw, Release, Lost };
 struct GrabEvent {
@@ -149,6 +179,9 @@ struct TargetCommand {
     TargetKind kind{};
     Mode mode{};
     bool thrown{}; // the web let go: the last command for this target
+    // Follow, HAND GRAB: an enemy held by the hand; the game keeps him in its flight with a light kinetic
+    // blow now and again (game_grab) rather than a web's pull.
+    bool carried{};
     // Rope: a taut web takes up its stretch at `response` per second, and
     // the target's swing across it, relative to the hand, slows at `damping`
     // per second.
@@ -171,6 +204,30 @@ struct TargetCommand {
 Vec3 advance(const TargetCommand&, Vec3 position, Vec3 velocity, float dt, Vec3 gravity);
 // Its angular velocity after that step.
 Vec3 advanceSpin(const TargetCommand&, Vec3 spin, float dt);
+// HAND GRAB's account, for the log and the feel: what was taken, thrown and slammed, and the latest
+// action (1 holding, 2 throw, 3 slam, 4 let go of) on what (1 enemy, 2 prop), its mass and speed.
+struct HandReport {
+    std::uint32_t grabs{}, enemies{}, props{}, throws{}, slams{}, drops{}, lost{};
+    std::uint32_t lastAction{}, lastKind{}, serial{};
+    float lastMass{}, lastSpeed{};
+};
+// PHYSICAL WEB TETHERS' view of one hand's line, for drawing: the points past the ends (at most
+// tether::maxDrawn), the target's end, how taut it is, and whether the hand is spinning the target or the
+// line was kept after a throw.
+struct TetherView {
+    bool active{}, spinning{}, kept{};
+    std::uint32_t count{};
+    std::array<Vec3, tether::maxDrawn> points{};
+    Vec3 end{};
+    float tension{};
+};
+// Its account: whips, spins begun, slings (a spinning target let go of), throws that kept the line, lines
+// cut, and the latest action (1 whip, 2 spin, 3 sling, 4 throw on a tether, 5 cut) with its speed (m/s).
+struct TetherReport {
+    std::uint32_t whips{}, spins{}, slings{}, throws{}, cuts{};
+    std::uint32_t lastAction{}, serial{};
+    float lastSpeed{};
+};
 class WebGrab {
   public:
     explicit WebGrab(GrabConfig config = {});
@@ -207,9 +264,32 @@ class WebGrab {
     const GrabConfig& config() const {
         return config_;
     }
+    // HAND GRAB, switched during play (an invalid one is refused). Turned off, the hands let go of what
+    // they hold, without a throw.
+    bool handGrab(const hand_grab::Config&);
+    const HandReport& handReport() const {
+        return report_;
+    }
+    // HAND GRAB: whether this hand's squeeze belongs to the hand grab in this sample: it holds a body by
+    // its palm, or its squeeze begins with a body within reach (what claim() would take). The swing leaves
+    // such a hand no wall grip: an enemy in reach is taken before a wall.
+    bool handClaims(int hand, const HandInput&, const TargetQueries&) const;
+    // PHYSICAL WEB TETHERS, switched during play (an invalid one is refused). Turned off, the lines kept after a
+    // throw are let go of and every web is as it was.
+    bool tether(const tether::Config&);
+    const TetherReport& tetherReport() const {
+        return tether_;
+    }
+    const TetherView& tetherView(int hand) const {
+        return views_[hand & 1];
+    }
     // GrabConfig::yankOnlyCharacters, switched during play.
     void yankOnlyCharacters(bool on) {
         config_.yankOnlyCharacters = on;
+    }
+    // GrabConfig::softLock, switched during play (non-finite or negative: off).
+    void softLock(float metres) {
+        config_.softLock = std::isfinite(metres) && metres > 0 ? std::min(metres, config_.maxRange) : 0.f;
     }
 
   private:
@@ -223,8 +303,22 @@ class WebGrab {
         // A yanked target's nearest approach to its hold length, and time since.
         float closest{}, stalled{};
         bool launched{}; // the yank's jerk is sent
+        // HAND GRAB: the physical grip squeezed (with release hysteresis), the palm and its smoothed
+        // velocity, and the last palm samples.
+        bool squeezed{};
+        Vec3 palm{}, palmVelocity{};
+        hand_grab::Samples samples;
+        // TETHERS: the trigger's depth, and the line kept after a throw (the grip is let go; the trigger holds it).
+        float trigger{};
+        bool kept{};
     };
+    std::optional<GrabTarget> pickHand(Vec3 palm, const TargetQueries&) const;
+    bool startHand(int hand, const TargetQueries&);
+    void stepHand(int hand, float dt, const GrabTarget& target, std::vector<TargetCommand>& out,
+                  std::size_t first);
+    void letGoHand(int hand, const TargetQueries&, bool otherReleasing);
     void end(int hand, GrabEventKind reason, Vec3 velocity = {});
+    void note(std::uint32_t action, float speed);
     void letGo(int hand, const TargetQueries&, const Body& player, bool otherReleasing);
     float holdLength(int hand) const;
     // How long a yanked target's arc to `hold` takes: as long as a straight
@@ -236,6 +330,11 @@ class WebGrab {
     std::array<HandState, 2> hands_{};
     std::vector<GrabEvent> events_;
     std::vector<TargetCommand> pending_; // throws, sent with the next step
+    HandReport report_;
+    TetherReport tether_;
+    std::array<tether::Rope, 2> ropes_{};
+    std::array<tether::Spinner, 2> spinners_{};
+    std::array<TetherView, 2> views_{};
     // The player's velocity at the latest sample: a yank's arc is aimed where
     // the hand is carried, not where the pulling gesture itself would take it.
     Vec3 playerVelocity_{};

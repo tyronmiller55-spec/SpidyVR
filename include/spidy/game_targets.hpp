@@ -189,6 +189,13 @@ bool scan(uintptr_t base, uint32_t kinds, std::vector<Candidate>& out);
 // image at `base`: the kinds it marks (bit 1 << Kind) and, from bit 8 up, the
 // traits it gives. 0 for a vtable without type information.
 uint32_t classOf(uintptr_t base, uintptr_t vtable);
+// What the target scan cost since the last take (any watch's walks): walks, their mean and longest (ms), and the
+// waits a classOf() had for the class table while a walk held it (count, longest in us).
+struct ScanCost {
+    uint32_t scans{}, classWaits{};
+    float meanMs{}, maxMs{}, classWaitMaxUs{};
+};
+ScanCost takeScanCost();
 // A bot's size from his mover manager (the marker component): false, and
 // `out` left as it was, when it holds no body or an implausible one.
 bool sizeOf(uintptr_t base, uint64_t moverManager, Size& out);

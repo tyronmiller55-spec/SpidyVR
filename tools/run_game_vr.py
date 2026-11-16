@@ -32,6 +32,7 @@ from vr_launcher import (LauncherLock, alive, exit_status, bring_to_front, wait_
                          RENDER_MEMORY_HOOKS, NeedsAdministrator, NEEDS_ADMINISTRATOR_EXIT, CLOSE_GAME_EXIT,
                          close_game)
 import game_freeze
+from session_summary import write_summary
 import vr_display
 import xr_runtime
 
@@ -50,7 +51,7 @@ GAME_HOOKS = (*HOOKS, 0x2e67010, 0x1fbe360, 0x1fbda50, 0xa7b3a0, 0x1f9db60,
 RENDER_SCALES = (50, 200)
 # Upscaling: the percent of the eye's size, per side, the eyes' scene is rendered at, and its default
 # (spidy::minimumEyeUpscale, maximumEyeUpscale and defaultEyeUpscale).
-UPSCALES, DEFAULT_UPSCALE = (50, 100), 67
+UPSCALES, DEFAULT_UPSCALE = (50, 100), 50
 # How often the game's window gets the left eye in immersive VR: presents a second, 0 for every frame
 # (include/spidy/monitor_rate.hpp).
 MONITOR_RATES, DEFAULT_MONITOR_RATE = (0, 240), 30
@@ -612,6 +613,55 @@ def pad_ignored(watch, sample, quiet=5):
         watch['warned'] = True
         return True
     return False
+
+
+# LOW FPS (polish pass; include/spidy/low_fps.hpp is the same rule for the diagnostics' quiet mode). The 4d58169
+# playtest's game ran at 8.7 fps for 104 minutes (its own render load and a failing DLSS evaluate; the mod was
+# under 1% of the game thread) and nothing told the player. A rate under LOW_FPS for LOW_FPS_SECONDS says so,
+# once, and a return to LOW_FPS_GOOD says that too. A game that stops altogether is the freeze watch's.
+LOW_FPS, LOW_FPS_GOOD, LOW_FPS_SECONDS, LOW_FPS_WINDOW = 15.0, 24.0, 60.0, 5.0
+LOW_FPS_LINE = 'WARNING: the game has run slowly'
+LOW_FPS_OVER = 'The game is back up to speed'
+
+
+def low_fps_advice(fps, seconds):
+    return (f"{LOW_FPS_LINE}, about {fps:.0f} fps for {seconds:.0f} s. That is the game's own drawing (a render load "
+            "or a failing DLSS evaluate), not Spidy: its cost is in the diagnostics' 'game thread cost' lines. If "
+            "it does not clear, close the game and start VR again from Spidy's launcher. A lower Upscaling in the "
+            "launcher (50% is the default now) and a lower render scale also help.")
+
+
+def low_fps_watch(watch, sample):
+    """None, 'slow' or 'over' (once each per spell): `watch` (at, frames, slow_for, slow, good, fps) carries what
+    earlier samples showed; the rate is the frame counter's over windows of LOW_FPS_WINDOW seconds."""
+    frames = sample.get('frames', sample.get('submitted'))
+    now = sample.get('seconds')
+    if frames is None or now is None:
+        return None
+    if watch.get('at') is None or frames < watch.get('frames', 0):
+        watch.update(at=now, frames=frames)
+        return None
+    if now-watch['at'] < LOW_FPS_WINDOW:
+        return None
+    span, count = now-watch['at'], frames-watch['frames']
+    watch.update(at=now, frames=frames, fps=count/span)
+    fps = watch['fps']
+    if 0.5 < fps < LOW_FPS:
+        watch['good'] = 0
+        watch['slow_for'] = watch.get('slow_for', 0.0)+span
+        if not watch.get('slow') and watch['slow_for'] >= LOW_FPS_SECONDS:
+            watch['slow'] = True
+            return 'slow'
+    elif fps >= LOW_FPS:
+        watch['slow_for'] = 0.0
+        if watch.get('slow') and fps >= LOW_FPS_GOOD:
+            watch['good'] = watch.get('good', 0)+1
+            if watch['good'] >= 2:
+                watch.update(slow=False, good=0)
+                return 'over'
+        elif fps < LOW_FPS_GOOD:
+            watch['good'] = 0
+    return None
 
 
 # What the game makes while it runs - eye images, frames of its screen, camera commits, reads of Spidy's
@@ -1393,6 +1443,21 @@ def gadgets_of(raw):
                 equip_result=equip_result, equips=equips, gadget_shots=gadget_shots, empty_pulls=empty_pulls)
 
 
+def shooter_dispatch_of(raw):
+    """v5 observations, not proof of projectile visibility/absence or damage."""
+    if len(raw) < 432:
+        return {}
+    names = ('queued', 'queue_full', 'expired', 'call_success', 'rejected',
+             'object_known', 'object_unknown', 'gadget_calls', 'fallback_calls')
+    result = dict(zip(names, struct.unpack_from('<9Q', raw, 296)))
+    result['target'] = hex(struct.unpack_from('<Q', raw, 368)[0])
+    result['origin'] = list(struct.unpack_from('<3f', raw, 376))
+    result['direction'] = list(struct.unpack_from('<3f', raw, 388))
+    result['aim_point'] = list(struct.unpack_from('<3f', raw, 400))
+    result['route'], result['outcome'], result['hand'] = struct.unpack_from('<3I', raw, 412)
+    return dict(dispatch=result)
+
+
 def shooter_snapshot(game, address):
     """Web-shooter shots (game_shooter::Data): pulls that asked for a shot, shots the game fired and requests it
     dropped, those aimed at a thug and those whose target the game took, the hero's gadget, the main-thread frames
@@ -1402,8 +1467,15 @@ def shooter_snapshot(game, address):
         raw = game.read(address, 296)
         if len(raw) != 296:
             return None
-        if struct.unpack_from('<3I', raw) != (0x53484f44, 4, 296):
+        header = struct.unpack_from('<3I', raw)
+        if header not in ((0x53484f44, 4, 296), (0x53484f44, 5, 432)):
             raise RuntimeError('Shooter protocol mismatch')
+        if header[1] == 5:
+            raw = game.read(address, 432)
+            if len(raw) != 432:
+                return None
+            if struct.unpack_from('<3I', raw) != header:
+                continue
         if struct.unpack_from('<Q', raw, 16)[0] & 1 or raw[16:24] != game.read(address+16, 8):
             continue
         status = struct.unpack_from('<I', raw, 12)[0]
@@ -1418,7 +1490,7 @@ def shooter_snapshot(game, address):
                     hands=hands, last_origin=[round(x, 3) for x in origin],
                     last_aim_point=[round(x, 3) for x in aim_point],
                     last_shot=hex(struct.unpack_from('<Q', raw, 152)[0]), collisions=collisions, webbed=webbed,
-                    pushed=pushed, last_hit=hex(last_hit), **gadgets_of(raw))
+                    pushed=pushed, last_hit=hex(last_hit), **gadgets_of(raw), **shooter_dispatch_of(raw))
     return None
 
 
@@ -1897,22 +1969,18 @@ def controller_buttons(bits):
 
 # SESSION DIAGNOSTICS (diag_log.hpp, SpidyDiagData): the build, the feature settings and the features' own lines
 # (RUN LOGS' "run log:", WEB AIM's "forearm aim:", DODGE TUMBLE's, the state changes on and off the ground).
-# With RUN LOGS on the console and reports/<session>-diag.log get them; off, the module publishes none.
-DIAG_MAGIC, DIAG_VERSION = 0x47414944, 1
-DIAG_MAIN, DIAG_AIM, DIAG_CHARS, DIAG_BUILD = 128, 16, 240, 96
+# Until v4 they reached only the report's timeline; now the console and reports/<session>-diag.log get them.
+DIAG_MAGIC, DIAG_VERSION = 0x47414944, 2
+DIAG_MAIN, DIAG_AIM, DIAG_HEAD, DIAG_CHARS, DIAG_BUILD = 128, 16, 64, 240, 96
 DIAG_MAIN_AT = 120
 DIAG_AIM_AT = DIAG_MAIN_AT + 8 + DIAG_MAIN*DIAG_CHARS
-DIAG_BYTES = DIAG_AIM_AT + 8 + DIAG_AIM*DIAG_CHARS
+DIAG_HEAD_AT = DIAG_AIM_AT + 8 + DIAG_AIM*DIAG_CHARS  # version 2: HEAD PROBE's "head probe:" lines
+DIAG_BYTES = DIAG_HEAD_AT + 8 + DIAG_HEAD*DIAG_CHARS
 
 
 def diag_snapshot(game, address):
-    """The diagnostics' two rings as they stand: {'build', 'main': (written, slots), 'aim': (written, slots)},
-    a protocol mismatch reported (never raised: these are diagnostics), or None while it is being written or
-    before anything was published (RUN LOGS off: only the header is read)."""
-    head = game.read(address, 24)
-    if len(head) == 24 and struct.unpack_from('<3I', head) == (DIAG_MAGIC, DIAG_VERSION, DIAG_BYTES) and \
-            struct.unpack_from('<Q', head, 16)[0] == 0:
-        return None
+    """The diagnostics' rings as they stand: {'build', 'main', 'aim', 'head': (written, slots)},
+    a protocol mismatch reported (never raised: these are diagnostics), or None while it is being written."""
     for _ in range(8):
         raw = game.read(address, DIAG_BYTES)
         if len(raw) != DIAG_BYTES:
@@ -1924,7 +1992,8 @@ def diag_snapshot(game, address):
             continue
         text = lambda at, size: raw[at:at+size].split(b'\0', 1)[0].decode('utf-8', 'replace')
         rings = {}
-        for name, at, count in (('main', DIAG_MAIN_AT, DIAG_MAIN), ('aim', DIAG_AIM_AT, DIAG_AIM)):
+        for name, at, count in (('main', DIAG_MAIN_AT, DIAG_MAIN), ('aim', DIAG_AIM_AT, DIAG_AIM),
+                                ('head', DIAG_HEAD_AT, DIAG_HEAD)):
             written = struct.unpack_from('<Q', raw, at)[0]
             rings[name] = (written, [text(at+8+i*DIAG_CHARS, DIAG_CHARS) for i in range(count)])
         return dict(build=text(24, DIAG_BUILD), **rings)
@@ -1934,11 +2003,11 @@ def diag_snapshot(game, address):
 class DiagLog:
     """What diag_snapshot adds since the last look: each new line printed to the console (where the launcher
     shows it) and appended to the diagnostics file beside the session report, with the build first."""
-    SIZES = dict(main=DIAG_MAIN, aim=DIAG_AIM)
+    SIZES = dict(main=DIAG_MAIN, aim=DIAG_AIM, head=DIAG_HEAD)
 
     def __init__(self, path, echo=None):
         self.path, self.echo = pathlib.Path(path), echo or (lambda line: print(line, flush=True))
-        self.seen = dict(main=0, aim=0)
+        self.seen = dict(main=0, aim=0, head=0)
         self.build = None
         self.lines = 0
         self.stage = None  # the last "stage:" line (diag_log::Stages), for crash_advice
@@ -1958,7 +2027,7 @@ class DiagLog:
         if snapshot['build'] and snapshot['build'] != self.build:
             self.build = snapshot['build']
             self._out(f'Spidy diagnostics: build {self.build} (this file: {self.path})')
-        for name in ('main', 'aim'):
+        for name in ('main', 'aim', 'head'):
             written, slots = snapshot[name]
             size, seen = self.SIZES[name], self.seen[name]
             if written < seen:  # the module started again
@@ -2672,6 +2741,7 @@ def session(a, startup):
         # The game's reads of Spidy's controller: none while buttons are held on the game screen means its
         # menus cannot be played (the October 7 Steam Link session: the game had turned XInput off).
         pad_watch = dict(reads=None, since=0.0, warned=False)
+        low_fps_state = {}
         # A game that stops answering: the counters it stood still with, and its threads once saved.
         freeze_watch, freeze = {}, None
 
@@ -2779,6 +2849,8 @@ def session(a, startup):
                 lost_device.update(reason=reason, frames=(result.get('final') or {}).get('tracked'))
             a.output.write_text(json.dumps(result, indent=2)+'\n')
             report_written = startup.reported = True
+            # SHAREABLE SESSION SUMMARY: a compact copy under 20 MB beside it (session_summary.py).
+            write_summary(result, a.output, diag_path(a.output))
 
         def tell_device_lost():
             # Once, after the report that found it.
@@ -2963,6 +3035,11 @@ def session(a, startup):
                     samples.append(sample)
                     if pad_ignored(pad_watch, sample):
                         print(PAD_IGNORED, flush=True)
+                    slowed = low_fps_watch(low_fps_state, sample)
+                    if slowed == 'slow':
+                        print(low_fps_advice(low_fps_state['fps'], low_fps_state['slow_for']), flush=True)
+                    elif slowed == 'over':
+                        print(f"{LOW_FPS_OVER}: about {low_fps_state['fps']:.0f} fps.", flush=True)
                     # Saved once, while it still hangs: the dump is what says where (game_freeze.py).
                     if freeze is None and game_frozen(freeze_watch, sample) and \
                             time.monotonic() >= freeze_watch.get('asked', 0)+1:
@@ -3109,7 +3186,8 @@ def session(a, startup):
                 diag_log._out(crashed)
             if diag_log.lines:
                 print(f'Diagnostics: {diag_log.path.resolve()}', flush=True)
-            print(f'Game closed. Session report: {a.output.resolve()}',flush=True)
+            print(f'Game closed. Session report: {a.output.resolve()} (shareable summary: '
+                  f'{a.output.with_name(a.output.stem + "-summary.json").name})',flush=True)
             return 0
         if loop_error is not None:
             write_report(session_report(game_exited=False, error=str(loop_error)))

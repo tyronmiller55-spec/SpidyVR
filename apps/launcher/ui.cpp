@@ -761,6 +761,9 @@ void App::frame(float scale) {
         switch (tab_) {
         case Tab::play: play(origin, size); break;
         case Tab::options: options(origin, size); break;
+        case Tab::nativeAnimation:
+            nativeAnimation(origin, size);
+            break;
         case Tab::controls: controls(origin, size); break;
         case Tab::about: about(origin, size); break;
         }
@@ -845,8 +848,11 @@ void App::tabs() {
     const float width = ImGui::GetWindowWidth(), y = window.y + S(kHeaderHeight), height = S(kTabsHeight);
     draw->AddLine(ImVec2(window.x, y + height - 1), ImVec2(window.x + width, y + height - 1), col(kLine), 1);
     float x = window.x + S(12);
-    const std::pair<Tab, const char*> items[] = {
-        {Tab::play, "Play"}, {Tab::options, "Options"}, {Tab::controls, "Controls"}, {Tab::about, "About"}};
+    const std::pair<Tab, const char*> items[] = {{Tab::play, "Play"},
+                                                 {Tab::options, "Options"},
+                                                 {Tab::nativeAnimation, "Native Animation"},
+                                                 {Tab::controls, "Controls"},
+                                                 {Tab::about, "About"}};
     const float size = S(19), spacing = 0.06f;
     for (const auto& [tab, label] : items) {
         const std::string text = upper(label);
@@ -942,6 +948,21 @@ void App::startPanel(ImVec2 size) {
             headline = format("In VR  \xC2\xB7  %d:%02d", elapsed / 60, elapsed % 60);
             narration = "Keep the game window in front. Behind other windows the game pauses.";
             tint = kCyan;
+            // LOW FPS (polish pass): the session said the game has run under 15 fps for a minute and has
+            // not said it is back (tools/run_game_vr.py low_fps_watch).
+            const auto lastAt = [&](const char* text) {
+                for (size_t i = log_.size(); i-- > 0;)
+                    if (log_[i].text.find(text) != std::string::npos)
+                        return i + 1;
+                return size_t{0};
+            };
+            if (lastAt("WARNING: the game has run slowly") > lastAt("The game is back up to speed")) {
+                headline = format("Game running slowly  \xC2\xB7  %d:%02d", elapsed / 60, elapsed % 60);
+                narration = "The game itself is under 15 fps, not Spidy. If it does not clear, close the game and "
+                            "start VR again.";
+                aside = "A lower Upscaling (50% is the default) helps too.";
+                tint = kYellow;
+            }
         } else if (seen("Starting Spider-Man") || seen("Using the running game")) {
             headline = seen("Using the running game") ? "Attaching to the game" : "Starting the game";
             narration = "Its menus show on a screen in the headset. Pick your save with the controllers.";
@@ -1720,6 +1741,213 @@ void App::option(const char* title, const char* help, float controlWidth, const 
     ImGui::Dummy(ImVec2(width, 0));
 }
 
+void App::nativeAnimation(ImVec2 origin, ImVec2 size) {
+    ImGui::SetCursorScreenPos(origin);
+    ImGui::BeginChild("##nativeAnimationScroll", size, ImGuiChildFlags_None, ImGuiWindowFlags_NoBackground);
+    const ImVec2 base = ImGui::GetCursorScreenPos();
+    const float width = ImGui::GetContentRegionAvail().x - ImGui::GetStyle().ScrollbarSize - S(6);
+    const float gap = S(18);
+    float top = base.y;
+    top +=
+        captionBox(
+            ImGui::GetWindowDrawList(), ImVec2(base.x, top + S(4)), width - S(8),
+            "SpidyVR Native Animation: Insomniac's animations with SpidyVR controls and your tracked arms. "
+            "Changes apply when VR starts; during play use Settings > SPIDY VR > Native Animation.",
+            Caption::narrator) +
+        S(4) + gap;
+    ImGui::BeginDisabled(session_.running());
+    using spidy::vr_settings::Item;
+    bool tabChanged = false;
+    const auto tabCombo = [&](const char* id, Item item) {
+        std::vector<std::string> labels;
+        for (const auto& row : spidy::vr_settings::rows())
+            if (row.item == item)
+                for (const char* choice : row.choices)
+                    labels.push_back(launcherCase(choice));
+        std::vector<const char*> texts;
+        for (const auto& label : labels)
+            texts.push_back(label.c_str());
+        int index = spidy::vr_settings::choice(item, tabOnly_);
+        ImGui::PushFont(fonts_.semibold, 14);
+        if (ImGui::Combo(id, &index, texts.data(), static_cast<int>(texts.size())))
+            tabChanged |= spidy::vr_settings::choose(item, index, tabOnly_);
+        ImGui::PopFont();
+    };
+    const auto tabToggle = [&](const char* id, Item item) {
+        bool on = spidy::vr_settings::choice(item, tabOnly_) != 0;
+        if (toggle(id, &on))
+            tabChanged |= spidy::vr_settings::choose(item, on ? 1 : 0, tabOnly_);
+    };
+    const float columnWidth = (width - gap) * 0.5f;
+    float columnY[2] = {top, top};
+    // A card of options in a column: webs, moving and walls on the left; you, the picture, the screens and
+    // troubleshooting on the right.
+    const auto group = [&](int column, const char* title, const std::function<void()>& rows) {
+        ImGui::SetCursorScreenPos(ImVec2(base.x + column * (columnWidth + gap), columnY[column]));
+        if (beginCard(title, ImVec2(columnWidth, 0), ImGuiChildFlags_AutoResizeY)) {
+            ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing, ImVec2(S(10), 0));
+            cardTitle(title);
+            ImGui::Dummy(ImVec2(0, S(8)));
+            rows();
+            ImGui::PopStyleVar();
+        }
+        endCard();
+        columnY[column] = ImGui::GetItemRectMax().y + gap;
+    };
+    group(0, "Native Animation", [&] {
+        option("Native Animation",
+               "On applies the recommended head, hands, torso, turn and run controls. "
+               "Off returns to the classic body without changing your independent run, web or swing choices.",
+               S(42), [&] { tabToggle("##nativeanimation", Item::nativeAnimation); });
+        option(
+            "Head",
+            "Full follows the animated head, including flips. Level keeps the horizon level; Off unlocks it.",
+            S(150), [&] { tabCombo("##nativehead", Item::animatedHead); });
+        option("Smoothing",
+               "How much animation wobble is calmed while Native Animation owns the view. "
+               "Off is as now. Headset look, leaning and travel stay with you.",
+               S(150), [&] { tabCombo("##nativesmoothing", Item::animatedHeadsetSmooth); });
+        option("Arms", "Your controllers track through the same animated-head frame as your headset.", S(42),
+               [&] { tabToggle("##nativearms", Item::animatedArms); });
+        option("Torso", "Bounded upper-body reach assist. The animation keeps the head, root and legs.",
+               S(42), [&] { tabToggle("##nativetorso", Item::animatedTorso); });
+        option("Torso twist",
+               "Native Animation arms: the most his chest turns toward you so the arms reach your hands, "
+               "the hips and legs stay animated. 40 degrees is the old limit; 80 by default.",
+               S(150), [&] { tabCombo("##nativetorsotwist", Item::animatedTorsoTwist); });
+        option("Model yaw",
+               "Run with the left stick and turn with the right without losing running strength.", S(42),
+               [&] { tabToggle("##nativemodelyaw", Item::animatedModelYaw); });
+        option("View yaw source",
+               "Stable: running steers by a steady heading that only your headset and the right stick turn, "
+               "so Spider-Man can't run in circles. Body (old): steering follows the animated head.",
+               S(150), [&] { tabCombo("##nativeviewyawsource", Item::viewYawSource); });
+        option("Jump to SpidyVR",
+               "Plain jumps, zip launches, vaults and wall launches hand over from the animation to SpidyVR "
+               "this long into the air. Stay to landing: the old way (animation until you land). Flips, grip "
+               "cancel, webs and walls still break at once; landing returns to the animation. A jump whose rise has slowed under 4 m/s hands over after a quarter second at the soonest. Default: 300 ms.",
+               S(150), [&] { tabCombo("##nativejumphandoff", Item::jumpHandoff); });
+        option("Fall to SpidyVR",
+               "A plain fall (a ledge or a stumble, no jump press) hands from the animation to SpidyVR this long "
+               "into the air; there is no takeoff to wait for. With the jump timer: it waits for that. "
+               "Default: 150 ms.",
+               S(150), [&] { tabCombo("##nativefallhandoff", Item::fallHandoff); });
+        option("Air landing blend",
+               "Just before you land, your body comes upright over the last third of a second so the game's "
+               "own landing animation starts from upright; the landing itself is still the game's. Your view "
+               "never turns for it. The log says how well the landing was predicted. On by default.",
+               S(42), [&] { tabToggle("##nativelandingblend", Item::airLandingBlend); });
+        option("Air landing release (experimental)",
+               "Hands the body to the game's animation a fifth of a second before touchdown, in the air. "
+               "UNVERIFIED: it relies on the game keeping your speed and choosing its normal landing. Off by "
+               "default; needs Air landing blend.",
+               S(42), [&] { tabToggle("##nativelandingrelease", Item::airLandingRelease); });
+        option("Hybrid speed",
+               "How long 15 m/s in the air takes to switch to SpidyVR. Off disables speed takeover; "
+               "webs, mid-air turns and wall runs still take over. Default: 200 ms.",
+               S(150), [&] {
+                   int ms = tabOnly_.animatedHybridSpeedMs;
+                   ImGui::PushFont(fonts_.semibold, 14);
+                   if (slider("##nativehybridspeed", &ms, 0, 500, ms <= 0 ? "Off" : "%d ms")) {
+                       ms = ms < 3 ? 0 : std::clamp((ms + 2) / 5 * 5, 5, 500);
+                       if (ms != tabOnly_.animatedHybridSpeedMs) {
+                           tabOnly_.animatedHybridSpeedMs = ms;
+                           tabChanged = true;
+                       }
+                   }
+                   ImGui::PopFont();
+               });
+    });
+    group(0, "Camera & stabilization", [&] {
+        option("Camera motion",
+               "How much of the animation's own camera motion reaches your view: Full (as before), Light, "
+               "Heavy or Comfort. Pitch, roll and bob are set one by one in Options > Camera & Stabilization.",
+               S(150), [&] { tabCombo("##nativecameramotion", Item::cameraMotion); });
+        option("Head angle",
+               "Tilts the animated view below (Down) or above (Up) the horizon. Level is as before.",
+               S(150), [&] { tabCombo("##nativeheadangle", Item::cameraHeadAngle); });
+        option("Stabilization",
+               "Smooths what the animation adds (Off, Light, Heavy); the response times are in Options > "
+               "Camera & Stabilization. Your head stays 1:1.",
+               S(150), [&] { tabCombo("##nativestabilization", Item::cameraStabilization); });
+    });
+    group(1, "Run controls", [&] {
+        option("Native run",
+               "Hold the left stick far enough to use the game's own run and parkour. "
+               "Independent of the Native Animation switch.",
+               S(42), [&] { tabToggle("##nativerun", Item::nativeRun); });
+        option("Spidy run",
+               "Keep SpidyVR's ground run and speed carry where it owns movement. "
+               "Independent of the Native Animation switch.",
+               S(42), [&] { tabToggle("##spidyrun", Item::spidyRun); });
+        option("Run speed",
+               "Scales SpidyVR's own ground run (Spidy run, run from standing): 50% to 200%. "
+               "The game's native run and sprint animation keep the game's speed. Default: 100%.",
+               S(150), [&] {
+                   int percent = tabOnly_.runSpeedPercent;
+                   ImGui::PushFont(fonts_.semibold, 14);
+                   if (slider("##runspeed", &percent, 50, 200, "%d%%")) {
+                       percent = std::clamp((percent + 2) / 5 * 5, 50, 200);
+                       if (percent != tabOnly_.runSpeedPercent) {
+                           tabOnly_.runSpeedPercent = percent;
+                           tabChanged = true;
+                       }
+                   }
+                   ImGui::PopFont();
+               });
+        option("Slow-mo length",
+               "How long L3 slow motion lasts on a full meter, up to 1:30. The last step is Infinite: "
+               "it lasts until you click L3 again. Default: 12 s.",
+               S(150), [&] {
+                   int seconds = tabOnly_.slowMotionSeconds;
+                   ImGui::PushFont(fonts_.semibold, 14);
+                   if (slider("##slowmolength", &seconds, 3, spidy::vr_settings::slowMotionEndless,
+                              seconds >= spidy::vr_settings::slowMotionEndless ? "Infinite" : "%d s")) {
+                       seconds = std::clamp(seconds, 3, spidy::vr_settings::slowMotionEndless);
+                       if (seconds != tabOnly_.slowMotionSeconds) {
+                           tabOnly_.slowMotionSeconds = seconds;
+                           tabChanged = true;
+                       }
+                   }
+                   ImGui::PopFont();
+               });
+        option("Soft lock",
+               "Grip webs (and their aim marker) snap to an enemy or throwable prop near your aim, within "
+               "this distance; closer and nearer the aim wins. 0 is off. Default: 15 m.",
+               S(150), [&] {
+                   int metres = tabOnly_.softLockMetres;
+                   ImGui::PushFont(fonts_.semibold, 14);
+                   if (slider("##softlock", &metres, 0, 40, metres <= 0 ? "Off" : "%d m")) {
+                       metres = std::clamp(metres, 0, 40);
+                       if (metres != tabOnly_.softLockMetres) {
+                           tabOnly_.softLockMetres = metres;
+                           tabChanged = true;
+                       }
+                   }
+                   ImGui::PopFont();
+               });
+    });
+    group(1, "Advanced", [&] {
+        option("Air", "Legacy animation in the air. Hybrid ignores this setting.", S(42),
+               [&] { tabToggle("##nativeair", Item::animatedAir); });
+        option("Only", "Legacy animation-only ownership. Hybrid ignores this setting.", S(42),
+               [&] { tabToggle("##nativeonly", Item::animatedOnly); });
+        option("Steering", "Legacy actor-relative steering. Hybrid ignores this setting.", S(42),
+               [&] { tabToggle("##nativesteering", Item::animatedSteering); });
+        option("Air spin", "Legacy animated flips and momentum lean. Hybrid ignores this setting.", S(150),
+               [&] { tabCombo("##nativeairspin", Item::animatedAirSpin); });
+        option("Sound trace",
+               "Diagnostics only: logs the game's sound ids around jumps and landings. Changes no sound.",
+               S(42), [&] { tabToggle("##soundtrace", Item::soundTrace); });
+    });
+    ImGui::EndDisabled();
+    ImGui::SetCursorScreenPos(ImVec2(base.x, std::max(columnY[0], columnY[1]) - gap));
+    ImGui::Dummy(ImVec2(width, S(6)));
+    ImGui::EndChild();
+    if (tabChanged && !saveTabOnly(tabOnly_))
+        profileStatus("Could not save Native Animation settings.", true);
+}
+
 void App::options(ImVec2 origin, ImVec2 size) {
     const float navigation = S(168), navigationGap = S(18);
     ImGui::SetCursorScreenPos(origin);
@@ -1740,8 +1968,12 @@ void App::options(ImVec2 origin, ImVec2 size) {
         const bool selected = optionPage_ == static_cast<int>(i);
         ImGui::PushStyleColor(ImGuiCol_Button,
                               selected ? ImGui::GetStyleColorVec4(ImGuiCol_Header) : ImVec4(0, 0, 0, 0));
-        if (ImGui::Button(title, ImVec2(ImGui::GetContentRegionAvail().x, S(40))))
-            optionPage_ = static_cast<int>(i);
+        if (ImGui::Button(title, ImVec2(ImGui::GetContentRegionAvail().x, S(40)))) {
+            if (i == static_cast<size_t>(spidy::vr_settings::Category::nativeAnimation))
+                tab_ = Tab::nativeAnimation;
+            else
+                optionPage_ = static_cast<int>(i);
+        }
         ImGui::PopStyleColor();
     }
     ImGui::PopStyleColor(2);
@@ -1829,8 +2061,10 @@ void App::options(ImVec2 origin, ImVec2 size) {
         if (o.stockMonitorView && (item == Item::recordingFov || item == Item::recordingSmoothing))
             reason = "Turn Normal camera on the monitor off in Diagnostics first.";
         const std::string explanation = reason ? std::string(reason) + " " + help : help;
+        // A row shownWhenInactive (LEGS) stays usable; the note says what it needs.
+        const bool disabled = reason != nullptr && !spidy::vr_settings::shownWhenInactive(item);
         option(title, explanation.c_str(), controlWidth, [&] {
-            ImGui::BeginDisabled(reason != nullptr);
+            ImGui::BeginDisabled(disabled);
             control();
             ImGui::EndDisabled();
         }, reason != nullptr);
@@ -1926,30 +2160,10 @@ void App::options(ImVec2 origin, ImVec2 size) {
                "Web balls and zips go where your eyes look. Only where the headset and its VR runtime track "
                "the eyes (Quest Pro, Varjo, Pimax Crystal...); elsewhere hands and head aim as before.",
                S(150), [&] { tabCombo("##eyeaim", Item::eyeAim); });
-        settingOption(Item::webAimSource, "Web aim (experimental)",
-               "Controller follows your controller. Model forearm follows the visible arm, with the blend "
-               "and angle limit below. Wrist shooters is a shortcut to full forearm aim when Controller is selected.",
-               S(150), [&] { tabCombo("##webaimsource", Item::webAimSource); });
-        settingOption(Item::forearmBlend, "Forearm blend",
-               "With web aim MODEL FOREARM: how much of the forearm's line the webs take, from 0% (the "
-               "controller's) to 100% (the forearm's). 100% by default.",
-               S(150), [&] { tabCombo("##forearmblend", Item::forearmBlend); });
-        settingOption(Item::forearmAimLimit,
-            "Forearm aim limit",
-            "How far web aim MODEL FOREARM and wrist shooters may turn your webs off the controller's line "
-            "onto the forearm. NO LIMIT by default; 35 degrees keeps the webs near the controller.",
-            S(150), [&] { tabCombo("##forearmaimlimit", Item::forearmAimLimit); });
-        settingOption(Item::wristShooters, "Wrist shooters",
-               "Uses full forearm aim when Web aim is Controller. Model forearm already provides this, "
-               "with adjustable blend. If the body cannot supply an arm pose, aiming falls back to the controller.",
-               S(42), [&] { tabToggle("##wristshooters", Item::wristShooters); });
-        settingOption(Item::palmShooters, "Palm shooters",
-               "Adds a palm-side quarter turn to your chosen aim direction. Combines with forearm aim and Web angle.",
-               S(42), [&] { tabToggle("##palmshooters", Item::palmShooters); });
-        settingOption(Item::webAngle, "Web angle",
-               "Tilts the line your webs leave your hands along, up or down from the controller's, 15 to 45 "
-               "degrees. 0: along the controller, as before. Punches keep the controller's own.",
-               S(150), [&] { tabCombo("##webangle", Item::webAngle); });
+        settingOption(Item::shooterMode, "Web shooters: see the Web Shooters page",
+               "Where your webs leave your hand (Controller, Locked to arm, Palm) is set on the Web Shooters "
+               "page, with lock strength and web angle.",
+               S(150), [&] { tabCombo("##shootermodeaiming", Item::shooterMode); });
     });
     group(1, 0, "Web tricks", [&] {
         settingOption(Item::webTie, "Web tie (experimental)",
@@ -2015,7 +2229,8 @@ void App::options(ImVec2 origin, ImVec2 size) {
                S(150), [&] { tabCombo("##nativerunatpercent", Item::nativeRunAt); });
         settingOption(Item::runCurve, "Run curve (experimental)",
                "On the ground the left stick reaches the game's full run at 80% of its tilt, with more of "
-               "its speed early. Off: the stick as it is, as before.",
+               "its speed early; Native run still sprints at the same stick tilt. On by default. Off: the "
+               "stick as it is.",
                S(42), [&] { tabToggle("##runcurve", Item::runCurve); });
         settingOption(Item::steadyStates, "Steady states (experimental)",
                "Native run's RT comes back only once nothing has stopped it for 0.15 s, so a kerb, a prompt "
@@ -2049,7 +2264,7 @@ void App::options(ImVec2 origin, ImVec2 size) {
         settingOption(Item::earlyJump, "Early jump (experimental)",
                "QUICK TAP: a tap of A jumps if let go within 0.1 s instead of 0.18 s. RUNNING: that, and "
                "while NATIVE RUN sprints A jumps the moment it is pressed (no charged leap while sprinting). "
-               "OFF: as before.",
+               "QUICK TAP by default. OFF: the old 0.18 s tap.",
                S(150), [&] { tabCombo("##earlyjump", Item::earlyJump); });
         settingOption(Item::softLanding, "Soft landing (experimental)",
                "Falling with no web, your fall eases to 9 m/s over the last 3 m (or 0.35 s) before the "
@@ -2072,6 +2287,59 @@ void App::options(ImVec2 origin, ImVec2 size) {
                "On a wall with the left stick at rest, squeeze a grip near the wall to hold on and pull to "
                "climb; both grips held roll your view along it.",
                S(42), [&] { tabToggle("##handclimb", Item::handClimb); });
+        settingOption(
+            Item::wallBrake, "Wall brake (experimental)",
+            "On a wall (with hand climbing on), squeeze a grip with your palm on it while sliding or "
+            "falling along it: you slow down as friction would (about 1.2 s from 10 m/s with one hand, "
+            "half that with two; pressing the palm in harder grips harder), then you hold on as usual. "
+            "Your hands buzz with the slide. Off by default.",
+            S(42), [&] { tabToggle("##wallbrake", Item::wallBrake); });
+        settingOption(
+            Item::gripFling, "Grip fling (experimental)",
+            "Squeeze a grip with your palm on a surface (the ground, a wall, anything), pull your hand "
+            "and let go: you are flung the other way, about 1.3 times your hand speed, at most 9 m/s. "
+            "Slow pulls do nothing. Letting go with the other hand still holding does nothing. Works from "
+            "the ground too, and a palm on a surface will not shoot a web. Off by default.",
+            S(42), [&] { tabToggle("##gripfling", Item::gripFling); });
+        settingOption(
+            Item::handGrab, "Hand grab (experimental)",
+            "Squeeze a grip with your palm within 35 cm of an enemy (first) or a prop: you take hold of it "
+            "by hand instead of shooting a web. It rides 45 cm ahead of your palm; punch it with your "
+            "other fist; let go with your hand moving to throw it (up to 1.6 times your hand speed, at "
+            "most 18 m/s), or swing your hand down fast to slam it into the ground. One hand lifts a "
+            "normal enemy; bigger ones need two hands or only drag. Holding costs a normal enemy almost "
+            "nothing. Off by default.",
+            S(42), [&] { tabToggle("##handgrab", Item::handGrab); });
+        settingOption(
+            Item::handGrabForce, "Hand grab strength",
+            "One hand's force in newtons (400 to 4000). A hand lifts 7.5% of it in kilograms: 90 kg at "
+            "1200 N, the default, which holds a normal enemy; bigger ones need more, or two hands. "
+            "Needs Hand grab on.",
+            S(150), [&] { tabCombo("##handgrabforce", Item::handGrabForce); });
+        settingOption(
+            Item::enemyHoldCost, "Hand grab hold cost",
+            "How fast holding an enemy tires your grip (none, 1, 2, 3 or 5): a normal enemy costs "
+            "almost nothing at 1, a heavy one much more. None: it never tires. Needs Hand grab on.",
+            S(150), [&] { tabCombo("##holdcost", Item::enemyHoldCost); });
+        settingOption(
+            Item::physicalTethers, "Web tethers (experimental)",
+            "A simulated rope on each web you hold on a prop or an enemy, so the line sags and drapes, drawn "
+            "in the game's own web. Snap your hand and the wave runs down the line and jerks what is on it "
+            "toward you (up to 14 m/s, less for a heavy one). Circle your hand and what is on the web orbits "
+            "you; let go and it is slung. Let go of the grip with the trigger held and the line pays out "
+            "after the prop: the trigger's depth brakes it, fully squeezed it locks, and letting go of the "
+            "trigger cuts it. A sharp pull yanks it back. Off by default.",
+            S(42), [&] { tabToggle("##webtethers", Item::physicalTethers); });
+        settingOption(
+            Item::tetherParticles, "Tether points",
+            "How many points the rope is simulated with (12 to 32). Drawing is at most 6 bends either way. "
+            "Needs Web tethers on.",
+            S(150), [&] { tabCombo("##tetherpoints", Item::tetherParticles); });
+        settingOption(
+            Item::tetherSubsteps, "Tether steps",
+            "How many steps a frame the rope takes (4 to 16). Fewer is cheaper and a little stretchier. "
+            "Needs Web tethers on.",
+            S(150), [&] { tabCombo("##tethersteps", Item::tetherSubsteps); });
         settingOption(Item::joystickRunCamera, "Joystick wall run camera",
                "On: a joystick run turns your view onto the wall, as before. Off: the left stick drives the "
                "momentum wall run's view and gait.",
@@ -2103,6 +2371,39 @@ void App::options(ImVec2 origin, ImVec2 size) {
                       "Enemies that block in the base game block your punches and web strikes until they are "
                       "webbed or stunned. Off: nobody guards, as before.",
                       S(42), [&] { tabToggle("##enemytypes", Item::enemyTypes); });
+        settingOption(Item::punchAutotarget, "Punch auto-target",
+               "Punch toward an enemy you have targeted (the one the ring marks) and your body, your aim and the "
+               "icons turn onto him that moment. Punches always do the same damage; only a targeted enemy is "
+               "tracked. Needs the enemy within the cone and range below.",
+               S(42), [&] { tabToggle("##punchautotarget", Item::punchAutotarget); });
+        settingOption(Item::punchTrackCone, "Punch track cone",
+               "How far off the targeted enemy a punch can be thrown and still track him (45 degrees by default).",
+               S(150), [&] { tabCombo("##punchtrackcone", Item::punchTrackCone); });
+        settingOption(Item::punchTrackRange, "Punch track range",
+               "How far away the targeted enemy can be and still be tracked (6 m by default).",
+               S(150), [&] { tabCombo("##punchtrackrange", Item::punchTrackRange); });
+        settingOption(Item::punchViewSnap, "Punch view snap",
+               "A tracked punch turns your view onto the enemy too. Off by default: your view stays where you "
+               "look and only your body and aim turn.",
+               S(42), [&] { tabToggle("##punchviewsnap", Item::punchViewSnap); });
+        settingOption(Item::jumpPull, "Jump pull",
+               "Jump toward an enemy and, in your own air with no web out, he pulls you a little: the enemy "
+               "within the cone of where you look (or where the left stick points while you hold it) and the "
+               "range below, until the jump has added the limit. Never in the game's own jump animation.",
+               S(42), [&] { tabToggle("##jumppull", Item::jumpPull); });
+        settingOption(Item::jumpPullGaze, "Jump pull gaze",
+               "How far off an enemy you can look and still be pulled toward him (20 degrees by default).",
+               S(150), [&] { tabCombo("##jumppullgaze", Item::jumpPullGaze); });
+        settingOption(Item::jumpPullStick, "Jump pull stick",
+               "How far off an enemy the left stick can point and still pull you toward him (25 degrees by "
+               "default).",
+               S(150), [&] { tabCombo("##jumppullstick", Item::jumpPullStick); });
+        settingOption(Item::jumpPullRange, "Jump pull range",
+               "How far away an enemy can be and still pull you (12 m by default).",
+               S(150), [&] { tabCombo("##jumppullrange", Item::jumpPullRange); });
+        settingOption(Item::jumpPullCap, "Jump pull limit",
+               "The most speed a jump's pull adds in all (1.5 m/s by default).",
+               S(150), [&] { tabCombo("##jumppullcap", Item::jumpPullCap); });
     });
     group(4, 0, "Flip controls", [&] {
         settingOption(Item::realisticFlips, "Realistic flips (experimental)",
@@ -2135,6 +2436,10 @@ void App::options(ImVec2 origin, ImVec2 size) {
                    [&] { tabCombo("##handmomentum", Item::automaticHandStrength); });
         settingOption(Item::automaticAirBrake, "Air rotation brake", "A in the air stops the spin and brings you upright.", S(42),
                    [&] { tabToggle("##brake", Item::automaticAirBrake); });
+        settingOption(Item::airCorrect, "Air upright time",
+                   "How long A in the air takes to bring you upright, smoothly with no jerk at either end. "
+                   "Needs Realistic flips. 1 second by default.",
+                   S(150), [&] { tabCombo("##aircorrect", Item::airCorrect); });
         settingOption(Item::automaticCombat, "Flips in combat",
                    "Off: while enemies are near, and 3 s after, arms and webs stop turning you and you come "
                    "upright.",
@@ -2172,6 +2477,10 @@ void App::options(ImVec2 origin, ImVec2 size) {
                [&] { tabToggle("##reelhaptics", Item::reelHaptics); });
         settingOption(Item::swingHaptics, "Swing haptics", "Swinging on a taut web ticks softly in that hand, faster as you speed up.",
                S(42), [&] { tabToggle("##swinghaptics", Item::swingHaptics); });
+        settingOption(Item::moveHaptics, "Move haptics",
+               "Jumps, wall jumps, zip launches and landings thump both controllers, scaled by speed; a point "
+               "jump gives a double thump. Its own strength (0-200%): Controller vibration does not scale it.",
+               S(150), [&] { tabCombo("##movehaptics", Item::moveHaptics); });
     });
     group(5, 1, "Body haptics", [&] {
         settingOption(Item::bodyHaptics, "Body haptics", "A bHaptics vest, sleeves and visor feel webs, blows, wind and Spider-Sense; the "
@@ -2307,7 +2616,414 @@ void App::options(ImVec2 origin, ImVec2 size) {
                "How softly the recording view turns with your head; the headset's view is never smoothed.",
                S(150), [&] { tabCombo("##recordingsmoothing", Item::recordingSmoothing); });
     });
-    group(8, 0, "Troubleshooting", [&] {
+    {
+        using spidy::vr_settings::Category;
+        const int cameraPage = static_cast<int>(Category::camera);
+        const int shootersPage = static_cast<int>(Category::shooters);
+        const int legsPage = static_cast<int>(Category::legs);
+        const int pointJumpPage = static_cast<int>(Category::pointJump);
+        const int showtimePage = static_cast<int>(Category::showtime);
+        group(cameraPage, 0, "Camera motion (how much)", [&] {
+            settingOption(Item::cameraMotion, "Camera motion preset",
+                   "How much of the animation's own camera motion reaches your view while Native Animation "
+                   "carries it. Full is as before; Light, Heavy and Comfort calm it step by step. Picking one "
+                   "fills the four rows below; changing any of them shows Custom.",
+                   S(150), [&] { tabCombo("##cameramotion", Item::cameraMotion); });
+            settingOption(Item::cameraPitch, "Pitch",
+                   "The animation nodding your view up and down. 0% keeps it level, 100% is all of it. Your "
+                   "own head always moves the view 1:1.",
+                   S(150), [&] { tabCombo("##camerapitch", Item::cameraPitch); });
+            settingOption(Item::cameraRoll, "Roll",
+                   "The animation leaning the horizon. 0% keeps it level (like Head: Level, but the view "
+                   "still turns with Spider-Man). Flips still turn fully.",
+                   S(150), [&] { tabCombo("##cameraroll", Item::cameraRoll); });
+            settingOption(Item::cameraBobVertical, "Bob up/down",
+                   "The head bobbing up and down with steps and landings. 0% steady, 100% all of it. Where "
+                   "you are (your feet) is never changed.",
+                   S(150), [&] { tabCombo("##camerabobv", Item::cameraBobVertical); });
+            settingOption(Item::cameraBobSide, "Bob side",
+                   "The head swaying side to side and fore-aft. 0% steady, 100% all of it.",
+                   S(150), [&] { tabCombo("##camerabobs", Item::cameraBobSide); });
+            settingOption(Item::cameraHeadAngle, "Head angle",
+                   "Tilts the animated view below (Down) or above (Up) the horizon, up to 30 degrees. Level "
+                   "is as before. Your own head still moves the view 1:1 on top.",
+                   S(150), [&] { tabCombo("##cameraheadangle", Item::cameraHeadAngle); });
+            settingOption(
+                Item::cameraHorizonLevel, "Horizon level",
+                "Removes this share of the view's roll and pitch tilt, in Native Animation and in SpidyVR "
+                "(swing, air, combat, wall). 100% keeps the horizon level. Flips still turn fully and your "
+                "own head always moves the view 1:1. Off by default.",
+                S(150), [&] { tabCombo("##camerahorizon", Item::cameraHorizonLevel); });
+        });
+        group(cameraPage, 1, "Camera smoothing (how smoothly)", [&] {
+            settingOption(
+                Item::cameraStabilization, "Stabilization",
+                "Off uses the Camera rows below; Light, Heavy and Steady use their own rows, with heavier "
+                "speed damping (Steady the most: 350/300/450 ms to start). Smooths only what the view adds; "
+                "your head stays 1:1.",
+                S(150), [&] { tabCombo("##camerastab", Item::cameraStabilization); });
+            settingOption(
+                Item::cameraVrStabilization, "VR stabilization",
+                "Also applies the Camera rows, Horizon level and the chosen bank's turn smoothing to the "
+                "view "
+                "tilt in SpidyVR (swinging, air, combat, walls), not only in Native Animation. It never "
+                "touches your headset's own look, the turn or where you are. On by default (nothing changes "
+                "until Stabilization or the amounts are set).",
+                S(150), [&] { tabCombo("##cameravrstab", Item::cameraVrStabilization); });
+            settingOption(Item::punchViewEase, "Punch view ease",
+                   "When a punch hands you from the animation back to VR, the view stays where the animation "
+                   "showed it and eases onto your feet over this time (fast at first, settling last; sooner "
+                   "while you move). Hands and webs move with the view. Off: the old instant jump. 250 ms by "
+                   "default.",
+                   S(150), [&] { tabCombo("##punchviewease", Item::punchViewEase); });
+            settingOption(Item::airViewEase, "Air view ease",
+                   "The same hold and ease for the timed jump handoff, a flip break and the grip cancel: the "
+                   "view stays where the animation showed it and eases onto your feet; hands and webs move with "
+                   "it. Off: the old instant snap. 250 ms by default.",
+                   S(150), [&] { tabCombo("##airviewease", Item::airViewEase); });
+            settingOption(Item::movementMode, "Movement mode",
+                   "HYBRID (default): the view stays on Spider-Man's head, its turn included. The left stick's "
+                   "front half is free movement (he runs where it points while the view keeps the right stick's "
+                   "heading; straight ahead, within 15 degrees, your head steers him inside a 30-degree window); "
+                   "pushing it into the rear half turns him and the view to that exact direction. STABLE: "
+                   "Step B, the view's turn on a steady heading of its own. OLD: head-bone steering.",
+                   S(150), [&] { tabCombo("##movementmode", Item::movementMode); });
+            settingOption(Item::rearSnap, "Rear snap turn",
+                   "HYBRID: how fast the view turns for the left stick's rear snap (over 100 degrees back snaps, "
+                   "back under 80 or to neutral re-arms). 200 ms by default, like a head turn; Instant is a frame "
+                   "switch. The hero turns at the game's pace. Used only with Headset first off (on, the back stick "
+                   "runs you backward and the view stays).",
+                   S(150), [&] { tabCombo("##rearsnap", Item::rearSnap); });
+            settingOption(Item::headsetFirst, "Headset first",
+                   "On (default): the left stick runs relative to where your headset looks at the moment you press "
+                   "it (afterwards it follows only your own head and right-stick turns), never relative to the body "
+                   "that is still turning, and pushing it back runs you backward: the body turns round, your view "
+                   "stays. Off: the old HYBRID heading.",
+                   S(42), [&] { tabToggle("##headsetfirst", Item::headsetFirst); });
+            settingOption(Item::animHeadRide, "Head ride",
+                   "In a landing, a perch or standing still, the view's turn rides Spider-Man's head bone (eased "
+                   "in and out). It turns your view without you, so it is off by default; with Headset first on, "
+                   "the animation otherwise never turns your view.",
+                   S(42), [&] { tabToggle("##animheadride", Item::animHeadRide); });
+            settingOption(Item::shoulderLimit, "Shoulder limit",
+                   "Turns the view back when your head is turned more than 90 degrees past his shoulders. It "
+                   "turns your view without you, so it is off by default.",
+                   S(42), [&] { tabToggle("##shoulderlimit", Item::shoulderLimit); });
+            settingOption(Item::animYawSway, "Anim yaw sway",
+                   "With Head lock Full and View yaw source Stable: the view's left-right turn comes from your "
+                   "steady heading, not the hero's head; this much of the animation's head sway is added back. "
+                   "100% is the old feel (the view on the head). 20% by default. With Headset first on, the head's "
+                   "sway is never shown.",
+                   S(150), [&] { tabCombo("##animyawsway", Item::animYawSway); });
+            settingOption(Item::turnInPlace, "Turn-in-place angle",
+                   "Standing still with the steady heading: once you look (or turn with the right stick) this far "
+                   "from where the hero faces, he turns to face it. Off: he never turns by himself. 35 degrees "
+                   "by default.",
+                   S(150), [&] { tabCombo("##turninplace", Item::turnInPlace); });
+            settingOption(Item::cameraVertical, "Camera vertical", "Up/down smoothing with Stabilization Off.",
+                   S(150), [&] { tabCombo("##cameravertical", Item::cameraVertical); });
+            settingOption(Item::cameraHorizontal, "Camera horizontal", "Side/forward smoothing with Stabilization Off.",
+                   S(150), [&] { tabCombo("##camerahorizontal", Item::cameraHorizontal); });
+            settingOption(Item::cameraAngle, "Camera angle", "Turn smoothing with Stabilization Off.",
+                   S(150), [&] { tabCombo("##cameraangle", Item::cameraAngle); });
+            settingOption(Item::lightVertical, "Light vertical", "Up/down smoothing with Stabilization Light.",
+                   S(150), [&] { tabCombo("##lightvertical", Item::lightVertical); });
+            settingOption(Item::lightHorizontal, "Light horizontal", "Side/forward smoothing with Stabilization Light.",
+                   S(150), [&] { tabCombo("##lighthorizontal", Item::lightHorizontal); });
+            settingOption(Item::lightAngle, "Light angle", "Turn smoothing with Stabilization Light.",
+                   S(150), [&] { tabCombo("##lightangle", Item::lightAngle); });
+            settingOption(Item::heavyVertical, "Heavy vertical", "Up/down smoothing with Stabilization Heavy.",
+                   S(150), [&] { tabCombo("##heavyvertical", Item::heavyVertical); });
+            settingOption(Item::heavyHorizontal, "Heavy horizontal", "Side/forward smoothing with Stabilization Heavy.",
+                   S(150), [&] { tabCombo("##heavyhorizontal", Item::heavyHorizontal); });
+            settingOption(Item::heavyAngle, "Heavy angle", "Turn smoothing with Stabilization Heavy.",
+                   S(150), [&] { tabCombo("##heavyangle", Item::heavyAngle); });
+            settingOption(Item::steadyVertical, "Steady vertical",
+                          "Up/down smoothing with Stabilization Steady.", S(150),
+                          [&] { tabCombo("##steadyvertical", Item::steadyVertical); });
+            settingOption(Item::steadyHorizontal, "Steady horizontal",
+                          "Side/forward smoothing with Stabilization Steady.", S(150),
+                          [&] { tabCombo("##steadyhorizontal", Item::steadyHorizontal); });
+            settingOption(Item::steadyAngle, "Steady angle", "Turn smoothing with Stabilization Steady.",
+                          S(150), [&] { tabCombo("##steadyangle", Item::steadyAngle); });
+        });
+        group(shootersPage, 0, "Web shooters", [&] {
+            settingOption(Item::shooterMode, "Shooters",
+                   "Controller: webs leave along the controller, as before. Locked to arm: along the forearm "
+                   "of the arm you see, in Native Animation too, falling back to your learned forearm when "
+                   "the arm cannot be read. Palm: a quarter turn out of the palm.",
+                   S(150), [&] { tabCombo("##shootermode", Item::shooterMode); });
+            settingOption(Item::shooterLock, "Lock strength",
+                   "With Locked to arm: how much of the arm's line your webs take. 100% is fully on your arm; "
+                   "lower leans back toward the controller.",
+                   S(150), [&] { tabCombo("##shooterlock", Item::shooterLock); });
+            settingOption(Item::webAngle, "Web angle",
+                   "Tilts the line your webs leave along, up or down, 15 to 45 degrees, on top of Shooters. "
+                   "0: as chosen above. Punches keep the controller's own.",
+                   S(150), [&] { tabCombo("##webangleshooters", Item::webAngle); });
+            settingOption(
+                Item::animForearmFallback, "Arm aim fallback",
+                "In Native Animation, webs aim along your controller once his forearm is this far off it "
+                "(his arm is deformed there). Off: always the forearm. 60 degrees by default.",
+                S(150), [&] { tabCombo("##animforearmfallback", Item::animForearmFallback); });
+        });
+        group(shootersPage, 1, "Replaced settings", [&] {
+            ImGui::PushTextWrapPos(0);
+            ImGui::TextDisabled("Web aim, Forearm blend, Forearm aim limit, Wrist shooters and Palm shooters are "
+                                "now the two rows on the left. Your saved values carry over: Model forearm or "
+                                "Wrist shooters is Locked to arm, Forearm blend is Lock strength, Palm shooters "
+                                "is Palm. Forearm aim limit is no longer used.");
+            ImGui::PopTextWrapPos();
+        });
+        group(legsPage, 0, "Legs (advanced)", [&] {
+            settingOption(Item::legControl, "Leg control (advanced)",
+                   "Hold Y and X together in midair or while swinging and the right stick poses your legs: "
+                   "forward a jackknife, back a rearward splay, left and right splays. Y and X do nothing else "
+                   "while held together. Let go of them and the legs stay while you keep moving the stick (your "
+                   "left thumb is free for the left stick); the right stick back to centre ends them. Works with Controlled "
+                   "flips or Realistic flips (the legs' swing and spread feed Realistic flips' momentum); "
+                   "with neither, turning this on turns Controlled flips on.",
+                   S(42), [&] { tabToggle("##legcontrol", Item::legControl); });
+            settingOption(Item::legStiffness, "Leg stiffness",
+                   "How firmly the legs hold the stick's pose. Lower swings more.",
+                   S(150), [&] { tabCombo("##legstiffness", Item::legStiffness); });
+            settingOption(Item::legDamping, "Leg damping",
+                   "How fast the legs' swing settles. Lower keeps them swinging.",
+                   S(150), [&] { tabCombo("##legdamping", Item::legDamping); });
+            settingOption(Item::legCoupling, "Leg coupling",
+                   "How much the legs' swing turns your body in the air.",
+                   S(150), [&] { tabCombo("##legcoupling", Item::legCoupling); });
+            settingOption(Item::passiveLegs, "Passive legs",
+                   "In SpidyVR's air without Leg control engaged, the legs swing on their own with your "
+                   "momentum (swings, spins, slowing down). This much of it is shown; Off keeps the old legs. "
+                   "Works without Leg control; 60% by default.",
+                   S(150), [&] { tabCombo("##passivelegs", Item::passiveLegs); });
+            settingOption(Item::passiveCoupling, "Passive coupling",
+                   "How much the passive legs' swing turns you, as a share of Leg coupling (you still have to "
+                   "swing for a big effect). Needs Controlled or Realistic flips to turn you. 15% by default.",
+                   S(150), [&] { tabCombo("##passivecoupling", Item::passiveCoupling); });
+            settingOption(Item::legAirCrouch, "Air crouch",
+                   "Upright in the air with hang time or near the top of a jump, not spinning: the legs fold "
+                   "into the ground jump's midair crouch. On by default.",
+                   S(42), [&] { tabToggle("##legaircrouch", Item::legAirCrouch); });
+            settingOption(Item::legReachSpread, "Reach spread",
+                   "A hand reaching down between your legs: they spread and lift forward with bent knees to "
+                   "clear your arm. On by default.",
+                   S(42), [&] { tabToggle("##legreachspread", Item::legReachSpread); });
+        });
+        group(legsPage, 1, "Swing kick (experimental)", [&] {
+            settingOption(
+                Item::swingKickManual, "Swing kick",
+                "Swinging on a web with the legs engaged (Y+X), flick the right stick up (a quick, firm "
+                "push; a slow push still poses the legs) to kick the enemy the ring marks: 3 to 14 m away, "
+                "within 30 degrees of the way you are swinging, at 9 m/s or faster. The web lengthens or "
+                "shortens a little and nudges you toward him, never adding speed; a hit is a hard blow that "
+                "sends him flying, and you keep most of your speed. A miss just fades out. Off by default.",
+                S(42), [&] { tabToggle("##swingkick", Item::swingKickManual); });
+            settingOption(
+                Item::swingKickAuto, "Auto dive kick",
+                "The dive you already have: a fast swing, zip or fall straight at the marked enemy lets go "
+                "of "
+                "the webs and kicks him feet first. Turn it off to kick only by hand with Swing kick. Both "
+                "can be on; the dive waits while a hand kick is under way. On by default.",
+                S(42), [&] { tabToggle("##swingkickauto", Item::swingKickAuto); });
+        });
+        group(legsPage, 1, "Air kicks (experimental)", [&] {
+            settingOption(
+                Item::kicks, "Air kicks",
+                "Off the ground with the legs engaged (Y+X), flick the right stick (a quick, firm push; a slow "
+                "push still poses the legs): up is a two-leg dive, up-left or up-right a one-leg dive, a quarter "
+                "circle from a side up to the top a spinning roundhouse, and any other flick a lighter freeform "
+                "kick. Look at a head, chest or legs to aim at it; a fast foot that meets an enemy lands a "
+                "blow, harder the faster it goes. The swing kick keeps its own flick while swinging. Off by "
+                "default.",
+                S(42), [&] { tabToggle("##airkicks", Item::kicks); });
+            settingOption(
+                Item::kickGazeCone, "Air kick aim",
+                "How far from where you look a head, chest or legs can be and still be aimed at (10 to 50 "
+                "degrees). The foot bends toward it a little, never more than 25 cm. Needs Air kicks on.",
+                S(150), [&] { tabCombo("##kickaim", Item::kickGazeCone); });
+            settingOption(
+                Item::kickSpin, "Air kick spin",
+                "How much of a kick's turn on your body the legs keep (none to 100%). 30% by default: a "
+                "roundhouse turns you a little, not around. Needs Air kicks on.",
+                S(150), [&] { tabCombo("##kickspin", Item::kickSpin); });
+        });
+        group(legsPage, 1, "Handstand (experimental)", [&] {
+            settingOption(
+                Item::handstand, "Handstand",
+                "Come down upside down (at least 100 degrees over) with both palms on a flat floor and your "
+                "hands catch you and balance you; push off the palms to launch, lift them to drop to your "
+                "feet. Needs Realistic flips (VR FLIPS) on; the rows here say so while it is off. On by "
+                "default.",
+                S(42), [&] { tabToggle("##handstand", Item::handstand); });
+            settingOption(
+                Item::handstandAssist, "Balance assist",
+                "Steadies the balance on your palms as you lean (it steers the centre of pressure). Off: "
+                "you balance it entirely yourself. Needs Realistic flips. On by default.",
+                S(42), [&] { tabToggle("##handstandassist", Item::handstandAssist); });
+            settingOption(
+                Item::handstandFall, "Fall angle",
+                "How far you can lean before you drop to your feet (15 to 60 degrees). 50 by default. "
+                "Needs Realistic flips.",
+                S(150), [&] { tabCombo("##handstandfall", Item::handstandFall); });
+            settingOption(
+                Item::handstandSupport, "Balance support",
+                "How far around your palms you can sway and still hold the handstand (10 to 30 cm). 18 by "
+                "default (it was 12). Needs Realistic flips.",
+                S(150), [&] { tabCombo("##handstandsupport", Item::handstandSupport); });
+            settingOption(
+                Item::handstandGrace, "Sway time",
+                "How long you can be off balance before you fall (100 to 1500 ms). 500 by default (it was "
+                "120). Needs Realistic flips.",
+                S(150), [&] { tabCombo("##handstandgrace", Item::handstandGrace); });
+            settingOption(
+                Item::handstandDamping, "Sway damping",
+                "How quickly a sway dies down (none to 600%). 250% by default (it was none). Needs "
+                "Realistic flips.",
+                S(150), [&] { tabCombo("##handstanddamping", Item::handstandDamping); });
+            settingOption(
+                Item::handstandLeap, "Handstand leap",
+                "Press A, hold the left stick hard, or push off the palms to leap out at once, up and "
+                "forward along where you look. Off: only the push-off leaves. On by default. Needs "
+                "Realistic flips.",
+                S(42), [&] { tabToggle("##handstandleap", Item::handstandLeap); });
+            settingOption(
+                Item::handstandPushGain, "Push-off strength",
+                "How hard a push of your palms into the floor launches you, as a share of the palms' speed "
+                "(100% to 400%). 220% by default. Needs Realistic flips.",
+                S(150), [&] { tabCombo("##handstandpush", Item::handstandPushGain); });
+            settingOption(
+                Item::handstandPushMax, "Push-off top speed",
+                "The fastest a push-off can launch you, in metres per second (2 to 12). 7 by default. "
+                "Needs Realistic flips.",
+                S(150), [&] { tabCombo("##handstandpushmax", Item::handstandPushMax); });
+            settingOption(
+                Item::handstandHeight, "Balance height",
+                "Where the balance counts your centre of mass over your palms (60 to 140 cm). 95 by "
+                "default. Needs Realistic flips.",
+                S(150), [&] { tabCombo("##handstandheight", Item::handstandHeight); });
+            settingOption(
+                Item::handstandGain, "Balance assist strength",
+                "How strongly the balance assist steers (50% to 600%). 500% by default. Needs Realistic "
+                "flips.",
+                S(150), [&] { tabCombo("##handstandgain", Item::handstandGain); });
+            settingOption(
+                Item::handstandEyeDrop, "View drop",
+                "How far your view comes down toward the floor when you are upside down (0 to 120 cm). 90 "
+                "by default. Needs Realistic flips.",
+                S(150), [&] { tabCombo("##handstandeye", Item::handstandEyeDrop); });
+        });
+        group(pointJumpPage, 0, "Point jump (experimental)", [&] {
+            settingOption(Item::pointJump, "Point jump",
+                   "Whenever you touch a surface (the ground, a perch, a wall you run on), press A and B "
+                   "together to jump the way you are looking. A tap is a quick jump; hold up to the charge "
+                   "time for a bigger leap, with the charged leap's rumble. No point-launch smoke. Off by default.",
+                   S(42), [&] { tabToggle("##pointjump", Item::pointJump); });
+            settingOption(Item::pointJumpTrigger, "Trigger",
+                   "A+B together: press both within about 50 ms. Hold B, then A: hold B and press A; B let "
+                   "go of alone, or held a quarter second, is still the dodge, and a spider-sense warning "
+                   "makes B the dodge at once.",
+                   S(150), [&] { tabCombo("##pointjumptrigger", Item::pointJumpTrigger); });
+            settingOption(Item::pointJumpMinSpeed, "Tap speed",
+                   "How fast a quick tap launches you, metres per second. 9 by default.",
+                   S(150), [&] { tabCombo("##pointjumpmin", Item::pointJumpMinSpeed); });
+            settingOption(Item::pointJumpMaxSpeed, "Max speed",
+                   "How fast a full charge launches you, metres per second. 22 by default.",
+                   S(150), [&] { tabCombo("##pointjumpmax", Item::pointJumpMaxSpeed); });
+            settingOption(Item::pointJumpFull, "Charge time",
+                   "How long to hold both buttons for the full charge. 1 second by default.",
+                   S(150), [&] { tabCombo("##pointjumpfull", Item::pointJumpFull); });
+            settingOption(Item::pointJumpPush, "Surface push",
+                   "How much of the surface's own direction (up from the ground, out from a wall) is mixed "
+                   "into your look, so a flat look still leaves the surface. 25% by default; the jump never "
+                   "goes into the surface either way.",
+                   S(150), [&] { tabCombo("##pointjumppush", Item::pointJumpPush); });
+            settingOption(Item::pointJumpBullet, "Bullet body",
+                   "On a point jump your body turns along your eyes, any angle, straight down too, over about "
+                   "a tenth of a second, and comes upright when you land, web, press A or slow down. Your view "
+                   "never turns for it. On by default.",
+                   S(42), [&] { tabToggle("##pointjumpbullet", Item::pointJumpBullet); });
+        });
+        group(pointJumpPage, 1, "Point jump: more in spidy_vr.ini", [&] {
+            ImGui::PushTextWrapPos(0);
+            ImGui::TextDisabled("point_jump_chord_ms (50), point_jump_tap_ms (150), point_jump_curve (0 ease-out, "
+                                "1 linear), point_jump_min_out_degrees (10), point_jump_keep (25 percent of your "
+                                "speed kept across the jump), point_jump_coyote_ms (120), point_jump_buffer_ms "
+                                "(150), point_jump_cooldown_ms (250), point_jump_zip_guard_ms (400, after a game "
+                                "zip), point_jump_dodge_hold_ms (250) and point_jump_in_combat (1).");
+            ImGui::PopTextWrapPos();
+        });
+        group(showtimePage, 0, "Showtime (experimental)", [&] {
+            settingOption(Item::showtime, "Showtime",
+                   "Hold X and B together for a fifth of a second and your view steps outside Spidey, to watch him "
+                   "from behind and above; your head still looks and leans one to one. Let go and the "
+                   "view is back on his head, looking where it looked. X first: no dodge. B first: the dodge, then "
+                   "Showtime. Y held is the legs' flail, not Showtime. Off by default.",
+                   S(42), [&] { tabToggle("##showtime", Item::showtime); });
+            settingOption(Item::showtimeWhile, "While out",
+                   "Watch only: nothing you press starts anything (a web you already hold stays held). Keep "
+                   "control: the left stick walks the way the camera faces, A jumps, B dodges; webs, punches and "
+                   "flips stay off.",
+                   S(150), [&] { tabCombo("##showtimewhile", Item::showtimeWhile); });
+            settingOption(Item::showtimeFade, "Fade time",
+                   "The fade to black and back under each step out and in (150 ms by default). Cut: none.",
+                   S(150), [&] { tabCombo("##showtimefade", Item::showtimeFade); });
+            settingOption(Item::showtimeDistance, "Distance",
+                   "How far behind him the outside camera sits: 2.5 m by default. The camera never gets nearer "
+                   "than 0.8 m; nearer than that the picture goes black.",
+                   S(150), [&] { tabCombo("##showtimedistance", Item::showtimeDistance); });
+            settingOption(Item::showtimeHeight, "Height",
+                   "How high above his waist the camera sits (+0.3 m by default). While you are outside, the "
+                   "right stick up and down raises and lowers it from -0.5 m to +1.5 m in all.",
+                   S(150), [&] { tabCombo("##showtimeheight", Item::showtimeHeight); });
+            settingOption(Item::showtimeAngle, "Orbit angle",
+                   "Where the camera starts, off his back: 0 is straight behind him, 90 is beside him (35 "
+                   "degrees by default, an over-the-shoulder view).",
+                   S(150), [&] { tabCombo("##showtimeangle", Item::showtimeAngle); });
+            settingOption(Item::showtimeTurn, "Orbit turn",
+                   "The right stick orbits the camera round him while you are outside. Smooth turns at your own "
+                   "turn speed; Snap goes 30 degrees a flick under a 100 ms blink. Only the stick turns it, "
+                   "never his animation.",
+                   S(150), [&] { tabCombo("##showtimeturn", Item::showtimeTurn); });
+            settingOption(Item::showtimeFollow, "Follow",
+                   "How closely the camera keeps up with him. Always a smooth spring, never a cut: Soft trails "
+                   "more, Tight less. It catches up faster the further he gets.",
+                   S(150), [&] { tabCombo("##showtimefollow", Item::showtimeFollow); });
+            settingOption(Item::showtimeVignette, "Vignette",
+                   "Darkens the edges of the view as the camera itself moves fast (a swing, a zip): Light 25%, "
+                   "Strong 45%. It follows the camera's speed, never your head.",
+                   S(150), [&] { tabCombo("##showtimevignette", Item::showtimeVignette); });
+            settingOption(Item::showtimeSlowMo, "Slow motion in Showtime",
+                   "While you are outside, a click of the left stick starts slow motion as it does in play, "
+                   "drains the same meter and ends the same way. Off: the click does nothing out there.",
+                   S(42), [&] { tabToggle("##showtimeslowmo", Item::showtimeSlowMo); });
+            settingOption(Item::showtimeLatch, "Latch",
+                   "Double press: press and hold X+B again within a second of letting go and the camera stays "
+                   "out after you let go; press X+B once more to come back. Off: out only while held.",
+                   S(150), [&] { tabCombo("##showtimelatch", Item::showtimeLatch); });
+            settingOption(Item::showtimeChord, "Chord",
+                   "Hold X+B: you step outside by hand (the default). Auto only: the chord does nothing and X and B "
+                   "are the game's as always; only the automatic moments below take the camera out.",
+                   S(150), [&] { tabCombo("##showtimechord", Item::showtimeChord); });
+            settingOption(Item::showtimeAutoDodge, "Auto: dodges",
+                   "The camera steps outside by itself for a dodge and comes back 0.3 s after it ends (and not "
+                   "while you hold X+B). Perfect only: just the dodge the game slows time for. All: every dodge. "
+                   "A dodge keeps its own B while you are out.",
+                   S(150), [&] { tabCombo("##showtimeautododge", Item::showtimeAutoDodge); });
+            settingOption(Item::showtimeAutoFinish, "Auto: finishers (log only)",
+                   "Not in this build: when on, the session log notes each first-person scene that starts "
+                   "(whether the scene camera is the view) so the next build can tell finishers from cutscenes. "
+                   "It never moves the camera. Off by default.",
+                   S(42), [&] { tabToggle("##showtimeautofinish", Item::showtimeAutoFinish); });
+            settingOption(Item::showtimeBody, "Body (advanced)",
+                   "What you see of him from outside. Game pose: his head is shown (in play it is hidden because "
+                   "your eyes are inside it) and the body is whatever drives him now, the game's animation or "
+                   "your own body. As in play: the head stays hidden, to compare.",
+                   S(150), [&] { tabCombo("##showtimebody", Item::showtimeBody); });
+        });
+    }
+    group(static_cast<int>(spidy::vr_settings::categoryCount) + 1, 0, "Troubleshooting", [&] {
         settingOption(Item::none, "Normal camera on the monitor",
                "Only for a display driver error as VR starts: the game keeps its own camera, and the "
                "monitor shows it. Costs frame rate; shadows and far detail follow that camera, and "
@@ -3050,6 +3766,16 @@ void App::about(ImVec2 origin, ImVec2 size) {
         ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing, ImVec2(S(10), S(10)));
         ImGui::PushStyleColor(ImGuiCol_Text, vec(kLogText));
         ImGui::PushTextWrapPos(0);
+        ImGui::TextUnformatted(
+            "This build includes SpidyVR Native Animation: a community layer on Ilya "
+            "Mezerowsky's SpidyVR. Insomniac's animation keeps playing while SpidyVR controls "
+            "and your tracked arms sit on top. Inspired by vrfloofy's first-person mod.");
+        ImGui::TextUnformatted(
+            "Modified community build, GPL-3.0. Not an official Marvel or Insomniac product. "
+            "For Native Animation support, use the tyronmiller55-spec/SpidyVR fork, "
+            "not upstream Spidy's bug tracker.");
+        ImGui::TextUnformatted("The existing updater installs official Spidy, replacing this community layer. "
+                               "Use Native Animation packages from the fork to keep this mode.");
         ImGui::TextUnformatted("Spidy puts you inside Marvel's Spider-Man Remastered: your head is the camera, each hand "
                                "shoots its own web, and you swing, zip and throw with your own arms.");
         ImGui::TextUnformatted("Spidy changes nothing in the game's folder. It attaches to the game while it runs and "

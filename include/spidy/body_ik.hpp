@@ -156,9 +156,56 @@ bool prepare(Rig& rig, std::span<const float> restPose);
 // What the player's body should do, in model space (model units).
 struct Targets {
     bool head{};
+    // ANIMATED ARMS overlay: solve only the arm chains on top of the game's
+    // pose (torso/legs/root/head untouched unless torsoAssist). Requires
+    // armWeight; ignores the full-body yaw/plant/crawl paths. Not bodyOn.
+    bool armsOnly{};
+    // Wanted per-arm blend 0..1 while armsOnly (native_body fills from XR).
+    std::array<float, 2> armWeight{};
+    // GROUND KICKS (K3), armsOnly only: one leg (0 left, 1 right) kicks out to groundKickAt (model space, a
+    // point in the pose's own frame) over the game's standing pose, at groundKickWeight 0..1; the pelvis, the
+    // other leg and the torso stay on the animation. EXPERIMENTAL and headset-untested.
+    bool groundKick{};
+    int groundKickLeg{};
+    Vec3 groundKickAt{};
+    float groundKickWeight{};
+    // ANIMATED TORSO: a mapped/tracked head drives articulated spine/neck
+    // rooted at the authored waist, then arm IK. Actor/pelvis/lower joints
+    // never move here. Missing mapped head is not a guessed torso target.
+    bool torsoAssist{};
+    // ANIMATED AIR SPIN (animated_air_spin.hpp), armsOnly only: turn the whole
+    // animated skeleton (pelvis subtree) by this model-space rotation about
+    // the anim head after the arm solve — SpidyVR-style spherical midair on
+    // the game's pose. Identity: untouched. With it, `tilt` below (the rig's
+    // flip on the grips) is undone on the hand targets about `eyes` first, as
+    // the full-body path does, so arms solve level and then turn with it.
+    Quat yieldTilt{};
+    // Midair softlock / headbone: remap player frame = chest-forward eyes.
+    bool viewSoftlock{};
+    bool viewMapped{}; // already resolved with the eye anchor: never remap to chest again
     // In the air (swinging, falling): the legs keep the game's pose instead
-    // of standing on the ground.
+    // of standing on the ground. With airMomentum (a SpidyVR swing or an
+    // adopted leap, when XR has a velocity), they trail that pose with the
+    // body's linear and turning motion so they read as weight, not a freeze
+    // or a standing plant. With tuck, those same chains ease toward a
+    // knees-to-chest fold while the hold is down (the same blendSpeed as
+    // the arms taking weight). Kick, wall-run and crawl still take over.
     bool airborne{};
+    bool airMomentum{};
+    Vec3 airVelocity{}; // model-space metres per second, when airMomentum
+    bool tuck{};        // visual knees-to-chest; ignored unless airborne
+    // LEG CONTROL (leg_control.hpp): each leg's hip angles and knee bend in
+    // the body's frame (pitch forward +, side toward the body's left +),
+    // from the right stick and the legs' own swing. Only while
+    // airLegsAllowed; it replaces the momentum trail (its swing is its own).
+    struct LegAngles {
+        float pitch{}, side{}, knee{};
+    };
+    bool legControl{};
+    std::array<LegAngles, 2> legAngles{};
+    // The share of them shown, 0..1 (PASSIVE LEGS' percent; 1 for the stick,
+    // the flail and the auto poses; leg_layers.hpp). legControlWeight eases to it.
+    float legAmount = 1.f;
     // Directional running cycle; head and arms remain tracked.
     bool wallRun{};
     Vec3 runNormal{}, runAhead{};
@@ -319,12 +366,41 @@ struct Config {
     // How fast the body takes over from the game's pose and gives it back
     // (shares per second).
     float blendSpeed = 4;
+    // ANIMATED TORSO: waist yaw cap; pitch uses OG lean/maxLean.
+    // overlayTorsoPitchMax retained for config source compatibility.
+    // (TORSO UPDATE: the cap on the chest's turn toward the player, default ~80 degrees;
+    // vr_settings animated_torso_twist, via native_body::setTorsoTwist. 40 was the old waist cap.)
+    float overlayTorsoYawMax = 1.3962634f;  // ~80°
+    float overlayTorsoPitchMax = .4363323f; // ~25°
 };
 struct State {
     CrawlFeet crawlFeet;
     CrawlFeet outwardFeet;
     CrawlTurn crawlTurn;
     float weight{}, yaw{};
+    // Jump adopt (seedFromPose): the arms take the controllers at full weight
+    // from the first frame while the rest of the body blends in from the
+    // game's pose. Ends once the body is all in, or no longer wanted.
+    bool adoptArms{};
+    // Per-arm overlay blend while Targets::armsOnly (separate from weight).
+    std::array<float, 2> armWeight{};
+    // GROUND KICKS: the kicking leg's blend (Targets::groundKick), easing in and out.
+    float groundKickWeight{};
+    // Actual player torso demand angles for diagnostics (rad).
+    float overlayTorsoYaw{};
+    float overlayTorsoPitch{};
+    // Slice C tracking-lock diag: last armsOnly chest vs player look yaw (rad).
+    float overlayChestYaw{};
+    float overlayPlayerYaw{};
+    // TORSO UPDATE diag: the yaw the chest needs toward the player (rad, before the cap),
+    // the cap, the share of the capped yaw that kept both wrists reachable, the scale each
+    // overlay arm took and the elbow poles (chest axes) last used.
+    float overlayTwistWanted{};
+    float overlayTwistCap{};
+    float overlayTwistShare{1.f};
+    std::array<float, 2> overlayArmScale{1.f, 1.f};
+    std::array<Vec3, 2> overlayChestPole{};
+    bool overlaySoftlock{};
     float crawlWeight{};
     float crawlTwist{};
     float crawlOutwardMotion{};
@@ -355,7 +431,30 @@ struct State {
         Quat orientation{};
     };
     std::array<Held, 2> held{};
+    // Air-momentum legs: last smoothed foot points and last body forward
+    // (a simple spin). Cleared when airMomentum is off.
+    bool airFootSet{};
+    std::array<Vec3, 2> airFoot{};
+    bool airFwdSet{};
+    Vec3 airFwd{};
+    // Visual tuck: 0..1, eases toward Targets::tuck at Config::blendSpeed.
+    float tuckWeight{};
+    // Air-momentum legs' share, 0..1: in over airLegBlendSeconds while
+    // airLegsAllowed, out as smoothly on a landing or a wall's contact.
+    float airLegWeight{};
+    // LEG CONTROL's share, 0..1, in and out over airLegBlendSeconds.
+    float legControlWeight{};
+    std::array<Targets::LegAngles, 2> legAngles{}; // the last pose given, for the blend out
 };
+// PROCEDURAL LEGS ONLY IN THE AIR (the user, November 10 21:03: "procedural
+// legs are only in midair or during swinging"): the momentum trail and the
+// tuck may move the legs only while airborne and on nothing - no kick, wall
+// run, crawl, vent hands, plant or kneel.
+constexpr float airLegBlendSeconds = .2f;
+template <class T>
+inline bool airLegsAllowed(const T& t) {
+    return t.airborne && !t.kick && !t.wallRun && !t.crawl && !t.surfaceHands && !t.plant && !t.kneel;
+}
 // Turns the body's yaw by `radians` about the up, at once: the player snap
 // turned (body and all), or the model turned under the body (the hero's
 // actor turned in the world, which turns a still headset back as much).
@@ -374,6 +473,29 @@ struct Result {
 // sizes the body about the feet (1 the game's size), and `armScale` its arms
 // on top of that, each about its shoulder (the player's arms, measured by
 // the T-pose calibration). Leaves the pose as it was while the weight is 0.
+// Reconstruct the controller-equivalent grip from the ACTUAL solved hand
+// matrix. Calibrated hand axes preserve mirrored model rigs; no requested
+// target or authored chest orientation is substituted. Internal pose API.
+bool solvedGrip(const Pose& pose, const Rig& rig, const Config& config, unsigned hand, spidy::Pose& out);
 Result solve(Pose& pose, const Rig& rig, const Targets& targets, const Config& config, State& state, bool wanted,
              float dt, float scale = 1, float armScale = 1);
+// ANIMATED HYBRID: the animation takes the body back from the full-body solve
+// while another one takes over on the game's own pose (the ANIMATED ARMS
+// overlay, `armsOnly`, which never ramps `state.weight`). On its own the body
+// would leave on the first frame, while the view still glides onto the head.
+// This blends the full body out first, over `seconds`, toward `last` - its
+// final full-body targets - and never in. Leaves the pose as it was once the
+// weight is gone (and drops a weight left with no full-body targets).
+Result fadeOut(Pose& pose, const Rig& rig, const Targets& last, const Config& config, State& state, float dt,
+               float seconds, float scale = 1, float armScale = 1);
+// ANIMATED HYBRID jump adopt: the full-body solve picks the body up from the
+// game's pose on the frame a real jump leaves the ground. `snapshot` is that
+// live pose, as the game's animation left it (before any solve). The body's
+// yaw is set to the snapshot's hips (so they are not turned), its weight
+// starts from 0 (the first solved frame is the snapshot, less a frame's
+// blend), and the arms take the controllers at once (State::adoptArms).
+// With Targets::airborne the legs go on from the jump's own shape. `targets`
+// gives the up the yaw is measured about. False (state untouched) when the
+// rig or the snapshot cannot be used.
+bool seedFromPose(const Pose& snapshot, const Rig& rig, const Targets& targets, State& state);
 } // namespace spidy::body

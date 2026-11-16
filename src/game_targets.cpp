@@ -1,6 +1,7 @@
 // Finds web-grab candidates in-process, the way game_player finds the player.
 #include "spidy/game_targets.hpp"
 #include "spidy/guard.hpp"
+#include <algorithm>
 #include <chrono>
 #include <cmath>
 #include <cstring>
@@ -220,7 +221,7 @@ std::unordered_map<uint64_t, std::string> behaviorNow;
 // The names met for each actor record, joined with commas (a name once each, the bots' alone, at most about
 // 700 characters).
 std::unordered_map<uint64_t, std::string>
-joinNames(const std::vector<std::pair<uint64_t, const std::string*>>& seen,
+joinNames(const std::vector<std::pair<uint64_t, std::string>>& seen,
           const std::unordered_map<uint64_t, bool>& bots) {
     std::unordered_map<uint64_t, std::string> joined;
     for (const auto& [record, name] : seen) {
@@ -228,22 +229,59 @@ joinNames(const std::vector<std::pair<uint64_t, const std::string*>>& seen,
             continue;
         auto& list = joined[record];
         bool have{};
-        for (size_t at = list.find(*name); at != std::string::npos && !have; at = list.find(*name, at + 1))
+        for (size_t at = list.find(name); at != std::string::npos && !have; at = list.find(name, at + 1))
             have = (at == 0 || list[at - 1] == ',') &&
-                   (at + name->size() == list.size() || list[at + name->size()] == ',');
-        if (!have && list.size() + name->size() < 700)
-            list += (list.empty() ? "" : ",") + *name;
+                   (at + name.size() == list.size() || list[at + name.size()] == ',');
+        if (!have && list.size() + name.size() < 700)
+            list += (list.empty() ? "" : ",") + name;
     }
     return joined;
 }
+// The scan's cost since the last take (takeScanCost), under its own small lock.
+std::mutex costLock;
+game_targets::ScanCost scanCost;
+double scanTotalMs{};
 } // namespace
 
+game_targets::ScanCost game_targets::takeScanCost() {
+    std::lock_guard lock(costLock);
+    ScanCost c = scanCost;
+    c.meanMs = c.scans ? static_cast<float>(scanTotalMs / c.scans) : 0.f;
+    scanCost = {};
+    scanTotalMs = 0;
+    return c;
+}
+
 uint32_t game_targets::classOf(uintptr_t base, uintptr_t vtable) {
-    std::lock_guard lock(classesLock);
+    // Timed only when it has to wait: an uncontended lookup costs no clock.
+    if (!classesLock.try_lock()) {
+        const auto start = std::chrono::steady_clock::now();
+        classesLock.lock();
+        const float us = std::chrono::duration<float, std::micro>(std::chrono::steady_clock::now() - start).count();
+        std::lock_guard lock(costLock);
+        ++scanCost.classWaits;
+        scanCost.classWaitMaxUs = (std::max)(scanCost.classWaitMaxUs, us);
+    }
+    std::lock_guard lock(classesLock, std::adopt_lock);
     return lookup(base, vtable);
 }
 
+namespace {
+bool scanWalk(uintptr_t base, uint32_t kinds, std::vector<game_targets::Candidate>& out);
+}
 bool game_targets::scan(uintptr_t base, uint32_t kinds, std::vector<Candidate>& out) {
+    const auto start = std::chrono::steady_clock::now();
+    const bool found = scanWalk(base, kinds, out);
+    const double ms = std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - start).count();
+    std::lock_guard lock(costLock);
+    ++scanCost.scans;
+    scanTotalMs += ms;
+    scanCost.maxMs = (std::max)(scanCost.maxMs, static_cast<float>(ms));
+    return found;
+}
+namespace {
+bool scanWalk(uintptr_t base, uint32_t kinds, std::vector<game_targets::Candidate>& out) {
+    using namespace game_targets;
     out.clear();
     const auto table = pointer(base + registryTable);
     int32_t count{};
@@ -259,9 +297,12 @@ bool game_targets::scan(uintptr_t base, uint32_t kinds, std::vector<Candidate>& 
     std::unordered_map<uint64_t, Tracker> trackers;
     std::unordered_map<uint64_t, bool> bots;
     // The combat classes met, by actor record (the guard's census), and the Behavior ones.
-    std::vector<std::pair<uint64_t, const std::string*>> combatSeen, behaviorSeen;
+    std::vector<std::pair<uint64_t, std::string>> combatSeen, behaviorSeen;
     const auto size = imageSize(base);
-    std::lock_guard lock(classesLock);
+    // HITCH (9790d67 playtest, game-vr-20261115-113027: "punch scan" held each 10 s window's longest game-thread visit in
+    // 96 of 154 windows, 18-40 ms, in fights and out of them alike): this walk used to hold classesLock for the whole
+    // registry, every 250 ms per watch, and the game thread's punch scan takes the same lock in classOf() (up(), held())
+    // for each bot, so it waited out the whole walk. The lock now covers one class lookup at a time.
     for (uint32_t i = 0; i < static_cast<uint32_t>(count); ++i) {
         struct Entry {
             uintptr_t address;
@@ -297,14 +338,18 @@ bool game_targets::scan(uintptr_t base, uint32_t kinds, std::vector<Candidate>& 
         }
         if (head.vtable - base >= size)
             continue;
-        const uint32_t bits = lookup(base, head.vtable);
-        // The census's names (classesLock keeps them until the scan's end, where they are joined).
-        if (bits & combatClass)
-            if (const auto n = combatNames.find(head.vtable); n != combatNames.end())
-                combatSeen.emplace_back(head.record, &n->second);
-        if (bits & behaviorClass)
-            if (const auto n = behaviorNames.find(head.vtable); n != behaviorNames.end())
-                behaviorSeen.emplace_back(head.record, &n->second);
+        const uint32_t bits = game_targets::classOf(base, head.vtable);
+        // The census's names (0.8.7's guard census), copied under classesLock for this class alone: the walk no
+        // longer holds the lock through the registry (HITCH, above), so no pointer into the maps outlives it.
+        if (bits & (combatClass | behaviorClass)) {
+            std::lock_guard names(classesLock);
+            if (bits & combatClass)
+                if (const auto n = combatNames.find(head.vtable); n != combatNames.end())
+                    combatSeen.emplace_back(head.record, n->second);
+            if (bits & behaviorClass)
+                if (const auto n = behaviorNames.find(head.vtable); n != behaviorNames.end())
+                    behaviorSeen.emplace_back(head.record, n->second);
+        }
         if (bits & botHealthClass)
             healths[head.record] = entry.address;
         else if (bits & healthClass)
@@ -350,6 +395,7 @@ bool game_targets::scan(uintptr_t base, uint32_t kinds, std::vector<Candidate>& 
     }
     return true;
 }
+} // namespace
 // The game's own class names, from its type information.
 namespace {
 // A class's own name from its vtable's complete object locator, without the decoration (".?AVBotHealth@@").

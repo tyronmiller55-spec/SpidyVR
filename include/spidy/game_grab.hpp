@@ -42,6 +42,7 @@ struct Hand {
     // The web this hand just let go of (thrown, released or lost) still
     // hangs from `target`, at `end`, for trailSeconds: it is drawn falling
     // away with it rather than left where the target was. phase is 0.
+    // reserved: 1 for a body held by the palm (HAND GRAB), where no web is drawn.
     uint32_t trailing{}, reserved{};
 };
 // How long a web let go of is reported trailing its target.
@@ -184,6 +185,39 @@ void tieArmed(bool);
 // start): no tie, an enemy comes as before, and the ties there are let go,
 // as at a fight's end.
 void allowTies(bool on);
+// SOFT LOCK distance in metres (GrabConfig::softLock; 0 off).
+void softLock(float metres);
+// HAND GRAB (G2, hand_grab.hpp; hand_grab, hand_grab_force, enemy_hold_cost), EXPERIMENTAL: a grip squeezed
+// with the palm on a prop or an enemy takes it by hand. `on`; `force` N per hand (400 to 4000); `holdCost` (0
+// to 5). Off (as at a start): the hands let go of what they hold and every squeeze is as it was.
+void handGrab(bool on, float force, float holdCost);
+// Its account (WebGrab::handReport) and the hands holding by palm now (bits), for the swing's HandGrabLive.
+struct HandData {
+    uint32_t grabs{}, enemies{}, props{}, throws{}, slams{}, drops{}, lost{}, knocks{}, holding{};
+    uint32_t lastAction{}, lastKind{}, serial{};
+    float lastMass{}, lastSpeed{};
+};
+HandData handData();
+// PHYSICAL WEB TETHERS (W1, tether.hpp; physical_tethers, tether_particles, tether_substeps), EXPERIMENTAL: a
+// simulated rope on each web, a whip, a spin and a throw that keeps its line. Off (as at a start): the lines
+// kept after a throw are let go of and every web is as it was.
+void tetherSettings(bool on, unsigned particles, unsigned substeps);
+// Its account (WebGrab::tetherReport) and each hand's line to draw (WebGrab::tetherView), for the swing's TetherLive.
+struct TetherLine {
+    uint32_t count{}, flags{}; // flags: bit 0 active, 1 spinning, 2 kept after a throw
+    float tension{};
+    Vec3 end{};
+    Vec3 points[6]{};
+};
+struct TetherData {
+    uint32_t whips{}, spins{}, slings{}, throws{}, cuts{}, lastAction{}, serial{};
+    float lastSpeed{};
+    TetherLine lines[2];
+};
+TetherData tetherData();
+// Whether this hand's squeeze belongs to the hand grab in this sample (WebGrab::handClaims): the swing
+// gives such a hand no wall grip.
+bool handClaims(unsigned hand, const Input&);
 TieData tieData();
 // The kinds this build can move.
 constexpr uint32_t movableKinds = 1u << static_cast<unsigned>(game_targets::Kind::throwable) |

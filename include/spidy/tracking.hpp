@@ -78,4 +78,35 @@ inline Pose webShooter(Pose grip, unsigned hand) {
     const float palm = hand == 0 ? .01f : -.01f;
     return compose(grip, {{palm, .105f, 0}, {-.70710678f, 0, 0, .70710678f}});
 }
+// When the arms overlay has mapped a hand onto the head-bone frame, the
+// mapped grip is in world axes RELATIVE TO THE FEET, as published by
+// native_body::OverlayTracking. Action inputs/queries need absolute world
+// positions: translate exactly once; its orientation is already world-space.
+// The web shooter sits on that mapped grip — the glove the player sees. A
+// pre-existing held web keeps the caller's rig aim. A fresh animation
+// cancel is consumed before this helper and never dispatches a grip-out web.
+// Presentation must also follow held hands, without changing an existing
+// web's physical aim. Keep that transport separate from free-hand aim policy.
+inline bool worldDisplayedPose(Pose& world, Pose relative, Vec3 root) {
+    const auto q = relative.orientation;
+    const float norm = q.x*q.x + q.y*q.y + q.z*q.z + q.w*q.w;
+    if (!finite(relative.position) || !finite(root) || !std::isfinite(norm) ||
+        std::abs(norm-1.f) > .01f)
+        return false;
+    relative.position += root;
+    if (!finite(relative.position)) return false;
+    world = relative;
+    return true;
+}
+inline bool mapAimToDisplayedGrip(Pose& aim, Pose mappedGrip, Vec3 feet, unsigned hand, float webHold) {
+    Pose world;
+    if (hand > 1 || !std::isfinite(webHold) || webHold > .5f ||
+        !worldDisplayedPose(world, mappedGrip, feet))
+        return false;
+    const Pose next = webShooter(world, hand);
+    if (!finite(next.position)) return false;
+    aim = next;
+    return true;
+}
+
 } // namespace spidy

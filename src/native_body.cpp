@@ -2,8 +2,13 @@
 // game's animation writes them (native_body.hpp, body_ik.hpp).
 #include "spidy/native_body.hpp"
 #include "spidy/body_ik.hpp"
+#include "spidy/upper_frame.hpp"
+#include "spidy/tracking.hpp"
 #include "spidy/game_fp.hpp"
 #include "spidy/guard_pose.hpp"
+#include "spidy/hybrid_handoff.hpp"
+#include "spidy/arm_frame.hpp"
+#include "spidy/view_yaw_lock.hpp"
 #include "spidy/native_appearance.hpp"
 #include <MinHook.h>
 #include <algorithm>
@@ -36,8 +41,9 @@ void* writerHook{};
 bool hooked{};
 std::atomic<bool> enabled{};
 SRWLOCK lifecycle = SRWLOCK_INIT, commandLock = SRWLOCK_INIT, solveLock = SRWLOCK_INIT,
-        statusLock = SRWLOCK_INIT, forearmLock = SRWLOCK_INIT;
+        statusLock = SRWLOCK_INIT, forearmLock = SRWLOCK_INIT, headLock = SRWLOCK_INIT;
 Command command{};
+animated_view::Targets commandView{};
 uint64_t commandDeadline{};
 // The probe's joint roles for a rig of `overrideJoints` joints (0: none).
 struct Roles {
@@ -64,15 +70,53 @@ struct Cache {
     body::Rig ik;
     std::vector<float> rest; // for the probe's capture
     uint32_t problem = native_body::noRig;
+    // HEAD PROBE: the head and neck by name, the head's parent chain, and
+    // which of head_probe::candidateNames the rig has (read with the rig).
+    int head = -1, neck = -1;
+    uint32_t chain{}, candidates{};
 };
 std::array<Cache, 4> caches;
 uint64_t cacheUses{};
 std::atomic<uint32_t> rolesSerial{1};
 body::State state;
+std::array<float, 2> overlayArmWeight{};
+bool overlayTorsoAssist{};
+Quat yieldTiltBody{}, yieldTiltHands{}; // ANIMATED AIR SPIN (setYieldTilt), world axes
+bool viewSoftlock{}; // midair softlock / headbone remap player frame
+float overlayTorsoTwist = body::Config{}.overlayTorsoYawMax; // setTorsoTwist
+SRWLOCK anchorLock = SRWLOCK_INIT;
+upper_frame::Anchor originalHead{};
+Quat actionJobTurn{};
+uintptr_t actionInstance{};
+native_body::OverlayTracking overlayTrackingSample{};
 body::Targets lastTargets;
+// The last full-body (bodyOn) targets: what the body fades out on when the animation takes it
+// back under the ANIMATED ARMS overlay (body::fadeOut).
+body::Targets lastBodyTargets;
+// Midair swing / adopted-leap look (setAirMomentum): world velocity, model-mapped
+// onto Targets::airVelocity when airborne. Cleared when the call is empty.
+Vec3 airWorldVel{};
+bool airWorldVelSet{};
+// Visual tuck hold (setTuck): mapped onto Targets::tuck when airborne.
+bool airTuckHeld{};
+// LEG CONTROL (setLegControl): mapped onto Targets::legControl when airborne.
+bool legControlOn{};
+std::array<body::Targets::LegAngles, 2> legControlAngles{};
+float legControlAmount = 1.f; // PASSIVE LEGS' shown share (setLegControl)
+// GROUND KICKS (setGroundKick): the standing kick's leg, mapped onto Targets::groundKick in the armsOnly path.
+bool groundKickOn{};
+int groundKickLeg{};
+Vec3 groundKickFoot{};
+float groundKickShare{};
+// ANIMATED HYBRID jump / air adopt (beginJumpAdopt): wanted since this tick (0 none), the live
+// pose snapshot taken at the first bodyOn job, and that first frame's result.
+uint64_t adoptWantedTick{};
+std::array<float, native_body::maxJoints * 16> adoptSnapshot{};
+native_body::JumpAdopt adoptSample{};
 // The body's turn away from the wall at the last solve (crawlOutwardWeight),
 // for the XR thread, which must not wait out a solve for it.
 std::atomic<float> outwardWeight{};
+std::atomic<float> handWaitEma{}; // HAND PREDICTION: the pose job's wait for a command, s
 // The hero's instance and rig at the previous hero job (solveLock): another
 // instance is another actor, and the body starts over on it.
 uintptr_t lastInstance{}, lastRig{};
@@ -101,6 +145,14 @@ std::atomic<uint32_t> heroJobsThisFrame{};
 // head, whatever an earlier job of the frame did.
 std::atomic<uint64_t> lastDrawn{};
 std::atomic<bool> latestSolved{};
+// HEAD PROBE (head_probe.hpp): on, and the latest sample (headLock).
+std::atomic<bool> headProbeOn{};
+// SHOULDER LIMIT (camera_mode.hpp): the chest's forward in world (x, z) as the
+// game's animation left it, before the body's solve, and when (GetTickCount64).
+std::atomic<float> chestForwardX{0}, chestForwardZ{0};
+std::atomic<uint64_t> chestTick{};
+head_probe::Sample headProbeSample{};
+uint64_t headProbeJobs{};
 
 bool read(uintptr_t p, void* out, size_t n) {
     __try {
@@ -338,6 +390,17 @@ Cache& rigEntry(uintptr_t rig) {
     } else {
         entry.joints = static_cast<uint32_t>(data.parent.size());
         entry.problem = identify(data, entry.ik);
+        // HEAD PROBE: found by name as identify() does, whether or not the
+        // body can use the rig.
+        entry.head = byName(data, {"head"});
+        entry.neck = byName(data, {"neck", "neck_A", "neck_01", "neck1"});
+        if (entry.neck < 0 && entry.head >= 0)
+            entry.neck = data.parent[entry.head];
+        for (int j = entry.head; j >= 0 && entry.chain <= data.parent.size(); j = data.parent[j])
+            ++entry.chain;
+        for (unsigned i = 0; i < head_probe::candidateCount; ++i)
+            if (byName(data, {head_probe::candidateNames[i]}) >= 0)
+                entry.candidates |= 1u << i;
         if (!entry.problem && !body::prepare(entry.ik, data.rest))
             entry.problem = native_body::badRest;
         entry.rest = data.rest;
@@ -366,15 +429,97 @@ void solveHero(float* out, uintptr_t job, uintptr_t instance) {
     if (!cache.problem && cache.ik.ready)
         game_fp::setHeadAxes(cache.ik.headForward, cache.ik.headUp, cache.ik.eyesFromHead);
     Command wanted{};
+    uint64_t sampleDeadline{};
+    animated_view::Targets view{};
     AcquireSRWLockShared(&commandLock);
     wanted = command;
+    sampleDeadline = commandDeadline;
+    view = commandView;
     const bool live = GetTickCount64() < commandDeadline;
     ReleaseSRWLockShared(&commandLock);
     const bool on = live && (wanted.flags & native_body::bodyOn);
+    // ANIMATED ARMS: arm-only overlay while bodyOn is clear (pose yield).
+    const bool armsOverlayOn = live && !on && (wanted.flags & native_body::armsOverlay);
+    // ANIMATED AIR SPIN: turn the yielded anim skeleton (armsOnly path, zero
+    // arm weight unless the overlay is on too).
+    const bool spinOn = live && !on && body::angle(body::unit(yieldTiltBody)) > 1e-3f;
     uint32_t problem = cache.problem;
     const bool turned = read(instance, transform, sizeof(transform)) && instanceTurn(transform, toWorld);
     if (!problem && !turned)
         problem = native_body::badInstance;
+    // HEAD PROBE: the head as the game's animation wrote it, before the body's
+    // solve. Read only.
+    const bool probing = headProbeOn.load(std::memory_order_relaxed);
+    head_probe::Sample probe{};
+    const int probeHead = cache.ik.head >= 0 && !cache.problem ? cache.ik.head : cache.head;
+    const bool probeReady = cache.ik.ready && !cache.problem;
+    const Vec3 probeForward = probeReady ? cache.ik.headForward : Vec3{0, 0, 1},
+               probeUp = probeReady ? cache.ik.headUp : Vec3{0, 1, 0};
+    if (probing) {
+        probe.joints = cache.joints;
+        probe.problem = problem;
+        probe.head = probeHead;
+        probe.neck = cache.neck;
+        probe.chain = cache.chain;
+        probe.candidates = cache.candidates;
+        probe.turned = turned;
+        probe.toWorld = toWorld;
+        probe.root = {transform[12], transform[13], transform[14]};
+        probe.bodyOn = on;
+        probe.headset = live;
+        probe.eyes = wanted.eyes;
+        probe.facing = wanted.facing;
+        if (probeHead >= 0 && probeHead < static_cast<int>(cache.joints)) {
+            const body::Pose game(out, static_cast<int>(cache.joints));
+            probe.gameHead = probe.shownHead = game.position(probeHead);
+            probe.gameForward = game.direction(probeHead, probeForward);
+            probe.gameUp = game.direction(probeHead, probeUp);
+        } else {
+            probe.head = -1;
+        }
+    }
+    // SHOULDER LIMIT: the chest (the spine's top) as the animation left it,
+    // before the body's solve (the player's torso turns the drawn one toward
+    // the headset; the limit is the animation's shoulders). Read only.
+    if (!problem && turned && cache.ik.ready && !cache.ik.spine.empty() &&
+        cache.ik.spineForward.size() == cache.ik.spine.size()) {
+        const int chest = cache.ik.spine.back();
+        if (chest >= 0 && chest < static_cast<int>(cache.joints)) {
+            const body::Pose game(out, static_cast<int>(cache.joints));
+            const Vec3 f = toWorld.rotate(game.direction(chest, cache.ik.spineForward.back()));
+            if (finite(f) && std::hypot(f.x, f.z) > .2f) {
+                chestForwardX.store(f.x, std::memory_order_relaxed);
+                chestForwardZ.store(f.z, std::memory_order_relaxed);
+                chestTick.store(GetTickCount64(), std::memory_order_release);
+            }
+        }
+    }
+    // The gameplay camera must never anchor to the HMD-driven render head.
+    // Preserve explicit authored full-body air-spin's original camera/torso
+    // policy; its arm solve and actual action frames still run below.
+    const bool playerTorso = armsOverlayOn && overlayTorsoAssist && !spinOn &&
+        view.frame != animated_view::Frame::none && view.frame != animated_view::Frame::missing && !problem;
+    upper_frame::Anchor authored;
+    authored.active = playerTorso;
+    authored.instance = instance;
+    authored.serial = wanted.serial;
+    authored.deadline = sampleDeadline;
+    if (playerTorso && probeHead >= 0 && probeHead < static_cast<int>(cache.joints)) {
+        const body::Pose original(out, static_cast<int>(cache.joints));
+        // Cache the calibrated eye frame, not raw joint axes plus unrelated
+        // live global calibration. Suit/rig changes remain one coherent job.
+        animated_view::headFrame(original.position(probeHead),
+            original.direction(probeHead, cache.ik.headForward),
+            original.direction(probeHead, cache.ik.headUp), cache.ik.eyesFromHead, authored.model);
+    }
+    AcquireSRWLockExclusive(&anchorLock);
+    // A native activation can precede its first matching pose command. Keep
+    // that pending camera boundary across an old-owner writer/missing view;
+    // otherwise it would briefly anchor to the modified OG/HMD render head.
+    if (!(originalHead.active && !originalHead.serial && overlayTorsoAssist &&
+          !spinOn && !playerTorso))
+        originalHead = authored;
+    ReleaseSRWLockExclusive(&anchorLock);
     body::Result result;
     float scale = 1, armScale = 1;
     const bool capture = captureWanted.exchange(false);
@@ -383,9 +528,11 @@ void solveHero(float* out, uintptr_t job, uintptr_t instance) {
         std::memcpy(SpidyBodyPoses.game, out, joints * 64ull);
     if (turned) {
         // The actor turned under the body since the last job: the body keeps
-        // facing the same way in the world.
+        // facing the same way in the world. While bodyOn is off (ANIMATED MOVES
+        // yield), only latch the facing — turning the IK state through parkour
+        // rotations left a stale yaw that yanked the VR body back on reclaim.
         const float facing = heading(transform);
-        if (actorHeadingSet)
+        if (on && actorHeadingSet)
             body::turnState(state, -std::remainder(facing - actorHeading, 6.2831853f));
         actorHeading = facing;
         actorHeadingSet = true;
@@ -397,7 +544,11 @@ void solveHero(float* out, uintptr_t job, uintptr_t instance) {
         trackingYaw = wanted.trackingYaw;
         trackingYawSet = true;
     }
-    if (!problem && (on || state.weight > 0)) {
+    const bool groundKickLive = live && !on && groundKickOn;
+    const bool armsBlend = !on && !armsOverlayOn &&
+                           (state.armWeight[0] > .001f || state.armWeight[1] > .001f || groundKickLive ||
+                            state.groundKickWeight > .001f);
+    if (!problem && (on || armsOverlayOn || armsBlend || spinOn || state.weight > 0)) {
         if (on) {
             // World axes relative to the feet into the hero's model space.
             const Quat toModel = toWorld.conjugate();
@@ -461,6 +612,17 @@ void solveHero(float* out, uintptr_t job, uintptr_t instance) {
                 t.crawlStrokes = {wanted.crawlStrokes[0], wanted.crawlStrokes[1]};
                 t.crawlDistance = wanted.version >= 9 ? wanted.crawlDistance : 0.f;
             }
+            // Procedural legs only in the air (body::airLegsAllowed): never
+            // planted, kneeling, on a wall run, a crawl or a vent.
+            const bool airLegs = body::airLegsAllowed(t);
+            if (airLegs && airWorldVelSet && finite(airWorldVel)) {
+                t.airMomentum = true;
+                t.airVelocity = toModel.rotate(airWorldVel);
+            }
+            t.tuck = airLegs && airTuckHeld;
+            t.legControl = airLegs && legControlOn;
+            t.legAngles = legControlAngles;
+            t.legAmount = legControlAmount;
             t.eyes = toModel.rotate(wanted.eyes);
             t.facing = toModel * wanted.facing;
             if (const Quat tilt = wanted.tilt; tilt.x != 0 || tilt.y != 0 || tilt.z != 0)
@@ -471,10 +633,103 @@ void solveHero(float* out, uintptr_t job, uintptr_t instance) {
                               wanted.shoot[i]};
             }
             lastTargets = t;
+            lastBodyTargets = t;
+        } else if (armsOverlayOn || armsBlend || spinOn) {
+            body::Targets t;
+            t.armsOnly = true;
+            t.torsoAssist = playerTorso;
+            t.armWeight = armsOverlayOn ? std::array<float, 2>{overlayArmWeight[0], overlayArmWeight[1]}
+                                        : std::array<float, 2>{};
+            const Quat toModel = toWorld.conjugate();
+            if (spinOn) {
+                t.yieldTilt = toModel * body::unit(yieldTiltBody) * toWorld;
+                if (body::angle(body::unit(yieldTiltHands)) > 1e-4f)
+                    t.tilt = toModel * body::unit(yieldTiltHands) * toWorld;
+            }
+            t.viewSoftlock = viewSoftlock;
+            t.up = toModel.rotate(Vec3{0, 1, 0});
+            t.groundKick = groundKickLive && finite(groundKickFoot);
+            t.groundKickLeg = groundKickLeg;
+            t.groundKickAt = t.groundKick ? toModel.rotate(groundKickFoot) : Vec3{};
+            t.groundKickWeight = groundKickShare;
+            t.eyes = toModel.rotate(wanted.eyes);
+            t.facing = toModel * wanted.facing;
+            for (int i = 0; i < 2; ++i) {
+                const auto& h = wanted.hands[i];
+                // Untracked hands get weight 0 from XR; still pass grip when
+                // tracked so the overlay can place the wrist.
+                t.hands[i] = {h.tracked != 0, toModel.rotate(h.grip), toModel * h.orientation, h.fist,
+                              wanted.shoot[i]};
+                if (!h.tracked)
+                    t.armWeight[i] = 0.f;
+            }
+            if (armsOverlayOn && view.frame != animated_view::Frame::none) {
+                const body::Pose game(out, static_cast<int>(joints));
+                Mat4 anchor{};
+                bool valid = animated_view::headFrame(
+                    game.position(cache.ik.head), game.direction(cache.ik.head, cache.ik.headForward),
+                    game.direction(cache.ik.head, cache.ik.headUp), cache.ik.eyesFromHead, anchor);
+                valid = valid && animated_view::modelAnchor(view, toWorld, anchor, anchor,
+                    {transform[12], transform[13], transform[14]});
+                // FULL head lock on the stable heading: the arms' anchor turned
+                // as the eyes are (view_yaw_lock.hpp), so the hands stay in view.
+                if (valid && view.frame == animated_view::Frame::full && view.yawLock) {
+                    view_yaw_lock::State lock;
+                    lock.on = true;
+                    lock.yaw = view.lockYaw;
+                    lock.sway = view.lockSway;
+                    lock.heroYaw = view.lockHero;
+                    lock.ride = view.lockRide;
+                    lock.limit = view.lockLimit;
+                    view_yaw_lock::noteUse(2, lock, view.lockAction);
+                    view_yaw_lock::turnModel(anchor, toWorld, lock);
+                }
+                if (valid) {
+                    const auto head = animated_view::resolve(anchor, view.head);
+                    t.eyes = head.position;
+                    t.facing = head.orientation;
+                    t.viewMapped = true;
+                    t.head = true;
+                    // HAND PREDICTION: the job measures its wait for the next
+                    // command's lead (handLeadWait); this one applies exactly the
+                    // lead the XR thread used for the actions' hand, so the glove,
+                    // the marker and the line start share one time base.
+                    if (view.sampledTicks > 0 && frequency.QuadPart > 0) {
+                        const float waited =
+                            static_cast<float>(now.QuadPart - view.sampledTicks) / frequency.QuadPart;
+                        if (waited >= 0 && waited < .2f) {
+                            const float was = handWaitEma.load(std::memory_order_relaxed);
+                            handWaitEma.store(was * .9f + waited * .1f, std::memory_order_relaxed);
+                        }
+                    }
+                    for (unsigned i = 0; i < 2; ++i) {
+                        const auto grip = animated_view::resolve(
+                            anchor, arm_frame::ahead(view.grips[i], view.gripVelocity[i], view.leadSeconds));
+                        // A lost hand keeps only its last valid target during its short fade.
+                        t.hands[i].tracked =
+                            view.valid[i] && (wanted.hands[i].tracked || overlayArmWeight[i] > 0);
+                        t.hands[i].grip = grip.position;
+                        t.hands[i].orientation = grip.orientation;
+                        t.armWeight[i] = upper_frame::armWeight(overlayTorsoAssist,
+                            wanted.hands[i].tracked != 0, view.valid[i], overlayArmWeight[i]);
+                        overlayTrackingSample.aim[i] =
+                            toWorld * animated_view::resolve(anchor, view.aims[i]).orientation;
+                    }
+                } else {
+                    // No usable animation frame: return arms to authored animation, not stale rig targets.
+                    t.armWeight = {};
+                    t.torsoAssist = false;
+                    for (auto& hand : t.hands)
+                        hand.tracked = false;
+                }
+            }
+            lastTargets = t;
         }
         body::Config config;
-        config.hideHead = wanted.flags & native_body::hideHead;
+        config.hideHead = upper_frame::hideHead((wanted.flags & native_body::hideHead) != 0,
+            armsOverlayOn, game_fp::followingHero());
         config.handOrientation = wanted.flags & native_body::handTurn;
+        config.overlayTorsoYawMax = overlayTorsoTwist;
         // The player's size: their T-pose calibration's eye height and arm,
         // or the headset's running height and the hero's own arms.
         heroProportions = body_calibration::proportions(cache.ik);
@@ -484,39 +739,135 @@ void solveHero(float* out, uintptr_t job, uintptr_t instance) {
                         ? body_calibration::bodyScale(wanted.height, heroProportions)
                         : std::clamp(wanted.height / cache.ik.eyeHeight, .85f, 1.2f);
         armScale = body_calibration::armScale(wanted.armLength, scale, heroProportions);
-        const float dt = lastSolve.QuadPart ? static_cast<float>(now.QuadPart - lastSolve.QuadPart) / frequency.QuadPart
-                                            : 0.f;
+        float dt = lastSolve.QuadPart
+                       ? static_cast<float>(now.QuadPart - lastSolve.QuadPart) / frequency.QuadPart
+                       : 0.f;
         lastSolve = now;
         body::Pose pose(out, static_cast<int>(joints));
-        result = body::solve(pose, cache.ik, lastTargets, config, state, on, dt, scale, armScale);
+        // ANIMATED HYBRID jump / air adopt: the first SpidyVR frame after a mid-air takeover is
+        // the pose the game's animation left him in. Snapshot it before the solve and seed.
+        bool adopted = false;
+        if (adoptWantedTick && GetTickCount64() - adoptWantedTick > 250)
+            adoptWantedTick = 0;
+        if (on && adoptWantedTick && joints <= native_body::maxJoints) {
+            adoptWantedTick = 0;
+            std::memcpy(adoptSnapshot.data(), out, joints * 64ull);
+            const body::Pose snapshot(adoptSnapshot.data(), static_cast<int>(joints));
+            adopted = body::seedFromPose(snapshot, cache.ik, lastTargets, state);
+            // A first frame long after the last solve would take the whole blend at once.
+            if (adopted && std::isfinite(dt))
+                dt = std::clamp(dt, 0.f, 1.f / 30);
+        }
+        // ANIMATED HYBRID T->G under ANIMATED ARMS: the overlay solves on the game's pose and never
+        // ramps the body's weight, so the body would leave at once while the view still glides onto
+        // the head. It fades out with that 180 ms glide first, so the neck stays under the view.
+        if (!on && lastTargets.armsOnly && state.weight > 0.f)
+            body::fadeOut(pose, cache.ik, lastBodyTargets, config, state, dt, hybrid_handoff::handoffSec,
+                          scale, armScale);
+        result = body::solve(pose, cache.ik, lastTargets, config, state, on || armsOverlayOn || armsBlend || spinOn, dt, scale, armScale);
+        if (adopted) {
+            const body::Pose snapshot(adoptSnapshot.data(), static_cast<int>(joints));
+            native_body::JumpAdopt a;
+            a.count = adoptSample.count + 1;
+            a.joints = joints;
+            a.hips = length(pose.position(cache.ik.pelvis) - snapshot.position(cache.ik.pelvis));
+            for (const auto& leg : cache.ik.legs)
+                for (const int j : {leg.upper, leg.lower, leg.foot})
+                    if (j >= 0 && j < static_cast<int>(joints))
+                        a.legs = std::max(a.legs, length(pose.position(j) - snapshot.position(j)));
+            a.weight = result.weight;
+            a.handError[0] = lastTargets.hands[0].tracked ? result.handError[0] : -1.f;
+            a.handError[1] = lastTargets.hands[1].tracked ? result.handError[1] : -1.f;
+            adoptSample = a;
+        }
+        // Internal diagnostic snapshot: all values belong to this command + pose job.
+        actionJobTurn = toWorld;
+        actionInstance = instance;
+        overlayTrackingSample.headError = result.headError;
+        overlayTrackingSample.headValid = result.solved && lastTargets.viewMapped && lastTargets.head;
+        overlayTrackingSample.mappedHead = {toWorld.rotate(lastTargets.eyes), toWorld * lastTargets.facing};
+        overlayTrackingSample.playerTorso = lastTargets.torsoAssist && lastTargets.head;
+        overlayTrackingSample.rootDrift = 0;
+        overlayTrackingSample.root = {transform[12], transform[13], transform[14]};
+        overlayTrackingSample.serial = wanted.serial;
+        overlayTrackingSample.deadlineMs = sampleDeadline;
+        overlayTrackingSample.targetFrame = lastTargets.viewMapped ? view.frame : animated_view::Frame::none;
+        for (unsigned i = 0; i < 2; ++i) {
+            const auto& hand = lastTargets.hands[i];
+            const auto& a = cache.ik.arms[i];
+            const Vec3 offset{i == 0 ? -config.wristFromGrip.x : config.wristFromGrip.x,
+                              config.wristFromGrip.y, config.wristFromGrip.z};
+            const Vec3 wrist = hand.grip + hand.orientation.rotate(offset);
+            overlayTrackingSample.requestedWeight[i] = overlayArmWeight[i];
+            overlayTrackingSample.grip[i] = toWorld.rotate(hand.grip);
+            overlayTrackingSample.gripOri[i] = toWorld * hand.orientation;
+            overlayTrackingSample.sourceGripOri[i] = wanted.hands[i].orientation;
+            overlayTrackingSample.wrist[i] = toWorld.rotate(wrist);
+            overlayTrackingSample.solvedWrist[i] = toWorld.rotate(pose.position(a.hand));
+            overlayTrackingSample.elbow[i] = toWorld.rotate(pose.position(a.lower));
+            overlayTrackingSample.valid[i] = result.solved && hand.tracked;
+            spidy::Pose actualGrip;
+            overlayTrackingSample.actualValid[i] = result.solved && hand.tracked &&
+                body::solvedGrip(pose, cache.ik, config, i, actualGrip);
+            overlayTrackingSample.actualGrip[i] = overlayTrackingSample.actualValid[i]
+                ? spidy::Pose{toWorld.rotate(actualGrip.position), toWorld * actualGrip.orientation}
+                : spidy::Pose{};
+            if (lastTargets.viewMapped && overlayTrackingSample.actualValid[i])
+                overlayTrackingSample.aim[i] = webShooter(overlayTrackingSample.actualGrip[i], i).orientation;
+            overlayTrackingSample.residual[i] = result.handError[i];
+            overlayTrackingSample.reachClamped[i] =
+                length(wrist - pose.position(a.upper)) >
+                (cache.ik.upperArm[i] + cache.ik.forearm[i]) * scale * armScale;
+            const Vec3 right = hand.orientation.rotate({1, 0, 0});
+            const Quat pitch = body::axisAngle(right, config.fingerPitch);
+            const Vec3 fingers = pitch.rotate(hand.orientation.rotate({0, -1, 0}));
+            const Vec3 palm = pitch.rotate(i == 0 ? right : -right);
+            overlayTrackingSample.angle[i] =
+                body::angle(body::between(pose.direction(a.hand, cache.ik.handFingers[i]),
+                                          pose.direction(a.hand, cache.ik.handPalm[i]), fingers, palm)) *
+                57.29578f;
+            if (!lastTargets.viewMapped)
+                overlayTrackingSample.aim[i] = {}; // XR caller uses its matching rig-space aim instead
+        }
         // MODEL FOREARM: each arm as this solve left it, in world axes.
-        native_body::Forearms arms;
+        native_body::Forearms forearmsOut;
         for (int i = 0; i < 2; ++i) {
             const auto& a = cache.ik.arms[i];
-            auto& f = arms.arms[i];
-            if (!result.solved || !on || a.lower < 0 || a.hand < 0 || a.lower >= static_cast<int>(joints) ||
+            auto& f = forearmsOut.arms[i];
+            if (!result.solved || !(on || armsOverlayOn || armsBlend || spinOn) || a.lower < 0 || a.hand < 0 || a.lower >= static_cast<int>(joints) ||
                 a.hand >= static_cast<int>(joints))
                 continue;
             f.elbow = toWorld.rotate(pose.position(a.lower));
             f.wrist = toWorld.rotate(pose.position(a.hand));
             const Vec3 palm = cache.ik.handPalm[i];
             f.palm = length(palm) > .5f ? normalized(toWorld.rotate(pose.direction(a.hand, palm))) : Vec3{};
-            f.grip = wanted.hands[i].orientation;
+            f.grip = lastTargets.viewMapped && overlayTrackingSample.actualValid[i]
+                         ? overlayTrackingSample.actualGrip[i].orientation
+                                            : wanted.hands[i].orientation;
             f.handError = result.handError[i];
             f.valid = wanted.hands[i].tracked && finite(f.elbow) && finite(f.wrist) &&
                       length(f.wrist - f.elbow) > 1e-3f;
         }
         const Quat tilt = wanted.tilt;
-        arms.tilted = tilt.x != 0 || tilt.y != 0 || tilt.z != 0;
+        forearmsOut.tilted = tilt.x != 0 || tilt.y != 0 || tilt.z != 0;
         AcquireSRWLockExclusive(&forearmLock);
         InterlockedIncrement64(&SpidyForearms.sequence);
-        arms.sequence = SpidyForearms.sequence;
-        arms.job = SpidyForearms.job + 1;
-        SpidyForearms = arms;
+        forearmsOut.sequence = SpidyForearms.sequence;
+        forearmsOut.job = SpidyForearms.job + 1;
+        SpidyForearms = forearmsOut;
         InterlockedIncrement64(&SpidyForearms.sequence);
         ReleaseSRWLockExclusive(&forearmLock);
     } else {
         lastSolve = now;
+    }
+    if (!result.solved) {
+        // A failed/missing latest writer is not permission to dispatch using
+        // an earlier successful pose which happens to retain a live lease.
+        actionInstance = 0;
+        overlayTrackingSample.deadlineMs = 0;
+        overlayTrackingSample.headValid = 0;
+        for (unsigned i=0;i<2;++i)
+            overlayTrackingSample.valid[i] = overlayTrackingSample.actualValid[i] = 0;
     }
     if (capture && joints <= native_body::maxJoints) {
         InterlockedIncrement64(&SpidyBodyPoses.sequence);
@@ -537,12 +888,37 @@ void solveHero(float* out, uintptr_t job, uintptr_t instance) {
                 jobRows[r * 3 + c] = transform[r * 4 + c];
         jobRowsSet = true;
     }
-    if (result.solved && on)
+    if (result.solved && (on || armsOverlayOn || armsBlend || spinOn))
         lastDrawn = GetTickCount64();
     outwardWeight = lastTargets.crawl && lastTargets.crawlTurnAway && state.crawlTurn.ready()
                         ? state.crawlTurn.outwardWeight(state.crawlTurn.angle())
                         : 0.f;
-    latestSolved = result.solved && on;
+    latestSolved = result.solved && (on || armsOverlayOn || armsBlend || spinOn);
+    if (armsOverlayOn || armsBlend) {
+        overlayTrackingSample.job++;
+        overlayTrackingSample.armWeight[0] = state.armWeight[0];
+        overlayTrackingSample.armWeight[1] = state.armWeight[1];
+        overlayTrackingSample.chestYaw = state.overlayChestYaw;
+        overlayTrackingSample.playerYaw = state.overlayPlayerYaw;
+        overlayTrackingSample.remapped = armsOverlayOn && !lastTargets.viewMapped ? 1u : 0u;
+        overlayTrackingSample.softlock = state.overlaySoftlock ? 1u : 0u;
+        overlayTrackingSample.chestTwist = state.overlayTorsoYaw;
+        overlayTrackingSample.twistWanted = state.overlayTwistWanted;
+        overlayTrackingSample.twistCap = state.overlayTwistCap;
+        overlayTrackingSample.twistShare = state.overlayTwistShare;
+        overlayTrackingSample.armScale[0] = state.overlayArmScale[0];
+        overlayTrackingSample.armScale[1] = state.overlayArmScale[1];
+    }
+    if (probing) {
+        // And as the body left it, then published (its own lock, a copy).
+        probe.solved = result.solved && (on || armsOverlayOn || armsBlend || spinOn);
+        if (probe.solved && probe.head >= 0)
+            probe.shownHead = body::Pose(out, static_cast<int>(cache.joints)).position(probe.head);
+        AcquireSRWLockExclusive(&headLock);
+        probe.job = ++headProbeJobs;
+        headProbeSample = probe;
+        ReleaseSRWLockExclusive(&headLock);
+    }
     const uint32_t switches = rigSwitches;
     LARGE_INTEGER finished{};
     QueryPerformanceCounter(&finished);
@@ -764,9 +1140,182 @@ void native_body::guardPose(uint64_t enemyRecord, uint32_t move, float strength)
         game_fp::note("guard pose: four cues and no pose job has had an enemy's joints (the body hook may be "
                       "off, or an enemy's joints are not where a pose job has them)");
 }
+void native_body::resyncAfterYield() {
+    AcquireSRWLockExclusive(&solveLock);
+    state = {};
+    adoptWantedTick = 0;
+    overlayArmWeight[0] = overlayArmWeight[1] = 0.f;
+    overlayTorsoAssist = false;
+    yieldTiltBody = yieldTiltHands = {};
+    viewSoftlock = false;
+    overlayTrackingSample = {};
+    actionInstance = 0;
+    AcquireSRWLockExclusive(&anchorLock);
+    originalHead = {};
+    ReleaseSRWLockExclusive(&anchorLock);
+    airTuckHeld = false;
+    actorHeadingSet = trackingYawSet = false;
+    actorHeading = trackingYaw = 0;
+    outwardWeight.store(0.f, std::memory_order_relaxed);
+    ReleaseSRWLockExclusive(&solveLock);
+}
+void native_body::beginReclaim() {
+    AcquireSRWLockExclusive(&solveLock);
+    // Warm: keep crawl/held latches; only reset what would fight the handoff.
+    adoptWantedTick = 0;
+    state.adoptArms = false;
+    state.weight = 0.f;
+    state.armWeight = {};
+    state.outwardAnchor = {};
+    state.overlayTorsoYaw = state.overlayTorsoPitch = 0.f;
+    if (actorHeadingSet) {
+        state.yaw = actorHeading;
+        state.yawSet = true;
+    } else {
+        state.yawSet = false;
+    }
+    overlayArmWeight[0] = overlayArmWeight[1] = 0.f;
+    overlayTorsoAssist = false;
+    yieldTiltBody = yieldTiltHands = {};
+    viewSoftlock = false;
+    overlayTrackingSample = {};
+    actionInstance = 0;
+    AcquireSRWLockExclusive(&anchorLock);
+    originalHead = {};
+    ReleaseSRWLockExclusive(&anchorLock);
+    // Fresh tracking yaw latch on the first bodyOn frame (no stale turnState jump).
+    trackingYawSet = false;
+    trackingYaw = 0;
+    state.airFootSet = state.airFwdSet = false;
+    state.airFoot = {};
+    state.airFwd = {};
+    state.tuckWeight = 0.f;
+    airTuckHeld = false;
+    outwardWeight.store(0.f, std::memory_order_relaxed);
+    ReleaseSRWLockExclusive(&solveLock);
+}
+void native_body::setArmOverlay(float left, float right) {
+    auto clamp01 = [](float v) {
+        return std::isfinite(v) ? std::clamp(v, 0.f, 1.f) : 0.f;
+    };
+    AcquireSRWLockExclusive(&solveLock);
+    overlayArmWeight[0] = clamp01(left);
+    overlayArmWeight[1] = clamp01(right);
+    ReleaseSRWLockExclusive(&solveLock);
+}
+
+
+void native_body::setTorsoAssist(bool on) {
+    AcquireSRWLockExclusive(&solveLock);
+    if (on && !overlayTorsoAssist) {
+        const auto hero = record.load();
+        AcquireSRWLockExclusive(&anchorLock);
+        originalHead.begin(hero ? pointer(hero) : 0);
+        ReleaseSRWLockExclusive(&anchorLock);
+    }
+    overlayTorsoAssist = on;
+    ReleaseSRWLockExclusive(&solveLock);
+}
+
+void native_body::setYieldTilt(Quat bodyTilt, Quat handTilt) {
+    auto clean = [](Quat q) {
+        return std::isfinite(q.x) && std::isfinite(q.y) && std::isfinite(q.z) && std::isfinite(q.w)
+                   ? body::unit(q)
+                   : Quat{};
+    };
+    AcquireSRWLockExclusive(&solveLock);
+    yieldTiltBody = clean(bodyTilt);
+    yieldTiltHands = clean(handTilt);
+    ReleaseSRWLockExclusive(&solveLock);
+}
+
+void native_body::setTorsoTwist(float maxRadians) {
+    AcquireSRWLockExclusive(&solveLock);
+    overlayTorsoTwist = std::isfinite(maxRadians) ? std::clamp(maxRadians, 0.f, 1.5707963f)
+                                                  : body::Config{}.overlayTorsoYawMax;
+    ReleaseSRWLockExclusive(&solveLock);
+}
+
+void native_body::setViewSoftlock(bool on) {
+    AcquireSRWLockExclusive(&solveLock);
+    viewSoftlock = on;
+    ReleaseSRWLockExclusive(&solveLock);
+}
+
+void native_body::setAirMomentum(const Vec3& worldVelocity) {
+    AcquireSRWLockExclusive(&solveLock);
+    if (finite(worldVelocity) && length(worldVelocity) > .01f) {
+        airWorldVel = worldVelocity;
+        airWorldVelSet = true;
+    } else {
+        airWorldVel = {};
+        airWorldVelSet = false;
+    }
+    ReleaseSRWLockExclusive(&solveLock);
+}
+
+void native_body::setGroundKick(bool on, int leg, Vec3 foot, float weight) {
+    AcquireSRWLockExclusive(&solveLock);
+    groundKickOn = on && finite(foot);
+    if (groundKickOn) {
+        groundKickLeg = leg == 0 ? 0 : 1;
+        groundKickFoot = foot;
+        groundKickShare = std::isfinite(weight) ? std::clamp(weight, 0.f, 1.f) : 0.f;
+    } else {
+        groundKickShare = 0.f;
+    }
+    ReleaseSRWLockExclusive(&solveLock);
+}
+
+void native_body::setTuck(bool held) {
+    AcquireSRWLockExclusive(&solveLock);
+    airTuckHeld = held;
+    ReleaseSRWLockExclusive(&solveLock);
+}
+
+void native_body::setLegControl(bool on, const std::array<body::Targets::LegAngles, 2>& legs, float amount) {
+    AcquireSRWLockExclusive(&solveLock);
+    legControlOn = on;
+    if (on) {
+        legControlAngles = legs;
+        legControlAmount = std::isfinite(amount) ? std::clamp(amount, 0.f, 1.f) : 1.f;
+    }
+    ReleaseSRWLockExclusive(&solveLock);
+}
+
+float native_body::tuckWeight() {
+    AcquireSRWLockShared(&solveLock);
+    const float w = state.tuckWeight;
+    ReleaseSRWLockShared(&solveLock);
+    return w;
+}
+
+void native_body::beginJumpAdopt() {
+    beginReclaim();
+    AcquireSRWLockExclusive(&solveLock);
+    adoptWantedTick = std::max<uint64_t>(GetTickCount64(), 1);
+    ReleaseSRWLockExclusive(&solveLock);
+}
+native_body::JumpAdopt native_body::jumpAdopt() {
+    AcquireSRWLockShared(&solveLock);
+    const JumpAdopt copy = adoptSample;
+    ReleaseSRWLockShared(&solveLock);
+    return copy;
+}
+native_body::OverlayTracking native_body::overlayTracking() {
+    AcquireSRWLockShared(&solveLock);
+    const OverlayTracking copy = overlayTrackingSample;
+    ReleaseSRWLockShared(&solveLock);
+    return copy;
+}
+
 void native_body::submit(const Command& next) {
+    submit(next, {});
+}
+void native_body::submit(const Command& next, const animated_view::Targets& view) {
     AcquireSRWLockExclusive(&commandLock);
     command = next;
+    commandView = view;
     commandDeadline = GetTickCount64() + std::min<uint32_t>(next.leaseMs, 500);
     ReleaseSRWLockExclusive(&commandLock);
 }
@@ -808,6 +1357,98 @@ native_body::Forearms native_body::forearms() {
     AcquireSRWLockShared(&forearmLock);
     auto out = SpidyForearms;
     ReleaseSRWLockShared(&forearmLock);
+    return out;
+}
+native_body::ActionFrame native_body::actionFrame() {
+    // Same order as solveHero's publication: solve -> forearm. No reader or
+    // writer acquires solveLock while holding forearmLock.
+    AcquireSRWLockShared(&solveLock);
+    AcquireSRWLockShared(&forearmLock);
+    ActionFrame out{overlayTrackingSample, SpidyForearms};
+    // The actor can turn/translate after its pose job. Use its real current
+    // root on every action read instead of stale job-world axes + rig feet.
+    float current[16]{};
+    Quat turn{};
+    const auto hero = record.load();
+    const auto instance = hero ? pointer(hero) : 0;
+    if (instance && instance == actionInstance && read(instance, current, sizeof(current)) &&
+        instanceTurn(current, turn)) {
+        const Quat delta = body::unit(turn * actionJobTurn.conjugate());
+        out.tracking.rootDrift = body::angle(delta);
+        out.tracking.root = {current[12], current[13], current[14]};
+        out.tracking.mappedHead = upper_frame::rebase(out.tracking.mappedHead, delta);
+        for (unsigned i=0;i<2;++i) {
+            auto& t = out.tracking;
+            t.actualGrip[i] = upper_frame::rebase(t.actualGrip[i], delta);
+            t.grip[i] = delta.rotate(t.grip[i]);
+            t.gripOri[i] = delta * t.gripOri[i];
+            t.wrist[i] = delta.rotate(t.wrist[i]);
+            t.solvedWrist[i] = delta.rotate(t.solvedWrist[i]);
+            t.elbow[i] = delta.rotate(t.elbow[i]);
+            t.aim[i] = delta * t.aim[i];
+            auto& f = out.forearms.arms[i];
+            f.elbow = delta.rotate(f.elbow); f.wrist = delta.rotate(f.wrist);
+            f.palm = delta.rotate(f.palm); f.grip = delta * f.grip;
+        }
+    } else {
+        out.tracking.headValid = 0;
+        for (unsigned i=0;i<2;++i) {
+            out.tracking.actualValid[i] = out.tracking.valid[i] = false;
+            out.forearms.arms[i].valid = false;
+        }
+    }
+    ReleaseSRWLockShared(&forearmLock);
+    ReleaseSRWLockShared(&solveLock);
+    return out;
+}
+int native_body::authoredHead(uintptr_t instance, Mat4& world) {
+    Mat4 root{};
+    if (!read(instance, root.data(), sizeof(root))) return -1;
+    AcquireSRWLockShared(&anchorLock);
+    const int result = originalHead.read(instance, GetTickCount64(), root, world);
+    ReleaseSRWLockShared(&anchorLock);
+    return result;
+}
+float native_body::handLeadWait() {
+    return handWaitEma.load(std::memory_order_relaxed);
+}
+int native_body::viewAnchorWorld(Mat4& world) {
+    const auto hero = record.load();
+    const auto instance = hero ? pointer(hero) : 0;
+    if (!instance) return 0;
+    // The game writes the actor's matrix on its own thread: read it until two
+    // reads agree (a torn read is never used), at most three tries. The arms
+    // then fall back to the pose job's mapping for that frame.
+    Mat4 root{}, again{};
+    bool stable = false;
+    for (int tries = 0; tries < 3 && !stable; ++tries) {
+        if (!read(instance, root.data(), sizeof(root)) || !read(instance, again.data(), sizeof(again)))
+            return -1;
+        stable = std::memcmp(root.data(), again.data(), sizeof(root)) == 0;
+    }
+    if (!stable) return -1;
+    AcquireSRWLockShared(&anchorLock);
+    const int result = originalHead.read(instance, GetTickCount64(), root, world);
+    ReleaseSRWLockShared(&anchorLock);
+    return result;
+}
+void native_body::setHeadProbe(bool on) {
+    headProbeOn = on;
+}
+bool native_body::heroChestYaw(float& yaw) {
+    const uint64_t at = chestTick.load(std::memory_order_acquire);
+    if (!at || GetTickCount64() - at > 250)
+        return false;
+    const float x = chestForwardX.load(std::memory_order_relaxed), z = chestForwardZ.load(std::memory_order_relaxed);
+    if (!std::isfinite(x) || !std::isfinite(z) || std::hypot(x, z) < .2f)
+        return false;
+    yaw = std::atan2(-x, -z); // the rig's yaw (view_yaw_lock::nativeYaw's)
+    return true;
+}
+head_probe::Sample native_body::headSample() {
+    AcquireSRWLockShared(&headLock);
+    auto out = headProbeSample;
+    ReleaseSRWLockShared(&headLock);
     return out;
 }
 native_body::Status native_body::status() {

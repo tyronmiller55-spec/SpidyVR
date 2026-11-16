@@ -1,0 +1,122 @@
+# Ownership: who drives Spider-Man's body (ANIMATED HYBRID)
+
+The single ownership table. It **replaces** every earlier ownership rule:
+- the Nov 8 08:50 ground-release rule;
+- the Nov 8 21:51 "grip cancel stays in SpidyVR until a native animation starts" rule;
+- jump adopt (SpidyVR taking the body on the takeoff frame);
+- the mid-air rotate and speed takeovers;
+- the ground grip cancel;
+- launch facing.
+
+Source: the user, Nov 9 09:34 PST. Code: `include/spidy/hybrid_owner.hpp`, the `HybridOwner::update` function.
+
+> Animation owns the ground, parkour, landings and jumps. SpidyVR owns the air and wall running / wall jumping.
+
+| Where / what | Owner | Switch |
+|---|---|---|
+| Ground, perch, the game's crawl, parkour | ANIM | VR → ANIM the moment he lands (`land`, or `mount` onto the game's crawl) |
+| Ground + grip or trigger | ANIM | **None.** Grip only enables SpidyVR's arm features on the animated arms (webs, web balls, punches, markers). The one exception is a punch's web strike under FULL ARMS (next rows). |
+| Jump, vault, point launch, Y zip, fall: any midair native animation | ANIM, then VR on the timer | **Nov 12 05:41 (JUMP TO SPIDYVR, `jump_handoff_ms`, default 500, **300 since Nov 14 with the air takeover: a jump's vertical speed under 4 m/s after 0.25 s, or a plain fall after `fall_handoff_ms` 150, hands over earlier**):** a plain jump, a fall, a zip launch, a vault or a wall launch plays animated for the timer's time in the air, then hands to VR (`jump-timer`; diag `jump handoff: <kind> after X ms`). A zip launch's timer counts from its rise; the zip's pull itself stays ANIM. The timer waits while he fights, dodges or zips. Landing before the timer: no switch. **STAY TO LANDING** (0) keeps the Nov 11 23:39 rule: the animation plays through the fall to the landing. |
+| Midair animation + a flip's pitch or tilt (either stick, see below) | VR | `flip-break`, **on the frame the input is read** (`HybridOwner::breakForFlip`, before that frame's tracking, hands and body). |
+| Midair animation + grip | VR | Grip cancel (`grip-cancel`). **Nov 14 (t70u): the squeeze is a web too.** The owner flips on that frame (`breakForCancel`) and the press is QUEUED through the handoff (`web_fire.hpp`): the swing gets it as a fresh press on the next frame, in whichever owner has the body then, and a tap is held 200 ms so it shoots. It is never dropped; every press is one `web fire:` line (owner, outcome, reason, aim error). Web balls (the trigger) are still not fired by the cancel. Before this a cancel consumed the press, and the other hand's squeeze while the gate waited for both to let go; the swing saw no web and the player saw only the switch. |
+| Midair animation + Spidy's wall | VR | `wallrun` |
+| Midair animation + a SpidyVR web attaching | VR | `web` |
+| Air after a break (flip, grip, web, wall) or the jump timer | VR | It stays VR until landing; landing on the feet always returns to ANIM (`land`). |
+| Y zip pressed from VR in the air | ANIM | `zip`, once the game begins the zip. A zip the game refuses never leaves VR. |
+| Spidy wall run / wall jump | VR | none |
+| Wall run that came out of a Native Run, stick let go on the wall | ANIM | `run-release`. It stays ANIM on that wall. |
+| FULL ARMS (`animated_full_arms`, on): a punch opens a web strike in an animation | VR | `punch`, for the strike's flight and hang, even on the ground. The hold needs a fresh strike sample (within 100 ms), lasts 4 s at most, and freezes the setting while it lasts (`full arms strike:` diag). It lands back in ANIM. |
+| POINT JUMP (`point_jump`, off by default) fired from the ground, a perch or Spidy's wall | VR | `point-jump`, **the approved ground exception** (the user, Nov 11: point jump may take over from the ground animation; lock the feet at the switch). On the frame the launch is sent (`Frame::pointJump`); the position lock puts the origin on the actor's feet; VR is held on the ground until he is off it (`Frame::pointJumpHold`, at most 400 ms). The air is VR's; landing on the feet returns to ANIM (`land`). See [POINT_JUMP.md](POINT_JUMP.md). |
+| GRIP FLING (`grip_fling`, off by default) let go of a pull with the palm on the ground, a wall or in the air | VR | Uses the point jump's path: **an approved ground exception** (the plan's locked decision: grip fling works everywhere, the ground included). The swing launches him (`EventKind::GripFling`, taken off as a point jump is); XR holds VR through the takeoff (`Frame::pointJumpHold`, at most 400 ms) from the swing's account (`SpidySwingGripLive`). The air and Spidy's wall are VR's already. See [GRIP.md](GRIP.md). |
+| HAND GRAB (`hand_grab`, off by default): grab, hold, punch, throw or slam a prop or an enemy, on the ground or in the air | ANIM stays ANIM (arms only) | No switch: the grab is the web grab's (a body moved by the hold law, the game's flight, a light kinetic blow), the throw is the body's. A hand holding a body is busy: no punch, no web, no wall grip. See [GRIP.md](GRIP.md). |
+| AIR KICKS (`kicks`, off by default): a flick of the right stick with the legs engaged, off the ground, kicks | VR (the legs are only free in SpidyVR's air, as LEG CONTROL has them) | None: no switch and no position lock change. The kick is the legs' top layer (`leg_layers::Layer::kick`) and a blow through `game_punch`; the body is not moved or turned by it beyond the legs' own spin reaction (KICK SPIN). The ground is GROUND KICKS (next row). The swing kick (K1) keeps its own flick; the auto dive holds back while either is under way. See [AIR_KICKS.md](AIR_KICKS.md). |
+| GROUND KICKS (`ground_kicks`, off by default): standing and slow, a flick of the right stick with the legs engaged kicks; a half circle across the bottom sweeps the legs | VR and the animation (the blow lands in either; the leg is drawn only while the animation owns the body) | Y + X on the ground is the legs' chord while the setting is on (neither button reaches the game while held; not where a prompt names X or Y), and the right stick does not turn while it is held; nothing else: no switch or position lock change. The blow is `game_punch::kickHit`'s; one leg of the animation's pose is solved onto the foot (`body_ik` armsOnly, `native_body::setGroundKick`), the pelvis, the other leg and the torso stay the animation's. See [GROUND_KICKS.md](GROUND_KICKS.md). |
+| ENEMY JOINTS (`enemy_joints`, `enemy_limb_zones`, both off by default): a kick reads an enemy's head and chest joints (and with the limb zones his forearms and shins) for its zones | Reads only: the game's pose of the enemy, the game's own `getJoint`; nothing is written | None: no switch, no position lock, no hook and no write; the enemy's skeleton is the game's. The zones come from `game_joints::read` into the kick's targets, with the capsule bands as the fallback; the limb zones stay off until `probe_c0_skeleton.py` has been run. R2 (overlay of an enemy's pose) is not built. See [ENEMY_JOINTS.md](ENEMY_JOINTS.md). |
+| WEB TETHERS (`physical_tethers`, off by default): each web held on a prop or an enemy is a simulated rope, drawn through the game's own web; a whip, a spin and a throw with the trigger held that keeps its line | VR (hands and the web grab) | None: no switch or position lock change. The rope is the mod's own sim, drawn through the verified hand points hook; the target is moved by the web grab's existing commands (Follow for a spin, Launch for a whip or a throw, Rope otherwise), at the web's force over the target's mass. Off, a web is as it was; a kept line is let go of when the setting goes off. The game's rope is never driven. See [TETHERS.md](TETHERS.md). |
+| QUICK SIDESTEP (`sidestep`, on by default) on the ground under the animation | VR | `sidestep`, **an approved ground exception** (the user, Nov 12: "Yes on sidestep"). A left-stick flick then A: on the frame the burst is sent (`Frame::sidestep`) the position lock puts the origin on the actor's feet; VR holds on the ground while the burst lasts (`Frame::sidestepHold`, 0.18 s by default); then the ground hands back to ANIM (`land`) with the position lock. See [SIDESTEP.md](SIDESTEP.md). |
+| Cutscene / stale sample | frozen | none |
+
+**Rules:**
+- No ownership switch happens on the ground, except a FULL ARMS punch's web strike (the user, Nov 9 22:27: "Punching can pull you out of the animation and teleport you"), a POINT JUMP's launch (Nov 11, approved), a QUICK SIDESTEP's burst (Nov 12, approved) and a GRIP FLING's launch (locked decision, build order Nov 13).
+- Otherwise, switching happens only in midair, on wall runs, and at Native Run's release.
+- The position lock (`position lock:` diag) runs on every switch.
+- **View handoff (Nov 12 05:41):** a punch, the jump timer, a flip break and a grip cancel hold the view where it was and ease it onto the new eyes (one code path, `view_ease.hpp` / `beginViewEase`; the rig placement moves, so eyes, hands, webs and body move together). Punch: PUNCH VIEW EASE; the others: AIR VIEW EASE (`air_view_ease_ms`, 250 by default; OFF = the old snap). Landing cancels an ease (`cancelled (landed)`). Diag: `<why> view ease: start offset X m, dur N ms` and `<why> view ease: <end> after N ms`.
+- **Legs across the timer:** Y+X may engage the legs during a midair animation (it is not zipped); an engaged hold carries into VR, and the air legs blend in over 0.2 s.
+- **SHOWTIME (X+B, experimental):** while the camera is out the view is the outside level frame; the owner (ANIM/VR) is not changed by it and nothing it does writes the heading authority or the hybrid latch ([SHOWTIME.md](SHOWTIME.md)). X and B are taken before FLAIL, POINT JUMP, the dodge and the wheel read them.
+- Same-frame breaks (flip, grip cancel, web, Spidy's wall) still come first, before the timer; right-stick turning never breaks; point jump and swing releases are instant.
+
+## Flip break (the user, Nov 11 23:39 and 23:41)
+
+> "Flips with the left or right stick cancel animations on that frame ... landing on your feet always snaps back to animation. Jumps are in animation until it's broken with a rotation, or grip cancel." "Turning left or right on the right stick should keep you in animation. Any cancel or pitch/tilt will break animation on that exact frame."
+
+What counts (`hybrid_owner::flipBreak`; dead zone 0.2, noise only):
+
+| Input | Breaks when |
+|---|---|
+| Right stick left / right | **Never** (the snap or smooth turn). |
+| Right stick up / down (pitch), diagonals by their up/down part | Basic FLIPS (the right stick flips), or LEG CONTROL in force (with CONTROLLED or REALISTIC FLIPS; the legs' swing pitches him). Not FLIPS' zip flick (`zipPriority`). With no flips on the right stick, up / down stays the zip / heal push and breaks nothing. |
+| Left stick, any way (pitch and tilt) | CONTROLLED FLIPS toggled on in the air (A), or REALISTIC FLIPS with FLIPS on (its left-stick steering). Otherwise the left stick steers the game's jump and breaks nothing. **Fresh push only (Nov 12):** a stick already tilted at takeoff is the run's; it breaks after it has rested inside the dead zone, or moved more than 60 deg from its takeoff direction (`hybrid_owner::FreshPush`). |
+| Grip cancel | Always, in a midair animation (the owner flips on that frame; the squeeze fires its web on the next, `web_fire.hpp`; no ball). |
+
+How (game_xr, `flip break:` and `grip cancel: anim->vr this frame` diag lines with the display time):
+- The right stick is read before the legs take it and before `rig.update`; the left stick right after `rig.update` (it reports the controlled flip's toggle). Either calls `breakForFlip`, which switches the owner at once; the owner's update later in the same frame reports `enterVr` with `flip-break`, so the usual handoff runs that frame: position lock on the actor's feet, the pose seeded from the air (`adoptsFromAir`), the swing's velocity kept.
+- The tracking rig reads the same stick that frame, so a basic flip or a controlled / realistic flip turns from the first frame (a basic flip's stick must have been at rest once in the air, as before).
+- With LEG CONTROL the push that broke goes to the legs from that frame (`legStickOwns`): a double tap's first push counts, the zip / heal fires on the second tap as in VR air. In the air with LEG CONTROL a single up / down push is the legs', not a zip.
+- On the ground nothing switches; a jump breaks on its first airborne frame if the stick is held.
+- Review M1 (ownership decided a frame late) is fixed for these two paths only; the other switches still decide in the owner's update.
+
+## When "the animation ended"
+
+The game does not tell the mod when a jump animation ends, so the mod uses a proxy (`hybrid_owner.hpp` constants). The animation counts as ended when all of these hold:
+- he has been off the ground at least **0.3 s**;
+- he has been falling (vertical velocity ≤ 0) for **0.15 s**;
+- no zip, fight or dodge is still going on.
+
+It always ends at **2.5 s** at the most. Since Nov 11 this is only read (diagnostics); the animation keeps the air until a break or the landing.
+
+The proxy has these consequences:
+- A short hop or step down lands inside 0.3 s and never switches.
+- A point launch rises the whole way to its top, so it plays in full.
+- A Y zip plays while its keys go out, and then through what it leads into:
+  - its point launch ends at the launch's top, by the same fall rule;
+  - a zip with no launch plays until he lands or perches, or 3 s.
+
+## Nothing of the mod's is steered into the game's animation
+
+The following were removed: launch facing, the facing seed after a handoff, and the model-yaw R-stick hero turn during a midair animation.
+
+In the air, the R stick turns the camera as in the main game. The player's own L stick is still mapped to the view, as on the ground.
+
+## Facing check on every event (Nov 12 07:14)
+
+Every ownership event (landing, point launch, jump handoff, anim re-entry, takeover) checks the facing within 0.3 s against the view shown before it: a view more than 45 deg off is turned back (yaw lock or rig), a hero more than 45 deg off (90 until the G1 playtest) on the animation's side is turned to it by the walk stick (forced TURN-IN-PLACE, kept pending up to 2.5 s for a standing frame; the player's left stick wins). Details: [FACING_CHECK.md](FACING_CHECK.md).
+
+### Dodges and the head ride (G1 playtest fixes)
+
+The G1 logs (Nov 14): after a dodge the view and the body were more than 45 deg apart 37-40% of the time, and 37-52% of the landing head rides started more than 45 deg between the view and the head bone.
+
+- **The turn after a dodge.** The hero turn (TURN-IN-PLACE, the look's and the facing check's) is blocked while the fight lasts, and a fight lasts 3 s past the last enemy in reach, so a dodge's turn was never made up. From 0.4 s after the dodge button is let go until 2.5 s, the fight's tail no longer blocks it (`view_yaw_lock::DodgeTail`). A dodge itself still blocks it, and so does the left stick (the player's own movement wins), and the other gates (grounded, the animation owns him, no zip, no leg stick) stand.
+- **The head ride is eased by the gap.** ANIM HEAD RIDE blends the view's yaw to the head bone in 250 ms. With the view 130 deg from the bone that was a 130 deg slew in a quarter of a second. The blend now takes as long as the slew needs at a peak of 240 deg/s (1.5 x the gap / 240 deg/s), never under 250 ms and never over 1.2 s: a gap under 40 deg is as before, 90 deg takes about 560 ms, 130 deg about 810 ms. The gap is read when the ride starts (`camera_mode::HeadRide::enterSecondsFor`). The `camera mode:` log line's blend is the ride's own.
+
+## MOVEMENT MODE HYBRID (Nov 12, t75u)
+
+In HYBRID the walk stick is the mod's on the ground (front half: along the right-stick heading; rear half: one snap) and, in SpidyVR's air, a light stick toward the view keeps the game's facing with it; a landing holds the heading on the shown view while the walk stick turns him. STABLE and OLD keep the rules above. Details: [HYBRID_MOVEMENT.md](HYBRID_MOVEMENT.md).
+
+## Defaults chosen (flag if wrong)
+
+- **Air cancel input** = grip, the web-hold button. If WEB BUTTON is swapped, it is the trigger. Web balls never cancel. The cancel's press is a web (Nov 14): queued through the handoff and fired one frame later, see the midair row.
+- **Native Run release** applies to a wall run entered within 0.5 s of Native Run's RT. "Released" = left stick tilt under 0.2. In open air the release changes nothing, because SpidyVR owns the air and landing hands back anyway.
+- **ANIMATED HYBRID SPEED** setting is still parsed but no longer used, because the speed takeover was removed.
+
+## Arms in an animation (Nov 9 22:27)
+
+While the animation owns, the arms are the player's own SpidyVR arms (`include/spidy/arm_frame.hpp`). The controller is mapped into the game every headset frame through the same map the eyes use:
+- the headset reference;
+- the view's turn;
+- the animated head's eye anchor, as the actor stands now.
+
+Webs, web balls, markers and punches aim from that pose, and the glove is solved onto it. When the player torso's anchor is missing, the old pose-job mapping is used.
+
+## HANDSTAND (H1, Nov 12; experimental, off by default)
+
+With `handstand=1` and REALISTIC FLIPS on: SpidyVR already owns him in its air when the palms catch a floor. While the hands hold him (`Frame::handSupport`: catching, balancing, and 0.3 s after letting go), the landing waits: no switch to ANIM on the ground. No new `EnterVr` value (he is already VR). When it ends, the feet landing returns to ANIM (`land`) with the position lock as always. A push-off goes through the point jump's swing path and its takeoff hold. `handSupport` never takes the body from ANIM. See [HANDSTAND.md](HANDSTAND.md).

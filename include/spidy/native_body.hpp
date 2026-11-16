@@ -1,5 +1,8 @@
 #pragma once
 #include "body_calibration.hpp"
+#include "body_ik.hpp"
+#include "animated_view.hpp"
+#include "head_probe.hpp"
 #include "math.hpp"
 #include <cstddef>
 #include <cstdint>
@@ -34,7 +37,7 @@ enum Flags : uint32_t {
     bodyOn = 1,      // the body follows the player; off blends back to the game's pose
     hideHead = 2,    // the head shrinks away (the eyes are inside it)
     handTurn = 4,    // the hands take the controllers' orientation
-    airborne = 8,    // the player is in the air: the legs keep the game's pose
+    airborne = 8,    // in the air: legs keep the game's pose unless setAirMomentum trails them or setTuck folds them
     // height is from the T-pose calibration (body_calibration.hpp), not the
     // headset's running height: the body takes it over a wider range.
     calibrated = 16,
@@ -59,6 +62,9 @@ enum Flags : uint32_t {
     kick = 65536, // official v11: feet-first dive target
     wallRun = 131072, // version 16: travel-driven gait in crawlNormal/Ahead/Phase/Motion
     ventHands = 32768, // version 10: upper-body contact response; native vent legs stay in control
+    // ANIMATED ARMS: solve arm chains only (body::Targets::armsOnly). Mutually
+    // exclusive with bodyOn in practice — XR clears bodyOn while yielding.
+    armsOverlay = 262144, // bit 18
 };
 inline uint32_t crawlHandFlags(unsigned hands) { return (hands & 3u) << 10; }
 inline unsigned crawlHandMask(uint32_t flags) { return (flags >> 10) & 3u; }
@@ -157,7 +163,7 @@ inline Vec3 runTuning(const Command& c) {
 }
 inline uint32_t runPadding(const Command& c) { return c.version == 15 ? c.kickReserved : c.runReserved; }
 inline bool validCrawl(const Command& c) {
-    if (c.flags & ~0x3ffffu) return false;
+    if (c.flags & ~0x7ffffu) return false;
     if ((c.flags & wallRun) && c.version != 16) return false;
     if ((c.flags & kick) && !legacyRunFormat(c) && !kickCommand(c)) return false;
     if (kickCommand(c) && (!finite(c.kick) || c.kickReserved)) return false;
@@ -248,6 +254,122 @@ uint32_t start(uintptr_t base);
 // The local player became another actor (zero: none).
 void retarget(uintptr_t record);
 void submit(const Command&);
+// Internal, synchronized with the command serial; not an exported IPC packet.
+void submit(const Command&, const animated_view::Targets&);
+// ANIMATED MOVES handoff: drop IK state and heading latches so the next bodyOn
+// frame takes the current actor facing and headset targets. Call on yield enter
+// (so residual IK does not fight the game anim) and on yield exit (before the
+// first mod-owned pose). Does not change the live command or bodyOn flag.
+void resyncAfterYield();
+// ANIMATED HYBRID G→T: warm reclaim — seed yaw from the actor, clear outward
+// anchors / overlay side channels, leave the rest of State so weight ramps
+// 0→1 via body_ik's existing blendSpeed. No full state={} wipe.
+void beginReclaim();
+// ANIMATED HYBRID jump / air adopt (a real jump, or any other mid-air
+// takeover): beginReclaim, then the next bodyOn pose job (within a quarter
+// second) snapshots the hero's live pose as the game's animation left it,
+// before its solve, and seeds the body from it (body::seedFromPose): the first
+// SpidyVR frame is that pose, the arms on the controllers at once. Side
+// channel: no Command layout or version change.
+void beginJumpAdopt();
+// The latest adopt's first frame (diagnostics): how far the solved hips and
+// legs ended from the snapshot, model metres, the body's weight then, and
+// each wrist's distance from its controller (-1 untracked). `count` goes up
+// once per seeded adopt.
+struct JumpAdopt {
+    uint64_t count{};
+    uint32_t joints{};
+    float hips{}, legs{}, weight{};
+    float handError[2]{-1, -1};
+};
+JumpAdopt jumpAdopt();
+// ANIMATED ARMS: per-arm overlay weights (0..1) read by the next pose job when
+// Flags::armsOverlay is set. Cleared by resyncAfterYield. No Command layout change.
+void setArmOverlay(float left, float right);
+// ANIMATED TORSO: with armsOverlay and mapped head, player articulation drives
+// waist→chest toward controller reaches. Cleared by resyncAfterYield. No
+// Command layout / version change (side channel, like setArmOverlay).
+void setTorsoAssist(bool on);
+// ANIMATED AIR SPIN (animated_air_spin.hpp): while bodyOn is clear (pose
+// yield), turn the game's animated skeleton by `body` (world axes) about its
+// head in the pose job; `hands` is the rig's flip already on the grips, undone
+// on the ARMS overlay targets before they solve. Identity `body`: off. Runs
+// the armsOnly solve with zero arm weight when ANIMATED ARMS is off. Cleared
+// by resyncAfterYield. Side channel: no Command layout / version change.
+void setYieldTilt(Quat body, Quat hands);
+// Midair softlock / headbone view: remap grips in the character view frame
+// (chest-forward eyes) instead of raw HMD tracking. Side channel like setYieldTilt.
+void setViewSoftlock(bool on);
+// TORSO UPDATE (vr_settings animated_torso_twist): the most the ARMS overlay turns the chest toward
+// the player, radians (0 to pi/2); the largest yaw within it that keeps both wrists reachable is
+// used. Not called: the default of body::Config (~80 degrees). Side channel: no Command layout or
+// version change.
+void setTorsoTwist(float maxRadians);
+// Midair swing / adopted-leap look: the hero's world velocity (metres per
+// second, same space as Command grips) so the next bodyOn pose job can trail
+// the air pose's legs. A non-finite or near-zero vector clears it. Side
+// channel: no Command layout or version change.
+void setAirMomentum(const Vec3& worldVelocity);
+// Visual knees-to-chest tuck while the hold is down (SpidyVR-owned air).
+// Side channel: no Command layout or version change. Triggers and grips
+// are not this control.
+void setTuck(bool held);
+// Eased visual tuck 0..1 from the last pose job (0 if none).
+float tuckWeight();
+// LEG CONTROL (leg_control.hpp): each leg's hip angles and knee bend for the
+// next bodyOn pose job (body::Targets::legAngles), used only while the body
+// may move its legs in the air (body::airLegsAllowed). on false: none, and the
+// legs blend back over body::airLegBlendSeconds. Side channel: no Command
+// layout or version change.
+void setLegControl(bool on, const std::array<body::Targets::LegAngles, 2>& legs, float amount = 1.f);
+// GROUND KICKS (ground_kick.hpp, K3; ground_kicks, EXPERIMENTAL): a standing kick's leg for the pose jobs
+// while the animation owns the body (the armsOnly path; the VR-owned body has no ground leg). `leg` 0 left,
+// 1 right; `foot` the kick's foot from the player's feet in the world's axes (metres); `weight` 0..1.
+// on false: the leg blends back to the game's pose. Side channel: no Command layout or version change.
+void setGroundKick(bool on, int leg, Vec3 foot, float weight);
+// Slice C tracking-lock diag (side channel; no Command / Forearms layout change).
+// Latest armsOnly chest vs player yaw and overlay weights after a pose job.
+struct OverlayTracking {
+    uint64_t job{};
+    uint64_t serial{};
+    animated_view::Frame targetFrame = animated_view::Frame::none;
+    // Positions are offsets from player feet, already rotated into WORLD axes.
+    // Absolute action/ray inputs add the current actual actor root exactly once.
+    Vec3 grip[2]{}, wrist[2]{}, solvedWrist[2]{}, elbow[2]{};
+    Quat gripOri[2]{}, aim[2]{}, sourceGripOri[2]{};
+    // Actual controller-equivalent pose reconstructed from rendered hand axes;
+    // requested grip/wrist above remain diagnostics, never silently relabeled.
+    float headError{}, rootDrift{};
+    uint32_t playerTorso{};
+    Vec3 root{}; // actual CURRENT actor origin for this internal snapshot
+    Pose mappedHead{}; // same-job HMD target, relative to root in WORLD axes
+    uint32_t headValid{};
+    Pose actualGrip[2]{};
+    uint32_t actualValid[2]{};
+    uint64_t deadlineMs{}; // originating body command lease, not last read time
+    float residual[2]{-1, -1}, angle[2]{-1, -1};
+    uint32_t valid[2]{}, reachClamped[2]{};
+    float requestedWeight[2]{}, armWeight[2]{};
+    float chestYaw{};  // rad, anim chest look
+    float playerYaw{}; // rad, player/softlock look
+    uint32_t remapped{}; // 1 when armsOnly chest remap ran
+    uint32_t softlock{}; // 1 when remap used softlock/headbone player frame
+    // TORSO UPDATE: the chest's yaw toward the player the solve applied (rad, eased), the
+    // yaw it needed before the cap, the cap, the share of the capped yaw that kept both
+    // wrists reachable, and the scale each overlay arm took.
+    float chestTwist{}, twistWanted{}, twistCap{}, twistShare{1.f};
+    float armScale[2]{1.f, 1.f};
+};
+// Gameplay only: 1 fresh original calibrated eye anchor in current world transform,
+// 0 not managed by player torso, -1 managed but missing/expired (never read
+// our modified head as the next camera anchor). Cinematics never call this.
+int authoredHead(uintptr_t instance, Mat4& world);
+// ARMS IN ANIMATION (arm_frame.hpp): authoredHead for the current hero, the
+// displayed head anchor the hands map onto every XR frame (same returns).
+int viewAnchorWorld(Mat4& world);
+// HAND PREDICTION: the pose job's measured wait for a command (seconds, smoothed).
+float handLeadWait();
+OverlayTracking overlayTracking();
 // A render frame begins (the stereo module's render setup, main thread).
 void renderFrame();
 // The body turned the hero's joints in the last moments, its head shrunk:
@@ -293,6 +415,19 @@ struct Forearms {
 static_assert(sizeof(Forearm) == 60 && sizeof(Forearms) == 160);
 // The latest Forearms (a copy); `job` 0 before any.
 Forearms forearms();
+// One pose-job snapshot for animation actions: origin, physical-frame mapping
+// and the rendered forearm must not come from independently sampled jobs.
+struct ActionFrame { OverlayTracking tracking; Forearms forearms; };
+ActionFrame actionFrame();
+// HEAD PROBE (head_probe.hpp; off by default): while on, each hero pose job
+// also notes the head bone as the game's animation wrote it and as the body
+// left it - read only, nothing written to the pose. The latest (a copy; job
+// 0 before any). Off, the writer does nothing more than before.
+void setHeadProbe(bool on);
+head_probe::Sample headSample();
+// SHOULDER LIMIT (camera_mode.hpp): the hero's chest yaw (the rig's yaw, as
+// view_yaw_lock::nativeYaw) as his animation posed it in the last 250 ms.
+bool heroChestYaw(float& yaw);
 
 // Wire formats of the probe exports (SpidyBodyStart, SpidyBodySubmit,
 // SpidyBodyCapture), which drive the body without the OpenXR worker.

@@ -1,4 +1,5 @@
 #pragma once
+#include "shooter_diagnostics.hpp"
 #include "shooter.hpp"
 #include "swing.hpp"
 #include <cstdint>
@@ -83,7 +84,7 @@ struct Owned {
     uint16_t pad{};
 };
 struct Data {
-    uint32_t magic = 0x53484f44, version = 4, bytes = sizeof(Data), status{};
+    uint32_t magic = 0x53484f44, version = 5, bytes = sizeof(Data), status{};
     int64_t sequence{};
     // Input samples seen; pulls that asked for a shot; shots the game fired;
     // requests dropped (no web shooter, no player, stale, refused); shots
@@ -121,8 +122,10 @@ struct Data {
     uint32_t equips{};
     Owned gadgets[8]{};
     uint64_t gadgetShots{}, emptyPulls{};
+    shooter_diagnostics::Data diagnostic; // v5; original 296-byte prefix unchanged
 };
-static_assert(sizeof(Hand) == 16 && sizeof(Owned) == 8 && sizeof(Data) == 296);
+static_assert(sizeof(Hand) == 16 && sizeof(Owned) == 8 && sizeof(Data) == 432 &&
+              offsetof(Data, diagnostic) == 296);
 // Starts the bot and gadget watches and the main-thread hooks.
 uint32_t start(uintptr_t base);
 uint32_t stop();
@@ -132,7 +135,10 @@ bool running();
 // or swings the player. record and feet: the player's actor and where it
 // stood for this sample; a shot leaves from where the hand was relative to
 // it when the main thread fires it.
-void update(float seconds, const Input&, uint32_t busy, uint64_t record, Vec3 feet, const WorldQueries&);
+void update(float seconds, const Input&, uint32_t busy, uint64_t record, Vec3 feet, const WorldQueries&,
+            uint64_t inputSerial = 0);
+// Accepted no-action owner switch: revoke queued/copied and late old-input shots.
+void invalidatePending(uint64_t inputSerial);
 // Whether Spidy's own web balls webbed this actor up lately: their webbing
 // (webbingPerHit a hit, wearing off at webbingDecay a second, as the game's
 // tracker wears off within seconds) reached webbedThreshold (a street
@@ -161,6 +167,22 @@ struct Test {
     Vec3 origin{}, aimPoint{};
     uint64_t target{};
 };
+// SpidyShooterDrops (a live side-channel export, as SpidySwingCostLive: Data stays v5 and 432 bytes): why web balls were
+// dropped, the account the "wb dispatch:" line's `rej` number lacked (Nov 14: 143 of 615 requests were dropped and the
+// reasons were deferred). Counters count up from any thread; each dropped pull is counted under one reason below.
+//  refusedAtEnqueue: the pull's input was already revoked (an air cancel or an owner flip came first).
+//  revokedQueued:    it waited in the queue when one came (game_shooter::invalidatePending).
+//  revokedAtDispatch: it was copied for dispatch when one came.
+//  fail*: the game thread refused it: failLine (no usable line), failGadget (the equipped gadget would not fire),
+//  failNotLive (the ball's weapon is gone), failNotReady (its setup or actor is missing), failEvent (its event could
+//  not be made), failCall (the engine's fire call said no).
+struct DropLive {
+    uint32_t magic = 0x53484452, version = 1, bytes = sizeof(DropLive), revocations{};
+    uint32_t refusedAtEnqueue{}, queueFull{}, revokedQueued{}, revokedAtDispatch{}, expired{};
+    uint32_t failLine{}, failGadget{}, failNotLive{}, failNotReady{}, failEvent{}, failCall{};
+    uint32_t reserved{};
+};
+static_assert(sizeof(DropLive) == 64 && offsetof(DropLive, failLine) == 36);
 // SpidyShooterGadgets: game_shooter::gadgetWheel.
 struct GadgetCommand {
     uint32_t magic = 0x53484f47, version = 1, bytes = sizeof(GadgetCommand), fire{};

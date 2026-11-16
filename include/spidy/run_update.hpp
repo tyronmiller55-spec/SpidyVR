@@ -38,6 +38,26 @@ inline Thresholds nativeRunThresholds(int percent) {
     const float on = std::clamp(percent, 50, 90) / 100.f;
     return {on, on - .2f};
 }
+// A physical tilt as RUN CURVE sends it (curveStick's magnitude; the tilt
+// itself with the curve off or within its dead zone).
+inline float curvedTilt(float tilt, bool on, float snap = curveSnap, float gamma = curveGamma) {
+    if (!std::isfinite(tilt))
+        return 0.f;
+    float right = std::clamp(tilt, 0.f, 1.f), forward = 0.f;
+    curveStick(right, forward, on, snap, gamma);
+    return std::hypot(right, forward);
+}
+// NATIVE RUN AT with RUN CURVE (the November 12 movement cleanup): NATIVE
+// RUN reads the curved stick, so its thresholds go through the same curve
+// and the sprint starts and stops at the same PHYSICAL tilt as with the curve
+// off (70% and 50% by default). Without this the curve moved the sprint down
+// to about half the stick's tilt and the jog range was lost.
+inline Thresholds nativeRunThresholds(int percent, bool curve) {
+    const Thresholds raw = nativeRunThresholds(percent);
+    if (!curve)
+        return raw;
+    return {curvedTilt(raw.onAbove, true), curvedTilt(raw.offBelow, true)};
+}
 // RUN LOGS (vr_settings::Values::runLogs, off by default): lines in the
 // session's timeline (game_prompts::note) about running, for the questions the
 // run update could not answer without the game: how fast the game's own run
@@ -273,6 +293,24 @@ struct GroundRun {
     float standTilt = .9f, standHold = .3f, standRearm = .5f, standAcceleration = 3, standTop = 14;
 };
 constexpr GroundRun groundRun{};
+// PARKOUR AHEAD (the user, November 13 t86u: "parkour activation ... seems to be iffy and
+// inconsistent"). While SPIDY RUN drives the body the game holds no RT and owns no ground,
+// so it cannot vault or climb what he runs at: in the 5061b4a session 45 of 236 full-stick
+// ground windows (19%) were the mod's run with RT 0%, and RUN FROM STANDING keeps the run
+// for as long as the stick is held past 90%. The run used to end only once the body had
+// been stopped for 0.25 s (too late for the game's vault, which needs his speed). So the
+// run looks ahead: a steep face (a wall, a ledge, a railing) across its way within
+// parkourLookSeconds of travel (parkourLookMin..parkourLookMax metres past the body's
+// radius) at any probe height ends it there, and the game - its RT, its sprint - meets the
+// obstacle at speed and plays its own parkour on it.
+inline constexpr float parkourLookSeconds = .45f, parkourLookMin = .8f, parkourLookMax = 3.5f;
+inline constexpr float parkourSteep = .5f; // a face whose normal is this level or more (y under)
+inline constexpr float parkourProbeHeights[] = {-.25f, .2f, .7f}; // off the body's centre, metres
+inline float parkourLook(float speed, float radius) {
+    if (!std::isfinite(speed) || !std::isfinite(radius))
+        return 0;
+    return std::clamp(speed * parkourLookSeconds, parkourLookMin, parkourLookMax) + std::max(radius, 0.f);
+}
 // The run a landing at `velocity` begins with, across the ground (y 0).
 inline Vec3 groundRunEntry(Vec3 velocity, const GroundRun& k = groundRun) {
     if (!finite(velocity))
@@ -285,6 +323,17 @@ inline Vec3 groundRunEntry(Vec3 velocity, const GroundRun& k = groundRun) {
 }
 // One step of the run: `along` its velocity across the ground, `move` the
 // stick in the world (Input::move), dt the step. Returns the new velocity.
+// RUN SPEED at the hand-back (Swing::setRunSpeedPercent): the run's speed
+// scale fades to 1 over the last runScaleFade m/s above the sprint, so the
+// body reaches the game's own sprint speed exactly where the run hands back
+// (no speed step at 50% or 200%). The native run itself is not touched.
+constexpr float runScaleFade = 3;
+inline float runSpeedScaleAt(float scale, float speed, const GroundRun& k = groundRun) {
+    if (!std::isfinite(scale) || !std::isfinite(speed))
+        return 1;
+    const float w = std::clamp((speed - k.sprint) / runScaleFade, 0.f, 1.f);
+    return 1 + (scale - 1) * w;
+}
 inline Vec3 groundRunStep(Vec3 along, Vec3 move, float dt, const GroundRun& k = groundRun) {
     along.y = 0;
     if (!finite(along) || !std::isfinite(dt) || !(dt > 0))

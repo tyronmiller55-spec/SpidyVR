@@ -210,7 +210,11 @@ int main() {
         check(args.size() == 9 && args[7] == L"--upscale" && args[8] == L"100", "no upscaling");
         options.upscale = 20;
         args = sessionArguments(options, L"r.json", L"", L"");
-        check(args.size() == 9 && args[7] == L"--upscale" && args[8] == L"50", "the upscale at least 50%");
+        check(args.size() == 7, "the upscale at least 50%, which is the default and goes unsaid");
+        options.upscale = 67;
+        args = sessionArguments(options, L"r.json", L"", L"");
+        check(args.size() == 9 && args[7] == L"--upscale" && args[8] == L"67", "the old default is passed now");
+        check(options.upscale != static_cast<int>(spidy::defaultEyeUpscale) && spidy::defaultEyeUpscale == 50, "the default is 50%");
         options.renderScale = 125;
         options.upscale = 58;
         args = sessionArguments(options, L"r.json", L"", L"");
@@ -589,6 +593,23 @@ int main() {
         for (const auto key : personalProfileSettings)
             check(at(key) < std::size(profileSettings), "unknown personal key");
     });
+    test("built-in presets preserve every Native Animation profile preference", [&] {
+        PlaySettings settings;
+        settings.tab.animatedMoves = settings.tab.animatedHybrid = false;
+        settings.tab.animatedHead = 1;
+        settings.tab.animatedHeadsetSmooth = 3;
+        settings.tab.animatedHybridSpeedMs = 500;
+        settings.tab.headProbe = true;
+        const auto before = profileOf(settings);
+        for (const auto& preset : builtInProfiles()) {
+            auto changed = settings;
+            applyProfile(preset.profile, changed);
+            const auto after = profileOf(changed);
+            for (size_t i = 0; i < std::size(profileSettings); ++i)
+                if (profileSettings[i].key.starts_with("animated_") || profileSettings[i].key == "head_probe")
+                    check(after.values[i] == before.values[i], "preset changed animation preference");
+        }
+    });
     test("presets replace all gameplay, preserve personal setup and survive sharing", [&] {
         PlaySettings personal;
         for (const auto& setting : profileSettings)
@@ -681,8 +702,30 @@ int main() {
             const bool leftOut = row.item == Item::view || row.item == Item::calibrate ||
                                  row.item == Item::height || row.item == Item::recordingFov ||
                                  row.item == Item::eyeAim || row.item == Item::recordingSmoothing ||
-                                 row.item == Item::flipReprojection ||
-                                 row.item == Item::steadyHud;
+                                 row.item == Item::flipReprojection || row.item == Item::steadyHud ||
+                                 row.item == Item::nativeAnimation ||
+                                 // Camera smoothing (comfort) and LEG CONTROL (first pass): the player's own, not shared.
+                                 (row.item >= Item::cameraStabilization && row.item <= Item::legCoupling) ||
+                                 // SHOOTERS and LOCK STRENGTH: views over WRIST SHOOTERS, WEB AIM,
+                                 // FOREARM BLEND and PALM SHOOTERS, which a profile already holds; CAMERA
+                                 // MOTION and its amounts and HEAD ANGLE: comfort, the player's own.
+                                 (row.item >= Item::shooterMode && row.item <= Item::cameraHeadAngle) ||
+                                 // POINT JUMP (November 11): the player's own controls and feel.
+                                 (row.item >= Item::pointJump && row.item <= Item::pointJumpPush) ||
+                                 // PUNCH VIEW EASE (November 12): comfort, the player's own.
+                                 row.item == Item::punchViewEase ||
+                                 // MOVE HAPTICS, VIEW YAW SOURCE, SOUND TRACE (November 12): the player's own.
+                                 row.item == Item::moveHaptics || row.item == Item::viewYawSource ||
+                                 row.item == Item::soundTrace ||
+                                 // JUMP TO SPIDYVR, AIR VIEW EASE (November 12): the player's own.
+                                 row.item == Item::jumpHandoff || row.item == Item::airViewEase ||
+                                 row.item == Item::animYawSway || row.item == Item::turnInPlace ||
+                                 (row.item >= Item::passiveLegs && row.item <= Item::legReachSpread) ||
+                                 // MOVEMENT MODE, REAR SNAP TURN (November 12): the player's own.
+                                 row.item == Item::movementMode || row.item == Item::rearSnap ||
+                                 // TORSO TWIST, ARM AIM FALLBACK (November 13 torso update), and what follows
+                                 // (the stability pass): the player's own feel and comfort, not shared.
+                                 (row.item >= Item::animatedTorsoTwist && row.item != Item::enemyTypes);
             check(std::count_if(begin, end, [&](const ProfileSetting& s) { return s.item == row.item; }) ==
                       (leftOut ? 0 : 1),
                   row.title);
@@ -692,8 +735,95 @@ int main() {
         size_t lines = 0;
         for (size_t line = 0; line < tabOnly.size(); line = tabOnly.find('\n', line) + 1) {
             const std::string key = tabOnly.substr(line, tabOnly.find('=', line) - line);
+            // MOVEMENT DEFAULTS (November 12): which defaults a file has had, no setting.
+            if (key == "movement_defaults")
+                continue;
+            // animated_full_arms: an ini-only test switch for the arms in animation
+            // (no menu row), the player's own like the headset's.
             if (key == "recording_fov" || key == "recording_smoothing" || key == "height_cm" ||
-                key == "eye_aim" || key == "flip_reprojection" || key == "steady_hud")
+                key == "eye_aim" || key == "flip_reprojection" || key == "steady_hud" ||
+                key == "animated_full_arms" || key == "spherical_aim" ||
+                key.rfind("camera_", 0) == 0 || key.rfind("leg_", 0) == 0 ||
+                // POINT JUMP (November 11): the player's own, not in shared profiles.
+                key.rfind("point_jump", 0) == 0 ||
+                // QUICK SIDESTEP (November 12): the player's own controls.
+                key.rfind("sidestep", 0) == 0 ||
+                // PUNCH VIEW EASE (November 12): comfort, the player's own.
+                key == "punch_view_ease_ms" ||
+                // MOVE HAPTICS, VIEW YAW SOURCE, SOUND TRACE (November 12): the player's own.
+                key == "move_haptics_pct" || key == "view_yaw_source" || key == "sound_trace" ||
+                // JUMP TO SPIDYVR, AIR VIEW EASE (November 12): the player's own.
+                key == "jump_handoff_ms" || key == "air_view_ease_ms" || key == "anim_yaw_sway_pct" ||
+                key == "turn_in_place_deg" || key.rfind("passive_", 0) == 0 || key == "movement_mode" ||
+                key == "rear_snap_turn_ms" ||
+                // TORSO TWIST, ARM AIM FALLBACK (November 13): the player's own feel.
+                key == "animated_torso_twist" || key == "anim_forearm_fallback_deg")
+                continue;
+            // NEXT PASS (November 15): the player's own feel.
+            if (key == "handstand_arms_over_head_cm")
+                continue;
+            if (key == "head_seat_glide_ms")
+                continue;
+            if (key == "landing_blend_ms")
+                continue;
+            if (key == "handoff_angle_ms")
+                continue;
+            if (key == "handoff_head_leads")
+                continue;
+            if (key == "handoff_glide_max_ms")
+                continue;
+            if (key == "handoff_glide_cm_s")
+                continue;
+            if (key == "handoff_ease_curve")
+                continue;
+            if (key == "landing_rear_turn")
+                continue;
+            if (key == "landing_body_ease_ms")
+                continue;
+            if (key == "landing_body_to_view")
+                continue;
+            if (key == "dodge_reface")
+                continue;
+            if (key == "snap_tap_ms")
+                continue;
+            if (key == "snap_body_turn")
+                continue;
+            if (key == "view_relatch_fix")
+                continue;
+            if (key == "handoff_one_blend")
+                continue;
+            if (key == "head_height_fade_ms")
+                continue;
+            if (key == "takeover_view_ease")
+                continue;
+            // SHOWTIME (November 14): experimental, the player's own.
+            if (key.rfind("showtime", 0) == 0)
+                continue;
+            // HANDSTAND (H1, November 12): experimental, the player's own.
+            if (key.rfind("handstand", 0) == 0)
+                continue;
+            // SWING KICK (K1, November 14): experimental, the player's own.
+            if (key.rfind("swing_kick", 0) == 0)
+                continue;
+            // WALL BRAKE and GRIP FLING (G1, November 14): experimental, the player's own.
+            if (key.rfind("wall_brake", 0) == 0 || key.rfind("grip_fling", 0) == 0 || key == "grip_stop_pct")
+                continue;
+            // AIR TAKEOVER (November 14): the player's own feel (upright time, fall handoff, landing blend and release).
+            if (key == "air_correct_ms" || key == "fall_handoff_ms" || key.rfind("air_landing", 0) == 0)
+                continue;
+            // HAND GRAB (G2, November 14): experimental, the player's own.
+            if (key.rfind("hand_grab", 0) == 0 || key == "enemy_hold_cost")
+                continue;
+            // AIR KICKS (K2, November 14): experimental, the player's own.
+            if (key == "kicks" || key.rfind("kick_", 0) == 0 || key == "ground_kicks" ||
+                key == "enemy_joints" || key == "enemy_limb_zones")
+                continue;
+            // PHYSICAL WEB TETHERS (W1, November 14): experimental, the player's own.
+            if (key == "physical_tethers" || key.rfind("tether_", 0) == 0)
+                continue;
+            // CAMERA MODES (November 13): the player's own comfort, not in shared profiles.
+            if (key == "anim_head_ride" || key == "shoulder_limit" || key == "snap_realign" || key == "headset_first" ||
+                key.rfind("punch_", 0) == 0 || key.rfind("jump_pull", 0) == 0)
                 continue;
             ++lines;
             check(at(key) < std::size(profileSettings) &&
@@ -800,22 +930,25 @@ int main() {
         t.webTie = true;
         t.webLines = true;
         t.singleHandYankPercent = 200;
+        t.runSpeedPercent = 150;
+        t.slowMotionSeconds = 91;
+        t.softLockMetres = 0;
         t.uiStyle = 1;
         t.combatVisuals = false;
         t.blowSounds = 1;
         t.pcMedia = true;
-        t.nativeRun = true;
+        t.nativeRun = false;
         t.airSlingshot = true;
         t.webAngle = 30;
         t.wristShooters = true;
         t.dodgeTumble = 2;
-        t.runCurve = true;
+        t.runCurve = false; // on by default since the movement cleanup (November 12)
         t.nativeRunPercent = 90;
         t.runLogs = true;
         t.momentumLeap = true;
         t.earlyJump = 2;
         t.softLanding = true;
-        t.spidyRun = true;
+        t.spidyRun = false;
         t.spidyRunFromStanding = true;
         t.webLandingSmooth = true;
         t.webLandingImpact = 16;
@@ -824,6 +957,19 @@ int main() {
         t.spidyRunJump = false;
         t.forearmAimLimit = 90;
         t.palmShooters = true;
+        t.headProbe = true;
+        t.animatedMoves = false;
+        t.animatedHead = 1;
+        t.animatedHeadsetSmooth = 3;
+        t.animatedAir = true;
+        t.animatedSteering = true;
+        t.animatedArms = false;
+        t.animatedTorso = false;
+        t.animatedModelYaw = false;
+        t.animatedOnly = true;
+        t.animatedAirSpin = 2;
+        t.animatedHybrid = false;
+        t.animatedHybridSpeedMs = 50;
         t.webAimSource = 1;
         t.forearmBlend = 50;
         t.webSlingshot = true;
@@ -848,6 +994,23 @@ int main() {
         t.automaticFalloff = 1000;
         t.automaticHandThreshold = 200;
     }
+    test("Native Animation profiles keep stored off values and missing-key defaults", [&] {
+        PlaySettings fresh;
+        const auto old = readProfile("animated_moves=0\nanimated_hybrid=0\nanimated_head=0\n"
+                                     "animated_arms=0\nanimated_torso=0\nanimated_model_yaw=0\n"
+                                     "native_run=0\nspidy_run=0\n");
+        check(old.has_value(), "old profile refused");
+        applyProfile(*old, fresh);
+        check(!fresh.tab.animatedMoves && !fresh.tab.animatedHybrid && fresh.tab.animatedHead == 0 &&
+                  !fresh.tab.animatedArms && !fresh.tab.animatedTorso && !fresh.tab.animatedModelYaw &&
+                  !fresh.tab.nativeRun && !fresh.tab.spidyRun,
+              "explicit saved off overwritten");
+        PlaySettings partial;
+        applyProfile(*readProfile("animated_torso=0\n"), partial);
+        check(!partial.tab.animatedTorso && partial.tab.animatedMoves && partial.tab.animatedHybrid &&
+                  partial.tab.animatedHead == 2 && partial.tab.nativeRun && partial.tab.spidyRun,
+              "missing profile keys lost recommended defaults");
+    });
     test("a profile's text: what it is, its name, its Spidy, then each setting in the tab's order", [&] {
         check(profileText(profileOf(PlaySettings{}, "Spidy's own"), "0.4.1") ==
                   "# Spidy settings profile. To use it, in the Spidy launcher: Profile > Paste a profile, "
@@ -860,16 +1023,10 @@ int main() {
                   "smooth_turn=0\nhaptics=100\nreel_haptics=0\nswing_haptics=0\nblow_sounds=0\npc_media=0\n"
                   "body_haptics=100\nbody_haptics_webs=1\nbody_haptics_wind=1\n"
                   "body_haptics_combat=1\nbody_haptics_movement=1\nscreen_size=1\nscreen_depth=2\nhud=2\n"
-                  "ui_style=0\ncombat_visuals=1\nnear_clip_mm=20\nseated=0\nflips=0\ncontrolled_flips="
-                  "0\nflip_speed=180\nhand_climb=0\n"
-                  "joystick_wall_run_camera=1\nwall_run_camera_tilt=1\nhalf_punch_damage=0\nair_fists="
-                  "1\nenemy_types=0\n"
-                  "web_tie=0\n"
-                  "native_run=0\nair_slingshot=0\nweb_angle_degrees=0\nwrist_shooters=0\ndodge_tumble=0\n"
-                  "run_curve=0\nnative_run_at_percent=70\nrun_logs=0\nrunning_leap=0\nearly_jump=0\n"
-                  "soft_landing=0\nspidy_run=0\nspidy_run_from_standing=0\nweb_aim_source=0\n"
-                  "forearm_blend=100\nweb_landing_smooth=0\nweb_landing_impact_speed=24\nsteady_states=0\n"
-                  "combat_responsive=0\nspidy_run_jump=1\nforearm_aim_limit=180\npalm_shooters=0\n"
+                  "ui_style=0\ncombat_visuals=1\nnear_clip_mm=20\nseated=0\nflips=0\ncontrolled_flips=0\nflip_speed=180\nhand_climb=0\n"
+                  "joystick_wall_run_camera=1\nwall_run_camera_tilt=1\nhalf_punch_damage=0\nair_fists=1\nenemy_types=0\nweb_tie=0\nnative_run=1\n"
+                  "air_slingshot=0\nweb_angle_degrees=0\nwrist_shooters=0\ndodge_tumble=0\n"
+                  "run_curve=1\nnative_run_at_percent=70\nrun_logs=0\nrunning_leap=0\nearly_jump=1\nsoft_landing=0\nspidy_run=1\nspidy_run_from_standing=0\nweb_aim_source=0\nforearm_blend=100\nweb_landing_smooth=0\nweb_landing_impact_speed=24\nsteady_states=0\ncombat_responsive=0\nspidy_run_jump=1\nforearm_aim_limit=180\npalm_shooters=0\nhead_probe=0\nanimated_moves=1\nanimated_head=2\nanimated_headset_smooth=0\nrun_speed_percent=100\nslow_motion_seconds=12\nsoft_lock_metres=15\nanimated_air=0\nanimated_steering=0\nanimated_arms=1\nanimated_torso=1\nanimated_model_yaw=1\nanimated_only=0\nanimated_air_spin=0\nanimated_hybrid=1\nanimated_hybrid_speed_ms=200\n"
                   "web_lines=0\n"
                   "wall_distance_cm=25\n"
                   "realistic_flips=0\nrotation_strength=50\nrotation_speed=240\nflight_speed_min=3\n"

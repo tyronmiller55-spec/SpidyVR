@@ -3,6 +3,8 @@
 #include "spidy/eye_job_table.hpp"
 #include "spidy/eye_resolution.hpp"
 #include "spidy/game_fp.hpp"
+#include "spidy/headset_smoothing.hpp"
+#include "spidy/camera_motion.hpp"
 #include "spidy/native_appearance.hpp"
 #include "spidy/native_body.hpp"
 #include "spidy/native_eye_frame.hpp"
@@ -166,6 +168,9 @@ struct RenderOffset {
     // Game rope starts of the same frame (bit per hand in `ropes`).
     Vec3 ropeStarts[2]{};
     uint32_t ropes{};
+    uint64_t serial{};
+    std::array<Mat4,2> eyes{}; // exact resolved world poses submitted for this generation
+    bool eyesValid{};
 };
 std::array<RenderOffset, 64> offsets{};
 SRWLOCK offsetLock = SRWLOCK_INIT;
@@ -742,16 +747,37 @@ void updateHero(bool immersive, bool hide) {
 }
 bool heroPosition(Vec3& position);
 bool retiring();
-// A first-person scene's command (anchored 2) with its eyes put on the head of
-// the character the scene plays, as that head is now (game_fp.hpp). Without a
-// head the command is switched off, and the eyes follow the game's own camera.
+// A first-person scene's command (anchored 2 or 4), or ANIMATED HEAD while
+// ANIMATED MOVES yields, with its eyes put on the head as that head is now
+// (game_fp::frame / frameLevel; followHero for gameplay). Without a head the
+// command is switched off, and the eyes follow the game's own camera.
 void resolveScene(native_eyes::Command& c) {
     if ((c.anchored != 2 && c.anchored != 4) || !c.enabled)
         return;
     Mat4 head{};
-    if (c.anchored == 4 ? game_fp::frameLevel(head) : game_fp::frame(head))
+    if (c.anchored == 4 ? game_fp::frameLevel(head) : game_fp::frame(head)) {
+        static headset_smoothing::Filter parentSmooth;
+        static ULONGLONG lastMs{};
+        const ULONGLONG nowMs = GetTickCount64();
+        const float dt = lastMs ? (nowMs - lastMs) * 0.001f : 0.f;
+        lastMs = nowMs;
+        // CAMERA SMOOTHING: the worker's params (fromValues, with the old
+        // SMOOTHING level folded in); the travel relative to the hero's feet.
+        Vec3 feet{};
+        const bool haveFeet = heroPosition(feet) && finite(feet);
+        // CAMERA MOTION first: how much of the animation's tilt and bob, and
+        // HEAD ANGLE (camera_motion::live; the identity unless set).
+        static camera_motion::Bob parentBob;
+        head = camera_motion::stabilize(head, camera_motion::live(), &parentBob, haveFeet ? &feet : nullptr, dt);
+        // ANIM HEAD RIDE: the yaw of the bone's head held on harder (headset_smoothing::withRide).
+        const auto smoothing = headset_smoothing::live();
+        head = parentSmooth.update(head, dt,
+                                   headset_smoothing::liveRide.load(std::memory_order_relaxed)
+                                       ? headset_smoothing::withRide(smoothing)
+                                       : smoothing,
+                                   haveFeet ? &feet : nullptr);
         c = native_eyes::resolvedOnHead(c, head);
-    else
+    } else
         c.enabled = 0;
 }
 // The newest eye command's head for this frame, not yet moved with the player.
@@ -1829,6 +1855,17 @@ void placeEyes() {
         if (activePlaced)
             activeLag = length(activeHeroPosition - rendered);
     }
+    if (controlled && desired.enabled == 1) {
+        placed.serial = desired.serial;
+        placed.eyesValid = true;
+        for (unsigned i=0;i<2;++i) {
+            placed.eyes[i] = desired.eyes[i].world;
+            placed.eyes[i][12] += placed.offset.x;
+            placed.eyes[i][13] += placed.offset.y;
+            placed.eyes[i][14] += placed.offset.z;
+            placed.eyesValid = placed.eyesValid && native_view::validPose(placed.eyes[i]);
+        }
+    }
     recordOffset(placed, anchored, rejected, lag, activeLag);
     if (latchedImmersive && frameHead.frame == frameIndex && frameHead.viewed) {
         // The HUD and the eyes should have moved with the player alike.
@@ -2871,6 +2908,15 @@ bool spidy::native_eyes::renderOffset(uint64_t frame, Vec3& offset) {
     ReleaseSRWLockShared(&offsetLock);
     offset = entry.generation == frame ? entry.offset : Vec3{};
     return frame && entry.generation == frame;
+}
+bool spidy::native_eyes::renderEyes(uint64_t frame, uint64_t serial, std::array<Mat4,2>& eyes) {
+    AcquireSRWLockShared(&offsetLock);
+    const auto entry = offsets[frame % offsets.size()];
+    ReleaseSRWLockShared(&offsetLock);
+    if (!frame || !serial || entry.generation != frame || entry.serial != serial || !entry.eyesValid)
+        return false;
+    eyes = entry.eyes;
+    return true;
 }
 bool spidy::native_eyes::renderWebStart(uint64_t frame, unsigned hand, Vec3& start) {
     AcquireSRWLockShared(&offsetLock);

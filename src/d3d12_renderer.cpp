@@ -640,7 +640,7 @@ void D3D12Renderer::prepareGrade(DXGI_FORMAT targetFormat) {
         parameters[0].DescriptorTable = {1, &range};
         parameters[0].ShaderVisibility = D3D12_SHADER_VISIBILITY_PIXEL;
         parameters[1].ParameterType = D3D12_ROOT_PARAMETER_TYPE_32BIT_CONSTANTS;
-        parameters[1].Constants.Num32BitValues = 12;
+        parameters[1].Constants.Num32BitValues = 16;
         parameters[1].ShaderVisibility = D3D12_SHADER_VISIBILITY_PIXEL;
         D3D12_STATIC_SAMPLER_DESC sampler{};
         sampler.Filter = D3D12_FILTER_MIN_MAG_MIP_LINEAR;
@@ -672,6 +672,8 @@ cbuffer Grade : register(b0) {
     float2 pixel;
     float amount, ripple, rippleStrength, entering;
     uint decodeSource, encodeTarget;
+    float vignette, fade;
+    float2 padding;
 };
 float4 vs(uint id : SV_VertexID) : SV_POSITION {
     const float2 corner = float2((id << 1) & 2, id & 2);
@@ -710,6 +712,12 @@ float4 ps(float4 position : SV_POSITION) : SV_TARGET {
     graded *= lerp(float3(1, 1, 1), float3(.84, .96, 1.18), amount);
     graded *= 1 - .55 * amount * smoothstep(.5, 1.7, r);
     graded += ring * (entering > .5 ? float3(.08, .2, .3) : float3(.2, .22, .24));
+    // SHOWTIME: the clear middle narrows with the vignette (round about the lens, as the rim is), then the fade.
+    {
+        const float clear = lerp(1.6, .6, saturate(vignette));
+        graded *= 1 - saturate(vignette * 8) * smoothstep(clear, clear + .6, r);
+        graded *= 1 - saturate(fade);
+    }
     if (encodeTarget)
         graded = encode(saturate(graded));
     return float4(graded, 1);
@@ -798,7 +806,7 @@ void D3D12Renderer::recordGrade(const ViewTarget& target, D3D12_CPU_DESCRIPTOR_H
     const auto value = [](float v, float lo, float hi) {
         return std::bit_cast<UINT>(std::isfinite(v) ? std::clamp(v, lo, hi) : lo);
     };
-    const UINT constants[12] = {value(lens[0], -8, 8),
+    const UINT constants[16] = {value(lens[0], -8, 8),
                                 value(lens[1], -8, 8),
                                 value(lens[2], -8, 8),
                                 value(lens[3], -8, 8),
@@ -809,13 +817,17 @@ void D3D12Renderer::recordGrade(const ViewTarget& target, D3D12_CPU_DESCRIPTOR_H
                                 value(grade.rippleStrength, 0, 1),
                                 std::bit_cast<UINT>(grade.entering ? 1.f : 0.f),
                                 srgb(viewFormat) ? 0u : 1u,
-                                srgb(target.format) ? 0u : 1u};
+                                srgb(target.format) ? 0u : 1u,
+                                value(grade.vignette, 0, 1),
+                                value(grade.fade, 0, 1),
+                                0u,
+                                0u};
     list_->SetPipelineState(gradePipeline_.Get());
     list_->SetGraphicsRootSignature(gradeRoot_.Get());
     ID3D12DescriptorHeap* heaps[] = {gradeHeap_.Get()};
     list_->SetDescriptorHeaps(1, heaps);
     list_->SetGraphicsRootDescriptorTable(0, gradeHeap_->GetGPUDescriptorHandleForHeapStart());
-    list_->SetGraphicsRoot32BitConstants(1, 12, constants, 0);
+    list_->SetGraphicsRoot32BitConstants(1, 16, constants, 0);
     list_->OMSetRenderTargets(1, &rtv, FALSE, nullptr);
     D3D12_VIEWPORT viewport{0, 0, static_cast<float>(target.width), static_cast<float>(target.height), 0, 1};
     D3D12_RECT rect{0, 0, static_cast<LONG>(target.width), static_cast<LONG>(target.height)};

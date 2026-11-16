@@ -1,5 +1,18 @@
 # Validation — 2026-10-27
 
+## November 14: air takeover (branch feat/air-takeover, on 331a70b; local, unreleased)
+
+Evidence for every claim is in [CHANGELOG.md](CHANGELOG.md) and [AIR_TAKEOVER.md](AIR_TAKEOVER.md); game facts in [REFERENCE.md](REFERENCE.md). Source session: `game-vr-20261114-164317` (b9b2196, 34 min).
+
+- Core suite on the final commit: 940/940. Per-feature executables: handstand (302+ checks, arms-up and fresh-push leap), direction_report (47 new), facing_check (46), grip, realistic_flip (smooth upright profile), point_bullet (new), landing_blend (new), jump_handoff (94), hybrid_movement, launcher (43). ctest on every portable target passes.
+- Handstand: the touchdown reach 1.6 -> 1.0 m, both palms 0.2 m below the head held 0.12 s; refused catches log the head gap.
+- Grip stop: 25 m/s stops in 1.28 s / 16 m (one hand, light press), 0.83 s / 10 m (hard press), 0.78 s (two hands); before, 2.8 s / 35 m. Still a slide (per-hand cap 30 m/s^2, both hands 32).
+- A in the air: a 2.2 rad flip rights in 0.70 s (the half-turn time is `air_correct_ms`, 1 s), first-frame step under 0.004 rad, worst step under 2.1x the mean.
+- Point jump bullet: body axis within 0.5 deg of the raw look for pitches +70 to -89 deg, straight down a half turn about the heading's right, 120 ms ease, lets go on landing/web/A/hands/slow/timeout. Not exercised in a headset.
+- Air handoff: a full jump hands over at 0.3 s, a slow rise (under 4 m/s) at 0.25 s, a plain fall at 0.15 s; with the ground within 0.45 s the animation keeps the body to its landing.
+- Landing blend: time to impact within 40 ms of the simulated touchdown over an 8 m fall, upright ramp 0 above 0.3 s to 1 at 0.1 s, never backing off. The ground ray (native tag 8) and the in-air release are NOT verified in the game: the release is off by default.
+- No game or headset session was run on this branch, and nothing was changed in the game folder; the numbers above are from the tests and the b9b2196 log analysis (`/workspace/playtest-b9b2196/ANALYSIS.md`).
+
 ## November 8: gameplay presets and Play selector (local, unreleased)
 
 - Added opt-in Arcade, Balanced and Pro built-ins, each explicitly covering

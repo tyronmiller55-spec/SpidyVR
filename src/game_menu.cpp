@@ -426,8 +426,27 @@ void change(Item item, int index) {
         return;
     AcquireSRWLockExclusive(&lock);
     const bool changed = vr_settings::choose(item, index, shown);
-    if (changed)
-        pending.set(static_cast<size_t>(item));
+    if (changed) {
+        if (item == vr_settings::Item::nativeAnimation) {
+            // Publish the resulting concrete settings, not a late master replay that
+            // could overwrite a subsequent ARMS/TORSO edit in the same pending batch.
+            for (const auto companion :
+                 {Item::animatedMoves, Item::animatedHybrid, Item::animatedHead, Item::animatedArms,
+                  Item::animatedTorso, Item::animatedModelYaw, Item::animatedAir, Item::animatedOnly,
+                  Item::animatedSteering, Item::animatedAirSpin, Item::nativeRun, Item::spidyRun})
+                pending.set(static_cast<size_t>(companion));
+        } else if (item == vr_settings::Item::pointJumpMinSpeed || item == vr_settings::Item::pointJumpMaxSpeed) {
+            // POINT JUMP: TAP SPEED never above MAX SPEED (vr_settings::choose).
+            for (const auto companion : {Item::pointJumpMinSpeed, Item::pointJumpMaxSpeed})
+                pending.set(static_cast<size_t>(companion));
+        } else if (item == vr_settings::Item::legControl) {
+            // LEG CONTROL ON also sets the flips it needs (vr_settings::choose).
+            for (const auto companion : {Item::legControl, Item::controlledFlips, Item::realisticFlips})
+                pending.set(static_cast<size_t>(companion));
+        } else {
+            pending.set(static_cast<size_t>(item));
+        }
+    }
     ReleaseSRWLockExclusive(&lock);
     if (changed)
         ++changesMade;
@@ -500,7 +519,8 @@ void __fastcall callbackHook(void* ui, uint32_t hash, GfxValue* args, uint32_t c
         AcquireSRWLockExclusive(&lock);
         const auto reset = vr_settings::resetCategory(static_cast<vr_settings::Category>(category), shown);
         for (Item item : vr_settings::screens()[category].items)
-            if (const auto* row = vr_settings::rowFor(item); row && row->place == vr_settings::Place::tab)
+            if (const auto* row = vr_settings::rowFor(item); row && row->place == vr_settings::Place::tab &&
+                item != Item::nativeAnimation)
                 if (vr_settings::choose(item, vr_settings::choice(item, reset), shown)) {
                     pending.set(static_cast<size_t>(item));
                     ++changesMade;
@@ -535,7 +555,10 @@ bool __fastcall activeHook(void* system, int setting) {
     if (r < 0)
         return originalActive(system, setting);
     AcquireSRWLockShared(&lock);
-    const bool active = vr_settings::inactiveReason(itemOf(r), shown) == nullptr;
+    // A row shownWhenInactive stays selectable; its help says what it needs
+    // (LEGS (ADVANCED): the user could not find them with REALISTIC FLIPS on).
+    const bool active = vr_settings::inactiveReason(itemOf(r), shown) == nullptr ||
+                        vr_settings::shownWhenInactive(itemOf(r));
     ReleaseSRWLockShared(&lock);
     return active;
 }

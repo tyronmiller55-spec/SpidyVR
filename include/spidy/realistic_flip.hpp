@@ -1,5 +1,7 @@
 #pragma once
 #include "tracking.hpp"
+#include <algorithm>
+#include <cmath>
 
 namespace spidy {
 // REALISTIC FLIPS (vr_settings::Values::realisticFlips and the nine rows under
@@ -19,6 +21,11 @@ struct RealisticFlipSettings {
     int responseMs = 500, handStrength = 100, falloffMs = 3000;
     int handThreshold = 100; // centimetres per second
     bool airBrake = true, inCombat = true;
+    // A IN THE AIR rights the player over this long, smoothly (the user, Nov 14 t71u: "gradually upright the player instead of
+    // jerk them, over a second or so"; air_correct_ms, 1000): a minimum-jerk turn from the tilt at the press to level about the
+    // heading. It was error / 0.18 s at up to `speed` degrees a second with a hard start (about 0.5 s for a full flip).
+    // A small tilt takes less (the angle's share of a half turn, never under 30% of this).
+    int levelMs = 1000;
     bool operator==(const RealisticFlipSettings&) const = default;
 };
 struct RealisticFlight {
@@ -28,7 +35,45 @@ struct RealisticFlight {
     float ropeLength = 20;
     float coupling = 1;
     bool fighting{}; // enemies in reach of the player's blows lately
+    // Pose coupling (swing_coupling.hpp): 1 = unchanged. Lower inertia
+    // speeds an existing spin (a diver tucking); lower drag lets it last.
+    float poseInertia = 1, poseDrag = 1;
+    // LEG CONTROL (leg_control.hpp; the user, November 11 23:35: "I want to
+    // change leg control so that it's on with Realistic Flips as well. I need
+    // that momentum rotation control"). legTurn: the body's counter-turn this
+    // frame from the legs' swing, a rotation vector in the tracking space
+    // (legTurnVector), radians; internal forces move the body without adding
+    // spin, so it turns the orientation once and leaves the momentum alone.
+    // legInertia: the body's moment of inertia relative to straight legs
+    // (1 / leg_control's spinScale): with poseInertia it scales the spin so
+    // angular momentum is kept (tucked spins faster, extended slower).
+    Vec3 legTurn{};
+    float legInertia = 1;
+    // HANDSTAND (handstand.hpp, H1): the hands hold him. The tilt is
+    // supportTilt (the balance's lean on the palms) and the spin
+    // supportAngular, as given: no web, arm or landing turns it meanwhile.
+    bool handSupport{};
+    Quat supportTilt{};
+    Vec3 supportAngular{};
 };
+// The legs' reaction (radians about the head's level right, + nose up, and
+// its level forward) as a rotation vector in the tracking space; the same
+// axes for CONTROLLED FLIPS (FlipMotion) and REALISTIC FLIPS (RealisticFlip).
+inline Vec3 legTurnVector(Quat head, float pitch, float roll) {
+    pitch = std::isfinite(pitch) ? std::clamp(pitch, -.1f, .1f) : 0.f;
+    roll = std::isfinite(roll) ? std::clamp(roll, -.1f, .1f) : 0.f;
+    if (pitch == 0 && roll == 0)
+        return {};
+    const auto horizontal = [](Vec3 v) { return normalized(Vec3{v.x, 0, v.z}); };
+    const Vec3 look = head.rotate({0, 0, -1});
+    Vec3 forward = horizontal(look);
+    if (!(length(forward) >= .5f))
+        forward = horizontal(head.rotate({0, look.y < 0 ? 1.f : -1.f, 0}));
+    if (!(length(forward) >= .5f))
+        forward = {0, 0, -1};
+    const Vec3 right{-forward.z, 0, forward.x};
+    return right * pitch + forward * roll;
+}
 struct RealisticControls {
     bool brake{};
     Vec3 manualAngular{}; // tracking-local left-stick angular velocity
@@ -84,10 +129,11 @@ class AutomaticHandMotion {
 // canned animation. Hand motion adds momentum; air drag removes it. A tether
 // supplies a smooth alignment torque while attached, and release carries spin.
 class RealisticFlip {
-    Quat tilt_{}, levelTarget_{};
+    Quat tilt_{}, levelTarget_{}, levelFrom_{};
+    float levelAge_{}, levelSeconds_ = 1.f;
     Vec3 angular_{}, momentum_{}, averageVelocity_{}, lastPull_{0, 1, 0};
     bool attached_{}, sampled_{}, airborne_{}, leveling_{}, brakeHeld_{};
-    float missingTime_{}, lastRadius_ = 20;
+    float missingTime_{}, lastRadius_ = 20, poseInertia_ = 1;
     static Quat unit(Quat q) {
         const float n = std::sqrt(q.x * q.x + q.y * q.y + q.z * q.z + q.w * q.w);
         return n > 1e-6f ? Quat{q.x / n, q.y / n, q.z / n, q.w / n} : Quat{};
@@ -125,6 +171,11 @@ class RealisticFlip {
     Vec3 angularVelocity() const {
         return angular_;
     }
+    // HANDSTAND: let go of the hands with this spin (tracking-space axes,
+    // rad/s); the flip goes on from the tilt the hands held.
+    void release(Vec3 spin) {
+        angular_ = momentum_ = finite(spin) ? limited(spin, 12.f) : Vec3{};
+    }
     // Takes the tilt's turn about the vertical out of it, radians (more than
     // 0 to the left, as Quat::yaw), for the tracking space's yaw to keep:
     // where a spin leaves the player facing is the heading from then on, and
@@ -142,6 +193,7 @@ class RealisticFlip {
         const Quat back = Quat::yaw(-heading);
         tilt_ = unit(back * tilt_);
         levelTarget_ = unit(back * levelTarget_);
+        levelFrom_ = unit(back * levelFrom_);
         angular_ = back.rotate(angular_);
         momentum_ = back.rotate(momentum_);
         averageVelocity_ = back.rotate(averageVelocity_);
@@ -156,22 +208,51 @@ class RealisticFlip {
         }
         if (!std::isfinite(dt) || dt <= 0 || dt > .1f)
             return tilt_;
+        // HANDSTAND: the hands hold the body; the balance sets the tilt.
+        if (flight.handSupport) {
+            const Quat q = unit(flight.supportTilt);
+            if (std::abs(q.x) + std::abs(q.y) + std::abs(q.z) + std::abs(q.w) > .5f && std::isfinite(q.w))
+                tilt_ = q;
+            angular_ = finite(flight.supportAngular) ? limited(flight.supportAngular, 12.f) : Vec3{};
+            momentum_ = angular_;
+            leveling_ = brakeHeld_ = attached_ = airborne_ = false;
+            missingTime_ = 0;
+            return tilt_;
+        }
         const float autoRate = std::clamp(settings.speed, 90, 360) * 3.14159265f / 180;
         const bool manual = controls.manualActive && finite(controls.manualAngular);
         const float rate = manual ? std::max(autoRate, length(controls.manualAngular)) : autoRate;
         const bool brake = controls.brake && settings.airBrake;
         if (brake && !brakeHeld_) {
             levelTarget_ = unit(arc(tilt_.rotate({0, 1, 0}), {0, 1, 0}) * tilt_);
+            levelFrom_ = tilt_;
+            levelAge_ = 0;
+            // The angle's share of a half turn, so a small tilt does not take a second.
+            const float angle = length(rotationVector(levelTarget_ * levelFrom_.conjugate()));
+            const float whole = std::clamp(settings.levelMs, 300, 2500) / 1000.f;
+            levelSeconds_ = std::max(.2f, whole * std::clamp(angle / 3.14159265f, .3f, 1.f));
             leveling_ = true;
         }
         brakeHeld_ = brake;
         if (brake || leveling_) {
-            // Finish an upright recovery even after a short button press.
-            // Preserve horizontal heading, and discard the old spin momentum.
+            // Finish an upright recovery even after a short button press, as a smooth turn (minimum jerk: no hard start,
+            // no hard stop). Preserve horizontal heading, and discard the old spin momentum.
             momentum_ = {};
-            const Vec3 error = rotationVector(levelTarget_ * tilt_.conjugate());
-            integrate(limited(error / .18f, autoRate), autoRate / .12f, dt);
-            if (length(error) < .001f && length(angular_) < .02f) {
+            levelAge_ += dt;
+            const float u = std::clamp(levelAge_ / levelSeconds_, 0.f, 1.f);
+            const float smooth = u * u * u * (u * (6 * u - 15) + 10);
+            const float rate = 30 * u * u * (1 - u) * (1 - u) / levelSeconds_;
+            const Vec3 whole = rotationVector(levelTarget_ * levelFrom_.conjugate());
+            const float angle = length(whole);
+            if (angle > 1e-6f) {
+                const Vec3 axis = whole / angle;
+                tilt_ = unit(Quat::around(axis, angle * smooth) * levelFrom_);
+                angular_ = axis * (angle * rate);
+            } else {
+                tilt_ = levelTarget_;
+                angular_ = {};
+            }
+            if (u >= 1.f) {
                 tilt_ = levelTarget_;
                 angular_ = {};
                 leveling_ = false;
@@ -210,7 +291,23 @@ class RealisticFlip {
         const bool tether = flying && flight.attached && flight.coupling > 0 && length(flight.pull) > .01f;
         const bool enough = length(averageVelocity_) >= std::clamp(settings.minimumSpeed, 3, 16);
         const float strength = std::clamp(settings.strength, 25, 100) / 100.f;
-        const float drag = std::clamp(settings.falloffMs, 500, 3000) / 1000.f;
+        // The arms' pose (swing_coupling) and the legs' spread (LEG CONTROL)
+        // together: one body, one moment of inertia.
+        const float legInertia =
+            std::isfinite(flight.legInertia) && flight.legInertia > .05f ? flight.legInertia : 1.f;
+        const float armInertia = std::clamp(
+            std::isfinite(flight.poseInertia) && flight.poseInertia > .05f ? flight.poseInertia : 1.f, .55f,
+            1.35f); // as before LEG CONTROL
+        const float inertia = std::clamp(armInertia * std::clamp(legInertia, .5f, 2.f), .4f, 1.8f);
+        const float poseDrag = std::clamp(
+            std::isfinite(flight.poseDrag) && flight.poseDrag > .05f ? flight.poseDrag : 1.f, .55f, 1.45f);
+        if (flying && std::abs(inertia - poseInertia_) > 1e-4f) {
+            const float keep = poseInertia_ / inertia;
+            angular_ = angular_ * keep;
+            momentum_ = momentum_ * keep;
+        }
+        poseInertia_ = inertia;
+        const float drag = (std::clamp(settings.falloffMs, 500, 3000) / 1000.f) / poseDrag;
         Vec3 desired = momentum_ * std::exp(-dt / drag);
         if (tether) {
             lastPull_ = normalized(local.rotate(flight.pull));
@@ -229,7 +326,7 @@ class RealisticFlip {
             desired = angular_ + limited(orbit * strength, rate * .5f);
         }
         if (flying) {
-            const float gain = 8.f * std::clamp(settings.handStrength, 0, 200) / 100.f;
+            const float gain = 8.f * std::clamp(settings.handStrength, 0, 200) / 100.f / inertia;
             const Vec3 hand = tilt_.rotate(flight.handMomentum) * gain;
             // Capture the short arm swing that straddles takeoff, then accept
             // ongoing gestures and opposite gestures that brake the rotation.
@@ -244,6 +341,13 @@ class RealisticFlip {
         airborne_ = aloft;
         momentum_ = limited(desired, rate);
         integrate(momentum_, acceleration, dt);
+        // The legs' counter-turn (zero net angular momentum: a cat's turn),
+        // in the air only; the spin above is untouched by it.
+        if (flying && finite(flight.legTurn)) {
+            const Vec3 turn = limited(flight.legTurn, .1f);
+            if (const float angle = length(turn); angle > 1e-7f)
+                tilt_ = unit(tilt_ * Quat::around(turn / angle, angle));
+        }
         if (tether || !flying || manual)
             momentum_ = angular_;
         return tilt_;
