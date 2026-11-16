@@ -29,7 +29,7 @@ from probe_native_rays import snapshot as ray_snapshot
 from probe_game_swing import snapshot as swing_snapshot
 from probe_native_motion import snapshot as motion_snapshot
 from vr_launcher import (LauncherLock, alive, exit_status, bring_to_front, wait_for_game, enlarge_render_memory, elevated,
-                         RENDER_MEMORY_HOOKS, NeedsAdministrator, NEEDS_ADMINISTRATOR_EXIT, CLOSE_GAME_EXIT,
+                         RENDER_MEMORY_HOOKS, RENDER_RING_MB, NeedsAdministrator, NEEDS_ADMINISTRATOR_EXIT, CLOSE_GAME_EXIT,
                          close_game)
 import game_freeze
 from session_summary import write_summary
@@ -2313,6 +2313,9 @@ def main():
                    help='How often the game window gets your left eye in immersive VR: pictures a second (1..240; '
                         'default %d), or 0 for every frame, as builds before October 11 did. Each one costs the '
                         'graphics card time the headset could have.' % DEFAULT_MONITOR_RATE)
+    p.add_argument('--render-memory-mb', type=int, default=RENDER_RING_MB,
+                   help="Megabytes of the game's per-frame graphics memory Spidy's module gives it (128..1024; "
+                        "default %d; the game's own is 128): the launcher ini's render_memory_mb" % RENDER_RING_MB)
     p.add_argument('--no-eye-reflections', action='store_true',
                    help="The eyes without the game's screen-space reflections, as builds before October 11's "
                         "second did. Without it they follow the game's own Screen Space Reflections setting")
@@ -2444,6 +2447,8 @@ def main():
         p.error('Use an upscale of %d..%d%%' % UPSCALES)
     if not 50 <= a.building_reach <= 400:
         p.error('Use a building reach of 50..400% of the game\'s distance')
+    if not 128 <= a.render_memory_mb <= 1024:
+        p.error('Use a render memory of 128..1024 MB')
     if not MONITOR_RATES[0] <= a.monitor_rate <= MONITOR_RATES[1]:
         p.error('Use a monitor rate of %d..%d a second (0: every frame)' % MONITOR_RATES)
     if not 0 <= a.snap_turn <= 90 or not 0 <= a.smooth_turn <= 360 or not 0 <= a.haptics <= 100:
@@ -2548,7 +2553,7 @@ def session(a, startup):
         # In time only in a game that has just started: it creates its render memory once. That is the graphics
         # card's memory for each frame's drawing, not the PC's (a player with 32 GB read it so on October 16).
         try:
-            render_module.update(enlarge_render_memory(pid))
+            render_module.update(enlarge_render_memory(pid, a.render_memory_mb))
         except GameNeedsRestart:
             raise
         except (OSError, RuntimeError) as error:

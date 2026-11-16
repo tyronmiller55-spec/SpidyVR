@@ -2104,6 +2104,7 @@ DWORD WINAPI run(void*) {
             s.webSpeed = static_cast<uint32_t>(values.webSpeed);
             s.halfPunchDamage = values.halfPunchDamage;
             s.enemyTypes = values.enemyTypes;
+            s.targetScanIdleMs = static_cast<uint32_t>(std::clamp(values.targetScanIdleMs, 250, 2000));
             s.singleHandYankPercent = static_cast<uint32_t>(values.singleHandYankPercent);
             s.webTie = values.webTie;
             s.airSlingshot = values.airSlingshot;
@@ -5143,6 +5144,10 @@ DWORD WINAPI run(void*) {
                         if (input.focused && values.combatResponsive &&
                             (fightLately || moverTable == config.base + bridge::combatCamera))
                             input.asks |= 4u;
+                        // TARGET SCAN OUTSIDE FIGHTS: a fight now, whatever COMBAT RESPONSIVE says; the
+                        // target watches scan every 250 ms in one and every target_scan_idle_ms out of one.
+                        if (input.focused && (fightLately || moverTable == config.base + bridge::combatCamera))
+                            input.asks |= 64u;
                         // SPIDY RUN JUMP (on by default): A out of the swing's run is
                         // the swing's own jump, at once (Input::runJump).
                         if (input.focused && values.spidyRunJump)

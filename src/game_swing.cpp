@@ -2720,7 +2720,7 @@ extern "C" __declspec(dllexport) DWORD WINAPI SpidySwingSettings(void* input) {
          header[2] != settingsBytesV21 && header[2] != settingsBytesV22 && header[2] != settingsBytesV23 && header[2] != settingsBytesV24 &&
          header[2] != settingsBytesV25 && header[2] != settingsBytesV26 && header[2] != settingsBytesV27 &&
          header[2] != settingsBytesV28 && header[2] != settingsBytesV29 && header[2] != settingsBytesV30 &&
-         header[2] != settingsBytesV31 && header[2] != settingsBytesV40 &&
+         header[2] != settingsBytesV31 && header[2] != settingsBytesV40 && header[2] != settingsBytesV41 &&
          header[2] != sizeof(s)) ||
         !copy(&s, input, header[2]) || !validSettings(s))
         return 2001;
@@ -2759,6 +2759,8 @@ extern "C" __declspec(dllexport) DWORD WINAPI SpidySwingSettings(void* input) {
         // The launcher's Enemy types (settings version 32): on only when it says so. An older sender leaves
         // the guards off.
         game_guard::setEnemyTypes(s.version >= 41 && s.enemyTypes != 0); // the fork's v41 (Ilya's v32)
+        // TARGET SCAN OUTSIDE FIGHTS (v42): an older sender keeps the 250 ms of before.
+        game_targets::setScanIdleMs(s.version >= 42 ? s.targetScanIdleMs : game_targets::fightScanMs);
         solver.singleHandYankStrength((s.version >= 22 ? s.singleHandYankPercent : 100u) / 100.f);
         // WEB TIE: off (and in older packets) no gesture and no tie, and a
         // webbed enemy comes as before; switched off, the ties let go.
@@ -2861,6 +2863,9 @@ extern "C" __declspec(dllexport) DWORD WINAPI SpidySwingSubmit(void* input) {
         inputDeadline = GetTickCount64() + c.leaseMs;
     }
     ReleaseSRWLockExclusive(&control);
+    // Bit 6 of asks (TARGET SCAN OUTSIDE FIGHTS): a fight now; the target watches scan at their fight rate.
+    if (!result && (c.asks & 64u))
+        game_targets::sawFight();
     if (revoke) game_shooter::invalidatePending(c.serial);
     return result;
 }

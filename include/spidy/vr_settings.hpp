@@ -301,7 +301,7 @@ struct Values {
     // from before it gets RUN CURVE on and EARLY JUMP QUICK TAP once (the
     // user: "movement fixes will be defaults"); after that the player's own
     // choice stands. Not a row. movement_defaults.
-    int movementDefaults = 3;
+    int movementDefaults = 5; // movementDefaultsRevision: a new file has seen them
     // SOFT LANDING (the tab's SOFT LANDING; Swing::allowSoftLanding,
     // run_update::softLandVertical): a fall the swing flies, with no web
     // holding, eases to 9 m/s down over its last 3 m (or 0.35 s), its speed
@@ -798,6 +798,10 @@ struct Values {
     // full power, instead of waiting for you to let go (s165800: press to launch median 361 ms, p90 1.2 s, mostly the
     // hold). A tap or a shorter hold still fires on the release. Off: only the release fires, as before.
     bool pointJumpFireFull = true;
+    // TARGET SCAN OUTSIDE FIGHTS (the owner, Nov 16; s165800: "things are lagging during heavy action"): how often,
+    // milliseconds, the web, grab and punch target lists rescan the game's actors when nothing is fighting (250 to
+    // 2000); in a fight, and for 3 s after one, every 250 ms as before. 500: half the scans out on the streets.
+    int targetScanIdleMs = 500;
     // [next pass settings]
     bool operator==(const Values&) const = default;
 };

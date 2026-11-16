@@ -489,6 +489,10 @@ inline std::wstring quoteArgument(std::wstring_view argument) {
 // them since October 8 (run_game_vr.py's switches still turn them off). So
 // are the swing's own walls and the view standing on them: no "Wall running"
 // since October 25 (--no-wall-run, --no-stand-on-walls).
+// RENDER MEMORY (the ini's render_memory_mb, tools/vr_launcher.py's RENDER_RING_MB): the per-frame graphics
+// memory pool Spidy's module gives the game, megabytes; native_render_memory.cpp takes 128 to 1024.
+inline constexpr int defaultRenderMemoryMb = 512, minimumRenderMemoryMb = 128, maximumRenderMemoryMb = 1024;
+
 struct SessionOptions {
     bool smallWindow = true;
     bool stockMonitorView = false;
@@ -537,6 +541,10 @@ struct SessionOptions {
     // How often the game window gets your left eye in immersive VR: pictures a second, 0 for every frame
     // (monitor_rate.hpp). Each one costs the graphics card time the headset could have.
     int monitorRate = static_cast<int>(defaultMonitorRate);
+    // The game's per-frame graphics memory pool, megabytes (128-1024; the game's own is 128): the ini's
+    // render_memory_mb. 512 by default: the playtests' two frames used at most 95 MB of it (November 2026), too few
+    // heavy fights to go lower yet; a lower pool frees graphics memory, one too small spills frames.
+    int renderMemoryMb = defaultRenderMemoryMb;
     bool operator==(const SessionOptions&) const = default;
 };
 
@@ -610,7 +618,9 @@ inline std::vector<std::wstring> sessionArguments(const SessionOptions& options,
         {std::clamp(options.hud, 0, 3), {L"--hud", 2}},
         {std::clamp(options.flipSpeed, 90, 480), {L"--flip-speed", 180}},
         {std::clamp(options.monitorRate, 0, static_cast<int>(maximumMonitorRate)),
-         {L"--monitor-rate", static_cast<int>(defaultMonitorRate)}}};
+         {L"--monitor-rate", static_cast<int>(defaultMonitorRate)}},
+        {std::clamp(options.renderMemoryMb, minimumRenderMemoryMb, maximumRenderMemoryMb),
+         {L"--render-memory-mb", defaultRenderMemoryMb}}};
     for (const auto& [value, flag] : settings)
         if (value != flag.second) {
             args.emplace_back(flag.first);

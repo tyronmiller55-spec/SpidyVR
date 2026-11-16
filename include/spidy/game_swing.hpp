@@ -155,6 +155,10 @@ struct Command {
     // button (B) held: on a web line, a dash along it. Bits 2 and 3 in pull
     // request #79, after #77's since; an older swing module refuses either
     // (asks > 15).
+    // Bit 6 (TARGET SCAN OUTSIDE FIGHTS, Nov 16): the player fought within 3 s or the game's combat camera is
+    // on, whatever COMBAT RESPONSIVE says: the target watches scan at their fight rate (game_targets::sawFight).
+    // No change of layout or version: an older swing module refuses such a command (asks > 63), and both come in
+    // one package.
     uint32_t asks{};
     uint64_t sampleTimeNs = 1;
     // Version 3: a flip's tilt of the tracking space (Input::tilt). Version 2
@@ -342,7 +346,7 @@ inline bool gameOwnsGround(bool fresh, const Data& d) {
 // Version 8 appends handClimb without changing the upstream phone or arcade
 // fields. Older official settings keep their original layout and meaning.
 struct Settings {
-    uint32_t magic = 0x53575354, version = 41, bytes = sizeof(Settings), grab = 1;
+    uint32_t magic = 0x53575354, version = 42, bytes = sizeof(Settings), grab = 1;
     float maxSpeed = 32;
     uint32_t airWebs = 1;
     float gravity = 6;
@@ -419,6 +423,9 @@ struct Settings {
     // 0, nobody guards. Appended after the fork's v40 fields (the fork's v32-v40 are not Ilya's); a v40 packet
     // (settingsBytesV40) ends before it and leaves the guards off.
     uint32_t enemyTypes{};
+    // Version 42 (TARGET SCAN OUTSIDE FIGHTS, vr_settings::Values::targetScanIdleMs): 250 to 2000 ms between the
+    // target watches' scans out of a fight (game_targets::setScanIdleMs); a v41 packet (settingsBytesV41) keeps 250.
+    uint32_t targetScanIdleMs = 500;
 };
 constexpr uint32_t settingsBytesV3 = 28, settingsBytesV4 = 32, settingsBytesV5 = 36, settingsBytesV6 = 40,
                    settingsBytesV7 = 44, settingsBytesV8 = 48, settingsBytesV9 = 52, settingsBytesV10 = 56,
@@ -430,9 +437,11 @@ constexpr uint32_t settingsBytesV3 = 28, settingsBytesV4 = 32, settingsBytesV5 =
                    settingsBytesV28 = 132, settingsBytesV29 = 136, settingsBytesV30 = 144,
                    settingsBytesV31 = 148, settingsBytesV32 = 152, settingsBytesV33 = 156,
                    settingsBytesV34 = 160, settingsBytesV35 = 164, settingsBytesV36 = 168,
-                   settingsBytesV37 = 172, settingsBytesV38 = 176, settingsBytesV39 = 180, settingsBytesV40 = 188;
+                   settingsBytesV37 = 172, settingsBytesV38 = 176, settingsBytesV39 = 180, settingsBytesV40 = 188,
+                   settingsBytesV41 = 192;
 static_assert(
-    sizeof(Settings) == 192 && offsetof(Settings, enemyTypes) == settingsBytesV40 && offsetof(Settings, runSpeedPercent) == settingsBytesV39 &&
+    sizeof(Settings) == 196 && offsetof(Settings, targetScanIdleMs) == settingsBytesV41 &&
+    offsetof(Settings, enemyTypes) == settingsBytesV40 && offsetof(Settings, runSpeedPercent) == settingsBytesV39 &&
     offsetof(Settings, walls) == settingsBytesV3 &&
     offsetof(Settings, physical) == settingsBytesV4 && offsetof(Settings, noBlows) == settingsBytesV5 &&
     offsetof(Settings, arcade) == settingsBytesV6 && offsetof(Settings, handClimb) == settingsBytesV7 &&
@@ -916,7 +925,8 @@ inline bool validSettings(const Settings& s) {
             (s.version == 31 && s.bytes == settingsBytesV31) ||
             (s.version == 39 && s.bytes == settingsBytesV39) ||
             (s.version == 40 && s.bytes == settingsBytesV40) ||
-            (s.version == 41 && s.bytes == sizeof(Settings))) &&
+            (s.version == 41 && s.bytes == settingsBytesV41) ||
+            (s.version == 42 && s.bytes == sizeof(Settings))) &&
            s.grab <= 1 && std::isfinite(s.maxSpeed) && s.maxSpeed > 0 && s.maxSpeed <= motionSpeedLimit &&
            s.airWebs <= 1 && std::isfinite(s.gravity) && s.gravity >= 0 && s.gravity <= maxGravity &&
            s.walls <= 4 && s.physical <= 1 && s.noBlows <= 3 && s.arcade <= 1 && s.handClimb <= 1 &&
@@ -938,7 +948,8 @@ inline bool validSettings(const Settings& s) {
            (s.version < 39 || s.animatedTorso <= 1) && (s.version < 39 || s.animatedModelYaw <= 1) &&
            (s.version < 31 || s.webLines <= 1) &&
            (s.version < 40 || (s.runSpeedPercent >= 50 && s.runSpeedPercent <= 200 && s.softLockMetres <= 40)) &&
-           (s.version < 41 || s.enemyTypes <= 1);
+           (s.version < 41 || s.enemyTypes <= 1) &&
+           (s.version < 42 || (s.targetScanIdleMs >= 250 && s.targetScanIdleMs <= 2000));
 }
 static_assert(sizeof(WebState) == 28 && sizeof(Data) == 272 && offsetof(Data, wall) == 240);
 // The player is in the air: Spidy's own flight, or the game's jump or fall,
@@ -999,7 +1010,7 @@ inline bool valid(const Command& c) {
         !commandBytes(c.version) || c.bytes != commandBytes(c.version) ||
         !std::isfinite(c.leap) || c.leap < 0 || c.leap > 1 || !finite(c.look) || length(c.look) > 1.01f ||
         !c.serial || c.focused > 1 || c.jump > 1 || c.leaseMs > 250 || (c.focused && !c.leaseMs) ||
-        !finite(c.move) || length(c.move) > 1.001f || !std::isfinite(c.trackingYaw) || c.asks > 63 ||
+        !finite(c.move) || length(c.move) > 1.001f || !std::isfinite(c.trackingYaw) || c.asks > 127 ||
         !std::isfinite(c.sampleSeconds) || c.sampleSeconds <= 0 || c.sampleSeconds > .1f ||
         (c.focused && !c.sampleTimeNs) || !std::isfinite(tilt) || tilt < .99f || tilt > 1.01f)
         return false;

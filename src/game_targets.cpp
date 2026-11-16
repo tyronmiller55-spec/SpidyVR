@@ -2,6 +2,7 @@
 #include "spidy/game_targets.hpp"
 #include "spidy/guard.hpp"
 #include <algorithm>
+#include <atomic>
 #include <chrono>
 #include <cmath>
 #include <cstring>
@@ -668,6 +669,26 @@ bool game_targets::behaviors(uint64_t record, std::string& out) {
     out = found->second;
     return true;
 }
+namespace {
+std::atomic<uint32_t> scanIdleMs{500};
+std::atomic<int64_t> fightSeenMs{INT64_MIN / 2};
+int64_t steadyMs() {
+    return std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::steady_clock::now().time_since_epoch())
+        .count();
+}
+} // namespace
+void game_targets::setScanIdleMs(uint32_t idleMs) {
+    scanIdleMs.store(std::clamp(idleMs, minScanIdleMs, maxScanIdleMs), std::memory_order_relaxed);
+}
+void game_targets::sawFight() {
+    fightSeenMs.store(steadyMs(), std::memory_order_relaxed);
+}
+bool game_targets::fightingNow() {
+    return steadyMs() - fightSeenMs.load(std::memory_order_relaxed) < static_cast<int64_t>(fightHoldMs);
+}
+uint32_t game_targets::scanIntervalNow() {
+    return scanIntervalMs(fightingNow(), scanIdleMs.load(std::memory_order_relaxed));
+}
 void Watch::start(uintptr_t base, uint32_t kinds) {
     stop();
     base_ = base;
@@ -696,9 +717,15 @@ void Watch::run() {
         std::unique_lock lock(lock_);
         list_.swap(next);
         ++scans_;
-        // Props stream in and out with the city and bots spawn with crimes:
-        // a quarter of a second is soon enough for a web shot at one.
-        if (wake_.wait_for(lock, std::chrono::milliseconds(250), [this] { return stopping_; }))
-            return;
+        // Props stream in and out with the city and bots spawn with crimes: a quarter of a second is soon
+        // enough for a web shot at one in a fight, half a second (TARGET SCAN OUTSIDE FIGHTS) out of one. Checked
+        // every 50 ms, so a fight that starts mid-wait gets its next scan within 250 ms.
+        const auto scanned = std::chrono::steady_clock::now();
+        for (;;) {
+            if (wake_.wait_for(lock, std::chrono::milliseconds(50), [this] { return stopping_; }))
+                return;
+            if (std::chrono::steady_clock::now() - scanned >= std::chrono::milliseconds(scanIntervalNow()))
+                break;
+        }
     }
 }

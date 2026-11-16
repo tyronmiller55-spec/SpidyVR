@@ -228,6 +228,15 @@ int main() {
         options.monitorRate = 999;
         args = sessionArguments(options, L"r.json", L"", L"");
         check(args.size() == 9 && args[7] == L"--monitor-rate" && args[8] == L"240", "the monitor at most 240");
+        // RENDER MEMORY (render_memory_mb): 512 MB goes unsaid, another is passed, within 128..1024.
+        options = {};
+        check(options.renderMemoryMb == 512, "render memory 512 MB by default");
+        options.renderMemoryMb = 384;
+        args = sessionArguments(options, L"r.json", L"", L"");
+        check(args.size() == 9 && args[7] == L"--render-memory-mb" && args[8] == L"384", "a smaller render memory");
+        options.renderMemoryMb = 5000;
+        args = sessionArguments(options, L"r.json", L"", L"");
+        check(args.size() == 9 && args[8] == L"1024", "render memory at most 1024 MB");
         options = {};
         options.weight = 999;
         args = sessionArguments(options, L"r.json", L"", L"");
@@ -760,6 +769,8 @@ int main() {
                 key == "animated_torso_twist" || key == "anim_forearm_fallback_deg")
                 continue;
             // NEXT PASS (November 15): the player's own feel.
+            if (key == "target_scan_idle_ms")
+                continue;
             if (key == "point_jump_fire_full")
                 continue;
             if (key == "web_zip_instant")

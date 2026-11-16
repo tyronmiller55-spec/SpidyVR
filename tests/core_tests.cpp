@@ -99,6 +99,7 @@
 #include "spidy/animated_torso.hpp"
 #include "spidy/animated_model_yaw.hpp"
 #include "spidy/animated_air_spin.hpp"
+#include "spidy/target_scan.hpp"
 #ifdef _WIN32
 #include "spidy/game_targets.hpp"
 // Stand-ins for the game's classes, by the names the target scan's rules look
@@ -1908,7 +1909,7 @@ int main() {
     });
     test("slingshot settings append to the old wire format and default off", [] {
         game_swing::Settings s;
-        check(s.version == 41 && s.bytes == 192 && !s.webSlingshot, "wrong slingshot defaults");
+        check(s.version == 42 && s.bytes == 196 && !s.webSlingshot, "wrong slingshot defaults");
         check(offsetof(game_swing::Settings, webSlingshot) == 48, "old settings moved");
         s.webSlingshot = 1; check(game_swing::validSettings(s), "ON refused");
         s.webSlingshot = 2; check(!game_swing::validSettings(s), "invalid switch accepted");
@@ -2574,7 +2575,7 @@ int main() {
         check(vr_settings::choose(vr_settings::Item::betterClimbing, 1, v), "ON failed");
         check(vr_settings::withTabOnly({}, vr_settings::tabOnlyText(v)).betterClimbing, "switch not saved");
         game_swing::Settings s;
-        check(s.version == 41 && s.bytes == 192 && offsetof(game_swing::Settings, betterClimbing) == 52,
+        check(s.version == 42 && s.bytes == 196 && offsetof(game_swing::Settings, betterClimbing) == 52,
               "settings moved old fields");
         s.betterClimbing = 1; check(game_swing::validSettings(s), "ON refused");
         s.betterClimbing = 2; check(!game_swing::validSettings(s), "invalid switch accepted");
@@ -4095,7 +4096,7 @@ int main() {
     test("merged settings keep phone suppression, arcade webs and hand climbing independent", [] {
         using namespace game_swing;
         Settings s;
-        check(s.version == 41 && s.bytes == 192, "updated settings did not append the climbing field");
+        check(s.version == 42 && s.bytes == 196, "updated settings did not append the climbing field");
         check(offsetof(Settings, noBlows) == 36 && offsetof(Settings, arcade) == 40 &&
               offsetof(Settings, handClimb) == 44, "upstream phone or arcade fields moved");
         s.noBlows = 3;
@@ -10315,7 +10316,7 @@ int main() {
         check(game_swing::valid(c) && !game_swing::input(c).fighting, "the web tie's click (bit 1) taken for a fight");
         c.asks = 7;
         check(game_swing::valid(c), "asks 7 refused");
-        c.asks = 64;
+        c.asks = 128;
         check(!game_swing::valid(c), "an unknown asks bit accepted");
         c.asks = 1;
         check(!game_swing::input(c).fighting, "bit 0 read as a fight");
@@ -10399,7 +10400,7 @@ int main() {
         c.asks = 8;
         check(game_swing::valid(c) && game_swing::input(c).runJump && !game_swing::input(c).fighting,
               "asks bit 3 refused or lost");
-        c.asks = 64;
+        c.asks = 128;
         check(!game_swing::valid(c), "an unknown asks bit accepted");
         vr_settings::Values values;
         check(values.spidyRunJump && vr_settings::defaultChoice(vr_settings::Item::spidyRunJump) == 1 &&
@@ -10545,7 +10546,7 @@ int main() {
         Swing fresh(inert());
         check(!fresh.webLandingSmoothEnabled() && !fresh.landCarrying(), "SMOOTH WEB LANDING on by default");
         game_swing::Settings packet;
-        check(packet.version == 41 && packet.bytes == 192 && !packet.webLandingSmooth &&
+        check(packet.version == 42 && packet.bytes == 196 && !packet.webLandingSmooth &&
                   packet.webLandingImpact == 24 &&
                   offsetof(game_swing::Settings, webLandingSmooth) == game_swing::settingsBytesV29,
               "SMOOTH WEB LANDING not appended, or on by default");
@@ -10699,7 +10700,7 @@ int main() {
         Swing fresh(inert());
         check(!fresh.groundRunEnabled() && !fresh.groundRunning(), "SPIDY RUN on by default");
         game_swing::Settings packet;
-        check(packet.version == 41 && packet.bytes == 192 && !packet.spidyRun &&
+        check(packet.version == 42 && packet.bytes == 196 && !packet.spidyRun &&
                   offsetof(game_swing::Settings, spidyRun) == game_swing::settingsBytesV27,
               "SPIDY RUN not appended, or on by default");
         packet.spidyRun = 2;
@@ -10899,7 +10900,7 @@ int main() {
             check(!sw.groundRunning(), "the air started a run from standing");
         }
         game_swing::Settings packet;
-        check(packet.version == 41 && packet.bytes == 192 && !packet.spidyRunStanding &&
+        check(packet.version == 42 && packet.bytes == 196 && !packet.spidyRunStanding &&
                   offsetof(game_swing::Settings, spidyRunStanding) == game_swing::settingsBytesV28,
               "SPIDY RUN FROM STANDING not appended, or on by default");
         packet.spidyRunStanding = 2;
@@ -11197,7 +11198,7 @@ int main() {
              // Settings version 32 appends it upstream; this fork's version 41 appends it after the fork's v32-v40
              // fields, off, and version 31 (148 bytes) and the fork's version 40 (188) are still taken, guards off.
              game_swing::Settings s;
-             check(s.version == 41 && s.bytes == 192 && s.enemyTypes == 0 &&
+             check(s.version == 42 && s.bytes == 196 && s.enemyTypes == 0 &&
                        game_swing::settingsBytesV31 == 148 && game_swing::settingsBytesV40 == 188 &&
                        offsetof(game_swing::Settings, enemyTypes) == game_swing::settingsBytesV40 &&
                        offsetof(game_swing::Settings, webLines) == game_swing::settingsBytesV30,
@@ -11223,6 +11224,34 @@ int main() {
              wrong.version = 32;
              wrong.bytes = sizeof(game_swing::Settings);
              check(!game_swing::validSettings(wrong), "upstream version 32 at version 41's size accepted");
+             // TARGET SCAN OUTSIDE FIGHTS (Nov 16): version 42 appends the scan interval out of a fight; a version
+             // 41 packet (192 bytes) is still taken and keeps 250 ms.
+             game_swing::Settings v41;
+             v41.version = 41;
+             v41.bytes = game_swing::settingsBytesV41;
+             check(game_swing::validSettings(v41) && game_swing::settingsBytesV41 == 192 &&
+                       offsetof(game_swing::Settings, targetScanIdleMs) == game_swing::settingsBytesV41,
+                   "version 41 refused, or the scan interval not after it");
+             game_swing::Settings scan;
+             check(scan.targetScanIdleMs == 500, "500 ms out of fights by default");
+             scan.targetScanIdleMs = 249;
+             check(!game_swing::validSettings(scan), "a scan under 250 ms accepted");
+             scan.targetScanIdleMs = 2001;
+             check(!game_swing::validSettings(scan), "a scan over 2 s accepted");
+             scan.targetScanIdleMs = 2000;
+             check(game_swing::validSettings(scan), "2 s refused");
+             check(game_targets::scanIntervalMs(true, 2000) == 250 && game_targets::scanIntervalMs(false, 500) == 500 &&
+                       game_targets::scanIntervalMs(false, 10) == 250 && game_targets::scanIntervalMs(false, 9000) == 2000,
+                   "the scan interval: 250 ms in a fight, the setting out of one, within 250..2000");
+             game_swing::Command c;
+             c.serial = 1;
+             c.asks = 64;
+             check(game_swing::valid(c) && !game_swing::input(c).fighting,
+                   "asks bit 6 (a fight, for the target scan) refused, or read as COMBAT RESPONSIVE");
+             check(vr_settings::Values{}.targetScanIdleMs == 500 &&
+                       vr_settings::withTabOnly({}, "target_scan_idle_ms=100\n").targetScanIdleMs == 250 &&
+                       vr_settings::withTabOnly({}, "target_scan_idle_ms=800\n").targetScanIdleMs == 800,
+                   "target_scan_idle_ms: 500 by default, read and clamped");
          });
     test("called blows hit harder and throw him the way they went", [] {
         const Flow flow;
@@ -23809,7 +23838,7 @@ int main() {
     test("free combat: settings default to called combat and preserve older packet layouts", [] {
         using namespace game_swing;
         Settings s;
-        check(s.version == 41 && s.bytes == 192 && s.combatVisuals == 1 &&
+        check(s.version == 42 && s.bytes == 196 && s.combatVisuals == 1 &&
                   offsetof(Settings, combatVisuals) == 56,
               "free combat broke the settings defaults or layout");
         s.combatVisuals = 0;
@@ -23856,7 +23885,7 @@ int main() {
         check(withTabOnly(Values{}, "single_hand_yank_percent=999\n").singleHandYankPercent == 300,
               "saved single-hand yank strength was not clamped");
         game_swing::Settings packet;
-        check(packet.version == 41 && packet.bytes == 192 && !packet.halfPunchDamage &&
+        check(packet.version == 42 && packet.bytes == 196 && !packet.halfPunchDamage &&
                   packet.singleHandYankPercent == 100 &&
                   offsetof(game_swing::Settings, halfPunchDamage) == 96 &&
                   offsetof(game_swing::Settings, singleHandYankPercent) == 100,
@@ -25155,7 +25184,7 @@ int main() {
               "spidy_vr.ini does not keep WEB LINES as web_lines");
         game_swing::Settings s;
         check(!s.webLines && offsetof(game_swing::Settings, webLines) == game_swing::settingsBytesV30 &&
-                  s.version == 41 && s.bytes == sizeof(game_swing::Settings),
+                  s.version == 42 && s.bytes == sizeof(game_swing::Settings),
               "web lines on in a new packet, or not appended");
         s.webLines = 1;
         check(game_swing::validSettings(s), "a packet with web lines refused");
@@ -25422,6 +25451,7 @@ int main() {
                   "landing_body_hold_turn=1\n"
                   "web_zip_instant=1\n"
                   "point_jump_fire_full=1\n"
+                  "target_scan_idle_ms=500\n"
                   "movement_defaults=5\n",
               "the defaults' text");
         Values changed = defaults;
@@ -27796,12 +27826,12 @@ int main() {
         c.serial = 1;
         c.focused = 1;
         c.tilt = Quat{};
-        for (uint32_t asks = 0; asks < 64; ++asks) {
+        for (uint32_t asks = 0; asks < 128; ++asks) {
             c.asks = asks;
             check(game_swing::valid(c),
                   "a command with the tie's click, a zip or a dodge was refused (2001)");
         }
-        c.asks = 64;
+        c.asks = 128;
         check(!game_swing::valid(c), "an unknown ask was accepted");
     });
     // Web lines (web_line.hpp): both hands' webs on surfaces, hands together, the click.
@@ -32142,7 +32172,7 @@ int main() {
         near(run(50) / base, .5f, .01f);
         near(run(1000) / base, 2.f, .01f);
         game_swing::Settings s;
-        check(s.version == 41 && s.runSpeedPercent == 100 && game_swing::validSettings(s), "v41 default (0.8.7 port)");
+        check(s.version == 42 && s.runSpeedPercent == 100 && game_swing::validSettings(s), "v42 default (0.8.7 port, target scan)");
         s.runSpeedPercent = 201;
         check(!game_swing::validSettings(s), "run speed over 200% accepted");
         s = {};
@@ -32324,7 +32354,7 @@ int main() {
         bad.holdCost = 5;
         check(game_swing::validHandGrab(bad), "the ends of the range are valid");
         // The settings struct is untouched: this is a side channel.
-        check(game_swing::Settings{}.version == 41 && sizeof(game_swing::Settings) == 192,
+        check(game_swing::Settings{}.version == 42 && sizeof(game_swing::Settings) == 196,
               "Settings stays v41 (0.8.7's enemyTypes), 192 bytes");
     });
     test("air kicks settings: the switch, aim and spin rows on the legs page, steps, notes and ini keys", [] {
@@ -32577,7 +32607,7 @@ int main() {
         bad.magic = 0;
         check(!game_swing::validTether(bad), "a wrong magic is refused");
         check(game_swing::TetherLive{}.version == 1 && sizeof(game_swing::TetherLive) == 240 &&
-                  game_swing::Settings{}.version == 41 && sizeof(game_swing::Settings) == 192,
+                  game_swing::Settings{}.version == 42 && sizeof(game_swing::Settings) == 196,
               "TetherLive v1; Settings stays v41, 192 bytes");
     });
     test("hand grab settings: strength and hold cost rows, steps, notes and ini keys", [] {
@@ -32764,7 +32794,7 @@ int main() {
         for (unsigned i = 1; i <= static_cast<unsigned>(lastItem); ++i)
             check(seen[i] == 1, "Item has no menu row");
         game_swing::Settings s;
-        check(s.version == 41 && s.bytes == 192 && offsetof(game_swing::Settings, webLines) == 144 &&
+        check(s.version == 42 && s.bytes == 196 && offsetof(game_swing::Settings, webLines) == 144 &&
                   offsetof(game_swing::Settings, headProbe) == 148 &&
                   offsetof(game_swing::Settings, animatedModelYaw) == 176 && game_swing::validSettings(s),
               "v39 layout or validation");

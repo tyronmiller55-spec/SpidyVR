@@ -1,6 +1,8 @@
 #pragma once
 #include "guard.hpp"
 #include "math.hpp"
+#include "target_scan.hpp"
+#include <algorithm>
 #include <condition_variable>
 #include <cstdint>
 #include <mutex>
@@ -248,6 +250,14 @@ bool tellsCombat(const char* name);
 // `others`, each a comma separated list in order, cut at about 240 names. False when the image cannot be
 // read.
 bool imageClasses(uintptr_t base, std::string& states, std::string& others);
+
+// TARGET SCAN OUTSIDE FIGHTS: target_scan.hpp has the intervals.
+// Both from the swing module's thread; each Watch's thread reads them.
+void setScanIdleMs(uint32_t idleMs);
+void sawFight();
+// Whether a fight was seen within fightHoldMs, and the interval every Watch keeps now.
+bool fightingNow();
+uint32_t scanIntervalNow();
 
 class Watch {
   public:
