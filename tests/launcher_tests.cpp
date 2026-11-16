@@ -756,6 +756,10 @@ int main() {
                 key == "animated_torso_twist" || key == "anim_forearm_fallback_deg")
                 continue;
             // NEXT PASS (November 15): the player's own feel.
+            if (key == "handoff_glide_max_ms")
+                continue;
+            if (key == "handoff_glide_cm_s")
+                continue;
             if (key == "handoff_ease_curve")
                 continue;
             if (key == "landing_rear_turn")

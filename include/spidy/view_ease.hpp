@@ -103,6 +103,7 @@ class Ease {
         start_ = magnitude_ = lm;
         duration_ = durationSeconds;
         gentle_ = gentle;
+        offset0_ = offset;
         hold_ = std::isfinite(holdSeconds) ? std::clamp(holdSeconds, 0.f, 2.f) : 0.f;
         held_ = 0;
         elapsed_ = 0;
@@ -166,6 +167,16 @@ class Ease {
         if (heightDone)
             vMagnitude_ = 0;
         return dir_ * magnitude_ + Vec3{0, vMagnitude_, 0};
+    }
+    // HANDOFF GLIDE SPEED: a new length for the ease just begun (before its first frame), same offset, hold and curve.
+    bool retime(float durationSeconds, float verticalSeconds) {
+        if (!active_ || elapsed_ > 0 || held_ > 0)
+            return false;
+        const uint32_t begins = begins_;
+        active_ = false;
+        const bool ok = begin(offset0_, durationSeconds, verticalSeconds, hold_, gentle_);
+        begins_ = begins;
+        return ok;
     }
     void cancel(End why) {
         if (active_)
@@ -232,6 +243,7 @@ class Ease {
     float vStart_{}, vMagnitude_{}, vDuration_{};
     float hold_{}, held_{};
     bool gentle_{};
+    Vec3 offset0_{};
     Vec3 dir_{}, lastFeet_{};
     float start_{}, magnitude_{}, duration_{}, elapsed_{}, lastYaw_{}, turned_{};
     End lastEnd_ = End::none;

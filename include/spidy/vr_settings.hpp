@@ -748,6 +748,13 @@ struct Values {
     // and stops at rest (smootherstep, no motion bleed): the camera never jolts into the glide. 0: the cubic ease-out with
     // the motion bleed, which starts at three times the average speed (d591229: median 0.32 m in 250 ms, 3.8 m/s at once).
     int handoffEaseCurve = 1;
+    // HANDOFF GLIDE SPEED (handoff_glide_cm_s, 200 = 2 m/s; 0: the fixed lengths): a handoff's camera glide is made
+    // long enough that the camera never moves faster than this - a 0.3 m offset still takes the ease's 250 ms, a 0.6 m
+    // one about 560 ms (d591229: offsets up to 0.94 m level and 1.31 m in height were crossed in 250 ms). Takeovers'
+    // glides and the height fade, and the landing's blend onto the head.
+    int handoffGlideCmS = 200;
+    // HANDOFF GLIDE LONGEST (handoff_glide_max_ms, 700): the longest a glide is stretched to by HANDOFF GLIDE SPEED.
+    int handoffGlideMaxMs = 700;
     // [next pass settings]
     bool operator==(const Values&) const = default;
 };

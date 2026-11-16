@@ -24709,6 +24709,8 @@ int main() {
                   "landing_body_ease_ms=500\n"
                   "landing_rear_turn=1\n"
                   "handoff_ease_curve=1\n"
+                  "handoff_glide_cm_s=200\n"
+                  "handoff_glide_max_ms=700\n"
                   "movement_defaults=3\n",
               "the defaults' text");
         Values changed = defaults;

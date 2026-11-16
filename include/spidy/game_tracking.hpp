@@ -531,6 +531,9 @@ class GameTrackingRig {
     // an ease began; the offset is startOffset() of viewEase().
     bool beginViewEase(Vec3 worldEyes, const Pose& head, float seconds, float verticalSeconds = 0, float holdSeconds = 0,
                        bool gentle = false);
+    bool retimeViewEase(float seconds, float verticalSeconds) {
+        return viewEase_.retime(seconds, verticalSeconds);
+    }
     void cancelViewEase(view_ease::End why) {
         viewEase_.cancel(why);
     }

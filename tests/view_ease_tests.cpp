@@ -245,6 +245,19 @@ int main() {
         check(t > .24f && t < .27f, "gentle at 20 m/s: no bleed, ends on its own time");
         check(worst < 1.875f * .32f / .25f + .05f, "its peak speed: 1.875 x average (smootherstep)");
     }
+    // HANDOFF GLIDE SPEED: retime before the first frame keeps the offset, hold and curve; refused once it ran.
+    {
+        Ease e;
+        e.begin({.3f, .4f, 0}, .25f, .5f, 0, true);
+        check(e.retime(.5f, .8f) && near(e.duration(), .5f) && near(e.heightSeconds(), .8f) && e.gentle() &&
+                  near(e.startOffset(), .3f) && near(e.startHeight(), .4f),
+              "retimed: same offset and curve, new lengths");
+        e.step(dt, {}, 0);
+        check(!e.retime(1.f, 1.f), "not after the first frame");
+        Ease n;
+        n.begin({.3f, .4f, 0}, .25f, .5f);
+        check(n.retime(.6f, .5f) && n.heightSeconds() == 0 && near(n.startOffset(), .5f), "a level glide past the fade: one offset");
+    }
     std::printf("punch view ease: %d checks passed\n", passed);
     return 0;
 }

@@ -152,6 +152,21 @@ int main() {
         const auto r = fc.update(dt, fs);
         check(r.hero.verdict == facing_check::Verdict::corrected && r.heroTurn, "rear turn on: he turns");
     }
+    // HANDOFF GLIDE SPEED: long enough that the peak speed stays under the setting; never shorter, capped.
+    {
+        using namespace hybrid_handoff;
+        const vr_settings::Values v{};
+        check(v.handoffGlideCmS == 200 && v.handoffGlideMaxMs == 700 && v.handoffEaseCurve == 1, "defaults 2 m/s, 700 ms, gentle");
+        check(glideMs(.3f, 250, 200, 700, peakSmootherstep) == 282, "0.3 m gentle at 2 m/s: 282 ms");
+        check(glideMs(.2f, 250, 200, 700, peakSmootherstep) == 250, "a short offset keeps the ease's 250 ms");
+        check(glideMs(.6f, 250, 200, 700, peakSmootherstep) == 563, "0.6 m: 563 ms");
+        check(glideMs(2.f, 250, 200, 700, peakSmootherstep) == 700, "capped at the longest");
+        check(glideMs(.9f, 250, 0, 700, peakSmoothstep) == 250, "0: the fixed length");
+        check(glideMs(.9f, 900, 200, 700, peakSmoothstep) == 900, "a base over the cap stays");
+        check(glideMs(NAN, 250, 200, 700, peakSmoothstep) == 250, "a bad distance: the base");
+        const float peakSpeed = peakSmootherstep * .6f / (glideMs(.6f, 250, 200, 700, peakSmootherstep) * .001f);
+        check(peakSpeed <= 2.f + 1e-3f, "the peak speed stays under 2 m/s");
+    }
     std::printf("next pass: %d checks passed\n", passed);
     return 0;
 }

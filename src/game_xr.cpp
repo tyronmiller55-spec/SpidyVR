@@ -9136,7 +9136,7 @@ DWORD WINAPI run(void*) {
                                         // ease for the timed jump handoff, a flip break and the
                                         // grip cancel (hybrid_owner::viewEaseMs); 0 the snap.
                                         // TAKEOVER VIEW EASE (takeover_view_ease): every other takeover too.
-                                        const int easeMs = hybrid_owner::viewEaseMs(
+                                        int easeMs = hybrid_owner::viewEaseMs(
                                             hybridOwner.lastEnterVr, values.punchViewEaseMs, values.airViewEaseMs,
                                             values.takeoverViewEase);
                                         const auto why = hybridOwner.lastEnterVr;
@@ -9166,6 +9166,30 @@ DWORD WINAPI run(void*) {
                                             if (punchHold > 0)
                                                 diag_log::writef("punch camera lock: held %.0f ms before the ease (a punch "
                                                                  "on the ground)", punchHold * 1000.f);
+                                            // HANDOFF GLIDE SPEED (handoff_glide_cm_s): a long offset glides longer, so the
+                                            // camera never crosses it faster than the setting.
+                                            const float peak = rig.viewEase().gentle() ? hybrid_handoff::peakSmootherstep
+                                                                                       : hybrid_handoff::peakEaseOut;
+                                            const bool splitNow = rig.viewEase().heightSeconds() > 0;
+                                            const int levelMs = hybrid_handoff::glideMs(
+                                                rig.viewEase().startOffset(), easeMs, values.handoffGlideCmS,
+                                                values.handoffGlideMaxMs, peak);
+                                            const int fadeMs = static_cast<int>(heightFade * 1000.f + .5f);
+                                            const int heightMs =
+                                                splitNow ? hybrid_handoff::glideMs(std::abs(rig.viewEase().startHeight()),
+                                                                                   fadeMs, values.handoffGlideCmS,
+                                                                                   values.handoffGlideMaxMs, peak)
+                                                         : fadeMs;
+                                            if ((levelMs > easeMs || heightMs > fadeMs) &&
+                                                rig.retimeViewEase(static_cast<float>(levelMs) * .001f,
+                                                                   static_cast<float>(heightMs) * .001f)) {
+                                                diag_log::writef("handoff glide: %s %.2f m level over %d ms (was %d), height "
+                                                                 "%+.2f m over %d ms (was %d), at most %.1f m/s",
+                                                                 easeName, rig.viewEase().startOffset(), levelMs, easeMs,
+                                                                 rig.viewEase().startHeight(), heightMs, fadeMs,
+                                                                 values.handoffGlideCmS * .01f);
+                                                easeMs = levelMs;
+                                            }
                                             easeWhy = easeName;
                                             punchEaseEndsLogged = rig.viewEase().ends();
                                             takeoverEased = true;
@@ -9337,6 +9361,21 @@ DWORD WINAPI run(void*) {
                                         std::abs(hybrid_handoff::wrapPi(hbYaw - landHeadProbe.fromYaw)) *
                                             (180.f / 3.14159265f));
                                     landHeadProbe.pending = false;
+                                    // HANDOFF GLIDE SPEED: the landing's blend onto the head, long enough for this
+                                    // distance (it is known only now, the head's first frame; a few ms into the blend).
+                                    if (hybridBlend.active && !hybridBlend.toTraversal) {
+                                        const int baseMs = static_cast<int>(hybridBlend.durNs / 1'000'000);
+                                        const int ms = hybrid_handoff::glideMs(
+                                            length(landHeadProbe.fromEyes - hb), baseMs, values.handoffGlideCmS,
+                                            values.handoffGlideMaxMs, hybrid_handoff::peakSmoothstep);
+                                        if (ms > baseMs) {
+                                            hybridBlend.durNs = static_cast<int64_t>(ms) * 1'000'000;
+                                            diag_log::writef("handoff glide: landing %.2f m onto the head over %d ms (was "
+                                                             "%d), at most %.1f m/s",
+                                                             length(landHeadProbe.fromEyes - hb), ms, baseMs,
+                                                             values.handoffGlideCmS * .01f);
+                                        }
+                                    }
                                 } else if (landHeadProbe.frames >= 30 || !hybridOn) {
                                     diag_log::writef("hybrid: vr->anim (%s) headbone still n/a %d frames, %.0f ms "
                                                      "after the switch",

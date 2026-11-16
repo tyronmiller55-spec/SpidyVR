@@ -46,6 +46,18 @@ inline int64_t oneBlendNs(bool on, int airViewEaseMs) {
     return static_cast<int64_t>(std::clamp(airViewEaseMs, 150, 400)) * 1'000'000;
 }
 
+// HANDOFF GLIDE SPEED (handoff_glide_cm_s, handoff_glide_max_ms): a glide's length so the camera's peak speed stays
+// under `speedCmS` - `peak` is the curve's peak over its average speed (1.5 smoothstep, 1.875 smootherstep, 3 the
+// cubic ease-out). Never shorter than `baseMs`, never longer than `maxMs` (or baseMs, if larger). speedCmS <= 0: baseMs.
+inline int glideMs(float metres, int baseMs, int speedCmS, int maxMs, float peak) {
+    if (speedCmS <= 0 || !std::isfinite(metres) || !(metres > 0) || !std::isfinite(peak) || peak <= 0)
+        return baseMs;
+    const float need = peak * metres / (static_cast<float>(speedCmS) * .01f) * 1000.f;
+    const int top = (std::max)(baseMs, maxMs);
+    return std::clamp(static_cast<int>(std::ceil(need)), baseMs, top);
+}
+inline constexpr float peakSmoothstep = 1.5f, peakSmootherstep = 1.875f, peakEaseOut = 3.f;
+
 // World look yaw from a level forward (0 = facing −Z, same as the tracking rig).
 inline float lookYaw(Vec3 forward) {
     if (!finite(forward))

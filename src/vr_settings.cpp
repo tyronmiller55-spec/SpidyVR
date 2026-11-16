@@ -1230,6 +1230,8 @@ Values sanitized(Values v) {
     v.snapTapMs = std::clamp(v.snapTapMs, 60, 400);
     v.landingBodyEaseMs = std::clamp(v.landingBodyEaseMs, 100, 1500);
     v.handoffEaseCurve = std::clamp(v.handoffEaseCurve, 0, 1);
+    v.handoffGlideCmS = std::clamp(v.handoffGlideCmS, 0, 1000);
+    v.handoffGlideMaxMs = std::clamp(v.handoffGlideMaxMs, 150, 2000);
     return v;
 }
 const std::array<Row, 222>& rows() {
@@ -2961,6 +2963,8 @@ constexpr TabOnly tabOnly[] = {
     {"landing_body_ease_ms", nullptr, &Values::landingBodyEaseMs},
     {"landing_rear_turn", &Values::landingRearTurn, nullptr},
     {"handoff_ease_curve", nullptr, &Values::handoffEaseCurve},
+    {"handoff_glide_cm_s", nullptr, &Values::handoffGlideCmS},
+    {"handoff_glide_max_ms", nullptr, &Values::handoffGlideMaxMs},
     {"movement_defaults", nullptr, &Values::movementDefaults},
 };
 } // namespace
