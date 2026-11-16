@@ -3,6 +3,7 @@
 #include "spidy/camera_mode.hpp"
 #include "spidy/facing_check.hpp"
 #include "spidy/hybrid_handoff.hpp"
+#include "spidy/hybrid_owner.hpp"
 #include "spidy/head_seat.hpp"
 #include "spidy/landing_body.hpp"
 #include "spidy/view_yaw_lock.hpp"
@@ -12,6 +13,7 @@
 #include <cstdlib>
 #include <cstring>
 #include <string>
+#include <utility>
 
 using namespace spidy;
 namespace {
@@ -262,6 +264,44 @@ int main() {
         for (int i = 0; i < 5; ++i)
             early = early || e.update(1.f / 72, .7f, false, false, false).easingOut != landing_body::End::none;
         check(!early, "on: still held through the pause");
+    }
+    // INSTANT WEB ZIP: a zip pressed while the swing has him goes to the animation on the press; off, VR waits.
+    {
+        using namespace hybrid_owner;
+        check(vr_settings::Values{}.webZipInstant, "instant web zip on by default");
+        const auto press = [](bool instant) {
+            HybridOwner o;
+            Frame f{};
+            f.state.playing = f.state.fresh = true;
+            int64_t t = 0;
+            o.domain = Domain::vr;
+            f.state.owned = true; // swinging
+            f.velY = -2.f;
+            o.update(f, t);
+            f.zipPress = true;
+            f.zipInstant = instant;
+            const Domain d = o.update(f, t += 11'000'000);
+            return std::pair{d, o.lastEnterAnim};
+        };
+        const auto on = press(true), off = press(false);
+        check(on.first == Domain::anim && on.second == EnterAnim::zip, "on: the zip's animation starts on the press");
+        check(off.first == Domain::vr, "off: SpidyVR waits for the game");
+        // A press the game never takes hands the swing back once the ask is over.
+        HybridOwner o;
+        Frame f{};
+        f.state.playing = f.state.fresh = true;
+        int64_t t = 0;
+        o.domain = Domain::vr;
+        f.state.owned = true;
+        f.velY = -2.f;
+        o.update(f, t);
+        f.zipPress = f.zipInstant = true;
+        o.update(f, t += 11'000'000);
+        f.zipPress = false;
+        Domain d = Domain::anim;
+        for (int i = 0; i < 60 && d == Domain::anim; ++i)
+            d = o.update(f, t += 11'000'000);
+        check(d == Domain::vr, "a refused instant zip gives the swing back");
     }
     std::printf("next pass: %d checks passed\n", passed);
     return 0;

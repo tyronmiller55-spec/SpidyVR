@@ -2989,6 +2989,7 @@ constexpr TabOnly tabOnly[] = {
     {"handstand_arms_over_head_cm", nullptr, &Values::handstandArmsOverHeadCm},
     {"turn_push_pct", nullptr, &Values::turnPushPct},
     {"landing_body_hold_turn", &Values::landingBodyHoldTurn, nullptr},
+    {"web_zip_instant", &Values::webZipInstant, nullptr},
     {"movement_defaults", nullptr, &Values::movementDefaults},
 };
 } // namespace

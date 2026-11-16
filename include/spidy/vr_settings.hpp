@@ -788,6 +788,11 @@ struct Values {
     // the hero has really come round (within 12 deg), not the first frame the walk stick's turn pauses. Off: as before
     // (s165800: 27 of 96 ended 'came round' early, 35 cancelled).
     bool landingBodyHoldTurn = true;
+    // INSTANT WEB ZIP (web_zip_instant, on): a web zip or web strike pressed while you swing or run a wall in SpidyVR
+    // hands the body to the game's zip on the press, so it starts at once. s165800: from SpidyVR the zip waited a median
+    // 0.9 s (up to 2.5 s) for the game to begin it. A press the game does not take (nothing to zip or strike) gives the
+    // swing back after 0.4 s. Off: SpidyVR waits for the game to start the zip, as before.
+    bool webZipInstant = true;
     // [next pass settings]
     bool operator==(const Values&) const = default;
 };

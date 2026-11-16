@@ -9163,6 +9163,7 @@ DWORD WINAPI run(void*) {
                                 screenAhead(frame.head, 0).orientation.rotate({0, 0, -1}));
                         hybridFrame.cutscene = !animState.playing || !animState.fresh;
                         hybridFrame.zipPress = hybridZipPress;
+                        hybridFrame.zipInstant = values.webZipInstant; // INSTANT WEB ZIP
                         hybridFrame.jumpAsk = hybridJumpAsk;
                         {
                             // Review M3/M4: a fresh, capped, setting-frozen strike hold.

@@ -341,6 +341,10 @@ struct Frame {
     // The player pressed a web zip this frame: the game's zip to a point or its
     // Y in the air (a web strike). Not Y on the ground or on Spidy's wall.
     bool zipPress{};
+    // INSTANT WEB ZIP (web_zip_instant): a zip pressed from the swing or Spidy's wall goes to ANIM on the press
+    // (the game's zip starts at once; a press it does not take hands back after zipAskNs). Off: VR waits for the
+    // game to begin the move (zipFromHold).
+    bool zipInstant{};
     bool jumpAsk{};     // a jump asked for (diagnostics; the jump is the game's)
     int64_t speedHoldNs = hybrid_owner::speedHoldNs; // retired setting
     // Consumed grip (animation_cancel::Gate, armed only in a midair animation)
@@ -726,7 +730,7 @@ struct HybridOwner {
         if (f.zipPress) {
             zipNs = zipPressNs = nowNs;
             zipFromHold = f.state.owned || f.state.wall == surfaceWall;
-            if (domain == Domain::vr && zipFromHold)
+            if (domain == Domain::vr && zipFromHold && !f.zipInstant)
                 return domain;
             if (domain == Domain::vr)
                 goAnim(nowNs, EnterAnim::zip);

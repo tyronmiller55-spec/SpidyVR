@@ -25420,6 +25420,7 @@ int main() {
                   "handstand_arms_over_head_cm=10\n"
                   "turn_push_pct=55\n"
                   "landing_body_hold_turn=1\n"
+                  "web_zip_instant=1\n"
                   "movement_defaults=3\n",
               "the defaults' text");
         Values changed = defaults;
