@@ -24714,6 +24714,7 @@ int main() {
                   "handoff_head_leads=1\n"
                   "handoff_angle_ms=300\n"
                   "landing_blend_ms=250\n"
+                  "head_seat_glide_ms=250\n"
                   "movement_defaults=3\n",
               "the defaults' text");
         Values changed = defaults;

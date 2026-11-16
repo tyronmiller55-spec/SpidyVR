@@ -766,6 +766,9 @@ struct Values {
     // onto the hero's head when the animation takes over (HANDOFF GLIDE SPEED stretches a long one). Was tied to
     // air_view_ease_ms; now tunable on its own.
     int landingBlendMs = 250;
+    // HEAD SEAT GLIDE (head_seat_glide_ms, 250; 180 was the old fixed length): how long the view takes to slide when
+    // the mod re-seats your head on the hero's (after a move change, an action, a zip or drift; up to ~0.2 m).
+    int headSeatGlideMs = 250;
     // [next pass settings]
     bool operator==(const Values&) const = default;
 };

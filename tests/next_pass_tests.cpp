@@ -3,6 +3,7 @@
 #include "spidy/camera_mode.hpp"
 #include "spidy/facing_check.hpp"
 #include "spidy/hybrid_handoff.hpp"
+#include "spidy/head_seat.hpp"
 #include "spidy/landing_body.hpp"
 #include "spidy/view_yaw_lock.hpp"
 #include "spidy/vr_settings.hpp"
@@ -192,6 +193,14 @@ int main() {
         const vr_settings::Values v{};
         check(v.landingBlendMs == 250 && v.landingBlendMs == v.airViewEaseMs, "landing blend 250 ms, as before");
         check(hybrid_handoff::oneBlendNs(true, v.landingBlendMs) == 250'000'000, "250 ms blend");
+    }
+    // HEAD SEAT GLIDE: the glide runs its own length.
+    {
+        const vr_settings::Values v{};
+        check(v.headSeatGlideMs == 250, "head seat glide 250 ms");
+        check(head_seat::alpha(125'000'000, 250'000'000) == .5f && head_seat::alpha(180'000'000) == 1.f &&
+                  head_seat::alpha(180'000'000, 250'000'000) < 1.f,
+              "250 ms glide halfway at 125 ms; the old 180 ms default stays");
     }
     std::printf("next pass: %d checks passed\n", passed);
     return 0;

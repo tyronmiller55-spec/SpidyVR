@@ -60,12 +60,14 @@ inline const char* whyName(Why w) {
     }
 }
 
-inline float alpha(int64_t elapsedNs) {
+inline float alpha(int64_t elapsedNs, int64_t durNs = glideNs) {
+    if (durNs <= 0)
+        durNs = glideNs;
     if (elapsedNs <= 0)
         return 0.f;
-    if (elapsedNs >= glideNs)
+    if (elapsedNs >= durNs)
         return 1.f;
-    const float t = static_cast<float>(elapsedNs) / static_cast<float>(glideNs);
+    const float t = static_cast<float>(elapsedNs) / static_cast<float>(durNs);
     return t * t * (3.f - 2.f * t);
 }
 
@@ -73,6 +75,8 @@ struct Glide {
     bool active{};
     Vec3 from{}, to{};
     int64_t startNs{};
+    // HEAD SEAT GLIDE (head_seat_glide_ms): the glide's length.
+    int64_t durNs = glideNs;
 };
 
 // The reference's place now (a glide under way included) - what the eyes and the
@@ -80,7 +84,7 @@ struct Glide {
 inline void step(Glide& g, Pose& reference, int64_t nowNs) {
     if (!g.active)
         return;
-    const float a = alpha(nowNs - g.startNs);
+    const float a = alpha(nowNs - g.startNs, g.durNs);
     reference.position = g.from + (g.to - g.from) * a;
     if (a >= 1.f)
         g.active = false;

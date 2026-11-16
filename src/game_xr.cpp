@@ -10462,6 +10462,9 @@ DWORD WINAPI run(void*) {
                                 head_seat::overDrift(animHeadSeat, animHeadRef, frame.head.position))
                                 seatWhy = head_seat::Why::drift;
                             float off = 0.f;
+                            // HEAD SEAT GLIDE (head_seat_glide_ms): the next glide's length.
+                            if (!animHeadSeat.active)
+                                animHeadSeat.durNs = static_cast<int64_t>(values.headSeatGlideMs) * 1'000'000;
                             if (seatWhy != head_seat::Why::none &&
                                 head_seat::reseat(animHeadSeat, animHeadRef, frame.head.position, eyeBlendNow,
                                                   &off)) {
@@ -10474,7 +10477,7 @@ DWORD WINAPI run(void*) {
                                         "%u this lock",
                                         head_seat::whyName(seatWhy),
                                         animated_moves::headFollowName(animHeadMode), off,
-                                        head_seat::glideNs / 1e6, animSeatCount);
+                                        animHeadSeat.durNs / 1e6, animSeatCount);
                                 }
                             }
                         }
