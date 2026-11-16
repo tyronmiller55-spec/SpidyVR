@@ -1238,6 +1238,7 @@ Values sanitized(Values v) {
     v.landingBlendMs = std::clamp(v.landingBlendMs, 0, 1500);
     v.headSeatGlideMs = std::clamp(v.headSeatGlideMs, 60, 1000);
     v.handstandArmsOverHeadCm = std::clamp(v.handstandArmsOverHeadCm, 0, 60);
+    v.turnPushPct = std::clamp(v.turnPushPct, 20, 100);
     return v;
 }
 const std::array<Row, 223>& rows() {
@@ -2986,6 +2987,8 @@ constexpr TabOnly tabOnly[] = {
     {"landing_blend_ms", nullptr, &Values::landingBlendMs},
     {"head_seat_glide_ms", nullptr, &Values::headSeatGlideMs},
     {"handstand_arms_over_head_cm", nullptr, &Values::handstandArmsOverHeadCm},
+    {"turn_push_pct", nullptr, &Values::turnPushPct},
+    {"landing_body_hold_turn", &Values::landingBodyHoldTurn, nullptr},
     {"movement_defaults", nullptr, &Values::movementDefaults},
 };
 } // namespace

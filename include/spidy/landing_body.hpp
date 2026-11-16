@@ -52,6 +52,9 @@ struct Ease {
     float offset = 0;     // radians, the drawn body's turn this frame (unwrapped against the last)
     float startGap = 0;   // the gap on the first frame
     bool first = false, sawTurn = false, rearAllowed = true;
+    // LANDING BODY HOLDS THE TURN (landing_body_hold_turn): in the hold, "arrived" only once the gap is inside
+    // skipAngle (a pause in the walk stick's turn is not the end); false: the turn's end as before.
+    bool holdToArrival = false;
     uint32_t begun = 0;
 
     bool active() const {
@@ -129,7 +132,7 @@ struct Ease {
             held += d;
             if (driving)
                 outWhy = End::driving;
-            else if (sawTurn && !turning)
+            else if (holdToArrival ? sawTurn && std::abs(g) < skipAngle : sawTurn && !turning)
                 outWhy = End::arrived;
             else if (!sawTurn && held > graceSeconds)
                 outWhy = End::noTurn;

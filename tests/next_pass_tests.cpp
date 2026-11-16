@@ -202,6 +202,67 @@ int main() {
                   head_seat::alpha(180'000'000, 250'000'000) < 1.f,
               "250 ms glide halfway at 125 ms; the old 180 ms default stays");
     }
+    // TURN SPEED: the walk stick's push follows turn_push_pct (55 by default; 35 the old fixed push).
+    {
+        const vr_settings::Values v{};
+        check(v.turnPushPct == 55 && v.landingBodyHoldTurn, "turn push 55, landing body holds the turn");
+        view_yaw_lock::TurnInPlace t;
+        view_yaw_lock::TurnInPlace::In in;
+        check(in.push == view_yaw_lock::pushTilt, "the old push unless set");
+        in.dt = 1.f / 72;
+        in.force = true;
+        in.forceYaw = 2.f;
+        in.forceAllowed = true;
+        in.heroYaw = 0;
+        in.push = .55f;
+        auto o = t.update(in);
+        check(o.push && std::abs(o.tilt - .55f) < 1e-6f, "pushes at 55%");
+        in.force = false;
+        for (int i = 0; i < 30; ++i)
+            o = t.update(in);
+        check(o.push && std::abs(o.tilt - .55f) < 1e-6f, "stuck: never less than the push");
+        in.push = .35f;
+        view_yaw_lock::TurnInPlace t2;
+        in.force = true;
+        t2.update(in);
+        in.force = false;
+        for (int i = 0; i < 30; ++i)
+            o = t2.update(in);
+        check(std::abs(o.tilt - view_yaw_lock::pushTiltHard) < 1e-6f, "at 35: the old hard push when stuck");
+    }
+    // LANDING BODY HOLDS THE TURN: a pause in the walk stick's turn is no arrival while the gap is still wide.
+    {
+        const auto run = [](bool hold) {
+            landing_body::Ease e;
+            e.holdToArrival = hold;
+            e.begin(.2f, true);
+            landing_body::End out = landing_body::End::none;
+            for (int i = 0; i < 30; ++i) // ease in, the turn running
+                e.update(1.f / 72, 1.0f, true, false, false);
+            for (int i = 0; i < 5; ++i) { // the turn pauses, 40 degrees left
+                const auto o = e.update(1.f / 72, .7f, false, false, false);
+                if (o.easingOut != landing_body::End::none)
+                    out = o.easingOut;
+            }
+            for (int i = 0; i < 5 && out == landing_body::End::none; ++i) { // he arrives
+                const auto o = e.update(1.f / 72, .1f, true, false, false);
+                if (o.easingOut != landing_body::End::none)
+                    out = o.easingOut;
+            }
+            return out;
+        };
+        check(run(false) == landing_body::End::arrived, "off: the pause reads as arrived");
+        check(run(true) == landing_body::End::arrived, "on: arrived once inside 12 degrees");
+        landing_body::Ease e;
+        e.holdToArrival = true;
+        e.begin(.2f, true);
+        for (int i = 0; i < 30; ++i)
+            e.update(1.f / 72, 1.0f, true, false, false);
+        bool early = false;
+        for (int i = 0; i < 5; ++i)
+            early = early || e.update(1.f / 72, .7f, false, false, false).easingOut != landing_body::End::none;
+        check(!early, "on: still held through the pause");
+    }
     std::printf("next pass: %d checks passed\n", passed);
     return 0;
 }

@@ -358,6 +358,9 @@ struct TurnInPlace {
         float forceYaw = 0;
         bool forceAllowed = false;
         Block forceBlock = Block::none; // when !forceAllowed: why (for the drop's log, and the stick's win)
+        // TURN SPEED (turn_push_pct): the walk stick's push while turning (pushTilt as before); the stuck push is at
+        // least pushTiltHard.
+        float push = pushTilt;
     };
     struct Out {
         bool push = false;
@@ -476,7 +479,8 @@ struct TurnInPlace {
         if (turning) {
             out.push = true;
             out.pushYaw = heading;
-            out.tilt = elapsed > .3f && std::abs(swept) < 5.f * degrees ? pushTiltHard : pushTilt;
+            const float push = std::isfinite(in.push) ? std::clamp(in.push, .05f, 1.f) : pushTilt;
+            out.tilt = elapsed > .3f && std::abs(swept) < 5.f * degrees ? std::max(pushTiltHard, push) : push;
         }
         return out;
     }

@@ -779,6 +779,15 @@ struct Values {
     // wanted the palms 20 cm below the head in the flipped world, which hands held over the head only met when he was
     // past about 125 degrees upside down (s165800: refused at 100 and 117).
     int handstandArmsOverHeadCm = 10;
+    // TURN SPEED (turn_push_pct, 55; 35 was the old fixed push): how hard the walk stick is pushed when the mod turns
+    // the hero onto your view (landing turns, re-faces, turn-in-place). s165800: at 35 the game turned him about 100-140
+    // deg/s and a landing's turn took 0.73 s (median), up to 2.6 s. Higher turns faster; a push past ~60 may make him
+    // step while turning. The 'still stuck' push stays at least 50.
+    int turnPushPct = 55;
+    // LANDING BODY HOLDS THE TURN (landing_body_hold_turn, on): after a landing the drawn body stays on your view until
+    // the hero has really come round (within 12 deg), not the first frame the walk stick's turn pauses. Off: as before
+    // (s165800: 27 of 96 ended 'came round' early, 35 cancelled).
+    bool landingBodyHoldTurn = true;
     // [next pass settings]
     bool operator==(const Values&) const = default;
 };

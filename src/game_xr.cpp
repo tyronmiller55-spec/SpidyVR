@@ -8215,6 +8215,8 @@ DWORD WINAPI run(void*) {
                                                  : legStickActive                       ? Block::legs
                                                                                         : Block::none;
                                 facingHeroPending = false;
+                                // TURN SPEED (turn_push_pct): the walk stick's push while he turns.
+                                tin.push = static_cast<float>(std::clamp(values.turnPushPct, 20, 100)) * .01f;
                                 const auto turned = turnInPlace.update(tin);
                                 if (turned.dropped && values.headsetFirst && turned.dropWhy == Block::stick)
                                     diag_log::writef(
@@ -10612,6 +10614,7 @@ DWORD WINAPI run(void*) {
                             const bool cancel = !hybridOn || !values.landingBodyToView || !values.headsetFirst ||
                                                 hybridOwner.domain == hybrid_owner::Domain::vr || airSpinWas ||
                                                 headRide.active() || !heroOk;
+                            landingBody.holdToArrival = values.landingBodyHoldTurn; // LANDING BODY HOLDS THE TURN
                             const auto lb = landingBody.update(armDt, viewY - heroY, hybridHeroTurn,
                                                                hybridInputL >= stable_yaw::steerZone, cancel);
                             if (lb.started && lb.ended == landing_body::End::none)

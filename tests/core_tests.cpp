@@ -25418,6 +25418,8 @@ int main() {
                   "landing_blend_ms=250\n"
                   "head_seat_glide_ms=250\n"
                   "handstand_arms_over_head_cm=10\n"
+                  "turn_push_pct=55\n"
+                  "landing_body_hold_turn=1\n"
                   "movement_defaults=3\n",
               "the defaults' text");
         Values changed = defaults;
