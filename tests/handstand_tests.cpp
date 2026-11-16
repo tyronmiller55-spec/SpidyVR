@@ -995,5 +995,47 @@ int main() {
         press.jump = true;
         check(a.update(press, p).exitNow == Exit::leap, "a fresh A press leaps");
     }
+    // ARMS DIAGNOSTIC: the Out fields - each palm from the head (tracking), below the head in the world, the flip's
+    // axis, and the touchdown window (from its first frame, about 0.25 s, gone with a catch or past the grace).
+    {
+        Handstand h;
+        auto a = inverted();
+        a.floorPalms = 0;
+        h.update(a, fresh());
+        auto in = inverted();
+        in.vrAir = false;
+        in.touchdown = true;
+        in.floorPalms = 0;
+        in.floorKnown = true;
+        in.floorY = 0;
+        in.headKnown = true;
+        in.head = {0, 1.0f, 0};
+        in.palms[0] = {-.2f, 1.4f, 0};
+        in.palms[1] = {.2f, 1.3f, 0};
+        in.palmRel[0] = {-.2f, -.4f, -.1f};
+        in.palmRel[1] = {.2f, -.3f, -.1f};
+        in.palmRelKnown[0] = in.palmRelKnown[1] = true;
+        in.angular = {0, 0, 4.f};
+        const auto o = h.update(in, fresh());
+        check(o.touchdownNow && o.windowAge == 0.f, "the window opens at the touchdown");
+        check(std::abs(o.palmRel[0].y + .4f) < 1e-5f && std::abs(o.palmRel[1].z + .1f) < 1e-5f, "palms from the head, as held");
+        check(std::abs(o.worldBelow[0] + .4f) < 1e-5f && std::abs(o.worldBelow[1] + .3f) < 1e-5f,
+              "below the head in the world (negative: above)");
+        check(std::abs(o.flipAxis.z - 1.f) < 1e-5f, "the flip's axis, unit");
+        float age = 0;
+        int frames = 0;
+        for (; frames < 60; ++frames) {
+            const auto w = h.update(in, fresh());
+            if (w.windowAge < 0)
+                break;
+            age = w.windowAge;
+        }
+        check(age > .2f && age <= .26f, "the window lasts about the touchdown grace");
+        Handstand u;
+        auto un = inverted();
+        un.palmRelKnown[0] = un.palmRelKnown[1] = false;
+        const auto uo = u.update(un, fresh());
+        check(std::isnan(uo.palmRel[0].y) && std::isnan(uo.worldBelow[0]), "unknown: NAN");
+    }
     return 0;
 }

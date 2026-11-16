@@ -406,6 +406,10 @@ class Handstand {
         bool aloft{}; // SpidyVR owns him off the ground (vrAir or not): the grace's start
         bool floorKnown{};
         float floorY{};
+        // ARMS DIAGNOSTIC (s165800: 7 inverted touchdowns refused, the hands unseen): each palm from the head in the
+        // tracking space (the rig's yaw frame: x side, y up, -z forward), and whether it is known.
+        Vec3 palmRel[2]{};
+        bool palmRelKnown[2]{};
     };
     struct Out {
         State state{};
@@ -445,6 +449,14 @@ class Handstand {
         Vec3 centre{};
         float centreJump{}, seedRaw{}, seedOffset{}, xiOutside{}, outsideSeconds{}, shift{}, span{};
         bool reseeded{};
+        // ARMS DIAGNOSTIC: each palm from the head in the tracking space (Input::palmRel; NAN: unknown), how far each
+        // palm is below the head in the world (m, + below; NAN: unknown), the flip's spin axis (world, unit; zero:
+        // no spin), and the touchdown window: seconds since the touchdown while no catch is on (-1: not in it).
+        Vec3 palmRel[2]{{NAN, NAN, NAN}, {NAN, NAN, NAN}};
+        float worldBelow[2]{NAN, NAN};
+        Vec3 flipAxis{};
+        float windowAge = -1.f;
+        unsigned reachDown{};
     };
     Out update(const Input& in, const Params& p) {
         Out out;
@@ -497,6 +509,23 @@ class Handstand {
         if (state_ != State::off || armsHeld_ >= p.armsHoldSeconds || ((in.floorPalms & 3u) == 3u))
             palmsDown |= reachDown;
         out.armsUp = reachBoth;
+        out.reachDown = reachDown & 3u;
+        for (unsigned i = 0; i < 2; ++i) {
+            out.palmRel[i] = in.palmRelKnown[i] && finite(in.palmRel[i]) ? in.palmRel[i] : Vec3{NAN, NAN, NAN};
+            out.worldBelow[i] =
+                in.headKnown && finite(in.head) && finite(in.palms[i]) ? in.head.y - in.palms[i].y : NAN;
+        }
+        if (finite(in.angular) && length(in.angular) > 1e-3f)
+            out.flipAxis = normalized(in.angular);
+        // The touchdown window (the log's throttled line): from the touchdown's first frame, while no catch is on.
+        if (touchdownNow && state_ == State::off) {
+            windowAge_ = 0.f;
+        } else if (windowAge_ >= 0.f) {
+            windowAge_ += dt;
+            if (windowAge_ > p.touchdownGrace || state_ != State::off || !touchdown)
+                windowAge_ = -1.f;
+        }
+        out.windowAge = windowAge_;
         out.armsHeld = armsHeld_;
         out.headGap = headGap < 1e8f ? headGap : 0.f;
         const bool both = (palmsDown & 3u) == 3u;
@@ -690,6 +719,7 @@ class Handstand {
     unsigned frame_{};
     float age_{};
     float airAge_ = 10.f;
+    float windowAge_ = -1.f;
     Balance balance_{};
     Balance::Out last_{};
     Push push_{};

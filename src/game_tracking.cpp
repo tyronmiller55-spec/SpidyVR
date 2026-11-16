@@ -1081,6 +1081,10 @@ GameMotionFrame GameTrackingRig::update(const XrFrame& f, Vec3 feet, Vec3 gameFo
         for (unsigned i = 0; i < 2; ++i) {
             in.palms[i] = out.grips[i].position;
             normal += handCollision_.floorNormal(i);
+            // ARMS: the palm from the head as the player holds it (tracking space, the rig's yaw frame).
+            in.palmRelKnown[i] = handValid(f.hands[i]) && validTrackedPose(f.head);
+            if (in.palmRelKnown[i])
+                in.palmRel[i] = f.hands[i].grip.position - f.head.position;
         }
         in.floorNormal = length(normal) > .5f ? normalized(normal) : Vec3{0, 1, 0};
         const Quat world = placed.orientation();

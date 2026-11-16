@@ -1339,6 +1339,7 @@ DWORD WINAPI run(void*) {
             bool vrOwns{}, flipAir{}, onLine{}, ground{}, landing{};
         } handstandGates;
         float handstandLogAge{};
+        float handstandWindowNext{}; // ARMS DIAGNOSTIC: the touchdown window's next line (s into it)
         vr_stabilize::LogGate vrStabilizeLog; // VR STABILIZATION's diag line, on change
         int64_t hybridSteerDiagAt{};
         // VIEW YAW SOURCE: STABLE's heading (stable_yaw.hpp), the hero-vs-steer
@@ -3748,6 +3749,26 @@ DWORD WINAPI run(void*) {
                                 "handstand: no catch at the touchdown: %s (inverted %.0f deg, "
                                 "spin %.1f rad/s, palms %.2f m over the floor, head %.2f m; every failing gate: %s)",
                                 handstand::refusalName(hs.refused), hs.inverted, hs.spin, hs.palmGap, hs.headGap, failed);
+                            // ARMS DIAGNOSTIC: each palm from the head as the player holds it (up, forward, side in the
+                            // rig's yaw frame), how far below the head it is in the world, and the flip's axis.
+                            diag_log::writef(
+                                "handstand: arms at the touchdown: L up %+.2f fwd %+.2f side %+.2f, R up %+.2f fwd %+.2f "
+                                "side %+.2f m; below the head in the world L %+.2f R %+.2f m; flip axis (%+.2f, %+.2f, %+.2f)",
+                                hs.palmRel[0].y, -hs.palmRel[0].z, hs.palmRel[0].x, hs.palmRel[1].y, -hs.palmRel[1].z,
+                                hs.palmRel[1].x, hs.worldBelow[0], hs.worldBelow[1], hs.flipAxis.x, hs.flipAxis.y,
+                                hs.flipAxis.z);
+                        }
+                        // ARMS DIAGNOSTIC: the touchdown's window (250 ms, no catch on), about every 50 ms.
+                        if (hs.windowAge < 0.f)
+                            handstandWindowNext = 0.f;
+                        else if (hs.windowAge >= handstandWindowNext && !hs.touchdownNow) {
+                            handstandWindowNext = hs.windowAge + .05f;
+                            diag_log::writef(
+                                "handstand: window %3.0f ms reachDown %u armsHeld %.2f s palms L %.2f R %.2f head %.2f "
+                                "inverted %.0f, arms up L %+.2f R %+.2f, below head L %+.2f R %+.2f",
+                                hs.windowAge * 1000.f, hs.reachDown, hs.armsHeld, hs.palmGaps[0], hs.palmGaps[1],
+                                hs.headGap, handstand::invertedDegrees(motion.flipTilt.rotate({0, 1, 0})),
+                                hs.palmRel[0].y, hs.palmRel[1].y, hs.worldBelow[0], hs.worldBelow[1]);
                         }
                         // THE CATCH'S GEOMETRY (G1 playtest): the first frames of a catch, to tell a lean from
                         // palms re-placed: the palm centre and how far it moved, the span, the centre of mass's
