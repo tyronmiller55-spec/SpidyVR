@@ -1235,6 +1235,7 @@ Values sanitized(Values v) {
     v.handoffAngleMs = std::clamp(v.handoffAngleMs, 0, 1500);
     v.landingBlendMs = std::clamp(v.landingBlendMs, 0, 1500);
     v.headSeatGlideMs = std::clamp(v.headSeatGlideMs, 60, 1000);
+    v.handstandArmsOverHeadCm = std::clamp(v.handstandArmsOverHeadCm, 0, 60);
     return v;
 }
 const std::array<Row, 222>& rows() {
@@ -2972,6 +2973,7 @@ constexpr TabOnly tabOnly[] = {
     {"handoff_angle_ms", nullptr, &Values::handoffAngleMs},
     {"landing_blend_ms", nullptr, &Values::landingBlendMs},
     {"head_seat_glide_ms", nullptr, &Values::headSeatGlideMs},
+    {"handstand_arms_over_head_cm", nullptr, &Values::handstandArmsOverHeadCm},
     {"movement_defaults", nullptr, &Values::movementDefaults},
 };
 } // namespace

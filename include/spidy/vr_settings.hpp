@@ -769,6 +769,11 @@ struct Values {
     // HEAD SEAT GLIDE (head_seat_glide_ms, 250; 180 was the old fixed length): how long the view takes to slide when
     // the mod re-seats your head on the hero's (after a move change, an action, a zip or drift; up to ~0.2 m).
     int headSeatGlideMs = 250;
+    // HANDSTAND ARMS OVER HEAD (handstand_arms_over_head_cm, 10; 0: the old test): at a landing, both hands count as up
+    // when they are at least this far over your real head (as you hold them), whatever the flip's angle. The old test
+    // wanted the palms 20 cm below the head in the flipped world, which hands held over the head only met when he was
+    // past about 125 degrees upside down (s165800: refused at 100 and 117).
+    int handstandArmsOverHeadCm = 10;
     // [next pass settings]
     bool operator==(const Values&) const = default;
 };

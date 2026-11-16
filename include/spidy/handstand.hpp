@@ -91,6 +91,11 @@ struct Params {
     // .2 m: the hands toward the floor, past the head, the way a handstand reaches), both for armsHoldSeconds (.12 s).
     float touchdownReach = 1.0f;
     float armsBelowHead = .2f, armsHoldSeconds = .12f;
+    // ARMS OVER HEAD (the owner, Nov 16; handstand_arms_over_head_cm): the arms-up test in the player's own frame - both palms
+    // at least this far over the head as he holds them (Input::palmRel.y), at any flip angle. The world test above
+    // (armsBelowHead) counted hands held over the head only past ~125 degrees inverted (0.35 m up reads 0.35 cos(theta)
+    // below the head: 0.06 m at 100, 0.16 m at 117). 0: the world test. A palm with no tracked offset is no test.
+    float armsOverHead = .10f;
     // A LEAP IS A FRESH PUSH: a stick already held at the catch has to be let go of first, and A pressed before the catch is not
     // a press now (9 of 11 leaps in that session came 0.01 s after the catch).
     // (A pressed after the catch is already a fresh press: only a held A or stick is carried across it.)
@@ -129,6 +134,7 @@ template <class V> Params paramsOf(const V& v) {
     // THE CATCH STICKS (the 9790d67 playtest; the owner, Nov 15): the hold while catching and the touchdown's reach.
     p.floorReach = std::clamp(v.handstandCatchHoldCm, 5, 60) / 100.f;
     p.touchdownReach = std::clamp(v.handstandReachCm, 60, 200) / 100.f;
+    p.armsOverHead = std::clamp(v.handstandArmsOverHeadCm, 0, 60) / 100.f;
     return p;
 }
 
@@ -496,8 +502,14 @@ class Handstand {
                 out.palmGaps[i] = gap < 1e8f ? gap : NAN;
                 const float reach = state_ == State::off ? p.touchdownReach : p.floorReach;
                 if (nearFloor && gap <= reach) {
-                    // The touchdown's reach path also needs the palm clearly below the head (no head: no test).
-                    if (state_ != State::off || !in.headKnown || gap + p.armsBelowHead <= headGap)
+                    // The touchdown's reach path also needs the arms up: ARMS OVER HEAD, the palm over the head as the
+                    // player holds it (no tracked offset: no test); 0, the old world test - the palm clearly below the
+                    // head (no head: no test).
+                    const bool armsUp =
+                        p.armsOverHead > 0.f
+                            ? !in.palmRelKnown[i] || !finite(in.palmRel[i]) || in.palmRel[i].y >= p.armsOverHead
+                            : !in.headKnown || gap + p.armsBelowHead <= headGap;
+                    if (state_ != State::off || armsUp)
                         reachDown |= 1u << i;
                 }
             }

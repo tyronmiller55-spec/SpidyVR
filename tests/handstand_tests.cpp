@@ -44,6 +44,7 @@ Params on() {
     // Before the arms-up pass (Nov 14): the touchdown counted a palm within 1.6 m with no wait and no head test.
     p.touchdownReach = 1.6f;
     p.armsBelowHead = -10.f;
+    p.armsOverHead = 0.f;
     p.armsHoldSeconds = 0.f;
     return p;
 }
@@ -909,6 +910,10 @@ int main() {
         };
         const auto landing = [](float palmY, float headY) {
             auto in = inverted();
+            // As held: palms below the head in the world are hands over it (inverted), above it hands at the sides.
+            in.palmRel[0] = {-.2f, palmY < headY - .1f ? .35f : -.4f, 0};
+            in.palmRel[1] = {.2f, in.palmRel[0].y, 0};
+            in.palmRelKnown[0] = in.palmRelKnown[1] = true;
             in.vrAir = false;
             in.touchdown = true;
             in.floorPalms = 0;
@@ -1036,6 +1041,58 @@ int main() {
         un.palmRelKnown[0] = un.palmRelKnown[1] = false;
         const auto uo = u.update(un, fresh());
         check(std::isnan(uo.palmRel[0].y) && std::isnan(uo.worldBelow[0]), "unknown: NAN");
+    }
+    // ARMS OVER HEAD (the owner, Nov 16): the arms-up test against the body. A rig rotated about the head by theta (the
+    // flip, about x) maps the held offsets into the world; hands held 0.35 m over the head catch at 100, 117 and 150
+    // degrees, hands at the chest (0.3 m below, 0.25 forward) never do. The old world test (0) refused 100 and 117.
+    {
+        const auto attempt = [](float degrees, Vec3 rel, const Params& p) {
+            const float t = degrees * 3.14159265f / 180.f;
+            const auto rot = [t](Vec3 v) {
+                return Vec3{v.x, v.y * std::cos(t) - v.z * std::sin(t), v.y * std::sin(t) + v.z * std::cos(t)};
+            };
+            const Vec3 head{0, 1.0f, 0}; // the rig's head over the floor (the session's 0.84 to 1.58 m)
+            Handstand h;
+            auto a = inverted();
+            a.floorPalms = 0;
+            a.bodyUp = rot({0, 1, 0});
+            h.update(a, p);
+            bool caught = false;
+            for (int i = 0; i < 40 && !caught; ++i) {
+                auto in = inverted();
+                in.vrAir = false;
+                in.touchdown = true;
+                in.floorPalms = 0;
+                in.floorKnown = true;
+                in.floorY = 0;
+                in.headKnown = true;
+                in.head = head;
+                in.bodyUp = rot({0, 1, 0});
+                for (unsigned k = 0; k < 2; ++k) {
+                    const Vec3 r{k ? .2f : -.2f, rel.y, rel.z};
+                    in.palmRel[k] = r;
+                    in.palmRelKnown[k] = true;
+                    in.palms[k] = head + rot(r);
+                }
+                caught = h.update(in, p).caughtNow;
+            }
+            return caught;
+        };
+        Params p = fresh();
+        check(p.armsOverHead == .10f, "default: 10 cm over the head");
+        const Vec3 overhead{0, .35f, 0}, chest{0, -.3f, -.25f};
+        for (const float d : {100.f, 117.f, 150.f}) {
+            char what[96];
+            std::snprintf(what, sizeof what, "inverted %.0f deg, hands over the head: caught", d);
+            check(attempt(d, overhead, p), what);
+            std::snprintf(what, sizeof what, "inverted %.0f deg, hands at the chest: no catch", d);
+            check(!attempt(d, chest, p), what);
+        }
+        Params old = fresh();
+        old.armsOverHead = 0.f;
+        check(!attempt(100.f, overhead, old) && !attempt(117.f, overhead, old) && attempt(150.f, overhead, old),
+              "0: the old world test (hands over the head refused at 100 and 117, caught at 150)");
+        check(handstand::paramsOf(vr_settings::Values{}).armsOverHead == .10f, "the setting's default reaches the params");
     }
     return 0;
 }
