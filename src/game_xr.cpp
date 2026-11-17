@@ -1,4 +1,5 @@
 #include "spidy/animation_cancel.hpp"
+#include "spidy/text_read.hpp"
 #include "spidy/showtime.hpp"
 #include "spidy/showtime_rig.hpp"
 #include "spidy/web_fire.hpp"
@@ -826,14 +827,17 @@ struct LayerSwitches {
                                                 nullptr, OPEN_EXISTING, 0, nullptr);
                 if (file == INVALID_HANDLE_VALUE)
                     continue;
-                std::string text(65536, '\0');
-                DWORD size{};
-                const bool loaded =
-                    ReadFile(file, text.data(), static_cast<DWORD>(text.size()), &size, nullptr);
+                // The whole manifest (text_read.hpp), not its first 64 KB.
+                auto read = text_read::readAll([file](char* buffer, size_t capacity) -> long long {
+                    DWORD got{};
+                    if (!ReadFile(file, buffer, static_cast<DWORD>(capacity), &got, nullptr))
+                        return -1;
+                    return got;
+                });
                 CloseHandle(file);
-                if (!loaded)
+                if (read.failed)
                     continue;
-                text.resize(size);
+                const std::string& text = read.text;
                 const auto layer = xr_layers::switchOff(text, layers);
                 if (layer.variable.empty() || GetEnvironmentVariableA(layer.variable.c_str(), nullptr, 0) ||
                     !SetEnvironmentVariableA(layer.variable.c_str(), "1"))
@@ -869,13 +873,21 @@ std::string readTabOnly() {
                                     OPEN_EXISTING, 0, nullptr);
     if (file == INVALID_HANDLE_VALUE)
         return {};
-    std::string text(4096, '\0');
-    DWORD size{};
-    if (!ReadFile(file, text.data(), static_cast<DWORD>(text.size()), &size, nullptr))
-        size = 0;
+    // The whole file, in chunks (text_read.hpp): it was cut at 4096 bytes until November 17.
+    auto read = text_read::readAll([file](char* buffer, size_t capacity) -> long long {
+        DWORD got{};
+        if (!ReadFile(file, buffer, static_cast<DWORD>(capacity), &got, nullptr))
+            return -1;
+        return got;
+    });
     CloseHandle(file);
-    text.resize(size);
-    return text;
+    if (read.failed || read.truncated) {
+        char line[160];
+        snprintf(line, sizeof(line), "VR settings: spidy_vr.ini %s after %zu bytes; the rest keeps its defaults",
+                 read.failed ? "could not be read" : "is too long", read.text.size());
+        game_prompts::note(line);
+    }
+    return std::move(read.text);
 }
 // Written whole and then put in place, so a crash mid-write keeps the last.
 bool writeTabOnly(const std::string& text) {
@@ -2437,7 +2449,7 @@ DWORD WINAPI run(void*) {
                                           "Player character: body %016llX (%u joints), %s",
                                           static_cast<unsigned long long>(asset), joints,
                                           spiderMan ? "Spider-Man" : "not Spider-Man: the game's controls");
-                            message(3, 0, line);
+                            game_prompts::note(line);
                         }
                     }
                     bridge::Data game{};
@@ -3286,7 +3298,7 @@ DWORD WINAPI run(void*) {
                                   seatLift.seatedEye(),
                                   std::clamp(seatStanding - seatLift.seatedEye(), 0.f, seated::Lift::maxLift),
                                   seatStanding, values.heightCm ? "set" : "AUTO");
-                        message(3, 0, line);
+                        game_prompts::note(line);
                     }
                     // Each hand's grip pose, and whether the headset has it; and
                     // whether the hand gestures play VR: gameplay in the headset,
@@ -4312,7 +4324,7 @@ DWORD WINAPI run(void*) {
                     if (static ULONGLONG lastNoteAt{}; GetTickCount64() - lastNoteAt >= 120) {
                         char line[200];
                         if (game_fp::note(fpNoteSeen, line, sizeof(line))) {
-                            message(3, 0, line);
+                            game_prompts::note(line);
                             lastNoteAt = GetTickCount64();
                         } else if (guardNote && guardNote(&guardSeen) == 0) {
                             // A line of the guards' log (game_guard keeps its own, in the module of the
@@ -8376,7 +8388,7 @@ DWORD WINAPI run(void*) {
                                               "Another controller in the game's first slot holds buttons 0x%04X: "
                                               "the VR controllers cannot press those while it does",
                                               static_cast<unsigned>(held));
-                                message(3, 0, line);
+                                game_prompts::note(line);
                             }
                         }
                         if (walk.interact && !interacting) {

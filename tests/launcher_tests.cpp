@@ -2,6 +2,11 @@
 #include "spidy/launcher_presets.hpp"
 #include "spidy/launcher_text.hpp"
 #include "spidy/launcher_update.hpp"
+#include "spidy/text_read.hpp"
+#include "spidy/vr_settings.hpp"
+#include <cstdio>
+#include <algorithm>
+#include <cstring>
 #include <functional>
 #include <iostream>
 #include <stdexcept>
@@ -1322,6 +1327,79 @@ int main() {
                 check(i && summary[i - 1] == '\xC3', "the other half");
         const size_t last = summary.find("\nLast session: ") + 15, error = summary.find("\nLast error: ");
         check(error - last >= 50 && summary.size() - error >= 50, "room for both of the session's lines");
+    });
+    test("spidy_vr.ini is read whole: a file over 8 KB keeps its last keys, and the movement defaults run once", [] {
+        namespace vs = spidy::vr_settings;
+        vs::Values chosen;
+        // The last rows (vr_settings.cpp's tabOnly, its end) away from their defaults, and RUN CURVE off: the
+        // movement defaults' first revision would turn it back on.
+        chosen.runCurve = false;
+        chosen.turnPushPct = 40;
+        chosen.webZipInstant = !vs::Values{}.webZipInstant;
+        chosen.pointJumpFireFull = !vs::Values{}.pointJumpFireFull;
+        chosen.targetScanIdleMs = 750;
+        const std::string saved = vs::tabOnlyText(chosen);
+        // November 17: the defaults alone are past the 4096 bytes the game used to read.
+        check(vs::tabOnlyText(vs::Values{}).size() > 4096, "the defaults' text is past 4 KB");
+        size_t cut = 0, keys = 0;
+        for (size_t at = 0; at < saved.size();) {
+            const size_t end = std::min(saved.find('\n', at), saved.size());
+            ++keys;
+            if (end >= 4096)
+                ++cut;
+            at = end + 1;
+        }
+        std::cout << "  spidy_vr.ini: " << saved.size() << " bytes, " << keys << " keys; " << cut
+                  << " were past the old 4096-byte read\n";
+        check(cut > 0, "the old read lost keys");
+        // Over 8 KB: lines no setting has, before the settings, so they end the file.
+        std::string padded;
+        while (padded.size() < 8192)
+            padded += "# padding: no setting has this line, and the reader passes it over\n";
+        padded += saved;
+        check(padded.size() > 8192, "the file is over 8 KB");
+        const char* name = "spidy_vr_whole_read_test.ini";
+        std::FILE* out = std::fopen(name, "wb");
+        check(out != nullptr, "the test file is written");
+        std::fwrite(padded.data(), 1, padded.size(), out);
+        std::fclose(out);
+        std::FILE* in = std::fopen(name, "rb");
+        const auto read = spidy::text_read::readAll(in);
+        std::fclose(in);
+        std::remove(name);
+        check(!read.failed && !read.truncated && read.text == padded, "read whole");
+        const vs::Values back = vs::withMovementDefaults(vs::withTabOnly({}, read.text), read.text);
+        check(back.turnPushPct == 40 && back.webZipInstant == chosen.webZipInstant &&
+                  back.pointJumpFireFull == chosen.pointJumpFireFull && back.targetScanIdleMs == 750,
+              "the last keys apply");
+        check(back.movementDefaults == vs::movementDefaultsRevision, "the revision is seen");
+        check(!back.runCurve, "the movement defaults do not run again: RUN CURVE stays off");
+        check(vs::tabOnlyText(back) == saved, "saved again unchanged");
+        // What the old read did: the first 4096 bytes, the revision unseen, RUN CURVE back on at every launch.
+        const std::string old = saved.substr(0, 4096);
+        const vs::Values cutBack = vs::withMovementDefaults(vs::withTabOnly({}, old), old);
+        check(cutBack.runCurve && cutBack.targetScanIdleMs != 750, "the old read's loss, as it was");
+        // A chunked read never assumes a size: one byte at a time, and the cap.
+        size_t at = 0;
+        const auto slow = spidy::text_read::readAll([&](char* buffer, size_t) -> long long {
+            if (at == padded.size())
+                return 0;
+            *buffer = padded[at++];
+            return 1;
+        });
+        check(slow.text == padded, "a byte at a time");
+        at = 0;
+        const auto capped = spidy::text_read::readAll(
+            [&](char* buffer, size_t capacity) -> long long {
+                const size_t n = std::min(capacity, padded.size() - at);
+                std::memcpy(buffer, padded.data() + at, n);
+                at += n;
+                return static_cast<long long>(n);
+            },
+            1000);
+        check(capped.truncated && capped.text == padded.substr(0, 1000), "the cap holds and says so");
+        const auto broken = spidy::text_read::readAll([](char*, size_t) -> long long { return -1; });
+        check(broken.failed && broken.text.empty(), "a failed read says so");
     });
     std::cout << (total - failed) << '/' << total << " launcher checks passed\n";
     return failed ? 1 : 0;

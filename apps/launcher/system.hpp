@@ -108,7 +108,7 @@ bool deleteProfile(const std::string& name);
 // %APPDATA%\Spidy\spidy_vr.ini (game_xr.cpp's tabOnlyPath), and putting others there.
 spidy::vr_settings::Values loadTabOnly();
 bool saveTabOnly(const spidy::vr_settings::Values& values);
-// A text file of up to 64 KB as UTF-8 (one saved as UTF-16 converted); empty when it cannot be read.
+// A whole text file (up to text_read::kSettingsLimit, 4 MB) as UTF-8 (one saved as UTF-16 converted); empty when it cannot be read.
 std::string readTextFile(const std::wstring& path);
 // Written whole and then put in place, so a failed write keeps the old file.
 bool writeTextFile(const std::wstring& path, const std::string& text);

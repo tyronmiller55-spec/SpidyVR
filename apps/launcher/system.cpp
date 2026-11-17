@@ -1,4 +1,5 @@
 #include "system.hpp"
+#include "spidy/text_read.hpp"
 #include <bcrypt.h>
 #include <dxgi.h>
 #include <shellapi.h>
@@ -66,14 +67,20 @@ std::wstring knownFolder(REFKNOWNFOLDERID id) {
     return result;
 }
 
-std::string readText(const fs::path& path, size_t limit = 4 << 20) {
+// The whole file up to limit, in chunks (text_read.hpp): nothing is allocated for bytes a file does not have.
+std::string readText(const fs::path& path, size_t limit = spidy::text_read::kSettingsLimit) {
     std::ifstream file(path, std::ios::binary);
     if (!file)
         return {};
-    std::string content(limit, '\0');
-    file.read(content.data(), static_cast<std::streamsize>(limit));
-    content.resize(static_cast<size_t>(file.gcount()));
-    return content;
+    return spidy::text_read::readAll(
+               [&file](char* buffer, size_t capacity) -> long long {
+                   file.read(buffer, static_cast<std::streamsize>(capacity));
+                   if (file.bad())
+                       return -1;
+                   return static_cast<long long>(file.gcount());
+               },
+               limit)
+        .text;
 }
 
 bool isFile(const fs::path& path) {
@@ -406,7 +413,7 @@ bool processRunning(const wchar_t* name) {
 std::string manifestName(const std::wstring& manifest) {
     if (auto label = text::runtimeLabel(narrow(manifest)); !label.empty())
         return label;
-    const std::string json = readText(fs::path(manifest), 1 << 16);
+    const std::string json = readText(fs::path(manifest));
     const size_t runtime = json.find("\"runtime\"");
     const size_t name = json.find("\"name\"", runtime == std::string::npos ? 0 : runtime);
     if (name != std::string::npos) {
@@ -520,7 +527,7 @@ std::wstring widen(std::string_view value) {
 
 Settings loadSettings() {
     Settings settings;
-    std::istringstream lines(readText(settingsPath(), 1 << 16));
+    std::istringstream lines(readText(settingsPath()));
     std::string line;
     int weight = 0, percentWeight = 0, legacyWeight = 0;
     // Polish pass: the default scene resolution went from 67% to 50%. A file that has not seen that
@@ -713,7 +720,7 @@ bool deleteProfile(const std::string& name) {
 
 spidy::vr_settings::Values loadTabOnly() {
     const fs::path path = tabOnlyPath();
-    const std::string text = path.empty() ? std::string() : readText(path, 1 << 16);
+    const std::string text = path.empty() ? std::string() : readText(path);
     // The movement cleanup's defaults reach a file older than them once.
     return spidy::vr_settings::withMovementDefaults(spidy::vr_settings::withTabOnly({}, text), text);
 }
@@ -728,7 +735,7 @@ bool saveTabOnly(const spidy::vr_settings::Values& values) {
 }
 
 std::string readTextFile(const std::wstring& path) {
-    std::string bytes = readText(path, 1 << 16);
+    std::string bytes = readText(path);
     // Notepad's "UTF-16 LE": the byte order mark FF FE, then two bytes a unit.
     if (bytes.size() >= 2 && static_cast<unsigned char>(bytes[0]) == 0xFF &&
         static_cast<unsigned char>(bytes[1]) == 0xFE) {

@@ -3,6 +3,7 @@
 // types - is the on/off of the whole module, and it is off until the launcher says on.
 #include "spidy/game_guard.hpp"
 #include "spidy/native_bodies.hpp"
+#include "spidy/text_read.hpp"
 #include <atomic>
 #include <cstdio>
 #include <cstring>
@@ -108,10 +109,13 @@ bool readFile(const std::wstring& path, std::string& out) {
                                     OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, nullptr);
     if (file == INVALID_HANDLE_VALUE)
         return false;
-    char buffer[4096];
-    DWORD got{};
-    while (out.size() < 65536 && ReadFile(file, buffer, sizeof(buffer), &got, nullptr) && got)
-        out.append(buffer, got);
+    // The whole file (text_read.hpp), not its first 64 KB.
+    out = text_read::readAll([file](char* buffer, size_t capacity) -> long long {
+              DWORD got{};
+              if (!ReadFile(file, buffer, static_cast<DWORD>(capacity), &got, nullptr))
+                  return -1;
+              return got;
+          }).text;
     CloseHandle(file);
     return true;
 }
