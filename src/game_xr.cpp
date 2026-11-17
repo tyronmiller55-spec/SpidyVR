@@ -4885,14 +4885,25 @@ DWORD WINAPI run(void*) {
                     }
                     const auto snapTap = snapRealign.update(frame.seconds, snapGate ? frame.hands[1].stickX : 0.f,
                                                             values.smoothTurn > 0, values.snapTurn);
-                    if (snapTap.began)
+                    if (snapTap.began) {
                         snapStartView = lastViewYaw;
+                        snapRealign.began();
+                    }
                     bool realignNow = false;
                     float realignTo = NAN, realignTurn = 0;
                     const char* realignWhy = "tap";
                     if (snapTap.fire && snapGate) {
-                        const float from = values.smoothTurn > 0 && std::isfinite(snapStartView) ? snapStartView
-                                                                                                : lastViewYaw;
+                        // The live view less this push's own smooth turn (camera_mode::SnapRealign::from); the
+                        // yaw latched at the push's start is only logged (a landing re-latch makes it stale).
+                        const float from = std::isfinite(lastViewYaw)
+                                               ? stable_yaw::wrap(snapRealign.from(lastViewYaw, values.smoothTurn > 0))
+                                               : NAN;
+                        if (std::isfinite(from) && std::isfinite(snapStartView) &&
+                            std::abs(stable_yaw::wrap(from - snapStartView)) > 10.f * 3.14159265f / 180.f)
+                            diag_log::writef("snap realign: the view moved under the push (latched %.0f, now %.0f less "
+                                             "the push's turn %+.0f = %.0f); snapping from the live view",
+                                             snapStartView * 57.2958f, lastViewYaw * 57.2958f,
+                                             snapRealign.pushTurn * 57.2958f, from * 57.2958f);
                         if (std::isfinite(from)) {
                             realignNow = true;
                             realignTurn = snapTap.turn;
@@ -4966,6 +4977,7 @@ DWORD WINAPI run(void*) {
                         const uint32_t snapsBefore = viewLock.snaps;
                         viewLockDelta = viewLock.turn(frame.seconds, turnX, values.smoothTurn,
                                                       values.snapTurn);
+                        snapRealign.turned(viewLockDelta);
                         viewLockSnapped = viewLock.snaps != snapsBefore;
                         if (viewLockSnapped)
                             ++armEpoch; // a snap is a jump of the frame, not a hand's motion
@@ -5028,6 +5040,12 @@ DWORD WINAPI run(void*) {
                         viewLock.yaw = hybridHeading.yaw;
                         hsHeadingWritten = true;
                         snapRealignPending = true;
+                        // The view this frame is the new heading (the headset recenters on it): the body's turn
+                        // and the hold's arrival aim there, not at the view before the snap (realign #1 turned
+                        // onto 57, the old view, then back onto 10).
+                        if (std::isfinite(hsViewNow))
+                            hsViewNow = realignTo;
+                        facingHeroYaw = realignTo;
                         dirActionBits |= 1u << static_cast<unsigned>(direction_report::Action::realign);
                         if (headRide.active())
                             rideWhy = camera_mode::RideWhy::none;
@@ -8396,7 +8414,7 @@ DWORD WINAPI run(void*) {
                                 if (turned.started && turned.forced)
                                     diag_log::writef("facing check: %s hero turn start, gap %+.0f deg, hero %.0f to %.0f",
                                                      facing_check::eventName(facingTurnEvent), turned.startGap * toDeg,
-                                                     heroYaw * toDeg, facingHeroYaw * toDeg);
+                                                     heroYaw * toDeg, tin.forceYaw * toDeg);
                                 else if (turned.started)
                                     diag_log::writef(
                                         "turn in place: start (#%u, %s) gap %+.0f deg, angle %d, hero %.0f heading %.0f",

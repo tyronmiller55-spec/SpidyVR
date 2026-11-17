@@ -301,6 +301,19 @@ struct SnapRealign {
         out = fired = false;
         outFor = 0;
         sign = 0;
+        pushTurn = 0;
+    }
+    // SNAP FROM THE LIVE VIEW (Nov 17: realign #6 went to 9 with the view on 136): the view a smooth-mode
+    // tap returns to is the live view minus what this push's own smooth turn added - never a yaw latched
+    // at the push's start, which a landing's re-latch (another frame of yaw) makes stale.
+    float pushTurn = 0;
+    void turned(float by) {
+        if (out && std::isfinite(by))
+            pushTurn += by;
+    }
+    void began() { pushTurn = 0; }
+    float from(float viewNow, bool smooth) const {
+        return smooth ? viewNow - pushTurn : viewNow;
     }
 };
 

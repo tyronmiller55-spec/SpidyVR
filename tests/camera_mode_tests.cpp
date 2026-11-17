@@ -197,6 +197,29 @@ int main() {
             w.update(.1f, .9f, true, 30);
             check(w.update(.05f, .1f, true, 30).fire, "the same push snaps at 250 ms (the old window)");
         }
+        // SNAP FROM THE LIVE VIEW (Nov 17, realign #6): the snap returns to the live view less this push's own
+        // smooth turn, whatever re-latched the view meanwhile.
+        {
+            SnapRealign w;
+            auto b = w.update(.01f, .9f, true, 45);
+            check(b.began, "the push begins");
+            w.began();
+            w.turned(-5 * deg); // the smooth turn while held
+            w.turned(-3 * deg);
+            check(near(w.from(100 * deg, true), 108 * deg), "the live view less the push's turn");
+            check(near(w.from(100 * deg, false), 100 * deg), "snap mode: the live view");
+            // A landing re-latches the view from -36 to 136 between the push and the release: the snap is from 136.
+            SnapRealign l;
+            l.update(.01f, .9f, true, 45);
+            l.began();
+            const auto f = l.update(.016f, .1f, true, 45);
+            check(f.fire && near(l.from(136 * deg, true), 136 * deg), "the re-latched view, not the stale -36");
+            l.turned(10 * deg);
+            check(near(l.pushTurn, 0), "after the release nothing more counts");
+            l.update(.01f, .9f, true, 45);
+            l.began();
+            check(near(l.pushTurn, 0), "a new push starts from zero");
+        }
         // A long push is the smooth turn, no snap.
         s.update(.01f, -.9f, true, 30);
         for (int i = 0; i < 4; ++i)
