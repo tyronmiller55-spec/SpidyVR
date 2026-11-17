@@ -822,6 +822,13 @@ struct Values {
     bool handstandTipIn = true;
     int handstandTipInDeg = 120;
     int handstandTipInReachCm = 200;
+    // MARKER TWIST STEADY (the owner, Nov 17: "reaching around to fire webs causes the marker to jump ... loosen up that
+    // twisting"): the arm line is smoothed in the world, carried with the controller's pointing, so a twist of the hand no longer
+    // swings it round (web_aim::ForearmAim::updateWorld); its own changes go at most marker_turn_rate_dps (360; 0 no cap), and the
+    // arm/controller fallback switches only after marker_switch_hold_ms (150) of the new answer. marker_twist_steady=0: as before.
+    bool markerTwistSteady = true;
+    int markerTurnRateDps = 360;
+    int markerSwitchHoldMs = 150;
     // [next pass settings]
     bool operator==(const Values&) const = default;
 };

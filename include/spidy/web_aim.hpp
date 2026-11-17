@@ -280,11 +280,94 @@ struct ForearmAim {
                 primed = false, smoothed = {};
         }
     }
+    // TWIST STEADY (the owner, Nov 17: "reaching around to fire webs causes the marker to jump ... loosen up that
+    // twisting"). update() smoothed the forearm's offset in the CONTROLLER's frame: a quick twist of the hand (the
+    // controller rolling about its own line, the forearm staying put) turned that offset with the hand for the 0.2 s
+    // smoothing, so the line swept round the controller by the twist - up to twice the offset - and came back. Here the
+    // line itself is smoothed in the world, carried with the controller's pointing (the shortest turn of its line: no
+    // roll), so a twist moves it not at all and a point moves it 1:1; its own changes (the solve's elbow, a trust or
+    // source switch) go at most `rateDps` (0: no cap). A line within singularDegrees of straight back from the
+    // controller has no well-defined turn: the last turn is kept.
+    static constexpr float singularDegrees = 170.f;
+    Vec3 worldLine{}, lastForward{};
+    bool worldPrimed{};
+    float lastStepDegrees{}; // this frame's own change of the line (the cap's measure)
+    void carry(Vec3 forward) {
+        if (worldPrimed && spherical_aim::unitish(lastForward) && spherical_aim::unitish(forward))
+            worldLine = normalized(arc(normalized(lastForward), normalized(forward)).rotate(worldLine));
+        lastForward = forward;
+    }
+    void localFrom(Quat aimNow, float limitDegrees) {
+        const Vec3 local = normalized(unitOr(aimNow).conjugate().rotate(worldLine));
+        if (!finite(local) || length(local) < .5f)
+            return;
+        if (spherical_aim::angleBetween(local, {0, 0, -1}) * 57.29578f > singularDegrees)
+            return; // straight back: keep the last turn
+        smoothed = clampTurn(arc({0, 0, -1}, local), std::clamp(limitDegrees, 0.f, 180.f) * 3.14159265f / 180);
+    }
+    void updateWorld(bool valid, Vec3 line, Quat aimNow, float dt, float rateDps,
+                     float limitDegrees = forearmLimitDefault) {
+        if (!std::isfinite(dt) || dt < 0)
+            dt = 0;
+        dt = std::min(dt, .1f);
+        lastStepDegrees = 0;
+        const Vec3 forward = unitOr(aimNow).rotate({0, 0, -1});
+        if (valid && spherical_aim::unitish(line)) {
+            line = normalized(line);
+            if (!worldPrimed) {
+                worldLine = line;
+                worldPrimed = true;
+                lastForward = forward;
+            } else {
+                carry(forward);
+                Vec3 next = spherical_aim::toward(worldLine, line, 1 - std::exp(-dt / forearmSmoothSeconds));
+                const float step = spherical_aim::angleBetween(worldLine, next) * 57.29578f;
+                if (rateDps > 0 && step > rateDps * dt && step > 1e-4f)
+                    next = spherical_aim::toward(worldLine, next, rateDps * dt / step);
+                lastStepDegrees = spherical_aim::angleBetween(worldLine, next) * 57.29578f;
+                worldLine = next;
+            }
+            localFrom(aimNow, limitDegrees);
+            primed = true;
+            weight = std::min(1.f, weight + dt / forearmFallbackSeconds);
+        } else {
+            weight = std::max(0.f, weight - dt / forearmFallbackSeconds);
+            if (weight <= 0) {
+                primed = false, smoothed = {};
+                worldPrimed = false;
+            } else if (worldPrimed) {
+                // Fading back to the controller: the line keeps riding the controller's pointing, never its roll.
+                carry(forward);
+                localFrom(aimNow, limitDegrees);
+            }
+        }
+    }
     // The turn to use, FOREARM BLEND percent of it (0 the controller's line).
     Quat turn(int blendPercent) const {
         const float share = weight * static_cast<float>(std::clamp(blendPercent, 0, 100)) / 100;
         return share <= 0 ? Quat{} : slerp({}, smoothed, share);
     }
+};
+// SWITCH HOLD (Nov 17): a yes/no that changes only after the new answer has held `seconds` (0: at once) - the ARM
+// AIM FALLBACK's toggles (s131456: the line flipped between the controller's and the arm's ~45 degrees apart every
+// 0.1-0.2 s, 1793 source changes in 18 minutes).
+struct SwitchHold {
+    bool value{};
+    float pending{};
+    bool update(bool raw, float dt, float seconds) {
+        if (raw == value || !(seconds > 0)) {
+            value = raw;
+            pending = 0;
+            return value;
+        }
+        pending += std::isfinite(dt) && dt > 0 ? std::min(dt, .1f) : 0.f;
+        if (pending >= seconds) {
+            value = raw;
+            pending = 0;
+        }
+        return value;
+    }
+    void reset() { *this = {}; }
 };
 // The aim pose a hand's webs take with a source turn (forearmTurn, through
 // ForearmAim::turn) under WEB ANGLE and WRIST SHOOTERS: the same place.

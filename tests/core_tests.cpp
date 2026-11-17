@@ -25540,6 +25540,9 @@ int main() {
                   "handstand_tip_in=1\n"
                   "handstand_tip_in_deg=120\n"
                   "handstand_tip_in_reach_cm=200\n"
+                  "marker_twist_steady=1\n"
+                  "marker_turn_rate_dps=360\n"
+                  "marker_switch_hold_ms=150\n"
                   "movement_defaults=6\n",
               "the defaults' text");
         Values changed = defaults;

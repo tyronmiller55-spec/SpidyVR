@@ -798,6 +798,12 @@ int main() {
                 continue;
             if (key == "handstand_tip_in_reach_cm")
                 continue;
+            if (key == "marker_twist_steady")
+                continue;
+            if (key == "marker_turn_rate_dps")
+                continue;
+            if (key == "marker_switch_hold_ms")
+                continue;
             if (key == "handstand_arms_over_head_cm")
                 continue;
             if (key == "head_seat_glide_ms")

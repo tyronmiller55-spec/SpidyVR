@@ -9,6 +9,7 @@
 #include "spidy/head_seat.hpp"
 #include "spidy/landing_body.hpp"
 #include "spidy/view_yaw_lock.hpp"
+#include "spidy/web_aim.hpp"
 #include "spidy/vr_settings.hpp"
 #include <cmath>
 #include <cstdio>
@@ -361,6 +362,87 @@ int main() {
         check(mj.frames == 2 && mj.worst > 20.f, "frames and the worst counted");
         mj.clearWindow();
         check(mj.jumps == 0 && mj.frames == 0, "the window clears");
+    }
+    // MARKER TWIST STEADY (the owner, Nov 17): a twist of the hand no longer swings the arm line round the controller.
+    {
+        const vr_settings::Values v{};
+        check(v.markerTwistSteady && v.markerTurnRateDps == 360 && v.markerSwitchHoldMs == 150,
+              "the defaults: on, 360 deg/s, 150 ms");
+        const float d2r = 3.14159265f / 180.f;
+        const float dt = 1.f / 90.f;
+        // The forearm 45 degrees right of the controller's line, fixed in the world; the hand twists 120 degrees about
+        // its own line in 0.1 s (9 frames), then holds.
+        const Vec3 forearm{std::sin(45 * d2r), 0, -std::cos(45 * d2r)};
+        const auto lineOf = [](const web_aim::ForearmAim& a, Quat aim) {
+            return (aim * a.turn(100)).rotate({0, 0, -1});
+        };
+        web_aim::ForearmAim world, local;
+        float worstWorld = 0, worstLocal = 0;
+        for (int f = 0; f < 80; ++f) { // 40 frames to fade in, then the twist
+            const float roll = std::clamp(f - 40, 0, 9) / 9.f * 120.f * d2r;
+            const Quat aim = Quat::around({0, 0, -1}, roll);
+            world.updateWorld(true, forearm, aim, dt, 360.f);
+            const Vec3 l = normalized(aim.conjugate().rotate(forearm));
+            local.update(true, arc({0, 0, -1}, l), dt, 180.f);
+            if (f >= 40) {
+                worstWorld = std::max(worstWorld, std::acos(std::clamp(dot(lineOf(world, aim), forearm), -1.f, 1.f)) / d2r);
+                worstLocal = std::max(worstLocal, std::acos(std::clamp(dot(lineOf(local, aim), forearm), -1.f, 1.f)) / d2r);
+            }
+        }
+        check(worstWorld < 2.f, "twist steady: the line stays on the forearm through a 120 deg twist");
+        check(worstLocal > 30.f, "the old smoothing swung it round the controller (> 30 deg)");
+        // Pointing: the controller and the forearm turn together 60 degrees in 0.1 s: the line follows 1:1.
+        web_aim::ForearmAim point;
+        float lagMax = 0;
+        for (int f = 0; f < 60; ++f) {
+            const float yaw = std::clamp(f - 40, 0, 9) / 9.f * 60.f * d2r;
+            const Quat aim = Quat::around({0, 1, 0}, -yaw);
+            const Vec3 fa = aim.rotate(Vec3{std::sin(45 * d2r), 0, -std::cos(45 * d2r)});
+            point.updateWorld(true, fa, aim, dt, 360.f);
+            if (f >= 40)
+                lagMax = std::max(lagMax, std::acos(std::clamp(dot(lineOf(point, aim), fa), -1.f, 1.f)) / d2r);
+        }
+        check(lagMax < 1.f, "pointing passes 1:1 (no lag from the smoothing)");
+        // A source switch: the line wants 60 degrees elsewhere at once; it goes at most 360 deg/s.
+        web_aim::ForearmAim cap;
+        cap.updateWorld(true, {0, 0, -1}, {}, dt, 360.f);
+        const Vec3 away{std::sin(60 * d2r), 0, -std::cos(60 * d2r)};
+        float worstStep = 0;
+        for (int f = 0; f < 30; ++f) {
+            cap.updateWorld(true, away, {}, dt, 360.f);
+            worstStep = std::max(worstStep, cap.lastStepDegrees);
+        }
+        check(worstStep <= 360.f * dt + .01f, "a 60 deg switch: at most 4 deg a frame at 360 deg/s");
+        // Straight back from the controller: the last turn is kept (no flip about an undefined axis).
+        web_aim::ForearmAim back;
+        back.updateWorld(true, {std::sin(150 * d2r), 0, -std::cos(150 * d2r)}, {}, dt, 0.f);
+        Quat atEdge{};
+        bool edge = false, kept = true;
+        for (int f = 0; f < 200; ++f) {
+            back.updateWorld(true, {std::sin(179 * d2r), 0, -std::cos(179 * d2r)}, {}, dt, 0.f);
+            const float a = std::acos(std::clamp(dot(back.worldLine, Vec3{0, 0, -1}), -1.f, 1.f)) / d2r;
+            if (a > 170.5f) {
+                if (!edge)
+                    atEdge = back.smoothed, edge = true;
+                else
+                    kept = kept && near(back.smoothed.x, atEdge.x) && near(back.smoothed.w, atEdge.w);
+            }
+        }
+        check(edge && kept, "within 10 deg of straight back: the last turn is kept");
+        // SWITCH HOLD: a flip back within 150 ms is ignored; one that holds is taken.
+        web_aim::SwitchHold h;
+        check(!h.update(false, dt, .15f), "starts off");
+        for (int f = 0; f < 9; ++f)
+            h.update(true, dt, .15f);
+        check(!h.value, "0.1 s of the new answer: not yet");
+        h.update(false, dt, .15f);
+        for (int f = 0; f < 9; ++f)
+            h.update(true, dt, .15f);
+        check(!h.value, "a flip back restarts the wait");
+        for (int f = 0; f < 6; ++f)
+            h.update(true, dt, .15f);
+        check(h.value, "held 150 ms: taken");
+        check(h.update(false, dt, 0.f) == false, "0: at once");
     }
     std::printf("next pass: %d checks passed\n", passed);
     return 0;

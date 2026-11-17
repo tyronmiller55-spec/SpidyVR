@@ -1238,6 +1238,8 @@ Values sanitized(Values v) {
     v.landingBlendMs = std::clamp(v.landingBlendMs, 0, 1500);
     v.headSeatGlideMs = std::clamp(v.headSeatGlideMs, 60, 1000);
     v.handstandArmsOverHeadCm = std::clamp(v.handstandArmsOverHeadCm, 0, 60);
+    v.markerSwitchHoldMs = std::clamp(v.markerSwitchHoldMs, 0, 500);
+    v.markerTurnRateDps = std::clamp(v.markerTurnRateDps, 0, 2000);
     v.handstandTipInReachCm = std::clamp(v.handstandTipInReachCm, 60, 300);
     v.handstandTipInDeg = std::clamp(v.handstandTipInDeg, 100, 180);
     v.handstandGraceAfterMs = std::clamp(v.handstandGraceAfterMs, 100, 1000);
@@ -3005,6 +3007,9 @@ constexpr TabOnly tabOnly[] = {
     {"handstand_tip_in", &Values::handstandTipIn, nullptr},
     {"handstand_tip_in_deg", nullptr, &Values::handstandTipInDeg},
     {"handstand_tip_in_reach_cm", nullptr, &Values::handstandTipInReachCm},
+    {"marker_twist_steady", &Values::markerTwistSteady, nullptr},
+    {"marker_turn_rate_dps", nullptr, &Values::markerTurnRateDps},
+    {"marker_switch_hold_ms", nullptr, &Values::markerSwitchHoldMs},
     {"movement_defaults", nullptr, &Values::movementDefaults},
 };
 } // namespace

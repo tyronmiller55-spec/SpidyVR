@@ -1350,6 +1350,12 @@ DWORD WINAPI run(void*) {
         // last line (its jitter). webTurnsOn: turns are being sent.
         std::array<web_aim::ForearmAim, 2> forearmAims;
         std::array<bool, 2> forearmMisaligned{}; // ARM AIM FALLBACK (anim_forearm_fallback_deg)
+        std::array<bool, 2> forearmMisalignedRaw{};            // before MARKER SWITCH HOLD
+        std::array<web_aim::SwitchHold, 2> forearmMisalignHold{};
+        // MARKER JUMPS (aim_watch.hpp): frames the web line turned more than 8 degrees beyond the controller.
+        std::array<aim_watch::MarkerJumps, 2> markerJumps{};
+        uint32_t markerJumpsTotal[2]{}, markerJumpEpoch{};
+        float markerJumpLogAge{};
         // SPHERICAL AIM: each hand's learned forearm (controller frame) and
         // the eased trust in the solve (spherical_aim.hpp). The model lives
         // for the session: owner switches keep it.
@@ -5651,9 +5657,16 @@ DWORD WINAPI run(void*) {
                                         const float enter = static_cast<float>(values.animForearmFallbackDeg);
                                         const float leave =
                                             std::max(0.f, enter - web_aim::forearmFallbackHysteresis);
-                                        forearmMisaligned[i] =
-                                            forearmMisaligned[i] ? alignDeg > leave : alignDeg > enter;
+                                        const bool raw =
+                                            forearmMisalignedRaw[i] ? alignDeg > leave : alignDeg > enter;
+                                        forearmMisalignedRaw[i] = raw;
+                                        // MARKER SWITCH HOLD: the new answer holds marker_switch_hold_ms first.
+                                        forearmMisaligned[i] = forearmMisalignHold[i].update(
+                                            raw, dt,
+                                            values.markerTwistSteady ? values.markerSwitchHoldMs * .001f : 0.f);
                                     } else {
+                                        forearmMisalignedRaw[i] = false;
+                                        forearmMisalignHold[i].reset();
                                         forearmMisaligned[i] = false;
                                     }
                                     if (why == Fallback::none && forearmMisaligned[i])
@@ -5715,7 +5728,13 @@ DWORD WINAPI run(void*) {
                                 const float limit = 0.f; // LOCKED TO ARM: no wrist cap
                                 const bool clamped = false;
                                 // 180: do not pull the turn back toward the controller.
-                                forearmAims[i].update(haveLine, target, dt, 180.f);
+                                if (values.markerTwistSteady)
+                                    forearmAims[i].updateWorld(
+                                        haveLine, haveLine ? web_aim::clampedForearmDir(webLine, aimNow, static_cast<int>(i), 0.f)
+                                                           : Vec3{},
+                                        aimNow, dt, static_cast<float>(values.markerTurnRateDps), 180.f);
+                                else
+                                    forearmAims[i].update(haveLine, target, dt, 180.f);
                                 // WRIST SHOOTERS without MODEL FOREARM takes all of it.
                                 webTurnsNow[i] = forearmAims[i].turn(shooter_lock::strength(values));
                                 turns.turns[i] = webTurnsNow[i];
@@ -5840,6 +5859,39 @@ DWORD WINAPI run(void*) {
                                     continue;
                                 input.hands[i].aim = aim_filter::steer(input.hands[i].aim, steadied);
                                 motion.swing.hands[i].aim = input.hands[i].aim;
+                            }
+                        }
+                        // MARKER JUMPS: the line the marker shows (the steadied aim with the arm's turn) against the
+                        // controller's own turn, per frame; a snap, a re-latch or a frame switch (armEpoch) is no jump.
+                        {
+                            if (armEpoch != markerJumpEpoch) {
+                                markerJumpEpoch = armEpoch;
+                                for (auto& m : markerJumps)
+                                    m.have = false;
+                            }
+                            for (unsigned i = 0; i < 2; ++i) {
+                                const bool ok = input.focused && input.hands[i].tracked && frame.hands[i].valid &&
+                                                !swingState.webs[i].attached;
+                                const Vec3 line =
+                                    (input.hands[i].aim.orientation * webTurnsNow[i]).rotate({0, 0, -1});
+                                if (markerJumps[i].update(ok, line, frame.hands[i].aim.orientation.rotate({0, 0, -1}),
+                                                          8.f))
+                                    ++markerJumpsTotal[i];
+                            }
+                            markerJumpLogAge += std::isfinite(frame.seconds) ? std::clamp(frame.seconds, 0.f, .1f) : 0.f;
+                            if (markerJumpLogAge >= 5.f) {
+                                markerJumpLogAge = 0;
+                                if (markerJumps[0].jumps || markerJumps[1].jumps)
+                                    diag_log::writef(
+                                        "marker jumps: L %u R %u in the last 5 s (worst %.0f / %.0f deg beyond the "
+                                        "controller in a frame; over 8 counts), total L %u R %u; twist steady %s, rate "
+                                        "%d deg/s, switch hold %d ms",
+                                        markerJumps[0].jumps, markerJumps[1].jumps, markerJumps[0].worst,
+                                        markerJumps[1].worst, markerJumpsTotal[0], markerJumpsTotal[1],
+                                        values.markerTwistSteady ? "on" : "off", values.markerTurnRateDps,
+                                        values.markerSwitchHoldMs);
+                                for (auto& m : markerJumps)
+                                    m.clearWindow();
                             }
                         }
                         // WEB FIRE: the line a web leaves on, at the squeeze, is never more than a few degrees off the
