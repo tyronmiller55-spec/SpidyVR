@@ -303,6 +303,30 @@ int main() {
             d = o.update(f, t += 11'000'000);
         check(d == Domain::vr, "a refused instant zip gives the swing back");
     }
+    // HANDOFF PLACE (the owner, Nov 17): a long way onto the head is placed at once; a short one glides as before.
+    {
+        using namespace hybrid_handoff;
+        const vr_settings::Values v{};
+        check(v.handoffPlaceCm == 200, "the default: placed past 2 m");
+        auto g = landingGlide(46.76f, 250, 200, 700, 200, peakSmoothstep);
+        check(g.place && g.ms == 250, "47 m (b318cb1's zip): placed, never a 67 m/s slide");
+        g = landingGlide(2.5f, 250, 200, 700, 200, peakSmoothstep);
+        check(g.place, "2.5 m: placed");
+        g = landingGlide(.6f, 250, 200, 700, 200, peakSmoothstep);
+        check(!g.place && g.ms == glideMs(.6f, 250, 200, 700, peakSmoothstep), "0.6 m glides as before");
+        g = landingGlide(1.9f, 250, 200, 700, 200, peakSmoothstep);
+        check(!g.place && g.ms == 700, "under the threshold: the longest glide");
+        g = landingGlide(46.f, 250, 200, 700, 0, peakSmoothstep);
+        check(!g.place && g.ms == 700, "0: always glide (the old way)");
+        g = landingGlide(NAN, 250, 200, 700, 200, peakSmoothstep);
+        check(!g.place && g.ms == 250, "a bad distance: the base, no place");
+        // The source is the shown view carried with the player, not the tracked eyes.
+        const Vec3 eyes[2] = {{-.03f, 1.6f, 0}, {.03f, 1.6f, 0}};
+        const Vec3 s = shownSource(eyes, {0, 0, 0}, {5, 0, 0});
+        check(near(s.x, 5.f) && near(s.y, 1.6f) && near(s.z, 0.f), "carried 5 m with the player");
+        const Vec3 far = shownSource(eyes, {0, 0, 0}, {30, 0, 0});
+        check(near(far.x, 0.f), "past the carry limit: not carried (a teleport)");
+    }
     std::printf("next pass: %d checks passed\n", passed);
     return 0;
 }

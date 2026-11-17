@@ -784,6 +784,8 @@ int main() {
                 continue;
             if (key == "turn_push_pct")
                 continue;
+            if (key == "handoff_place_cm")
+                continue;
             if (key == "handstand_arms_over_head_cm")
                 continue;
             if (key == "head_seat_glide_ms")

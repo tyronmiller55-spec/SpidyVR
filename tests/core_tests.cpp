@@ -25533,6 +25533,7 @@ int main() {
                   "web_zip_instant=1\n"
                   "point_jump_fire_full=1\n"
                   "target_scan_idle_ms=500\n"
+                  "handoff_place_cm=200\n"
                   "movement_defaults=5\n",
               "the defaults' text");
         Values changed = defaults;

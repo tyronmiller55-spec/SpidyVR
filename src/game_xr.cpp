@@ -1463,7 +1463,9 @@ DWORD WINAPI run(void*) {
             Vec3 fromEyes{};
             float fromYaw{};
             const char* why = "";
+            float stintMs{}; // the VR stint that just ended (the handoff gap's log)
         } landHeadProbe;
+        uint32_t handoffPlaces{};
         uint64_t hybridAdoptSeen{};
         // Horizontal measured (feet position-delta) speed for the owner's speed intent.
         Vec3 hybridFeetWas{};
@@ -1578,6 +1580,8 @@ DWORD WINAPI run(void*) {
             // (the blend then turns only their angle).
             int64_t durNs = hybrid_handoff::handoffNs;
             bool posFollowsEase{};
+            // HANDOFF PLACE (handoff_place_cm): the view's place is the destination's at once; only the angle blends.
+            bool placed{};
             // HANDOFF HEAD LEADS / ANGLE TIME: the angle's own length (0: durNs) and the switch's angle, per eye.
             int64_t angleNs{};
             bool oriOffsetSet[2]{};
@@ -9784,17 +9788,47 @@ DWORD WINAPI run(void*) {
                                     landHeadProbe.pending = false;
                                     // HANDOFF GLIDE SPEED: the landing's blend onto the head, long enough for this
                                     // distance (it is known only now, the head's first frame; a few ms into the blend).
+                                    // The distance is the one the view glides: from the eyes shown at the switch,
+                                    // carried with the player since (hybrid_handoff::shownSource), as the blend
+                                    // itself starts; the tracked eyes' own distance is logged beside it (b318cb1:
+                                    // it read 5 to 47 m). HANDOFF PLACE: farther than handoff_place_cm, the view is
+                                    // placed on the head at once (the position; the angle still blends).
                                     if (hybridBlend.active && !hybridBlend.toTraversal) {
                                         const int baseMs = static_cast<int>(hybridBlend.durNs / 1'000'000);
-                                        const int ms = hybrid_handoff::glideMs(
-                                            length(landHeadProbe.fromEyes - hb), baseMs, values.handoffGlideCmS,
-                                            values.handoffGlideMaxMs, hybrid_handoff::peakSmoothstep);
-                                        if (ms > baseMs) {
-                                            hybridBlend.durNs = static_cast<int64_t>(ms) * 1'000'000;
+                                        const Vec3 source =
+                                            hybridBlend.fromValid
+                                                ? hybrid_handoff::shownSource(hybridBlend.fromEyePos,
+                                                                              hybridBlend.fromAnchor, motion.anchor)
+                                                : landHeadProbe.fromEyes;
+                                        const float gap = length(source - hb);
+                                        const float trackedGap = length(landHeadProbe.fromEyes - hb);
+                                        const Vec3 carried = hybrid_handoff::travel(hybridBlend.fromAnchor, motion.anchor);
+                                        const Vec3 feetNow{body[12], body[13], body[14]};
+                                        const auto plan = hybrid_handoff::landingGlide(
+                                            gap, baseMs, values.handoffGlideCmS, values.handoffGlideMaxMs,
+                                            values.handoffPlaceCm, hybrid_handoff::peakSmoothstep);
+                                        // Why the gap is what it is (the owner, Nov 17: find the 20-47 m gaps).
+                                        if (gap > 1.f || trackedGap > 1.f)
+                                            diag_log::writef(
+                                                "handoff gap: %s, the shown view %.2f m from the head, the tracked eyes "
+                                                "%.2f m; carried %.2f m since the switch%s; tracked anchor %.2f m from "
+                                                "his feet; VR stint %.0f ms",
+                                                landHeadProbe.why, gap, trackedGap, length(carried),
+                                                hybridBlend.fromValid ? "" : " (no shown view: the tracked eyes)",
+                                                finite(feetNow) ? length(motion.anchor - feetNow) : -1.f,
+                                                landHeadProbe.stintMs);
+                                        if (plan.place) {
+                                            hybridBlend.placed = true;
+                                            ++handoffPlaces;
+                                            diag_log::writef("handoff place: %s %.2f m onto the head, placed at once (over "
+                                                             "%d cm; the angle still blends), #%u",
+                                                             landHeadProbe.why, gap, values.handoffPlaceCm,
+                                                             handoffPlaces);
+                                        } else if (plan.ms > baseMs) {
+                                            hybridBlend.durNs = static_cast<int64_t>(plan.ms) * 1'000'000;
                                             diag_log::writef("handoff glide: landing %.2f m onto the head over %d ms (was "
                                                              "%d), at most %.1f m/s",
-                                                             length(landHeadProbe.fromEyes - hb), ms, baseMs,
-                                                             values.handoffGlideCmS * .01f);
+                                                             gap, plan.ms, baseMs, values.handoffGlideCmS * .01f);
                                         }
                                     }
                                 } else if (landHeadProbe.frames >= 30 || !hybridOn) {
@@ -9917,6 +9951,7 @@ DWORD WINAPI run(void*) {
                                     landHeadProbe.fromEyes = fromEyes;
                                     landHeadProbe.fromYaw = fromYaw;
                                     landHeadProbe.why = why;
+                                    landHeadProbe.stintMs = landMs;
                                 }
                                 // FACING CHECK: the view SpidyVR showed last is the facing the
                                 // player expects on the animation's side, view and hero.
@@ -10813,7 +10848,9 @@ DWORD WINAPI run(void*) {
                         hybridBlend.active ? (eyeBlendNow - hybridBlend.startNs)
                                            : hybridBlend.durNs;
                     const float eyeBlendW =
-                        hybridBlend.active ? hybrid_handoff::blendAlphaFor(eyeBlendElapsed, hybridBlend.durNs) : 1.f;
+                        hybridBlend.active && !hybridBlend.placed
+                            ? hybrid_handoff::blendAlphaFor(eyeBlendElapsed, hybridBlend.durNs)
+                            : 1.f;
                     // HANDOFF ANGLE TIME (handoff_angle_ms): the angle on its own clock (0: the blend's).
                     const int64_t eyeBlendAngleNs = hybridBlend.angleNs > 0 ? hybridBlend.angleNs : hybridBlend.durNs;
                     const float eyeBlendOriW =

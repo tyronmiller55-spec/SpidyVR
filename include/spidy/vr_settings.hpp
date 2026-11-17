@@ -802,6 +802,10 @@ struct Values {
     // milliseconds, the web, grab and punch target lists rescan the game's actors when nothing is fighting (250 to
     // 2000); in a fight, and for 3 s after one, every 250 ms as before. 500: half the scans out on the streets.
     int targetScanIdleMs = 500;
+    // HANDOFF PLACE (handoff_place_cm, 200; 0: always glide): a landing or zip handoff whose view has farther than this to go
+    // onto the head is placed there at once (the position only; the angle still blends, the headset leads) instead of
+    // sliding at many metres a second (b318cb1: 26 of 85 landing glides had over 1.4 m to go, up to 47 m in 700 ms).
+    int handoffPlaceCm = 200;
     // [next pass settings]
     bool operator==(const Values&) const = default;
 };

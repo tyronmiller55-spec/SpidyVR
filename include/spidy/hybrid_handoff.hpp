@@ -58,6 +58,27 @@ inline int glideMs(float metres, int baseMs, int speedCmS, int maxMs, float peak
 }
 inline constexpr float peakSmoothstep = 1.5f, peakSmootherstep = 1.875f, peakEaseOut = 3.f;
 
+// HANDOFF PLACE (handoff_place_cm; the owner, Nov 17): what a landing's blend onto the head does with the distance the
+// view has to go - glide (stretched by HANDOFF GLIDE SPEED, glideMs) or, farther than `placeCm`, place the view on the
+// head at once (the position only: the angle blends as before, so the headset still leads and no view yaw is
+// written). b318cb1: glides of 5 to 47 m squeezed into 700 ms were a slide at up to 67 m/s. placeCm <= 0: always glide.
+struct LandingGlide {
+    bool place{};
+    int ms{};
+};
+inline LandingGlide landingGlide(float metres, int baseMs, int speedCmS, int maxMs, int placeCm, float peak) {
+    LandingGlide g;
+    g.ms = baseMs;
+    if (!std::isfinite(metres) || metres <= 0.f)
+        return g;
+    if (placeCm > 0 && metres * 100.f > static_cast<float>(placeCm)) {
+        g.place = true;
+        return g;
+    }
+    g.ms = glideMs(metres, baseMs, speedCmS, maxMs, peak);
+    return g;
+}
+
 // World look yaw from a level forward (0 = facing −Z, same as the tracking rig).
 inline float lookYaw(Vec3 forward) {
     if (!finite(forward))
@@ -203,6 +224,13 @@ inline Vec3 travel(Vec3 from, Vec3 now) {
     return length(d) <= carryLimit ? d : Vec3{};
 }
 
+// Where the blend's source view is now: the centre of the eyes shown at the switch, carried with the player's travel
+// since (travel; none past carryLimit). The distance from it to the head is the distance the view actually glides -
+// not the tracked eyes' (b318cb1: the landing's glide measured from the tracked eyes read 5 to 47 m where the
+// shown view was at the body).
+inline Vec3 shownSource(const Vec3 (&eyePos)[2], Vec3 fromAnchor, Vec3 anchorNow) {
+    return (eyePos[0] + eyePos[1]) * .5f + travel(fromAnchor, anchorNow);
+}
 inline bool validShown(const Shown& s, int64_t nowNs) {
     if (!s.valid || !finite(s.anchor) || nowNs < s.ns || nowNs - s.ns > shownMaxAgeNs)
         return false;

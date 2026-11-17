@@ -1238,6 +1238,7 @@ Values sanitized(Values v) {
     v.landingBlendMs = std::clamp(v.landingBlendMs, 0, 1500);
     v.headSeatGlideMs = std::clamp(v.headSeatGlideMs, 60, 1000);
     v.handstandArmsOverHeadCm = std::clamp(v.handstandArmsOverHeadCm, 0, 60);
+    v.handoffPlaceCm = std::clamp(v.handoffPlaceCm, 0, 2000);
     v.turnPushPct = std::clamp(v.turnPushPct, 20, 100);
     v.targetScanIdleMs = std::clamp(v.targetScanIdleMs, 250, 2000);
     return v;
@@ -2993,6 +2994,7 @@ constexpr TabOnly tabOnly[] = {
     {"web_zip_instant", &Values::webZipInstant, nullptr},
     {"point_jump_fire_full", &Values::pointJumpFireFull, nullptr},
     {"target_scan_idle_ms", nullptr, &Values::targetScanIdleMs},
+    {"handoff_place_cm", nullptr, &Values::handoffPlaceCm},
     {"movement_defaults", nullptr, &Values::movementDefaults},
 };
 } // namespace
