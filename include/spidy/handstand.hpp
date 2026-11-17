@@ -96,6 +96,15 @@ struct Params {
     // (armsBelowHead) counted hands held over the head only past ~125 degrees inverted (0.35 m up reads 0.35 cos(theta)
     // below the head: 0.06 m at 100, 0.16 m at 117). 0: the world test. A palm with no tracked offset is no test.
     float armsOverHead = .10f;
+    // HANDSTAND GRACE (the owner, Nov 17: "give some grace for getting into one"): the arms over the head up to
+    // armsGraceBefore before the touchdown count at it (and their hold with them), and the touchdown can catch for
+    // touchdownGrace after SpidyVR's air (.25 s before; handstand_grace_after_ms).
+    float armsGraceBefore = .3f;
+    // TIP-IN (the owner, Nov 17: "tip the player into the handstand when it's clear they're attempting one"): inverted
+    // at least tipInDegrees, not spinning past catchSpin, the arms over the head (now or in the grace): the catch takes
+    // the palms from as far as tipInReach over the floor and waits for no hold; the catch then sets them on the floor.
+    bool tipIn = true;
+    float tipInDegrees = 120.f, tipInReach = 2.f;
     // A LEAP IS A FRESH PUSH: a stick already held at the catch has to be let go of first, and A pressed before the catch is not
     // a press now (9 of 11 leaps in that session came 0.01 s after the catch).
     // (A pressed after the catch is already a fresh press: only a held A or stick is carried across it.)
@@ -135,13 +144,21 @@ template <class V> Params paramsOf(const V& v) {
     p.floorReach = std::clamp(v.handstandCatchHoldCm, 5, 60) / 100.f;
     p.touchdownReach = std::clamp(v.handstandReachCm, 60, 200) / 100.f;
     p.armsOverHead = std::clamp(v.handstandArmsOverHeadCm, 0, 60) / 100.f;
+    p.armsGraceBefore = std::clamp(v.handstandGraceBeforeMs, 0, 1000) / 1000.f;
+    p.touchdownGrace = std::clamp(v.handstandGraceAfterMs, 100, 1000) / 1000.f;
+    p.tipIn = v.handstandTipIn;
+    p.tipInDegrees = static_cast<float>(std::clamp(v.handstandTipInDeg, 100, 180));
+    p.tipInReach = std::clamp(v.handstandTipInReachCm, 60, 300) / 100.f;
     return p;
 }
 
 enum class State : uint8_t { off, catching, balance, leaving };
 enum class Exit : uint8_t { none, push, stepDown, fall, grip, tracking, disabled, missed, leap };
 // Why a touchdown out of SpidyVR's air did not catch (the log's reason).
-enum class Refusal : uint8_t { none, disabled, untracked, grip, notArmed, upright, spin, palmsHigh };
+// (Nov 17) A held grip is no gate (the catch carries it; it lets go after one release): Refusal::grip is kept for the
+// numbering and never set. palmsHigh is the palms' height alone now, armsDown the hands-over-head gesture.
+enum class Refusal : uint8_t { none, disabled, untracked, grip, notArmed, upright, spin, palmsHigh, armsDown };
+inline constexpr unsigned lastRefusal = static_cast<unsigned>(Refusal::armsDown);
 inline const char* refusalName(Refusal r) {
     switch (r) {
     case Refusal::disabled:
@@ -157,7 +174,9 @@ inline const char* refusalName(Refusal r) {
     case Refusal::spin:
         return "spinning too fast";
     case Refusal::palmsHigh:
-        return "palms too far over the floor or not below the head";
+        return "palms too far over the floor";
+    case Refusal::armsDown:
+        return "hands not over the head";
     default:
         return "none";
     }
@@ -171,7 +190,7 @@ inline int refusalList(unsigned failed, char* out, size_t size) {
         return 0;
     out[0] = 0;
     size_t used = 0;
-    for (unsigned r = 1; r <= static_cast<unsigned>(Refusal::palmsHigh); ++r) {
+    for (unsigned r = 1; r <= lastRefusal; ++r) {
         if (!(failed & (1u << r)))
             continue;
         const char* name = refusalName(static_cast<Refusal>(r));
@@ -463,6 +482,14 @@ class Handstand {
         Vec3 flipAxis{};
         float windowAge = -1.f;
         unsigned reachDown{};
+        // GRACE / TIP-IN (Nov 17): seconds since both hands were last over the head (10: not lately), how long that
+        // stretch was held, whether this frame's touchdown judgement took them from the grace, whether the tip-in's
+        // intent is clear, and the gates failing on each window frame; `windowClosed`: the window ended this frame
+        // without a catch, `closedFailed` its last frame's gates, `gripHeld` a grip squeezed (no gate).
+        float armsUpAge = 10.f, armsUpRun{};
+        bool armsFromGrace{}, tipIn{}, windowClosed{}, gripHeld{};
+        unsigned failedNow{}, closedFailed{};
+        float closedAge{};
     };
     Out update(const Input& in, const Params& p) {
         Out out;
@@ -494,31 +521,64 @@ class Handstand {
         // Only at a touchdown, or in a touchdown's catch: in the air the actor's
         // feet are no floor.
         const bool nearFloor = state_ == State::off ? touchdown : touchdownCaught_;
+        // HANDS OVER THE HEAD as the player holds them (Input::palmRel), in the air or not: when both were last,
+        // and for how long (the grace before the touchdown counts them, and their hold).
+        const bool overBoth = p.armsOverHead > 0.f && in.palmRelKnown[0] && in.palmRelKnown[1] && finite(in.palmRel[0]) &&
+                              finite(in.palmRel[1]) && in.palmRel[0].y >= p.armsOverHead &&
+                              in.palmRel[1].y >= p.armsOverHead;
+        if (overBoth) {
+            armsUpAge_ = 0.f;
+            armsUpRun_ = std::min(armsUpRun_ + dt, 10.f);
+        } else {
+            armsUpAge_ = std::min(armsUpAge_ + dt, 10.f);
+            if (armsUpAge_ > p.armsGraceBefore)
+                armsUpRun_ = 0.f; // the stretch is out of the grace: forgotten
+        }
+        const bool armsRecent = !overBoth && armsUpRun_ > 0.f && armsUpAge_ <= p.armsGraceBefore;
+        out.armsUpAge = armsUpAge_;
+        out.armsUpRun = armsUpRun_;
+        const float invertedNow = invertedDegrees(in.bodyUp);
+        const float spinNow = finite(in.angular) ? length(in.angular) : 0.f;
+        // TIP-IN: the intent is clear (inverted far, not a handspring, the hands over the head now or in the grace).
+        const bool tipIntent = p.tipIn && state_ == State::off && nearFloor && invertedNow >= p.tipInDegrees &&
+                               spinNow <= p.catchSpin && (overBoth || armsRecent);
+        out.tipIn = tipIntent;
+        bool armsOk = true, reachOk = true;
         if (in.floorKnown && std::isfinite(in.floorY)) {
             out.floorY = in.floorY;
             for (unsigned i = 0; i < 2; ++i) {
                 const float gap = finite(in.palms[i]) ? in.palms[i].y - in.floorY : 1e9f;
                 palmGap = std::max(palmGap, gap);
                 out.palmGaps[i] = gap < 1e8f ? gap : NAN;
-                const float reach = state_ == State::off ? p.touchdownReach : p.floorReach;
-                if (nearFloor && gap <= reach) {
-                    // The touchdown's reach path also needs the arms up: ARMS OVER HEAD, the palm over the head as the
-                    // player holds it (no tracked offset: no test); 0, the old world test - the palm clearly below the
-                    // head (no head: no test).
-                    const bool armsUp =
-                        p.armsOverHead > 0.f
-                            ? !in.palmRelKnown[i] || !finite(in.palmRel[i]) || in.palmRel[i].y >= p.armsOverHead
-                            : !in.headKnown || gap + p.armsBelowHead <= headGap;
-                    if (state_ != State::off || armsUp)
-                        reachDown |= 1u << i;
-                }
+                const float reach = state_ == State::off ? (tipIntent ? std::max(p.touchdownReach, p.tipInReach)
+                                                                      : p.touchdownReach)
+                                                         : p.floorReach;
+                // The touchdown's reach path also needs the arms up: ARMS OVER HEAD, the palm over the head as the
+                // player holds it (no tracked offset: no test; or both over it within the grace); 0, the old world
+                // test - the palm clearly below the head (no head: no test).
+                const bool armUpNow =
+                    p.armsOverHead > 0.f
+                        ? !in.palmRelKnown[i] || !finite(in.palmRel[i]) || in.palmRel[i].y >= p.armsOverHead
+                        : !in.headKnown || gap + p.armsBelowHead <= headGap;
+                const bool armsUp = armUpNow || armsRecent;
+                if (armsUp && !armUpNow && nearFloor && state_ == State::off)
+                    out.armsFromGrace = true;
+                armsOk = armsOk && armsUp;
+                reachOk = reachOk && gap <= reach;
+                if (nearFloor && gap <= reach && (state_ != State::off || armsUp))
+                    reachDown |= 1u << i;
             }
+        } else {
+            reachOk = false;
         }
-        // Held for armsHoldSeconds before the reach counts (a touch on the floor's own contact is no wait).
+        // Held for armsHoldSeconds before the reach counts (a touch on the floor's own contact is no wait; nor the
+        // tip-in, nor a hold already made in the grace before the touchdown).
         const bool reachBoth = (reachDown & 3u) == 3u;
         if (state_ == State::off)
             armsHeld_ = reachBoth && nearFloor ? std::min(armsHeld_ + dt, 10.f) : 0.f;
-        if (state_ != State::off || armsHeld_ >= p.armsHoldSeconds || ((in.floorPalms & 3u) == 3u))
+        const bool heldBefore = armsUpRun_ >= p.armsHoldSeconds && armsUpAge_ <= p.armsGraceBefore;
+        if (state_ != State::off || armsHeld_ >= p.armsHoldSeconds || ((in.floorPalms & 3u) == 3u) ||
+            (reachBoth && (tipIntent || heldBefore)))
             palmsDown |= reachDown;
         out.armsUp = reachBoth;
         out.reachDown = reachDown & 3u;
@@ -530,41 +590,54 @@ class Handstand {
         if (finite(in.angular) && length(in.angular) > 1e-3f)
             out.flipAxis = normalized(in.angular);
         // The touchdown window (the log's throttled line): from the touchdown's first frame, while no catch is on.
+        // EVERY REJECTION (Nov 17): the gates failing on each of its frames, and the last frame's when it closes.
+        const bool bothNow = ((palmsDown & 3u) == 3u);
+        const unsigned failedNow =
+            refusalBit(!p.enabled ? Refusal::disabled : Refusal::none) |
+            refusalBit(!in.tracked ? Refusal::untracked : Refusal::none) |
+            refusalBit(!armed_ ? Refusal::notArmed : Refusal::none) |
+            refusalBit(invertedNow < p.catchDegrees ? Refusal::upright : Refusal::none) |
+            refusalBit(spinNow > p.catchSpin ? Refusal::spin : Refusal::none) |
+            refusalBit(!bothNow && !reachOk ? Refusal::palmsHigh : Refusal::none) |
+            refusalBit(!bothNow && !armsOk ? Refusal::armsDown : Refusal::none);
+        out.gripHeld = in.grip;
         if (touchdownNow && state_ == State::off) {
             windowAge_ = 0.f;
+            windowFailed_ = failedNow;
         } else if (windowAge_ >= 0.f) {
             windowAge_ += dt;
-            if (windowAge_ > p.touchdownGrace || state_ != State::off || !touchdown)
+            if (windowAge_ > p.touchdownGrace || state_ != State::off || !touchdown) {
+                if (state_ == State::off) {
+                    out.windowClosed = true;
+                    out.closedFailed = windowFailed_;
+                    out.closedAge = windowAge_;
+                }
                 windowAge_ = -1.f;
+            } else {
+                windowFailed_ = failedNow;
+            }
         }
+        out.failedNow = windowAge_ >= 0.f ? failedNow : 0u;
         out.windowAge = windowAge_;
         out.armsHeld = armsHeld_;
         out.headGap = headGap < 1e8f ? headGap : 0.f;
-        const bool both = (palmsDown & 3u) == 3u;
+        const bool both = bothNow;
         // After an exit a new catch waits for the palms to come off the floor.
         if (!palmsDown)
             armed_ = true;
-        const float spinNow = finite(in.angular) ? length(in.angular) : 0.f;
         out.touchdownNow = touchdownNow && state_ == State::off;
         out.touchdownSeen = in.touchdown;
         out.aloftSeen = in.aloft;
         out.vrAirSeen = in.vrAir;
         out.airAge = airAge_;
         if (out.touchdownNow) {
-            out.inverted = invertedDegrees(in.bodyUp);
+            out.inverted = invertedNow;
             out.spin = spinNow;
             out.palmGap = palmGap;
-            // A grip squeezed with both palms down is no gate (the catch keeps it, below).
-            const bool gripGate = in.grip && !both;
-            out.failed = refusalBit(!p.enabled ? Refusal::disabled : Refusal::none) |
-                         refusalBit(!in.tracked ? Refusal::untracked : Refusal::none) |
-                         refusalBit(gripGate ? Refusal::grip : Refusal::none) |
-                         refusalBit(!armed_ ? Refusal::notArmed : Refusal::none) |
-                         refusalBit(out.inverted < p.catchDegrees ? Refusal::upright : Refusal::none) |
-                         refusalBit(spinNow > p.catchSpin ? Refusal::spin : Refusal::none) |
-                         refusalBit(!both && !reachBoth ? Refusal::palmsHigh : Refusal::none);
+            // A held grip is no gate (Nov 17: the catch carries it; Output::gripHeld says it was).
+            out.failed = failedNow;
             out.refused = Refusal::none;
-            for (unsigned r = 1; r <= static_cast<unsigned>(Refusal::palmsHigh); ++r)
+            for (unsigned r = 1; r <= lastRefusal; ++r)
                 if (out.failed & (1u << r)) {
                     out.refused = static_cast<Refusal>(r);
                     break;
@@ -732,6 +805,8 @@ class Handstand {
     float age_{};
     float airAge_ = 10.f;
     float windowAge_ = -1.f;
+    unsigned windowFailed_{};
+    float armsUpAge_ = 10.f, armsUpRun_{};
     Balance balance_{};
     Balance::Out last_{};
     Push push_{};

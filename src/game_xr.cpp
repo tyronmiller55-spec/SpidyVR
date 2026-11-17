@@ -1466,6 +1466,7 @@ DWORD WINAPI run(void*) {
             float stintMs{}; // the VR stint that just ended (the handoff gap's log)
         } landHeadProbe;
         uint32_t handoffPlaces{};
+        uint32_t handstandWindowMisses{};
         uint64_t hybridAdoptSeen{};
         // Horizontal measured (feet position-delta) speed for the owner's speed intent.
         Vec3 hybridFeetWas{};
@@ -3943,12 +3944,14 @@ DWORD WINAPI run(void*) {
                     {
                         const auto& hs = motion.handstand;
                         if (hs.caughtNow)
-                            diag_log::writef("handstand: catch%s (inverted %.0f deg, eyes down %.2f m%s%s; hold %.2f m, "
+                            diag_log::writef("handstand: catch%s (inverted %.0f deg, eyes down %.2f m%s%s%s%s; hold %.2f m, "
                                              "reach %.2f m)",
                                              hs.touchdownCatch ? " at the touchdown" : "",
                                              handstand::invertedDegrees(motion.flipTilt.rotate({0, 1, 0})),
                                              motion.handstandDrop, hs.gripCarried ? ", grip carried" : "",
                                              handstandGates.landing ? ", on the landing handoff" : "",
+                                             hs.tipIn ? ", TIPPED IN" : "",
+                                             hs.armsFromGrace ? ", hands over the head in the grace" : "",
                                              std::clamp(values.handstandCatchHoldCm, 5, 60) / 100.f,
                                              std::clamp(values.handstandReachCm, 60, 200) / 100.f);
                         else if (hs.touchdownNow && hs.refused != handstand::Refusal::none) {
@@ -3957,8 +3960,13 @@ DWORD WINAPI run(void*) {
                             handstand::refusalList(hs.failed, failed, sizeof failed);
                             diag_log::writef(
                                 "handstand: no catch at the touchdown: %s (inverted %.0f deg, "
-                                "spin %.1f rad/s, palms %.2f m over the floor, head %.2f m; every failing gate: %s)",
-                                handstand::refusalName(hs.refused), hs.inverted, hs.spin, hs.palmGap, hs.headGap, failed);
+                                "spin %.1f rad/s, palms %.2f m over the floor, head %.2f m; every failing gate: %s; hands "
+                                "over the head %s; grip %s (no gate); the window stays open %d ms)",
+                                handstand::refusalName(hs.refused), hs.inverted, hs.spin, hs.palmGap, hs.headGap, failed,
+                                hs.armsUpAge <= 0.f    ? "now"
+                                : hs.armsUpAge < 9.f ? "lately"
+                                                     : "not lately",
+                                hs.gripHeld ? "held" : "free", values.handstandGraceAfterMs);
                             // ARMS DIAGNOSTIC: each palm from the head as the player holds it (up, forward, side in the
                             // rig's yaw frame), how far below the head it is in the world, and the flip's axis.
                             diag_log::writef(
@@ -3968,17 +3976,30 @@ DWORD WINAPI run(void*) {
                                 hs.palmRel[1].x, hs.worldBelow[0], hs.worldBelow[1], hs.flipAxis.x, hs.flipAxis.y,
                                 hs.flipAxis.z);
                         }
-                        // ARMS DIAGNOSTIC: the touchdown's window (250 ms, no catch on), about every 50 ms.
+                        // EVERY REJECTION (Nov 17): the touchdown's window closed without a catch, and why.
+                        if (hs.windowClosed) {
+                            char failed[200];
+                            handstand::refusalList(hs.closedFailed, failed, sizeof failed);
+                            ++handstandWindowMisses;
+                            diag_log::writef(
+                                "handstand: window closed without a catch after %.0f ms: %s (hands over the head %.0f ms "
+                                "ago, held %.2f s; tip-in %s), #%u",
+                                hs.closedAge * 1000.f, hs.closedFailed ? failed : "no gate failed (the hold never made)",
+                                hs.armsUpAge < 9.f ? hs.armsUpAge * 1000.f : -1.f, hs.armsUpRun,
+                                values.handstandTipIn ? "on" : "off", handstandWindowMisses);
+                        }
+                        // ARMS DIAGNOSTIC: the touchdown's window (grace after, no catch on), about every 50 ms.
                         if (hs.windowAge < 0.f)
                             handstandWindowNext = 0.f;
                         else if (hs.windowAge >= handstandWindowNext && !hs.touchdownNow) {
                             handstandWindowNext = hs.windowAge + .05f;
                             diag_log::writef(
                                 "handstand: window %3.0f ms reachDown %u armsHeld %.2f s palms L %.2f R %.2f head %.2f "
-                                "inverted %.0f, arms up L %+.2f R %+.2f, below head L %+.2f R %+.2f",
+                                "inverted %.0f, arms up L %+.2f R %+.2f, below head L %+.2f R %+.2f%s; failing %#x",
                                 hs.windowAge * 1000.f, hs.reachDown, hs.armsHeld, hs.palmGaps[0], hs.palmGaps[1],
                                 hs.headGap, handstand::invertedDegrees(motion.flipTilt.rotate({0, 1, 0})),
-                                hs.palmRel[0].y, hs.palmRel[1].y, hs.worldBelow[0], hs.worldBelow[1]);
+                                hs.palmRel[0].y, hs.palmRel[1].y, hs.worldBelow[0], hs.worldBelow[1],
+                                hs.tipIn ? ", tip-in intent" : "", hs.failedNow);
                         }
                         // THE CATCH'S GEOMETRY (G1 playtest): the first frames of a catch, to tell a lean from
                         // palms re-placed: the palm centre and how far it moved, the span, the centre of mass's

@@ -788,6 +788,16 @@ int main() {
                 continue;
             if (key == "punch_track_by_look")
                 continue;
+            if (key == "handstand_grace_before_ms")
+                continue;
+            if (key == "handstand_grace_after_ms")
+                continue;
+            if (key == "handstand_tip_in")
+                continue;
+            if (key == "handstand_tip_in_deg")
+                continue;
+            if (key == "handstand_tip_in_reach_cm")
+                continue;
             if (key == "handstand_arms_over_head_cm")
                 continue;
             if (key == "head_seat_glide_ms")

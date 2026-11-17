@@ -707,9 +707,9 @@ struct Values {
     // HANDSTAND CATCH HOLD (handstand_catch_hold_cm, 35; 12 was the old floorReach): while a catch settles, palms
     // within this of the floor count as on it, so a catch is not dropped at the 0.6 s settle (the 9790d67 playtest: 3 of 3).
     int handstandCatchHoldCm = 35;
-    // HANDSTAND REACH (handstand_reach_cm, 130; 100 before): an upside-down touchdown counts a palm within this of the
-    // floor (and still clearly below the head: the hands-over-head gesture is kept).
-    int handstandReachCm = 130;
+    // HANDSTAND REACH (handstand_reach_cm, 160; 130 until Nov 17, 100 before): an upside-down touchdown counts a palm within
+    // this of the floor (and the hands over the head: the gesture is kept). s131456's attempts read 1.15-1.41 m.
+    int handstandReachCm = 160;
     // TAKEOVER VIEW EASE (takeover_view_ease, on): every switch to SpidyVR (a point jump, a web, a wall run, a handstand,
     // a sidestep, a swing, an animation's end) holds the view and eases it over AIR VIEW EASE, as the jump, flip and grip
     // cancel always did (the 9790d67 playtest: 60-110 uneased 0.26-0.30 m eye jumps a session). Off: only those.
@@ -811,6 +811,17 @@ struct Values {
     // PUNCH TRACK BY LOOK (Nov 17; off by default): a throw also tracks when you LOOK within the cone of the
     // targeted enemy, the fist thrown off it (punch_track.hpp). punch_track_by_look.
     bool punchTrackByLook = false;
+    // HANDSTAND GRACE (the owner, Nov 17: "give some grace for getting into one"): hands over the head up to this long
+    // before an upside-down touchdown count at it, their hold too (handstand_grace_before_ms, 300); and the touchdown can catch for
+    // handstand_grace_after_ms (400; 250 before) after SpidyVR's air.
+    int handstandGraceBeforeMs = 300;
+    int handstandGraceAfterMs = 400;
+    // HANDSTAND TIP-IN (the owner, Nov 17: "tip the player into the handstand when it's clear they're attempting one"):
+    // inverted at least handstand_tip_in_deg (120), not spinning, the hands over the head (now or in the grace): the catch takes
+    // the palms from up to handstand_tip_in_reach_cm (200) over the floor with no hold wait, and sets them down.
+    bool handstandTipIn = true;
+    int handstandTipInDeg = 120;
+    int handstandTipInReachCm = 200;
     // [next pass settings]
     bool operator==(const Values&) const = default;
 };

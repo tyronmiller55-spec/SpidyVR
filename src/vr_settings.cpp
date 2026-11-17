@@ -1238,6 +1238,10 @@ Values sanitized(Values v) {
     v.landingBlendMs = std::clamp(v.landingBlendMs, 0, 1500);
     v.headSeatGlideMs = std::clamp(v.headSeatGlideMs, 60, 1000);
     v.handstandArmsOverHeadCm = std::clamp(v.handstandArmsOverHeadCm, 0, 60);
+    v.handstandTipInReachCm = std::clamp(v.handstandTipInReachCm, 60, 300);
+    v.handstandTipInDeg = std::clamp(v.handstandTipInDeg, 100, 180);
+    v.handstandGraceAfterMs = std::clamp(v.handstandGraceAfterMs, 100, 1000);
+    v.handstandGraceBeforeMs = std::clamp(v.handstandGraceBeforeMs, 0, 1000);
     v.handoffPlaceCm = std::clamp(v.handoffPlaceCm, 0, 2000);
     v.turnPushPct = std::clamp(v.turnPushPct, 20, 100);
     v.targetScanIdleMs = std::clamp(v.targetScanIdleMs, 250, 2000);
@@ -2996,6 +3000,11 @@ constexpr TabOnly tabOnly[] = {
     {"target_scan_idle_ms", nullptr, &Values::targetScanIdleMs},
     {"handoff_place_cm", nullptr, &Values::handoffPlaceCm},
     {"punch_track_by_look", &Values::punchTrackByLook, nullptr},
+    {"handstand_grace_before_ms", nullptr, &Values::handstandGraceBeforeMs},
+    {"handstand_grace_after_ms", nullptr, &Values::handstandGraceAfterMs},
+    {"handstand_tip_in", &Values::handstandTipIn, nullptr},
+    {"handstand_tip_in_deg", nullptr, &Values::handstandTipInDeg},
+    {"handstand_tip_in_reach_cm", nullptr, &Values::handstandTipInReachCm},
     {"movement_defaults", nullptr, &Values::movementDefaults},
 };
 } // namespace
@@ -3097,6 +3106,9 @@ Values withMovementDefaults(Values v, std::string_view text) {
             v.punchTrackConeDeg = fresh.punchTrackConeDeg;
         if (v.punchTrackRangeM == 8)
             v.punchTrackRangeM = fresh.punchTrackRangeM;
+        // HANDSTAND REACH 130 -> 160 cm (the owner, Nov 17: "loosen up handstands"; the attempts read 1.15-1.41 m).
+        if (v.handstandReachCm == 130)
+            v.handstandReachCm = fresh.handstandReachCm;
     }
     v.movementDefaults = movementDefaultsRevision;
     return sanitized(v);

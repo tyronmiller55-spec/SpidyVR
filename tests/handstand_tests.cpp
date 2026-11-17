@@ -53,6 +53,12 @@ Params fresh() {
     p.enabled = true;
     return p;
 }
+// The defaults without the TIP-IN (Nov 17), for the hold's own tests.
+Params noTip() {
+    Params p = fresh();
+    p.tipIn = false;
+    return p;
+}
 Handstand::Input inverted() {
     Handstand::Input in;
     in.seconds = dt;
@@ -374,9 +380,9 @@ int main() {
         {
             vr_settings::Values d;
             d.realisticFlips = true;
-            check(std::abs(paramsOf(d).floorReach - .35f) < 1e-6f && std::abs(paramsOf(d).touchdownReach - 1.3f) < 1e-6f &&
+            check(std::abs(paramsOf(d).floorReach - .35f) < 1e-6f && std::abs(paramsOf(d).touchdownReach - 1.6f) < 1e-6f &&
                       std::abs(paramsOf(d).armsBelowHead - .2f) < 1e-6f,
-                  "the defaults: a 0.35 m catch hold, a 1.3 m reach, the below-head test kept");
+                  "the defaults: a 0.35 m catch hold, a 1.6 m reach, the below-head test kept");
             d.handstandCatchHoldCm = 12;
             d.handstandReachCm = 100;
             check(std::abs(paramsOf(d).floorReach - .12f) < 1e-6f && std::abs(paramsOf(d).touchdownReach - 1.f) < 1e-6f,
@@ -895,7 +901,148 @@ int main() {
         check(vr_settings::withMovementDefaults(saved, "movement_defaults=3\n").handstandFallDegrees == 35,
               "balance pass: a file that has seen revision 3 keeps its own");
     }
-    std::printf("handstand: %d checks passed\n", passed);
+    // HANDSTAND GRACE / TIP-IN (the owner, Nov 17: "loosen up handstands and give some grace for getting into one; maybe
+    // you could tip the player into the handstand when it's clear they're attempting one"). s131456's attempts: 141-165
+    // degrees, palms 1.15-1.41 m over the floor, the hands at or below the head at the touchdown.
+    {
+        vr_settings::Values d;
+        d.realisticFlips = true;
+        const Params P = paramsOf(d);
+        check(d.handstandReachCm == 160 && std::abs(P.touchdownReach - 1.6f) < 1e-6f &&
+                  std::abs(P.armsGraceBefore - .3f) < 1e-6f && std::abs(P.touchdownGrace - .4f) < 1e-6f && P.tipIn &&
+                  P.tipInDegrees == 120.f && std::abs(P.tipInReach - 2.f) < 1e-6f,
+              "the defaults: 1.6 m reach, 300 ms before, 400 ms after, tip-in from 120 deg within 2 m");
+        const auto attempt = [](float degrees, float palmsUp, float armsY, bool air) {
+            auto in = inverted();
+            const float r = degrees * 3.14159265f / 180.f;
+            in.bodyUp = {std::sin(r), std::cos(r), 0};
+            in.angular = {.4f, 0, 0};
+            in.floorPalms = 0;
+            in.floorKnown = true;
+            in.floorY = 0;
+            in.vrAir = air;
+            in.touchdown = !air;
+            in.palms[0] = {-.2f, air ? -.5f : palmsUp, 0};
+            in.palms[1] = {.2f, air ? -.5f : palmsUp, 0};
+            in.palmRelKnown[0] = in.palmRelKnown[1] = true;
+            in.palmRel[0] = {-.2f, armsY, 0};
+            in.palmRel[1] = {.2f, armsY, 0};
+            return in;
+        };
+        // Hands over the head 0.2 s in the air, lowered to the head 0.1 s before the touchdown: the grace counts them.
+        {
+            Handstand h;
+            for (int i = 0; i < 18; ++i)
+                h.update(attempt(145, 0, .25f, true), P);
+            for (int i = 0; i < 9; ++i)
+                h.update(attempt(145, 0, -.15f, true), P);
+            const auto o = h.update(attempt(145, 1.41f, -.15f, false), P);
+            check(o.caughtNow && o.touchdownCatch && o.armsFromGrace, "hands up 0.1 s before: caught at 1.41 m");
+        }
+        // The same without the grace: hands not over the head; the window closes with the reason.
+        {
+            Params g = P;
+            g.armsGraceBefore = 0.f;
+            Handstand h;
+            for (int i = 0; i < 18; ++i)
+                h.update(attempt(145, 0, .25f, true), g);
+            for (int i = 0; i < 9; ++i)
+                h.update(attempt(145, 0, -.15f, true), g);
+            auto o = h.update(attempt(145, 1.41f, -.15f, false), g);
+            check(!o.caughtNow && o.touchdownNow && o.refused == Refusal::armsDown &&
+                      (o.failed & refusalBit(Refusal::armsDown)) && !(o.failed & refusalBit(Refusal::palmsHigh)),
+                  "no grace: refused, hands not over the head (the palms' height passes)");
+            bool closed = false;
+            unsigned why = 0;
+            for (int i = 0; i < 60 && !closed; ++i) {
+                o = h.update(attempt(145, 1.41f, -.15f, false), g);
+                closed = o.windowClosed;
+                why = o.closedFailed;
+            }
+            check(closed && (why & refusalBit(Refusal::armsDown)) && !o.caughtNow,
+                  "the window closes with every failing gate");
+        }
+        // A hold made in the air counts at once below the tip-in's angle.
+        {
+            Handstand h;
+            for (int i = 0; i < 18; ++i)
+                h.update(attempt(110, 0, .25f, true), P);
+            const auto o = h.update(attempt(110, 1.5f, .25f, false), P);
+            check(o.caughtNow && !o.tipIn, "110 deg, hands held up in the air, palms 1.5 m: caught with no wait");
+        }
+        // Raised only at the touchdown, below the tip-in's angle: the 0.12 s hold, then the catch.
+        {
+            Handstand h;
+            for (int i = 0; i < 18; ++i)
+                h.update(attempt(110, 0, -.3f, true), P);
+            auto o = h.update(attempt(110, 1.5f, .25f, false), P);
+            check(!o.caughtNow && o.refused == Refusal::none, "hands up at the touchdown: the hold first");
+            int frames = 1;
+            for (; frames < 40 && !o.caughtNow; ++frames)
+                o = h.update(attempt(110, 1.5f, .25f, false), P);
+            check(o.caughtNow && frames * dt >= .12f, "then the catch");
+        }
+        // TIP-IN: clearly attempting (150 deg, hands over the head), palms 1.9 m up: tipped in at once.
+        {
+            Handstand h;
+            h.update(attempt(150, 0, -.3f, true), P);
+            const auto o = h.update(attempt(150, 1.9f, .25f, false), P);
+            check(o.caughtNow && o.tipIn, "150 deg, hands up, palms 1.9 m: tipped in");
+            Params off = P;
+            off.tipIn = false;
+            Handstand n;
+            n.update(attempt(150, 0, -.3f, true), off);
+            const auto no = n.update(attempt(150, 1.9f, .25f, false), off);
+            check(!no.caughtNow && no.refused == Refusal::palmsHigh, "tip-in off: palms too far over the floor");
+            Handstand fast;
+            fast.update(attempt(150, 0, -.3f, true), P);
+            auto spin = attempt(150, 1.9f, .25f, false);
+            spin.angular = {7, 0, 0};
+            check(!fast.update(spin, P).caughtNow, "a handspring is no tip-in");
+        }
+        // A held grip is no gate: the catch carries it.
+        {
+            Handstand h;
+            h.update(attempt(150, 0, .25f, true), P);
+            auto g = attempt(150, 1.3f, .25f, false);
+            g.grip = true;
+            const auto o = h.update(g, P);
+            check(o.caughtNow && o.gripCarried && o.gripHeld && !(o.failed & refusalBit(Refusal::grip)),
+                  "a grip held: caught, carried");
+        }
+        // GRACE AFTER: a touchdown 0.33 s after SpidyVR's air still catches (0.25 s refused it).
+        {
+            Handstand h;
+            h.update(attempt(150, 0, .25f, true), P);
+            auto idle = attempt(150, 0, .25f, false);
+            idle.touchdown = false;
+            for (int i = 0; i < 30; ++i)
+                h.update(idle, P);
+            check(h.update(attempt(150, 1.3f, .25f, false), P).caughtNow, "0.33 s after the air: caught");
+            Params old = P;
+            old.touchdownGrace = .25f;
+            Handstand o;
+            o.update(attempt(150, 0, .25f, true), old);
+            for (int i = 0; i < 30; ++i)
+                o.update(idle, old);
+            check(!o.update(attempt(150, 1.3f, .25f, false), old).caughtNow, "the old 0.25 s: no catch");
+        }
+        // Revision 6: a profile still on the 130 cm reach moves to 160; a tuned one stays.
+        {
+            vr_settings::Values saved;
+            saved.handstandReachCm = 130;
+            check(vr_settings::withMovementDefaults(saved, "movement_defaults=5\n").handstandReachCm == 160,
+                  "130 becomes 160");
+            saved.handstandReachCm = 110;
+            check(vr_settings::withMovementDefaults(saved, "movement_defaults=5\n").handstandReachCm == 110,
+                  "a tuned reach stays");
+            const auto r = vr_settings::withTabOnly({}, "handstand_tip_in=0\nhandstand_tip_in_deg=20\n"
+                                                        "handstand_grace_before_ms=5000\nhandstand_grace_after_ms=10\n");
+            check(!r.handstandTipIn && r.handstandTipInDeg == 100 && r.handstandGraceBeforeMs == 1000 &&
+                      r.handstandGraceAfterMs == 100,
+                  "the ini keys read, clamped");
+        }
+    }
     // ARMS UP (Nov 14 t71u; the b9b2196 session: palms 1.13 / 1.51 / 1.83 m over the floor at the touchdowns that caught, 15 of 28
     // catches "missed" at the 0.6 s settle): a touchdown catch needs both palms within 1.0 m, clearly below the head, for 0.12 s.
     {
@@ -906,7 +1053,7 @@ int main() {
             a.floorY = 0;
             a.palms[0] = {-.2f, -.5f, 0};
             a.palms[1] = {.2f, -.5f, 0};
-            return h.update(a, fresh());
+            return h.update(a, noTip());
         };
         const auto landing = [](float palmY, float headY) {
             auto in = inverted();
@@ -930,38 +1077,38 @@ int main() {
         air(sides);
         bool caught = false;
         for (int i = 0; i < 40; ++i)
-            caught = caught || sides.update(landing(1.5f, .8f), fresh()).caughtNow;
+            caught = caught || sides.update(landing(1.5f, .8f), noTip()).caughtNow;
         check(!caught, "palms at standing hand height over the floor: no catch (they were counted at 1.6 m)");
         // Palms within reach but above the head (hands toward the feet): no catch.
         Handstand above;
         air(above);
         caught = false;
         for (int i = 0; i < 40; ++i)
-            caught = caught || above.update(landing(.7f, .5f), fresh()).caughtNow;
+            caught = caught || above.update(landing(.7f, .5f), noTip()).caughtNow;
         check(!caught, "palms within reach but above the head: no catch");
         // Both palms toward the floor, below the head: caught, but only after the hold.
         Handstand up;
         air(up);
-        const auto first = up.update(landing(.6f, 1.0f), fresh());
+        const auto first = up.update(landing(.6f, 1.0f), noTip());
         check(!first.caughtNow && first.armsUp, "palms toward the floor: not caught on the first frame, the hold is running");
         int n = 1;
         bool got = false;
         for (; n < 40 && !got; ++n)
-            got = up.update(landing(.6f, 1.0f), fresh()).caughtNow;
+            got = up.update(landing(.6f, 1.0f), noTip()).caughtNow;
         check(got && n * dt >= .1f && n * dt < .2f, "arms up for 0.12 s: the catch");
         // The hold starts over when the palms leave the reach.
         Handstand flicker;
         air(flicker);
         for (int i = 0; i < 8; ++i)
-            flicker.update(landing(.6f, 1.0f), fresh());
-        flicker.update(landing(1.5f, 1.0f), fresh());
-        check(!flicker.update(landing(.6f, 1.0f), fresh()).caughtNow, "the hold starts over after palms drop out of reach");
+            flicker.update(landing(.6f, 1.0f), noTip());
+        flicker.update(landing(1.5f, 1.0f), noTip());
+        check(!flicker.update(landing(.6f, 1.0f), noTip()).caughtNow, "the hold starts over after palms drop out of reach");
         // A palm on a real floor contact needs no wait.
         Handstand real;
         auto r = inverted();
         r.floorKnown = true;
         r.floorY = 0;
-        check(real.update(r, fresh()).caughtNow, "palms on a confirmed floor contact in SpidyVR's air: the catch, no wait");
+        check(real.update(r, noTip()).caughtNow, "palms on a confirmed floor contact in SpidyVR's air: the catch, no wait");
     }
     // A LEAP IS A FRESH PUSH: the stick held at the catch is not a leap until it is let go of and pushed again.
     {
@@ -1094,5 +1241,6 @@ int main() {
               "0: the old world test (hands over the head refused at 100 and 117, caught at 150)");
         check(handstand::paramsOf(vr_settings::Values{}).armsOverHead == .10f, "the setting's default reaches the params");
     }
+    std::printf("handstand: %d checks passed\n", passed);
     return 0;
 }

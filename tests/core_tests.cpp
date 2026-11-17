@@ -25508,7 +25508,7 @@ int main() {
                   "air_landing_blend=1\n"
                   "air_landing_release=0\n"
                   "handstand_catch_hold_cm=35\n"
-                  "handstand_reach_cm=130\n"
+                  "handstand_reach_cm=160\n"
                   "takeover_view_ease=1\n"
                   "head_height_fade_ms=500\n"
                   "handoff_one_blend=1\n"
@@ -25535,6 +25535,11 @@ int main() {
                   "target_scan_idle_ms=500\n"
                   "handoff_place_cm=200\n"
                   "punch_track_by_look=0\n"
+                  "handstand_grace_before_ms=300\n"
+                  "handstand_grace_after_ms=400\n"
+                  "handstand_tip_in=1\n"
+                  "handstand_tip_in_deg=120\n"
+                  "handstand_tip_in_reach_cm=200\n"
                   "movement_defaults=6\n",
               "the defaults' text");
         Values changed = defaults;
