@@ -20,6 +20,9 @@ inline constexpr float degrees = 3.14159265f / 180.f;
 struct Config {
     bool on{};
     float coneDeg = 45.f, rangeM = 6.f;
+    // BY LOOK (punch_track_by_look, off by default; Nov 17): a throw also counts when the player LOOKS within the cone
+    // of the enemy (the fist's own line is still judged first).
+    bool byLook{};
 };
 enum class Why : uint8_t { tracked, off, noTarget, noDirection, tooFar, outsideCone };
 inline const char* whyName(Why w) {
@@ -36,9 +39,12 @@ struct Verdict {
     Why why = Why::off;
     float distance{}, angleDeg{};
     Vec3 toward{}; // unit, from the head to the enemy's middle (world); zero unless tracked
+    bool byLook{}; // tracked on the look (Config::byLook), the fist's line outside the cone
+    float lookDeg = -1.f; // the look's angle off him (-1: not judged)
 };
 // `punch`: the fist's velocity relative to the player (world axes); `head`: the head; `target`: the targeted enemy's middle.
-inline Verdict decide(const Config& c, bool haveTarget, Vec3 head, Vec3 punch, Vec3 target) {
+// `look`: where the player looks (world; zero: unknown), judged only with Config::byLook.
+inline Verdict decide(const Config& c, bool haveTarget, Vec3 head, Vec3 punch, Vec3 target, Vec3 look = {}) {
     Verdict v;
     if (!c.on)
         return v;
@@ -60,6 +66,17 @@ inline Verdict decide(const Config& c, bool haveTarget, Vec3 head, Vec3 punch, V
         return v;
     }
     if (v.angleDeg > c.coneDeg) {
+        const float lookLen = length(look);
+        if (c.byLook && std::isfinite(lookLen) && lookLen > 1e-3f) {
+            const float lc = std::fmax(-1.f, std::fmin(1.f, dot(to, look) / (distance * lookLen)));
+            v.lookDeg = std::acos(lc) / degrees;
+            if (v.lookDeg <= c.coneDeg) {
+                v.why = Why::tracked;
+                v.byLook = true;
+                v.toward = to / distance;
+                return v;
+            }
+        }
         v.why = Why::outsideCone;
         return v;
     }

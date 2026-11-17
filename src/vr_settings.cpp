@@ -319,10 +319,10 @@ constexpr const char* kickSpinChoices[] = {"NONE", "10%", "20%", "30% (DEFAULT)"
 static_assert(std::size(kickSpinChoices) == std::size(kickSpinSteps));
 // PUNCH AUTO-TARGET (punch_track.hpp): the cone round the targeted enemy a punch must be thrown in, and the range.
 constexpr int punchTrackConeSteps[] = {15, 30, 45, 60, 90};
-constexpr const char* punchTrackConeChoices[] = {"15 DEG", "30 DEG", "45 DEG", "60 DEG (DEFAULT)", "90 DEG"};
+constexpr const char* punchTrackConeChoices[] = {"15 DEG", "30 DEG", "45 DEG", "60 DEG", "90 DEG (DEFAULT)"};
 static_assert(std::size(punchTrackConeChoices) == std::size(punchTrackConeSteps));
 constexpr int punchTrackRangeSteps[] = {3, 4, 6, 8, 10};
-constexpr const char* punchTrackRangeChoices[] = {"3 M", "4 M", "6 M", "8 M (DEFAULT)", "10 M"};
+constexpr const char* punchTrackRangeChoices[] = {"3 M", "4 M", "6 M", "8 M", "10 M (DEFAULT)"};
 static_assert(std::size(punchTrackRangeChoices) == std::size(punchTrackRangeSteps));
 // JUMP PULL (jump_pull.hpp): the gaze's cone, the stick's cone, the range, and the most a jump adds (tenths of a m/s).
 constexpr int jumpPullGazeSteps[] = {10, 15, 20, 30, 45};
@@ -2995,6 +2995,7 @@ constexpr TabOnly tabOnly[] = {
     {"point_jump_fire_full", &Values::pointJumpFireFull, nullptr},
     {"target_scan_idle_ms", nullptr, &Values::targetScanIdleMs},
     {"handoff_place_cm", nullptr, &Values::handoffPlaceCm},
+    {"punch_track_by_look", &Values::punchTrackByLook, nullptr},
     {"movement_defaults", nullptr, &Values::movementDefaults},
 };
 } // namespace
@@ -3086,6 +3087,15 @@ Values withMovementDefaults(Values v, std::string_view text) {
         if (v.punchTrackConeDeg == 45)
             v.punchTrackConeDeg = fresh.punchTrackConeDeg;
         if (v.punchTrackRangeM == 6)
+            v.punchTrackRangeM = fresh.punchTrackRangeM;
+    }
+    if (seen < 6) {
+        // Revision 6 (the owner, Nov 17): PUNCH TRACK CONE 60 -> 90 degrees and RANGE 8 -> 10 m (s131456: 29 of 49
+        // throws outside 60 degrees, 7 too far). Still at the old defaults is untuned; a tuned value stays.
+        const Values fresh;
+        if (v.punchTrackConeDeg == 60)
+            v.punchTrackConeDeg = fresh.punchTrackConeDeg;
+        if (v.punchTrackRangeM == 8)
             v.punchTrackRangeM = fresh.punchTrackRangeM;
     }
     v.movementDefaults = movementDefaultsRevision;

@@ -20,6 +20,9 @@ void check(bool ok, const char* what) {
     }
     ++passed;
 }
+bool near(float a, float b, float e = 1e-3f) {
+    return std::fabs(a - b) <= e;
+}
 } // namespace
 
 int main() {
@@ -99,12 +102,12 @@ int main() {
     {
         using namespace vr_settings;
         const Values d;
-        check(d.punchAutotarget && d.punchTrackConeDeg == 60 && d.punchTrackRangeM == 8 && !d.punchViewSnap,
-              "the defaults: on, 45 deg, 6 m, view snap off");
+        check(d.punchAutotarget && d.punchTrackConeDeg == 90 && d.punchTrackRangeM == 10 && !d.punchViewSnap,
+              "the defaults: on, 90 deg, 10 m, view snap off");
         const auto text = tabOnlyText(d);
         check(text.find("punch_autotarget=1\n") != std::string::npos &&
-                  text.find("punch_track_cone_deg=60\n") != std::string::npos &&
-                  text.find("punch_track_range_m=8\n") != std::string::npos &&
+                  text.find("punch_track_cone_deg=90\n") != std::string::npos &&
+                  text.find("punch_track_range_m=10\n") != std::string::npos &&
                   text.find("punch_view_snap=0\n") != std::string::npos,
               "the ini keys write");
         const auto read = withTabOnly({}, "punch_autotarget=0\npunch_track_cone_deg=90\npunch_track_range_m=10\npunch_view_snap=1\n");
@@ -113,11 +116,11 @@ int main() {
         const auto wild = withTabOnly({}, "punch_track_cone_deg=500\npunch_track_range_m=-4\n");
         check(wild.punchTrackConeDeg == 90 && wild.punchTrackRangeM == 3, "and clamp");
         Values v;
-        check(choose(Item::punchTrackCone, 0, v) && v.punchTrackConeDeg == 15 && choose(Item::punchTrackRange, 4, v) &&
-                  v.punchTrackRangeM == 10 && choose(Item::punchViewSnap, 1, v) && v.punchViewSnap &&
+        check(choose(Item::punchTrackCone, 0, v) && v.punchTrackConeDeg == 15 && choose(Item::punchTrackRange, 3, v) &&
+                  v.punchTrackRangeM == 8 && choose(Item::punchViewSnap, 1, v) && v.punchViewSnap &&
                   choose(Item::punchAutotarget, 0, v) && !v.punchAutotarget,
               "the rows set the values");
-        check(defaultChoice(Item::punchTrackCone) == 3 && defaultChoice(Item::punchTrackRange) == 3, "the default steps");
+        check(defaultChoice(Item::punchTrackCone) == 4 && defaultChoice(Item::punchTrackRange) == 4, "the default steps");
         check(inactiveReason(Item::punchTrackCone, v) != nullptr, "the cone waits for the switch");
     }
     // Nov 16 (the owner): 60 degrees and 8 m by default; an untuned 45 / 6 moves to them, a tuned value stays.
@@ -126,7 +129,7 @@ int main() {
         old.punchTrackConeDeg = 45;
         old.punchTrackRangeM = 6;
         const auto moved = spidy::vr_settings::withMovementDefaults(old, "movement_defaults=4\n");
-        check(moved.punchTrackConeDeg == 60 && moved.punchTrackRangeM == 8, "the old defaults become 60 deg, 8 m");
+        check(moved.punchTrackConeDeg == 90 && moved.punchTrackRangeM == 10, "the old defaults become (now) 90 deg, 10 m");
         old.punchTrackConeDeg = 30;
         old.punchTrackRangeM = 4;
         const auto kept = spidy::vr_settings::withMovementDefaults(old, "movement_defaults=4\n");
@@ -138,6 +141,49 @@ int main() {
         const float s50 = std::sin(50.f * 3.14159265f / 180.f), c50 = std::cos(50.f * 3.14159265f / 180.f);
         check(decide(wide, true, head, {5 * s50, 0, -5 * c50}, {0, 1.6f, -7.f}).why == Why::tracked,
               "50 deg off and 7 m away: tracked at the new defaults");
+    }
+    // Nov 17 (the owner, "open up punch tracking and lengthen it to 10m"): 90 degrees and 10 m; an untuned 60 / 8 moves.
+    {
+        const spidy::vr_settings::Values fresh;
+        check(fresh.punchTrackConeDeg == 90 && fresh.punchTrackRangeM == 10 && !fresh.punchTrackByLook &&
+                  fresh.movementDefaults == 6 && spidy::vr_settings::movementDefaultsRevision == 6,
+              "the defaults: 90 deg, 10 m, by look off, revision 6");
+        spidy::vr_settings::Values old;
+        old.punchTrackConeDeg = 60;
+        old.punchTrackRangeM = 8;
+        auto m = spidy::vr_settings::withMovementDefaults(old, "movement_defaults=5\n");
+        check(m.punchTrackConeDeg == 90 && m.punchTrackRangeM == 10 && m.movementDefaults == 6, "60 / 8 become 90 / 10");
+        old.punchTrackConeDeg = 45;
+        old.punchTrackRangeM = 4;
+        m = spidy::vr_settings::withMovementDefaults(old, "movement_defaults=5\n");
+        check(m.punchTrackConeDeg == 45 && m.punchTrackRangeM == 4, "tuned values stay");
+        old.punchTrackConeDeg = 60;
+        m = spidy::vr_settings::withMovementDefaults(old, "movement_defaults=6\n");
+        check(m.punchTrackConeDeg == 60, "a 60 chosen after revision 6 stays");
+        const auto read = spidy::vr_settings::withTabOnly({}, "punch_track_by_look=1\n");
+        check(read.punchTrackByLook, "punch_track_by_look reads");
+        Config c;
+        c.on = true;
+        c.coneDeg = 90.f;
+        c.rangeM = 10.f;
+        const float s80 = std::sin(80.f * 3.14159265f / 180.f), c80 = std::cos(80.f * 3.14159265f / 180.f);
+        check(decide(c, true, head, {5 * s80, 0, -5 * c80}, {0, 1.6f, -9.5f}).why == Why::tracked,
+              "80 deg off at 9.5 m: tracked at 90 / 10");
+        check(decide(c, true, head, {0, 0, -5}, {0, 1.6f, -10.5f}).why == Why::tooFar, "10.5 m: too far");
+        // BY LOOK: a fist thrown 120 deg off him, the player looking right at him.
+        const Vec3 wide{5 * std::sin(2.0944f), 0, -5 * std::cos(2.0944f)};
+        auto v = decide(c, true, head, wide, {0, 1.6f, -5.f}, {0, 0, -1});
+        check(v.why == Why::outsideCone && !v.byLook && v.lookDeg < 0, "by look off: outside the cone");
+        c.byLook = true;
+        v = decide(c, true, head, wide, {0, 1.6f, -5.f}, {0, 0, -1});
+        check(v.why == Why::tracked && v.byLook && near(v.lookDeg, 0.f, .5f) && near(v.toward.z, -1.f),
+              "by look on: tracked on the look");
+        v = decide(c, true, head, wide, {0, 1.6f, -5.f}, {0, 0, 1});
+        check(v.why == Why::outsideCone && near(v.lookDeg, 180.f, .5f), "looking away: still outside");
+        v = decide(c, true, head, wide, {0, 1.6f, -5.f}, {});
+        check(v.why == Why::outsideCone && v.lookDeg < 0, "no look: the fist alone");
+        v = decide(c, true, head, {0, 0, -5}, {0, 1.6f, -5.f}, {0, 0, 1});
+        check(v.why == Why::tracked && !v.byLook, "the fist's line first");
     }
     std::printf("punch track: %d checks passed\n", passed);
     return 0;

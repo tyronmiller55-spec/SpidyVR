@@ -3162,7 +3162,7 @@ DWORD WINAPI run(void*) {
                     // and every second.
                     if (punchTrack) {
                         game_punch::TrackAsk ask;
-                        ask.flags = values.punchAutotarget ? 1u : 0u;
+                        ask.flags = (values.punchAutotarget ? 1u : 0u) | (values.punchTrackByLook ? 2u : 0u);
                         ask.coneDeg = static_cast<float>(values.punchTrackConeDeg);
                         ask.rangeM = static_cast<float>(values.punchTrackRangeM);
                         punchTrackSentAge += std::isfinite(frame.seconds) ? std::max(frame.seconds, 0.f) : 0.f;
@@ -3171,9 +3171,12 @@ DWORD WINAPI run(void*) {
                         if (key != punchTrackSentKey || punchTrackSentAge > 1.f) {
                             if (punchTrack(&ask) == 0) {
                                 if (key != punchTrackSentKey)
-                                    diag_log::writef("punch track: settings sent (%s, cone %d deg, range %d m, view snap %s)",
+                                    diag_log::writef("punch track: settings sent (%s, cone %d deg, range %d m, view snap %s, "
+                                                     "judged on %s)",
                                                      values.punchAutotarget ? "on" : "off", values.punchTrackConeDeg,
-                                                     values.punchTrackRangeM, values.punchViewSnap ? "on" : "off");
+                                                     values.punchTrackRangeM, values.punchViewSnap ? "on" : "off",
+                                                     values.punchTrackByLook ? "the fist's line or the look"
+                                                                             : "the fist's line");
                                 punchTrackSentKey = key;
                                 punchTrackSentAge = 0;
                             }
@@ -4926,6 +4929,9 @@ DWORD WINAPI run(void*) {
                             t.towardZ = tl->towardZ;
                             t.distance = tl->distance;
                             t.angleDeg = tl->angleDeg;
+                            t.lastByLook = tl->lastByLook;
+                            t.lookDeg = tl->lookDeg;
+                            t.byLook = tl->byLook;
                             MemoryBarrier();
                             if (tl->events == events) {
                                 punchTrackEvents = events;
@@ -4944,17 +4950,21 @@ DWORD WINAPI run(void*) {
                                     if (values.punchViewSnap)
                                         camera_mode::realignToHeading(punchTrackYaw);
                                     diag_log::writef(
-                                        "punch track: %s hand tracked the targeted enemy (%.1f m, thrown %.0f deg off him): "
+                                        "punch track: %s hand tracked the targeted enemy (%.1f m, thrown %.0f deg off him%s): "
                                         "body and aim turn to %.0f, view %s (hero %.0f, view %.0f), #%u",
-                                        hand, t.distance, t.angleDeg, punchTrackYaw * toDeg,
+                                        hand, t.distance, t.angleDeg,
+                                        t.lastByLook ? ", on the look" : "", punchTrackYaw * toDeg,
                                         values.punchViewSnap ? "snaps" : "stays where you look",
                                         std::hypot(body[8], body[10]) > .2f
                                             ? hybrid_handoff::actorLookYaw({body[8], body[9], body[10]}) * toDeg
                                             : -999.f,
                                         std::isfinite(hsViewNow) ? hsViewNow * toDeg : -999.f, punchTracks);
                                 } else if (why != punch_track::Why::noTarget && why != punch_track::Why::off) {
-                                    diag_log::writef("punch track: %s hand not tracked (%s: %.1f m, thrown %.0f deg off him)",
-                                                     hand, punch_track::whyName(why), t.distance, t.angleDeg);
+                                    diag_log::writef("punch track: %s hand not tracked (%s: %.1f m, thrown %.0f deg off him; "
+                                                     "cone %d deg, range %d m%s)",
+                                                     hand, punch_track::whyName(why), t.distance, t.angleDeg,
+                                                     values.punchTrackConeDeg, values.punchTrackRangeM,
+                                                     t.lookDeg >= 0.f ? ", looked off him too" : "");
                                 }
                             }
                         }

@@ -301,7 +301,7 @@ struct Values {
     // from before it gets RUN CURVE on and EARLY JUMP QUICK TAP once (the
     // user: "movement fixes will be defaults"); after that the player's own
     // choice stands. Not a row. movement_defaults.
-    int movementDefaults = 5; // movementDefaultsRevision: a new file has seen them
+    int movementDefaults = 6; // movementDefaultsRevision: a new file has seen them
     // SOFT LANDING (the tab's SOFT LANDING; Swing::allowSoftLanding,
     // run_update::softLandVertical): a fall the swing flies, with no web
     // holding, eases to 9 m/s down over its last 3 m (or 0.35 s), its speed
@@ -663,7 +663,9 @@ struct Values {
     // same damage with all of it off. punch_autotarget, punch_track_cone_deg, punch_track_range_m, punch_view_snap.
     bool punchAutotarget = true, punchViewSnap = false;
     // Nov 16 (the owner; s165800: 99 of 136 untracked punches outside 45 degrees, 37 past 6 m): 60 degrees, 8 m.
-    int punchTrackConeDeg = 60, punchTrackRangeM = 8;
+    // Nov 17 (the owner, "open up punch tracking and lengthen it to 10m"; s131456: 29 of 49 throws outside 60
+    // degrees, 17 of them within 90): 90 degrees, 10 m.
+    int punchTrackConeDeg = 90, punchTrackRangeM = 10;
     // JUMP PULL (the polish pass, slice 8; the user, t65u: "a soft pull that gently pulls you toward enemies you jump toward"):
     // in SpidyVR's own air, with no web out, an enemy within jumpPullGazeDeg of where you look (or within jumpPullStickDeg of
     // the left stick's way while it is held) and jumpPullRangeM pulls a little (4 m/s^2, fading at the cone's edge and the
@@ -806,6 +808,9 @@ struct Values {
     // onto the head is placed there at once (the position only; the angle still blends, the headset leads) instead of
     // sliding at many metres a second (b318cb1: 26 of 85 landing glides had over 1.4 m to go, up to 47 m in 700 ms).
     int handoffPlaceCm = 200;
+    // PUNCH TRACK BY LOOK (Nov 17; off by default): a throw also tracks when you LOOK within the cone of the
+    // targeted enemy, the fist thrown off it (punch_track.hpp). punch_track_by_look.
+    bool punchTrackByLook = false;
     // [next pass settings]
     bool operator==(const Values&) const = default;
 };
@@ -1164,7 +1169,7 @@ std::string tabOnlyText(const Values&);
 // key, or whose value is no whole number, is passed over.
 Values withTabOnly(Values, std::string_view text);
 // The movement defaults' revision (Values::movementDefaults) this build has.
-inline constexpr int movementDefaultsRevision = 5;
+inline constexpr int movementDefaultsRevision = 6;
 // November 12 movement cleanup: a settings file (that text) older than
 // movementDefaultsRevision gets the new movement defaults once - RUN CURVE
 // on, EARLY JUMP at least QUICK TAP - and is marked as having seen them; a

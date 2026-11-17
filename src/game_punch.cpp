@@ -940,6 +940,7 @@ Opened game_punch::update(float seconds, const Input& in, const Player& player, 
         tc.on = (ask.flags & 1u) != 0;
         tc.coneDeg = ask.coneDeg;
         tc.rangeM = ask.rangeM;
+        tc.byLook = (ask.flags & 2u) != 0;
         for (int i = 0; i < 2; ++i) {
             if (!trackThrows[i].update(seconds, punches.speed(i), hands[i].tracked && !hands[i].busy))
                 continue;
@@ -952,7 +953,7 @@ Opened game_punch::update(float seconds, const Input& in, const Player& player, 
                         middle = e.middle();
                         break;
                     }
-            const auto verdict = punch_track::decide(tc, found, head, punches.velocity(i), middle);
+            const auto verdict = punch_track::decide(tc, found, head, punches.velocity(i), middle, in.look);
             volatile TrackLive& live = SpidyPunchTrackLive;
             live.throws = live.throws + 1;
             switch (verdict.why) {
@@ -970,6 +971,10 @@ Opened game_punch::update(float seconds, const Input& in, const Player& player, 
             live.towardZ = verdict.toward.z;
             live.distance = verdict.distance;
             live.angleDeg = verdict.angleDeg;
+            live.lastByLook = verdict.byLook ? 1u : 0u;
+            live.lookDeg = verdict.lookDeg;
+            if (verdict.byLook)
+                live.byLook = live.byLook + 1;
             MemoryBarrier();
             live.events = live.events + 1;
         }

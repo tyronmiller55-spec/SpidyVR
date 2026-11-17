@@ -786,6 +786,8 @@ int main() {
                 continue;
             if (key == "handoff_place_cm")
                 continue;
+            if (key == "punch_track_by_look")
+                continue;
             if (key == "handstand_arms_over_head_cm")
                 continue;
             if (key == "head_seat_glide_ms")

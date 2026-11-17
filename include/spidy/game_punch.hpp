@@ -148,7 +148,9 @@ struct TrackLive {
     uint32_t lastHand{}, lastWhy{};
     uint64_t target{};
     float towardX{}, towardY{}, towardZ{}, distance{}, angleDeg{};
-    uint32_t reserved[3]{};
+    uint32_t byLook{};     // throws tracked on the look (punch_track_by_look)
+    uint32_t lastByLook{}; // the last throw was
+    float lookDeg{};       // the last throw's look angle off him (-1: not judged)
 };
 static_assert(sizeof(TrackLive) == 88);
 // What a sample opened: a web strike, at the enemy the hand's own web held.
