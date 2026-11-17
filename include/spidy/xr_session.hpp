@@ -1,6 +1,7 @@
 #pragma once
 #include "controller_layout.hpp"
 #include "d3d12_renderer.hpp"
+#include "frame_steps.hpp"
 #include "tracking.hpp"
 #include "xr_connect.hpp"
 #include "xr_timing.hpp"
@@ -26,6 +27,10 @@ class XrRuntime {
     // default, for the probes) asks once, as before.
     std::function<bool(double, unsigned)> waitingForHeadset;
     xr_connect::Wait headsetWait{0};
+    // FRAME STEPS (frame_steps.hpp): OpenXR's wait, begin and end frame and the eye images' waits and copy are
+    // marked here when set; the free commit, MB, for the lines of a stop or a lost session when set.
+    frame_steps::Steps* steps = nullptr;
+    std::function<unsigned long long()> freeCommitMb;
     // Why the runtime ended the session (LOSS_PENDING, EXITING, the instance
     // lost), once it has; empty while it runs.
     const std::string& endReason() const {

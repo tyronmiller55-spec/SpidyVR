@@ -1,5 +1,6 @@
 #include "spidy/animation_cancel.hpp"
 #include "spidy/text_read.hpp"
+#include "spidy/frame_steps.hpp"
 #include "spidy/showtime.hpp"
 #include "spidy/showtime_rig.hpp"
 #include "spidy/web_fire.hpp"
@@ -682,6 +683,8 @@ HANDLE worker{};
 // and the watchdog both copy the diagnostics out; one at a time keeps the
 // sequence's odd/even meaning for run_game_vr.py.
 diag_log::Stages startupStages;
+// FRAME STEPS (frame_steps.hpp): the step the worker is in, for the watchdog, and its longest times.
+frame_steps::Steps frameSteps;
 std::mutex diagPublish;
 void publishDiag() {
     std::lock_guard lock(diagPublish);
@@ -695,24 +698,119 @@ void publishDiag() {
 void stageLine(int stage, const char* detail = nullptr) {
     diag_log::writef("stage: %s%s%s", diag_log::Stages::name(stage), detail ? " - " : "", detail ? detail : "");
 }
-// Once a second while the worker runs: a "watchdog:" line when it is due, and
-// the diagnostics published, as the stuck worker would not.
-DWORD WINAPI watchdog(void* handle) {
-    char line[diag_log::lineChars];
-    while (WaitForSingleObject(static_cast<HANDLE>(handle), 1000) == WAIT_TIMEOUT) {
-        if (diag_log::enabled() && startupStages.check(GetTickCount64(), line, sizeof(line))) {
-            diag_log::write(line);
-            publishDiag();
-        }
-    }
-    CloseHandle(static_cast<HANDLE>(handle));
-    return 0;
-}
 // The system's free commit, MB (what it can still promise: RAM and page file), for the lines of a stop, a lost
 // session, a freeze and a dropped headset (November 17); 0 when Windows does not say.
 uint64_t freeCommitMb() {
     MEMORYSTATUSEX status{sizeof(status)};
     return GlobalMemoryStatusEx(&status) ? status.ullAvailPageFile >> 20 : 0;
+}
+// The stuck worker's code addresses from its registers (November 17), unwound by its functions' own unwind
+// data; a stack that moves on meanwhile ends early or reads as nonsense, under __try. Up to `max`.
+unsigned unwindStack(CONTEXT& context, DWORD64* out, unsigned max) {
+    unsigned n = 0;
+#if defined(_M_X64) || defined(__x86_64__)
+    __try {
+        while (n < max && context.Rip >= 0x10000) {
+            out[n++] = context.Rip;
+            DWORD64 imageBase = 0;
+            const PRUNTIME_FUNCTION function = RtlLookupFunctionEntry(context.Rip, &imageBase, nullptr);
+            if (!function) {
+                // A leaf function: its return address is on top of the stack.
+                context.Rip = *reinterpret_cast<const DWORD64*>(context.Rsp);
+                context.Rsp += 8;
+            } else {
+                void* handlerData{};
+                DWORD64 establisher{};
+                RtlVirtualUnwind(UNW_FLAG_NHANDLER, imageBase, context.Rip, function, &context, &handlerData,
+                                 &establisher, nullptr);
+            }
+        }
+    } __except (EXCEPTION_EXECUTE_HANDLER) {
+    }
+#endif
+    return n;
+}
+// The VR worker's stack, for the watchdog's first freeze line of a session: the worker is suspended only for
+// GetThreadContext (nothing else runs while it is, so no lock or heap it holds can block the watchdog), then
+// resumed and unwound. 0 when it cannot be taken.
+unsigned workerStack(HANDLE thread, DWORD64* out, unsigned max, DWORD& error) {
+#if defined(_M_X64) || defined(__x86_64__)
+    CONTEXT context{};
+    context.ContextFlags = CONTEXT_CONTROL | CONTEXT_INTEGER;
+    if (SuspendThread(thread) == static_cast<DWORD>(-1)) {
+        error = GetLastError();
+        return 0;
+    }
+    const BOOL got = GetThreadContext(thread, &context);
+    error = got ? 0 : GetLastError();
+    ResumeThread(thread);
+    return got ? unwindStack(context, out, max) : 0;
+#else
+    error = ERROR_NOT_SUPPORTED;
+    return 0;
+#endif
+}
+// "watchdog stack: game_xr.dll+0x1a2b3 LibOVRRT64_1.dll+0x4c5d ntdll.dll+0x9d4e4 ...": two lines at most.
+void writeWorkerStack(HANDLE thread) {
+    DWORD64 frames[24]{};
+    DWORD error{};
+    const unsigned n = workerStack(thread, frames, 24, error);
+    if (!n) {
+        diag_log::writef("watchdog stack: not taken (Windows error %lu)", error);
+        return;
+    }
+    char line[diag_log::lineChars];
+    unsigned i = 0;
+    for (int part = 0; part < 2 && i < n; ++part) {
+        int used = snprintf(line, sizeof(line), "watchdog stack%s:", part ? " (more)" : "");
+        for (; i < n; ++i) {
+            char frame[96];
+            HMODULE module{};
+            char path[MAX_PATH]{};
+            if (GetModuleHandleExA(GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS | GET_MODULE_HANDLE_EX_FLAG_UNCHANGED_REFCOUNT,
+                                   reinterpret_cast<LPCSTR>(frames[i]), &module) &&
+                GetModuleFileNameA(module, path, MAX_PATH)) {
+                const char* base = strrchr(path, '\\');
+                snprintf(frame, sizeof(frame), " %s+0x%llx", base ? base + 1 : path,
+                         static_cast<unsigned long long>(frames[i] - reinterpret_cast<uintptr_t>(module)));
+            } else {
+                snprintf(frame, sizeof(frame), " 0x%llx", static_cast<unsigned long long>(frames[i]));
+            }
+            const int length = static_cast<int>(strlen(frame));
+            if (used + length >= static_cast<int>(sizeof(line)))
+                break;
+            memcpy(line + used, frame, static_cast<size_t>(length) + 1);
+            used += length;
+        }
+        diag_log::write(line);
+    }
+}
+// Once a second while the worker runs: a "watchdog:" line when it is due, and
+// the diagnostics published, as the stuck worker would not. With it, the step
+// the worker is stuck in (FRAME STEPS) and, once a session, its stack.
+// The watchdog's handle to the worker: to wait for its end, and to take its stack.
+constexpr DWORD watchdogAccess = SYNCHRONIZE | THREAD_SUSPEND_RESUME | THREAD_GET_CONTEXT | THREAD_QUERY_INFORMATION;
+DWORD WINAPI watchdog(void* handle) {
+    char line[diag_log::lineChars];
+    while (WaitForSingleObject(static_cast<HANDLE>(handle), 1000) == WAIT_TIMEOUT) {
+        if (!diag_log::enabled())
+            continue;
+        bool wrote = false;
+        if (startupStages.check(GetTickCount64(), line, sizeof(line))) {
+            diag_log::write(line);
+            wrote = true;
+        }
+        if (frameSteps.stuck(frame_steps::nowUs(), 5000000, 10000000, freeCommitMb(), line, sizeof(line))) {
+            diag_log::write(line);
+            if (frameSteps.claimStack())
+                writeWorkerStack(static_cast<HANDLE>(handle));
+            wrote = true;
+        }
+        if (wrote)
+            publishDiag();
+    }
+    CloseHandle(static_cast<HANDLE>(handle));
+    return 0;
 }
 std::atomic<bool> stopRequested{};
 std::atomic<uint64_t> keepAliveDeadline{};
@@ -960,6 +1058,8 @@ DWORD WINAPI run(void*) {
         // found the headset: every session starts only after it does. So a headset the runtime now calls
         // unavailable dropped in between (November 17: Meta's logs, the USB Link connection), and the line says
         // so (xr_connect::droppedLine), with the timeline's line once.
+        runtime.steps = &frameSteps;
+        runtime.freeCommitMb = [] { return static_cast<unsigned long long>(freeCommitMb()); };
         runtime.waitingForHeadset = [&runtime, &waitShown](double seconds, unsigned) {
             if (waitShown < 0) {
                 char line[diag_log::lineChars];
@@ -2218,7 +2318,7 @@ DWORD WINAPI run(void*) {
                 // The watchdog holds its own handle to this worker and ends with it.
                 HANDLE watched{};
                 if (DuplicateHandle(GetCurrentProcess(), GetCurrentThread(), GetCurrentProcess(), &watched,
-                                    SYNCHRONIZE, FALSE, 0)) {
+                                    watchdogAccess, FALSE, 0)) {
                     if (HANDLE dog = CreateThread(nullptr, 0, watchdog, watched, 0, nullptr)) {
                         CloseHandle(dog);
                         watchdogStarted = true;
@@ -2339,6 +2439,14 @@ DWORD WINAPI run(void*) {
         };
         while (!stopRequested && (!nativeDeadline || GetTickCount64() < nativeDeadline)) {
             startupStages.beat(GetTickCount64());
+            // FRAME STEPS: the worker's own code from here; every 5 s, the longest time per step.
+            {
+                const uint64_t stepNow = frame_steps::nowUs();
+                frameSteps.mark(frame_steps::worker, stepNow);
+                char stepLine[diag_log::lineChars];
+                if (frameSteps.peaks(stepNow, stepLine, sizeof(stepLine)))
+                    diag_log::write(stepLine);
+            }
             if (!config.durationMs && GetTickCount64() >= keepAliveDeadline)
                 break;
             double copyMs{}, overlayMs{};
@@ -5659,8 +5767,11 @@ DWORD WINAPI run(void*) {
                         }
                         // POINT JUMP aims where the actions' head looks (next frame's fire).
                         pointJumpLook = input.look;
-                        check(submitSwing(&input), "Tracked swing input");
-                        check(sampleSwing(&swingState), "Native swing feedback");
+                        {
+                            frame_steps::Steps::Scope step(&frameSteps, frame_steps::swing);
+                            check(submitSwing(&input), "Tracked swing input");
+                            check(sampleSwing(&swingState), "Native swing feedback");
+                        }
                         // WEB FIRE: the swing's answer to each press.
                         for (unsigned i = 0; i < 2; ++i) {
                             const bool onSomething = swingState.status && swingState.webs[i].attached;
@@ -12461,6 +12572,7 @@ DWORD WINAPI run(void*) {
             if (!active)
                 break;
         }
+        frameSteps.idle();
         // HEAD PROBE: the session's numbers, one line per state, before VR stops.
         if (headProbeWas) {
             char session[head_probe::stateCount][head_probe::lineChars];
@@ -12476,13 +12588,19 @@ DWORD WINAPI run(void*) {
         }
         if (!runtime.endReason().empty()) {
             const auto text = runtime.endReason() + ". Stopping VR and restoring game hooks";
-            game_prompts::note(text.c_str());
+            game_prompts::note((text + " (free commit " + std::to_string(freeCommitMb()) + " MB)").c_str());
             message(6, 0, text.c_str());
         } else
             message(6, 0, "Stopping VR and restoring game hooks");
     } catch (const std::exception& e) {
         error = 1;
         failure = e.what();
+        frameSteps.idle();
+        // A lost session or any other stop on an error, with the memory Windows could still promise.
+        char line[diag_log::lineChars];
+        snprintf(line, sizeof(line), "VR stopped: %s (free commit %llu MB)", e.what(),
+                 static_cast<unsigned long long>(freeCommitMb()));
+        game_prompts::note(line);
     }
     players.stop();
     if (padInstalled)
@@ -12732,11 +12850,12 @@ extern "C" __declspec(dllexport) DWORD WINAPI SpidyXrStart(void* input) {
     message(1, 0, "Starting OpenXR");
     // The startup stages anew; the worker starts the watchdog with RUN LOGS on.
     startupStages.reset();
+    frameSteps.reset();
     worker = CreateThread(nullptr, 0, run, nullptr, 0, nullptr);
     if (worker) {
         // The watchdog holds its own handle to the worker and ends with it.
         HANDLE watched{};
-        if (DuplicateHandle(GetCurrentProcess(), worker, GetCurrentProcess(), &watched, SYNCHRONIZE, FALSE, 0)) {
+        if (DuplicateHandle(GetCurrentProcess(), worker, GetCurrentProcess(), &watched, watchdogAccess, FALSE, 0)) {
             if (HANDLE dog = CreateThread(nullptr, 0, watchdog, watched, 0, nullptr))
                 CloseHandle(dog);
             else

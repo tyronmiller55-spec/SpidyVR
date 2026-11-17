@@ -4,6 +4,7 @@
 #include <chrono>
 #include <cstring>
 #include <iostream>
+#include <optional>
 #include <stdexcept>
 #include <thread>
 namespace spidy {
@@ -570,6 +571,12 @@ void XrRuntime::poll() {
             char line[160];
             std::snprintf(line, sizeof(line), "openxr: session %s -> %s at %.2f s", xr_connect::stateName(previous),
                           xr_connect::stateName(state_), now() - createdAt_);
+            // A stop or a loss says how much memory Windows could still promise (November 17).
+            if (freeCommitMb && (state_ == XR_SESSION_STATE_STOPPING || state_ == XR_SESSION_STATE_LOSS_PENDING ||
+                                 state_ == XR_SESSION_STATE_EXITING)) {
+                const auto used = std::strlen(line);
+                std::snprintf(line + used, sizeof(line) - used, " (free commit %llu MB)", freeCommitMb());
+            }
             note(line);
             if (state_ == XR_SESSION_STATE_READY && !running_) {
                 XrSessionBeginInfo begin{XR_TYPE_SESSION_BEGIN_INFO};
@@ -599,7 +606,8 @@ void XrRuntime::poll() {
         }
         if (event.type == XR_TYPE_EVENT_DATA_INSTANCE_LOSS_PENDING) {
             exit_ = true;
-            note("openxr: instance loss pending (the VR runtime is going away)");
+            note("openxr: instance loss pending (the VR runtime is going away)" +
+                 (freeCommitMb ? " (free commit " + std::to_string(freeCommitMb()) + " MB)" : std::string()));
             if (endReason_.empty())
                 endReason_ = "The VR runtime is going away (instance loss pending)";
         }
@@ -875,12 +883,18 @@ bool XrRuntime::frameStereo(const std::function<bool(const XrFrame&)>& prepare,
     XrFrameWaitInfo wait{XR_TYPE_FRAME_WAIT_INFO};
     XrFrameState state{XR_TYPE_FRAME_STATE};
     auto phase = Clock::now();
-    xr(xrWaitFrame(session_, &wait, &state), "Wait frame");
+    {
+        frame_steps::Steps::Scope step(steps, frame_steps::waitFrame);
+        xr(xrWaitFrame(session_, &wait, &state), "Wait frame");
+    }
     frameTiming_.wait = elapsed(phase);
     frameTiming_.period = state.predictedDisplayPeriod * 1e-6;
     phase = Clock::now();
     XrFrameBeginInfo begin{XR_TYPE_FRAME_BEGIN_INFO};
-    xr(xrBeginFrame(session_, &begin), "Begin frame");
+    {
+        frame_steps::Steps::Scope step(steps, frame_steps::beginFrame);
+        xr(xrBeginFrame(session_, &begin), "Begin frame");
+    }
     XrFrameEndInfo end{XR_TYPE_FRAME_END_INFO};
     end.displayTime = state.predictedDisplayTime;
     end.environmentBlendMode = XR_ENVIRONMENT_BLEND_MODE_OPAQUE;
@@ -925,6 +939,7 @@ bool XrRuntime::frameStereo(const std::function<bool(const XrFrame&)>& prepare,
             XrSwapchainImageReleaseInfo release{XR_TYPE_SWAPCHAIN_IMAGE_RELEASE_INFO};
             try {
                 phase = Clock::now();
+                std::optional<frame_steps::Steps::Scope> imagesStep(std::in_place, steps, frame_steps::eyeImages);
                 for (unsigned i = 0; i < 2; ++i) {
                     auto& eye = eyes_[i];
                     uint32_t image{};
@@ -941,7 +956,11 @@ bool XrRuntime::frameStereo(const std::function<bool(const XrFrame&)>& prepare,
                                                     static_cast<int32_t>(eye.height)};
                 }
                 frameTiming_.acquire = elapsed(phase);
-                drawn = draw(targets);
+                imagesStep.reset();
+                {
+                    frame_steps::Steps::Scope step(steps, frame_steps::gpuCopy);
+                    drawn = draw(targets);
+                }
                 for (unsigned i = 0; i < 2; ++i) {
                     projectionViews[i].pose = targets[i].view.pose;
                     projectionViews[i].fov = targets[i].view.fov;
@@ -1014,7 +1033,10 @@ bool XrRuntime::frameStereo(const std::function<bool(const XrFrame&)>& prepare,
         }
         endCalled = true;
         phase = Clock::now();
-        xr(xrEndFrame(session_, &end), "Submit stereo frame");
+        {
+            frame_steps::Steps::Scope step(steps, frame_steps::endFrame);
+            xr(xrEndFrame(session_, &end), "Submit stereo frame");
+        }
         frameTiming_.end = elapsed(phase);
         frameTiming_.total = elapsed(start);
         lastFrameSubmitted_ = end.layerCount != 0;

@@ -4,6 +4,7 @@
 #include "spidy/game_tracking.hpp"
 #include "spidy/leg_control.hpp"
 #include "spidy/xr_connect.hpp"
+#include "spidy/frame_steps.hpp"
 #include "spidy/native_eye_frame.hpp"
 #include "spidy/native_hud.hpp"
 #include "spidy/native_eye_history.hpp"
@@ -691,6 +692,69 @@ int main() {
         check(waitingLine("Meta Quest Link", 10, 120).find("Meta Quest Link says it is not available") !=
                   std::string::npos,
               "the waiting line does not name the runtime");
+    });
+    test("frame steps: the longest time per step every 5 s, and the step a stuck worker is in", [] {
+        using namespace spidy::frame_steps;
+        Steps steps;
+        char line[240];
+        check(!steps.peaks(1000, line, sizeof(line)), "the first call starts the window");
+        uint64_t t = 1000;
+        for (int frame = 0; frame < 3; ++frame) {
+            steps.mark(worker, t);
+            steps.mark(waitFrame, t += 2000 + frame * 1000); // worker 2, 3, 4 ms
+            steps.mark(beginFrame, t += 11000);              // wait 11 ms
+            steps.mark(worker, t += 200);
+            steps.mark(swing, t += 500);
+            steps.mark(worker, t += 600);
+            steps.mark(eyeImages, t += 100);
+            steps.mark(gpuCopy, t += 100);
+            steps.mark(worker, t += 3400);
+            steps.mark(endFrame, t += 100);
+            steps.mark(worker, t += 1900);
+        }
+        check(steps.current() == worker && steps.since() == t, "where the worker is");
+        check(!steps.peaks(t, line, sizeof(line)), "not before 5 s");
+        check(steps.peaks(1000 + 5000000, line, sizeof(line)), "due at 5 s");
+        check(std::string(line).rfind("steps: longest in 5.0 s, ms: wait 11.0, begin 0.2, images 0.1, copy 3.4, "
+                                      "end 1.9, swing 0.6, worker ",
+                                      0) == 0 &&
+                  std::string(line).find("; 3 frames") != std::string::npos,
+              line);
+        // The worker's own code ran on to the window's end: that counts.
+        check(std::string(line).find("worker 4") != std::string::npos, line);
+        // The longest of a window huge in every step stays in the diagnostics' 239 characters.
+        Steps big;
+        big.peaks(1, line, sizeof(line));
+        for (int i = 0; i < count; ++i)
+            big.mark(i, 1 + i * 999999999999ull + 1);
+        check(big.peaks(999999999999999ull, line, sizeof(line)) && std::strlen(line) < 240, line);
+        // The watchdog: the step and how long, once each 10 s.
+        Steps stuck;
+        stuck.mark(waitFrame, 1000000);
+        check(!stuck.stuck(5900000, 5000000, 10000000, 5120, line, sizeof(line)), "not before 5 s");
+        check(stuck.stuck(7200000, 5000000, 10000000, 5120, line, sizeof(line)), "stuck");
+        check(std::string(line) == "watchdog: the VR worker is stuck in xrWaitFrame for 6.2 s (free commit 5120 MB)",
+              line);
+        check(!stuck.stuck(8200000, 5000000, 10000000, 5120, line, sizeof(line)), "again only after 10 s");
+        check(stuck.stuck(17300000, 5000000, 10000000, 5120, line, sizeof(line)), "again after 10 s");
+        check(stuck.claimStack() && !stuck.claimStack(), "the stack once a session");
+        stuck.idle();
+        check(!stuck.stuck(99000000, 5000000, 0, 5120, line, sizeof(line)), "no step after the frame loop");
+        stuck.reset();
+        check(stuck.claimStack(), "a new session takes it again");
+        {
+            Steps scoped;
+            {
+                Steps::Scope step(&scoped, swing);
+                check(scoped.current() == swing, "the scope marks its step");
+            }
+            check(scoped.current() == worker, "and the worker's own code after it");
+            Steps::Scope none(nullptr, swing); // no steps: nothing marked
+        }
+        char longest[240];
+        std::snprintf(longest, sizeof(longest), "watchdog: the VR worker is stuck in %s for 99999.9 s (free commit "
+                      "18446744073709551615 MB)", name(worker));
+        check(std::strlen(longest) < 240, "the longest watchdog line fits");
     });
     test("a headset lost after the launcher's check: the Link-drop line, and a new instance now and then", [] {
         using namespace spidy::xr_connect;
