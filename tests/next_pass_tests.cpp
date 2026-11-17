@@ -1,5 +1,7 @@
 // NEXT PASS (the owner's decisions, Nov 15: handoff hitches, body yaw, handstands): the pure parts of each change.
 // Portable.
+#include "spidy/aim_watch.hpp"
+#include "spidy/arm_frame.hpp"
 #include "spidy/camera_mode.hpp"
 #include "spidy/facing_check.hpp"
 #include "spidy/hybrid_handoff.hpp"
@@ -326,6 +328,39 @@ int main() {
         check(near(s.x, 5.f) && near(s.y, 1.6f) && near(s.z, 0.f), "carried 5 m with the player");
         const Vec3 far = shownSource(eyes, {0, 0, 0}, {30, 0, 0});
         check(near(far.x, 0.f), "past the carry limit: not carried (a teleport)");
+    }
+    // ARM LINE-UP THROUGH THE HANDOFF (the owner, Nov 17): in the landing blend's WORLD frame a hand goes through the
+    // shown eyes, carried with the player as the render carries them; a source change's move is measured.
+    {
+        arm_frame::ViewMap m;
+        m.valid = true;
+        m.reference = {{0, 1.6f, 0}, {}};
+        Pose eyes{{10, 50, -700}, {}};
+        Mat4 a{};
+        check(arm_frame::worldAnchor(animated_view::Frame::world, a, {}, eyes, m.anchor), "the world anchor: the eyes");
+        const Pose hand{{.3f, 1.2f, -.4f}, {}};
+        const Vec3 h0 = arm_frame::toGame(m, hand).position;
+        eyes.position = eyes.position + hybrid_handoff::travel({0, 0, 0}, {2, 0, 0});
+        arm_frame::worldAnchor(animated_view::Frame::world, a, {}, eyes, m.anchor);
+        const Vec3 h1 = arm_frame::toGame(m, hand).position;
+        check(near(h1.x - h0.x, 2.f) && near(h1.y, h0.y) && near(h1.z, h0.z), "carried 2 m: the hand 2 m with it");
+        aim_watch::Lineup lu;
+        auto o = lu.update(0, true, {0, 1, 0}, {0, 0, -1}, {0, 1, 0}, {0, 0, -1});
+        check(!o.changed, "the first frame: no change");
+        o = lu.update(3, true, {0, 1, 0}, {0, 0, -1}, {0, 1, 0}, {0, 0, -1});
+        check(o.changed && o.from == 0 && o.to == 3 && near(o.jumpM, 0.f), "rig to the shown view, no move");
+        o = lu.update(1, true, {.4f, 1, 0}, {0, 0, -1}, {.05f, 1, 0}, {0, 0, -1});
+        check(o.changed && near(o.jumpM, .35f, 1e-3f), "a 0.4 m jump with the controller 0.05 m: 0.35 m beyond");
+        aim_watch::MarkerJumps mj;
+        mj.update(true, {0, 0, -1}, {0, 0, -1}, 6.f);
+        const float r = 20.f * 3.14159265f / 180.f;
+        check(!mj.update(true, {std::sin(r), 0, -std::cos(r)}, {std::sin(r), 0, -std::cos(r)}, 6.f),
+              "the line turning with the controller: no jump");
+        check(mj.update(true, {0, std::sin(r), -std::cos(r)}, {std::sin(r), 0, -std::cos(r)}, 6.f) && mj.jumps == 1,
+              "the line turning 28 deg with the controller still: a jump");
+        check(mj.frames == 2 && mj.worst > 20.f, "frames and the worst counted");
+        mj.clearWindow();
+        check(mj.jumps == 0 && mj.frames == 0, "the window clears");
     }
     std::printf("next pass: %d checks passed\n", passed);
     return 0;

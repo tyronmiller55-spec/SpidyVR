@@ -64,6 +64,7 @@
 #include "spidy/camera_motion.hpp"
 #include "spidy/shooter_lock.hpp"
 #include "spidy/spherical_aim.hpp"
+#include "spidy/aim_watch.hpp"
 #include "spidy/leg_control.hpp"
 #include "spidy/leg_hold.hpp"
 #include "spidy/aim_filter.hpp"
@@ -1612,6 +1613,11 @@ DWORD WINAPI run(void*) {
         animated_view::Frame armFrameWas = animated_view::Frame::none;
         Quat armLevelWas{};
         Pose armWorldEyesWas{};
+        Vec3 armWorldAnchorWas{};  // the player position those eyes were placed from (the render carries them)
+        bool armWorldAnchorOk{};
+        // ARM LINE-UP (aim_watch.hpp): where the hands were mapped from, and a source change's move.
+        std::array<aim_watch::Lineup, 2> armLineup{};
+        uint32_t armLineupChanges{}, armBlendWorldFrames{}, armBlendRigFrames{};
         // HAND PREDICTION (review H1/L1): velocities in tracking space; a new
         // epoch (snap turn, re-latch, recenter, reseat, owner or frame-mode
         // change) restarts them. The lead is the pose job's measured wait.
@@ -5133,8 +5139,16 @@ DWORD WINAPI run(void*) {
                                               frame.hands[i].valid && validTrackedPose(frame.hands[i].grip),
                                               frame.predictedDisplayTime, armEpoch);
                     armLead = arm_frame::leadSeconds(native_body::handLeadWait());
+                    // ARM LINE-UP THROUGH THE HANDOFF (the owner, Nov 17): the landing's blend re-latches the head
+                    // lock only after it (animHeadRefSet off all through it), so the hands - webs, markers, the
+                    // line's start - were taken from the VR rig's hands for its 180-700 ms: off the view by the
+                    // blend's gap, then a jump onto the head lock at its end. The WORLD frame (the shown eyes' centre,
+                    // the tracked head as reference) needs no head lock: the hands go through the very view shown,
+                    // the eyes carried with the player since they were placed, as the render does.
+                    const bool armWorldFrame = armFrameWas == animated_view::Frame::world;
                     if (bodyStarted && values.animatedHybrid && values.animatedArms &&
-                        animatedMovesHandoff.yielding && animHeadRefSet && validTrackedPose(frame.head) &&
+                        animatedMovesHandoff.yielding && (animHeadRefSet || armWorldFrame) &&
+                        validTrackedPose(frame.head) &&
                         armFrameWas != animated_view::Frame::none && armFrameWas != animated_view::Frame::missing) {
                         Mat4 headWorld{};
                         Quat level = armLevelWas;
@@ -5143,8 +5157,12 @@ DWORD WINAPI run(void*) {
                             if (game_fp::sceneYaw(true, levelYaw))
                                 level = Quat::yaw(levelYaw); // M1: this frame's heading
                         }
-                        if (native_body::viewAnchorWorld(headWorld) == 1 &&
-                            arm_frame::worldAnchor(armFrameWas, headWorld, level, armWorldEyesWas,
+                        Pose worldEyes = armWorldEyesWas;
+                        if (armWorldFrame && armWorldAnchorOk && motion.active)
+                            worldEyes.position =
+                                worldEyes.position + hybrid_handoff::travel(armWorldAnchorWas, motion.anchor);
+                        if ((armWorldFrame || native_body::viewAnchorWorld(headWorld) == 1) &&
+                            arm_frame::worldAnchor(armFrameWas, headWorld, level, worldEyes,
                                                    armView.anchor)) {
                             // FULL head lock on the stable heading: turned as the eyes are.
                             if (armFrameWas == animated_view::Frame::full)
@@ -5191,7 +5209,9 @@ DWORD WINAPI run(void*) {
                     // marker on it) off the camera's quick motion - the anchor the
                     // hands are mapped onto, its bob, nod, roll and sway.
                     Quat aimSteadyTurn{};
-                    if (armView.valid)
+                    // (The handoff blend's WORLD frame has no head bone to steady: its anchor is the shown eyes, the
+                    // headset's own turns in it, which the steadying would lag.)
+                    if (armView.valid && armFrameWas != animated_view::Frame::world)
                         aimSteadyTurn = aimAnchorSteady.update(arm_frame::toGame(armView, armView.reference).orientation,
                                                                std::isfinite(frame.seconds) ? frame.seconds : 0.f);
                     else
@@ -5211,6 +5231,32 @@ DWORD WINAPI run(void*) {
                             kin.grip[i] = motion.grips[i];
                             kin.aim[i] = motion.swing.hands[i].aim;
                             kin.handValid[i] = finite(kin.grip[i].position);
+                        }
+                    }
+                    // ARM LINE-UP: the hands' source (0 the rig, else the frame mode), a change's move beyond the
+                    // controller's own, and in the landing blend how many frames went through the shown view.
+                    {
+                        const int source = armView.valid ? static_cast<int>(armFrameWas) : 0;
+                        if (hybridBlend.active && !hybridBlend.toTraversal)
+                            ++(source == static_cast<int>(animated_view::Frame::world) ? armBlendWorldFrames
+                                                                                        : armBlendRigFrames);
+                        static constexpr const char* sourceNames[] = {"the VR rig", "the head lock", "the level head",
+                                                                      "the shown view (handoff blend)", "none"};
+                        for (unsigned i = 0; i < 2; ++i) {
+                            const auto lu = armLineup[i].update(
+                                source, kin.handValid[i] && frame.hands[i].valid, kin.grip[i].position,
+                                kin.aim[i].orientation.rotate({0, 0, -1}), frame.hands[i].grip.position,
+                                frame.hands[i].aim.orientation.rotate({0, 0, -1}));
+                            if (lu.changed && (lu.jumpM > .03f || lu.jumpDeg > 3.f || armLineupChanges < 40)) {
+                                ++armLineupChanges;
+                                diag_log::writef(
+                                    "arm line-up: %s hand now from %s (was %s): moved %.2f m and %.1f deg beyond the "
+                                    "controller that frame; landing blends so far %u frames through the shown view, %u "
+                                    "from the rig, #%u",
+                                    i ? "R" : "L", sourceNames[std::clamp(lu.to, 0, 4)],
+                                    sourceNames[std::clamp(lu.from, 0, 4)], lu.jumpM, lu.jumpDeg, armBlendWorldFrames,
+                                    armBlendRigFrames, armLineupChanges);
+                            }
                         }
                     }
                     animation_cancel::Decision gripCancel;
@@ -11700,6 +11746,8 @@ DWORD WINAPI run(void*) {
                     armFrameWas = handView.frame;
                     armLevelWas = handView.levelWorld;
                     armWorldEyesWas = handView.worldAnchor;
+                    armWorldAnchorWas = eyes.anchor;
+                    armWorldAnchorOk = handView.frame == animated_view::Frame::world && finite(eyes.anchor);
                     if (bodyStarted)
                         native_body::submit(pose, handView);
                     // The HUD panel for this command's frame, as the head sees it:
