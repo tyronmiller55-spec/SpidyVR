@@ -708,6 +708,12 @@ DWORD WINAPI watchdog(void* handle) {
     CloseHandle(static_cast<HANDLE>(handle));
     return 0;
 }
+// The system's free commit, MB (what it can still promise: RAM and page file), for the lines of a stop, a lost
+// session, a freeze and a dropped headset (November 17); 0 when Windows does not say.
+uint64_t freeCommitMb() {
+    MEMORYSTATUSEX status{sizeof(status)};
+    return GlobalMemoryStatusEx(&status) ? status.ullAvailPageFile >> 20 : 0;
+}
 std::atomic<bool> stopRequested{};
 std::atomic<uint64_t> keepAliveDeadline{};
 void message(uint32_t status, uint32_t error, const char* text) {
@@ -950,10 +956,22 @@ DWORD WINAPI run(void*) {
         runtime.headsetWait = xr_connect::Wait{};
         // One status line each 5 s of the wait, not each attempt (the launcher prints every change).
         int waitShown = -1;
+        // The launcher's check (run_game_vr.py's preflight, then its check again just before this start) had
+        // found the headset: every session starts only after it does. So a headset the runtime now calls
+        // unavailable dropped in between (November 17: Meta's logs, the USB Link connection), and the line says
+        // so (xr_connect::droppedLine), with the timeline's line once.
         runtime.waitingForHeadset = [&runtime, &waitShown](double seconds, unsigned) {
+            if (waitShown < 0) {
+                char line[diag_log::lineChars];
+                snprintf(line, sizeof(line),
+                         "openxr: the launcher's check found the headset, %s now calls it unavailable: the "
+                         "connection dropped (free commit %llu MB)",
+                         runtime.runtimeName().c_str(), static_cast<unsigned long long>(freeCommitMb()));
+                game_prompts::note(line);
+            }
             if (static_cast<int>(seconds / 5) != waitShown) {
                 waitShown = static_cast<int>(seconds / 5);
-                const auto line = xr_connect::waitingLine(runtime.runtimeName().c_str(), seconds,
+                const auto line = xr_connect::droppedLine(runtime.runtimeName().c_str(), seconds,
                                                           runtime.headsetWait.limitSeconds);
                 message(1, 0, line.c_str());
             }

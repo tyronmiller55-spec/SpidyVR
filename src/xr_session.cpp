@@ -161,8 +161,15 @@ void XrRuntime::initialize(
         double waited{};
         unsigned attempts{};
         double lastNote = -10;
+        // A long wait starts over with a new instance now and then (xr_connect::Renew, November 17): one made
+        // before Link dropped may keep its answer. Nothing else is made from the instance before this.
+        xr_connect::Renew renew;
+        bool renewFailed = false;
         const auto found = static_cast<XrResult>(xr_connect::retry(
-            [&] { return static_cast<int32_t>(xrGetSystem(instance_, &si, &system_)); },
+            [&] {
+                return renewFailed ? static_cast<int32_t>(XR_ERROR_INSTANCE_LOST)
+                                   : static_cast<int32_t>(xrGetSystem(instance_, &si, &system_));
+            },
             [](double seconds) { std::this_thread::sleep_for(std::chrono::duration<double>(seconds)); },
             [&](double seconds, unsigned attempt, int32_t code) {
                 if (seconds - lastNote >= 15) {
@@ -171,7 +178,22 @@ void XrRuntime::initialize(
                          std::to_string(attempt) + ", " + std::to_string(static_cast<int>(seconds)) +
                          " s waited; asking again");
                 }
-                return !waitingForHeadset || waitingForHeadset(seconds, attempt);
+                if (!waitingForHeadset || waitingForHeadset(seconds, attempt)) {
+                    if (renew.due(seconds)) {
+                        xrDestroyInstance(instance_);
+                        instance_ = XR_NULL_HANDLE;
+                        const XrResult again = xrCreateInstance(&ci, &instance_);
+                        note(xr_connect::describe("openxr: a new instance for the wait,", again) + ", after " +
+                             std::to_string(static_cast<int>(seconds)) + " s");
+                        if (XR_FAILED(again)) {
+                            instance_ = XR_NULL_HANDLE;
+                            renewFailed = true;
+                            return false;
+                        }
+                    }
+                    return true;
+                }
+                return false;
             },
             headsetWait, waited, attempts));
         if (XR_FAILED(found)) {

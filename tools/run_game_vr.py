@@ -458,6 +458,41 @@ def preflight(requested):
                           recommended_eye=[int(eye[1]), int(eye[2])] if eye else None)
 
 
+LINK_DROPPED = ('The Link connection dropped. Put the headset on, re-enable Link (or reconnect the cable), and the '
+                'game will continue.')
+
+
+def clock_text(at):
+    """A check's time on this PC's clock, for the console: 10:52:21."""
+    return time.strftime('%H:%M:%S', time.localtime(at))
+
+
+def check_again(manifest, first, probe=None, now=time.time):
+    """The headset checked again just before the game asks for it (November 17: Meta's logs showed the USB Link
+    connection dropping in the seconds between preflight's check and the game's start, and the game waiting).
+    Never stops the session: the game waits for the headset and says what happened. Prints both checks' times
+    and returns what the report keeps."""
+    probe = probe or xr_runtime.probe
+    at = now()
+    try:
+        found, said = probe(manifest, timeout=20)
+    except (OSError, RuntimeError, ValueError) as error:
+        found, said = None, str(error)
+    gap = at-first
+    if found:
+        print(f'Headset check again before VR starts: found at {clock_text(at)}, {gap:.0f} s after the first '
+              f'check at {clock_text(first)}.', flush=True)
+    elif found is False:
+        print(f'Headset check again before VR starts: not found at {clock_text(at)}, {gap:.0f} s after the first '
+              f'check at {clock_text(first)} found it. {LINK_DROPPED}', flush=True)
+        print(said, flush=True)
+    else:
+        print(f'Headset check again before VR starts: could not ask at {clock_text(at)} ({said}); the game '
+              'asks next.', flush=True)
+    return [dict(at=round(first, 3), found=True),
+            dict(at=round(at, 3), found=found, seconds_after=round(gap, 1))]
+
+
 class _Echo:
     """A console stream that writes to the session's console log as well."""
 
@@ -2504,6 +2539,9 @@ def session(a, startup):
             raise GameNeedsRestart(reason)
     startup.stage = 'finding the headset'
     manifest, runtime = preflight(a.xr_runtime)
+    first_check = time.time()
+    print(f'Headset check: found at {clock_text(first_check)}.', flush=True)
+    runtime['headset_checks'] = [dict(at=round(first_check, 3), found=True)]
     startup.fields['xr_runtime'] = runtime
     links = network_links()
     startup.fields['network'] = links
@@ -2664,6 +2702,8 @@ def session(a, startup):
                                                  a.render_scale, a.weight, a.eye_height, a.arm_length, a.hud,
                                                  a.flip_speed, a.upscale, a.monitor_rate, a.screen_depth,
                                                  a.body_haptics)
+        startup.stage = 'checking the headset again'
+        runtime['headset_checks'] = check_again(manifest, first_check)
         startup.stage = 'starting VR'
         code = call_with_payload(process, xr['SpidyXrStart'], config)
         if code:

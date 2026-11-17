@@ -143,4 +143,47 @@ inline std::string waitingLine(const char* runtime, double seconds, double limit
     return text;
 }
 
+// November 17: Meta's own logs settled the November 11 to 17 waits. The launcher's check found the headset; seconds
+// later the USB Link connection dropped (Meta: "detached event with error code -4503: Flaky cable") and came back
+// asking for Link to be started again in the headset, and the game asked in between. The headset was gone, not
+// refused. The launcher checks again just before the game asks (run_game_vr.py), and the wait says what happened.
+inline constexpr const char* linkDropped =
+    "The Link connection dropped. Put the headset on, re-enable Link (or reconnect the cable), and the game will "
+    "continue.";
+
+// Whether the runtime is Meta's (Quest Link or Air Link): it calls itself "Oculus".
+inline bool metaRuntime(const char* runtime) {
+    if (!runtime)
+        return false;
+    const std::string name(runtime);
+    return name.find("Oculus") != std::string::npos || name.find("Meta") != std::string::npos;
+}
+
+// The player's line while waiting after the launcher's check had found the headset: the connection dropped in
+// between. Under 256 characters (XrData::message).
+inline std::string droppedLine(const char* runtime, double seconds, double limit) {
+    char text[256];
+    if (metaRuntime(runtime))
+        std::snprintf(text, sizeof(text), "%s (%.0f of %.0f s)", linkDropped, seconds, limit);
+    else
+        std::snprintf(text, sizeof(text),
+                      "The headset's connection dropped. Put the headset on, reconnect it in %s, and the game will "
+                      "continue. (%.0f of %.0f s)",
+                      runtime && *runtime ? runtime : "its VR app", seconds, limit);
+    return text;
+}
+
+// When a long wait starts over with a new OpenXR instance (xr_session.cpp): a runtime that lost its headset may
+// keep answering an instance made before the loss as it did then. First at `first` seconds, then each `every`.
+struct Renew {
+    double first = 20, every = 30;
+    double next = first;
+    bool due(double waited) {
+        if (waited < next)
+            return false;
+        next = waited + every;
+        return true;
+    }
+};
+
 } // namespace spidy::xr_connect

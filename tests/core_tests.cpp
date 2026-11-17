@@ -692,6 +692,23 @@ int main() {
                   std::string::npos,
               "the waiting line does not name the runtime");
     });
+    test("a headset lost after the launcher's check: the Link-drop line, and a new instance now and then", [] {
+        using namespace spidy::xr_connect;
+        const std::string meta = droppedLine("Oculus", 5, 120);
+        check(meta.rfind(linkDropped, 0) == 0, meta.c_str());
+        check(meta.find("(5 of 120 s)") != std::string::npos, "the wait's seconds");
+        check(meta.size() < 256, "fits XrData::message");
+        const std::string other = droppedLine("SteamVR/OpenXR", 10, 120);
+        check(other.find("reconnect it in SteamVR/OpenXR") != std::string::npos && other.size() < 256,
+              other.c_str());
+        check(metaRuntime("Oculus") && metaRuntime("Meta Quest Link") && !metaRuntime("VirtualDesktopXR") &&
+                  !metaRuntime(nullptr),
+              "Meta's runtime by name");
+        Renew renew;
+        check(!renew.due(0) && !renew.due(19.9), "not before 20 s");
+        check(renew.due(20.1) && !renew.due(21) && !renew.due(50), "once at 20 s");
+        check(renew.due(50.2) && !renew.due(60), "then each 30 s");
+    });
     struct SlingWorld : TwoAnchors {
         std::optional<RayHit> raycast(Vec3 o, Vec3 d, float distance) const override {
             return enabled ? TwoAnchors::raycast(o, d, distance) : std::nullopt;

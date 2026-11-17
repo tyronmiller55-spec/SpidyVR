@@ -195,6 +195,29 @@ class RuntimeTests(unittest.TestCase):
             with self.assertRaisesRegex(RuntimeError,'Headset unavailable: x. Connect your headset in Meta Quest Link'):
                 run_game_vr.preflight(str(self.oculus))
 
+    def test_the_headset_is_checked_again_just_before_vr_starts(self):
+        # November 17: the USB Link connection dropped between preflight's check and the game's start. The check
+        # again says so, with both checks' times, and never stops the session (the game waits).
+        lines=[]
+        def say(*parts,**_): lines.append(' '.join(str(p) for p in parts))
+        found=lambda manifest,timeout: (True,'Headset available: Test HMD.')
+        with unittest.mock.patch('builtins.print',side_effect=say):
+            checks=run_game_vr.check_again(self.oculus,1000.0,probe=found,now=lambda: 1023.4)
+        self.assertEqual(checks,[dict(at=1000.0,found=True),dict(at=1023.4,found=True,seconds_after=23.4)])
+        self.assertRegex(lines[0],r'^Headset check again before VR starts: found at \d\d:\d\d:\d\d, 23 s after the '
+                                  r'first check at \d\d:\d\d:\d\d\.$')
+        lines.clear()
+        gone=lambda manifest,timeout: (False,'Headset unavailable: XR_ERROR_FORM_FACTOR_UNAVAILABLE (-35).')
+        with unittest.mock.patch('builtins.print',side_effect=say):
+            checks=run_game_vr.check_again(self.oculus,1000.0,probe=gone,now=lambda: 1005.0)
+        self.assertIs(checks[1]['found'],False)
+        self.assertIn('not found at',lines[0])
+        self.assertTrue(lines[0].endswith(run_game_vr.LINK_DROPPED),lines[0])
+        self.assertIn('-35',lines[1])
+        def broken(manifest,timeout): raise RuntimeError('Build the headset probe first')
+        with unittest.mock.patch('builtins.print'):
+            self.assertIsNone(run_game_vr.check_again(self.oculus,1000.0,probe=broken,now=lambda: 1001.0)[1]['found'])
+
     def test_xr_config_v7_carries_the_manifest_null_terminated(self):
         packed=run_game_vr.runtime_path(r'C:\Program Files\Virtual Desktop Streamer\OpenXR\virtualdesktop-openxr.json')
         self.assertEqual(len(packed),520)
