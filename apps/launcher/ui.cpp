@@ -3022,6 +3022,51 @@ void App::options(ImVec2 origin, ImVec2 size) {
                    "your own body. As in play: the head stays hidden, to compare.",
                    S(150), [&] { tabCombo("##showtimebody", Item::showtimeBody); });
         });
+        const int handoffPage = static_cast<int>(Category::handoff);
+        // HANDOFF TIMING (Nov 18, the owner: "Handoff is still jumpy, and I'm feeling like it takes to long. Maybe give
+        // me smaller increments to set."): every handoff and landing time, speed and distance in fine steps (the game's
+        // own rows hold eleven choices; these sliders any multiple of their step). The same spidy_vr.ini keys.
+        const auto fineSlider = [&](const char* id, int& field, int lowest, int highest, int step, const char* format,
+                                    const char* zero) {
+            int value = field;
+            ImGui::PushFont(fonts_.semibold, 14);
+            if (slider(id, &value, lowest, highest, zero && value <= 0 ? zero : format)) {
+                value = std::clamp((value - lowest + step / 2) / step * step + lowest, lowest, highest);
+                if (value != field) {
+                    field = value;
+                    tabChanged = true;
+                }
+            }
+            ImGui::PopFont();
+        };
+        group(handoffPage, 0, "Handoff timing (fine steps)", [&] {
+            settingOption(Item::none, "Jump to SpidyVR", "How long into a jump the animation hands you to SpidyVR. 25 ms steps. Default: 300 ms.",
+                   S(150), [&] { fineSlider("##finejumphandoff", tabOnly_.jumpHandoffMs, 0, 1000, 25, "%d ms", "Stay to landing"); });
+            settingOption(Item::none, "Fall to SpidyVR", "How long into a plain fall SpidyVR takes over. 25 ms steps. Default: 150 ms.",
+                   S(150), [&] { fineSlider("##finefallhandoff", tabOnly_.fallHandoffMs, 0, 1000, 25, "%d ms", "With the jump timer"); });
+            settingOption(Item::none, "Air view ease", "Takeover: how long the view eases from the animation's onto your feet. Default: 250 ms.",
+                   S(150), [&] { fineSlider("##fineairviewease", tabOnly_.airViewEaseMs, 0, 1000, 25, "%d ms", "Off (snap)"); });
+            settingOption(Item::none, "Punch view ease", "The same ease for a punch's switch to VR. Default: 250 ms.",
+                   S(150), [&] { fineSlider("##finepunchviewease", tabOnly_.punchViewEaseMs, 0, 1000, 25, "%d ms", "Off (snap)"); });
+            settingOption(Item::none, "Punch camera lock", "A ground punch holds the view this long before its ease. Default: 300 ms.",
+                   S(150), [&] { fineSlider("##finepunchlock", tabOnly_.punchCameraLockMs, 0, 1000, 25, "%d ms", "Off"); });
+            settingOption(Item::none, "Head height fade", "Takeover: the animation head's extra height fades over this. Default: 500 ms.",
+                   S(150), [&] { fineSlider("##fineheightfade", tabOnly_.headHeightFadeMs, 0, 1500, 25, "%d ms", "Off"); });
+            settingOption(Item::none, "Handoff angle time", "The animation head's pitch and roll fade after a switch. Default: 300 ms.",
+                   S(150), [&] { fineSlider("##fineangle", tabOnly_.handoffAngleMs, 0, 1500, 25, "%d ms", "Blend length"); });
+            settingOption(Item::none, "Landing blend", "A landing: the view's glide onto the hero's head. Default: 250 ms.",
+                   S(150), [&] { fineSlider("##finelandingblend", tabOnly_.landingBlendMs, 0, 1500, 25, "%d ms", "Air view ease"); });
+            settingOption(Item::none, "Head seat glide", "The view's slide when your head is re-seated on the hero's. Default: 250 ms.",
+                   S(150), [&] { fineSlider("##fineheadseat", tabOnly_.headSeatGlideMs, 60, 1000, 10, "%d ms", nullptr); });
+            settingOption(Item::none, "Landing body ease", "How long the drawn body eases onto your view after a landing. Default: 500 ms.",
+                   S(150), [&] { fineSlider("##finebodyease", tabOnly_.landingBodyEaseMs, 100, 1500, 25, "%d ms", nullptr); });
+            settingOption(Item::none, "Handoff glide speed", "Long glides stretch so the view moves no faster than this; faster is shorter. Default: 200 cm/s.",
+                   S(150), [&] { fineSlider("##fineglidespeed", tabOnly_.handoffGlideCmS, 0, 1000, 10, "%d cm/s", "Off (base time)"); });
+            settingOption(Item::none, "Handoff glide longest", "The longest a glide is stretched to. Default: 700 ms.",
+                   S(150), [&] { fineSlider("##fineglidemax", tabOnly_.handoffGlideMaxMs, 150, 2000, 25, "%d ms", nullptr); });
+            settingOption(Item::none, "Handoff place", "A landing or zip view farther than this from the head is placed, not glided. Default: 200 cm.",
+                   S(150), [&] { fineSlider("##fineplace", tabOnly_.handoffPlaceCm, 0, 2000, 10, "%d cm", "Always glide"); });
+        });
     }
     group(static_cast<int>(spidy::vr_settings::categoryCount) + 1, 0, "Troubleshooting", [&] {
         settingOption(Item::none, "Normal camera on the monitor",

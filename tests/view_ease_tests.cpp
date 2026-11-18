@@ -156,8 +156,8 @@ int main() {
         check(v.punchViewEaseMs == 250, "default 250 ms");
         check(choose(Item::punchViewEase, 0, v) && v.punchViewEaseMs == 0, "OFF (SNAP)");
         const Row* row = rowFor(Item::punchViewEase);
-        check(row && row->choices.size() == 6 && std::strcmp(row->choices[0], "OFF (SNAP)") == 0 &&
-                  std::strcmp(row->choices[3], "250 MS") == 0,
+        check(row && row->choices.size() == 11 && std::strcmp(row->choices[0], "OFF (SNAP)") == 0 &&
+                  std::strcmp(row->choices[7], "250 MS (DEFAULT)") == 0,
               "choices");
         check(inactiveReason(Item::punchViewEase, v) == nullptr, "always available");
         bool listed = false;

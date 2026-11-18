@@ -221,8 +221,9 @@ constexpr int pointJumpPushes[] = {0, 10, 25, 40, 60};
 constexpr const char* pointJumpPushChoices[] = {"0%", "10%", "25%", "40%", "60%"};
 static_assert(std::size(pointJumpPushChoices) == std::size(pointJumpPushes));
 // PUNCH VIEW EASE (view_ease.hpp): punch_view_ease_ms; 0 is the old snap.
-constexpr int punchViewEases[] = {0, 150, 200, 250, 300, 400};
-constexpr const char* punchViewEaseChoices[] = {"OFF (SNAP)", "150 MS", "200 MS", "250 MS", "300 MS", "400 MS"};
+constexpr int punchViewEases[] = {0, 100, 125, 150, 175, 200, 225, 250, 300, 350, 400};
+constexpr const char* punchViewEaseChoices[] = {"OFF (SNAP)", "100 MS", "125 MS", "150 MS", "175 MS", "200 MS",
+                                                "225 MS", "250 MS (DEFAULT)", "300 MS", "350 MS", "400 MS"};
 static_assert(std::size(punchViewEaseChoices) == std::size(punchViewEases));
 // MOVE HAPTICS (move_haptics.hpp): move_haptics_pct, its own strength.
 constexpr int moveHapticLevels[] = {0, 25, 50, 75, 100, 125, 150, 175, 200};
@@ -233,12 +234,14 @@ constexpr int viewYawSources[] = {0, 1};
 constexpr const char* viewYawSourceChoices[] = {"BODY (OLD)", "STABLE"};
 static_assert(std::size(viewYawSourceChoices) == std::size(viewYawSources));
 // JUMP TO SPIDYVR (hybrid_owner.hpp): jump_handoff_ms; 0 stays to the landing.
-constexpr int jumpHandoffs[] = {0, 300, 400, 500, 700, 1000};
-constexpr const char* jumpHandoffChoices[] = {"STAY TO LANDING", "300 MS", "400 MS", "500 MS", "700 MS", "1000 MS"};
+constexpr int jumpHandoffs[] = {0, 150, 200, 250, 300, 350, 400, 500, 600, 800, 1000};
+constexpr const char* jumpHandoffChoices[] = {"STAY TO LANDING", "150 MS", "200 MS", "250 MS", "300 MS (DEFAULT)", "350 MS",
+                                              "400 MS", "500 MS", "600 MS", "800 MS", "1000 MS"};
 static_assert(std::size(jumpHandoffChoices) == std::size(jumpHandoffs));
 // AIR VIEW EASE (view_ease.hpp): air_view_ease_ms; 0 is the old snap.
-constexpr int airViewEases[] = {0, 150, 200, 250, 300, 400};
-constexpr const char* airViewEaseChoices[] = {"OFF (SNAP)", "150 MS", "200 MS", "250 MS", "300 MS", "400 MS"};
+constexpr int airViewEases[] = {0, 100, 125, 150, 175, 200, 225, 250, 300, 350, 400};
+constexpr const char* airViewEaseChoices[] = {"OFF (SNAP)", "100 MS", "125 MS", "150 MS", "175 MS", "200 MS",
+                                              "225 MS", "250 MS (DEFAULT)", "300 MS", "350 MS", "400 MS"};
 static_assert(std::size(airViewEaseChoices) == std::size(airViewEases));
 // ANIM YAW SWAY (view_yaw_lock.hpp): anim_yaw_sway_pct; 100 is the old feel.
 constexpr int animYawSways[] = {0, 10, 20, 30, 40, 50, 60, 80, 100};
@@ -377,9 +380,32 @@ static_assert(std::size(showtimeLatchChoices) == std::size(showtimeLatchSteps));
 constexpr int airCorrectSteps[] = {400, 600, 800, 1000, 1500, 2000};
 constexpr const char* airCorrectChoices[] = {"0.4 S", "0.6 S", "0.8 S", "1 S (DEFAULT)", "1.5 S", "2 S"};
 static_assert(std::size(airCorrectChoices) == std::size(airCorrectSteps));
-constexpr int fallHandoffSteps[] = {0, 100, 150, 250, 400};
-constexpr const char* fallHandoffChoices[] = {"WITH THE JUMP TIMER", "100 MS", "150 MS (DEFAULT)", "250 MS", "400 MS"};
+constexpr int fallHandoffSteps[] = {0, 50, 75, 100, 125, 150, 175, 200, 250, 300, 400};
+constexpr const char* fallHandoffChoices[] = {"WITH THE JUMP TIMER", "50 MS", "75 MS", "100 MS", "125 MS", "150 MS (DEFAULT)",
+                                              "175 MS", "200 MS", "250 MS", "300 MS", "400 MS"};
 static_assert(std::size(fallHandoffChoices) == std::size(fallHandoffSteps));
+// HANDOFF TUNE (Nov 18): finer steps for the handoff and landing timing (in-game rows hold 11 at most).
+constexpr int landingBlendSteps[] = {0, 100, 125, 150, 175, 200, 225, 250, 300, 400, 500};
+constexpr const char* landingBlendChoices[] = {"AIR VIEW EASE", "100 MS", "125 MS", "150 MS", "175 MS", "200 MS", "225 MS", "250 MS (DEFAULT)", "300 MS", "400 MS", "500 MS"};
+static_assert(std::size(landingBlendChoices) == std::size(landingBlendSteps));
+constexpr int handoffGlideSpeedSteps[] = {0, 150, 200, 250, 300, 350, 400, 450, 500, 600, 800};
+constexpr const char* handoffGlideSpeedChoices[] = {"OFF (BASE TIME)", "150 CM/S", "200 CM/S (DEFAULT)", "250 CM/S", "300 CM/S", "350 CM/S", "400 CM/S", "450 CM/S", "500 CM/S", "600 CM/S", "800 CM/S"};
+static_assert(std::size(handoffGlideSpeedChoices) == std::size(handoffGlideSpeedSteps));
+constexpr int handoffGlideLongestSteps[] = {150, 200, 250, 300, 350, 400, 450, 500, 600, 700, 1000};
+constexpr const char* handoffGlideLongestChoices[] = {"150 MS", "200 MS", "250 MS", "300 MS", "350 MS", "400 MS", "450 MS", "500 MS", "600 MS", "700 MS (DEFAULT)", "1000 MS"};
+static_assert(std::size(handoffGlideLongestChoices) == std::size(handoffGlideLongestSteps));
+constexpr int handoffPlaceSteps[] = {0, 25, 50, 75, 100, 125, 150, 200, 300, 500, 1000};
+constexpr const char* handoffPlaceChoices[] = {"ALWAYS GLIDE", "25 CM", "50 CM", "75 CM", "100 CM", "125 CM", "150 CM", "200 CM (DEFAULT)", "300 CM", "500 CM", "1000 CM"};
+static_assert(std::size(handoffPlaceChoices) == std::size(handoffPlaceSteps));
+constexpr int handoffAngleSteps[] = {0, 100, 150, 200, 250, 300, 350, 400, 500, 700, 1000};
+constexpr const char* handoffAngleChoices[] = {"BLEND LENGTH", "100 MS", "150 MS", "200 MS", "250 MS", "300 MS (DEFAULT)", "350 MS", "400 MS", "500 MS", "700 MS", "1000 MS"};
+static_assert(std::size(handoffAngleChoices) == std::size(handoffAngleSteps));
+constexpr int headSeatGlideSteps[] = {60, 100, 125, 150, 180, 200, 225, 250, 300, 400, 500};
+constexpr const char* headSeatGlideChoices[] = {"60 MS", "100 MS", "125 MS", "150 MS", "180 MS (OLD)", "200 MS", "225 MS", "250 MS (DEFAULT)", "300 MS", "400 MS", "500 MS"};
+static_assert(std::size(headSeatGlideChoices) == std::size(headSeatGlideSteps));
+constexpr int landingBodyEaseSteps[] = {100, 150, 200, 250, 300, 350, 400, 500, 600, 800, 1000};
+constexpr const char* landingBodyEaseChoices[] = {"100 MS", "150 MS", "200 MS", "250 MS", "300 MS", "350 MS", "400 MS", "500 MS (DEFAULT)", "600 MS", "800 MS", "1000 MS"};
+static_assert(std::size(landingBodyEaseChoices) == std::size(landingBodyEaseSteps));
 // PHYSICAL WEB TETHERS (tether.hpp): the rope's points and its steps a frame.
 constexpr int tetherParticleSteps[] = {12, 16, 20, 24, 28, 32};
 constexpr const char* tetherParticleChoices[] = {"12", "16", "20", "24 (DEFAULT)", "28", "32"};
@@ -562,6 +588,20 @@ std::span<const int> steps(Item item) {
         return airCorrectSteps;
     case Item::fallHandoff:
         return fallHandoffSteps;
+    case Item::landingBlend:
+        return landingBlendSteps;
+    case Item::handoffGlideSpeed:
+        return handoffGlideSpeedSteps;
+    case Item::handoffGlideLongest:
+        return handoffGlideLongestSteps;
+    case Item::handoffPlace:
+        return handoffPlaceSteps;
+    case Item::handoffAngle:
+        return handoffAngleSteps;
+    case Item::headSeatGlide:
+        return headSeatGlideSteps;
+    case Item::landingBodyEase:
+        return landingBodyEaseSteps;
     case Item::kickSpin:
         return kickSpinSteps;
     case Item::tetherParticles:
@@ -817,6 +857,20 @@ float numberOf(Item item, const Values& v) {
         return static_cast<float>(v.airCorrectMs);
     case Item::fallHandoff:
         return static_cast<float>(v.fallHandoffMs);
+    case Item::landingBlend:
+        return static_cast<float>(v.landingBlendMs);
+    case Item::handoffGlideSpeed:
+        return static_cast<float>(v.handoffGlideCmS);
+    case Item::handoffGlideLongest:
+        return static_cast<float>(v.handoffGlideMaxMs);
+    case Item::handoffPlace:
+        return static_cast<float>(v.handoffPlaceCm);
+    case Item::handoffAngle:
+        return static_cast<float>(v.handoffAngleMs);
+    case Item::headSeatGlide:
+        return static_cast<float>(v.headSeatGlideMs);
+    case Item::landingBodyEase:
+        return static_cast<float>(v.landingBodyEaseMs);
     case Item::kickSpin:
         return static_cast<float>(v.kickSpinPct);
     case Item::tetherParticles:
@@ -1249,9 +1303,9 @@ Values sanitized(Values v) {
     v.targetScanIdleMs = std::clamp(v.targetScanIdleMs, 250, 2000);
     return v;
 }
-const std::array<Row, 223>& rows() {
+const std::array<Row, 230>& rows() {
     // The help fits the game's description column beside the rows.
-    static const std::array<Row, 223> all{{
+    static const std::array<Row, 230> all{{
         {Item::none, "WEBS", nullptr, {}},
         {Item::webStyle, "WEB STYLE",
          "Arcade: webs pass lamp posts, signs and cars, and swings stay above the street.", webStyleChoices},
@@ -1954,6 +2008,20 @@ const std::array<Row, 223>& rows() {
          "AIR LANDING RELEASE (EXPERIMENTAL)",
          "Hands the body to the game 0.2 s before landing. Unverified; needs the blend on.",
          {}, Place::launcher},
+        {Item::landingBlend, "LANDING BLEND",
+         "A landing: how long the view takes to glide onto the hero's head. 250 ms.", landingBlendChoices},
+        {Item::handoffGlideSpeed, "HANDOFF GLIDE SPEED",
+         "A long handoff glide is stretched so the view stays under this. Faster: shorter.", handoffGlideSpeedChoices},
+        {Item::handoffGlideLongest, "HANDOFF GLIDE LONGEST",
+         "The longest HANDOFF GLIDE SPEED may stretch a glide. 700 ms by default.", handoffGlideLongestChoices},
+        {Item::handoffPlace, "HANDOFF PLACE",
+         "A landing or zip view farther than this from the head is placed, not glided.", handoffPlaceChoices},
+        {Item::handoffAngle, "HANDOFF ANGLE TIME",
+         "How long the animation head's tilt takes to fade after a switch. 300 ms.", handoffAngleChoices},
+        {Item::headSeatGlide, "HEAD SEAT GLIDE",
+         "How long the view slides when your head is re-seated on the hero's. 250 ms.", headSeatGlideChoices},
+        {Item::landingBodyEase, "LANDING BODY EASE",
+         "How long the drawn body takes to ease onto your view after a landing. 500 ms.", landingBodyEaseChoices},
     }};
     return all;
 }
@@ -2078,6 +2146,17 @@ const std::array<Screen, categoryCount>& screens() {
         Item::showtimeSlowMo,
         Item::showtimeLatch,
     };
+    // HANDOFF TIMING (Nov 18, the owner: "give me smaller increments to set"): the handoff and landing glides'
+    // times, speed and distance, a tab of their own (NATIVE ANIMATION's holds 20 rows already).
+    static constexpr Item handoff[] = {
+        Item::landingBlend,
+        Item::handoffGlideSpeed,
+        Item::handoffGlideLongest,
+        Item::handoffPlace,
+        Item::handoffAngle,
+        Item::headSeatGlide,
+        Item::landingBodyEase,
+    };
     static const std::array<Screen, categoryCount> all{{
         {"Setup", "VR SETUP", setup},
         {"Webs", "VR WEBS", webs},
@@ -2092,6 +2171,7 @@ const std::array<Screen, categoryCount>& screens() {
         {"Legs (Advanced)", "VR LEGS (ADVANCED)", legs},
         {"Point Jump", "VR POINT JUMP", pointJump},
         {"Showtime", "VR SHOWTIME", showtime},
+        {"Handoff Timing", "VR HANDOFF TIMING", handoff},
     }};
     return all;
 }
@@ -2618,6 +2698,27 @@ bool choose(Item item, int index, Values& v) {
         break;
     case Item::fallHandoff:
         v.fallHandoffMs = s[index];
+        break;
+    case Item::landingBlend:
+        v.landingBlendMs = s[index];
+        break;
+    case Item::handoffGlideSpeed:
+        v.handoffGlideCmS = s[index];
+        break;
+    case Item::handoffGlideLongest:
+        v.handoffGlideMaxMs = s[index];
+        break;
+    case Item::handoffPlace:
+        v.handoffPlaceCm = s[index];
+        break;
+    case Item::handoffAngle:
+        v.handoffAngleMs = s[index];
+        break;
+    case Item::headSeatGlide:
+        v.headSeatGlideMs = s[index];
+        break;
+    case Item::landingBodyEase:
+        v.landingBodyEaseMs = s[index];
         break;
     case Item::kickSpin:
         v.kickSpinPct = s[index];

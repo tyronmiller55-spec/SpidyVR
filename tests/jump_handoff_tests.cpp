@@ -551,15 +551,16 @@ int main() {
         check(v.jumpHandoffMs == 300, "JUMP TO SPIDYVR: 300 ms by default (air takeover, Nov 14)");
         check(v.fallHandoffMs == 150, "FALL TO SPIDYVR: 150 ms by default");
         const Row* fallRow = rowFor(Item::fallHandoff);
-        check(fallRow && fallRow->choices.size() == 5 && choose(Item::fallHandoff, 0, v) && v.fallHandoffMs == 0 &&
-                  choose(Item::fallHandoff, 3, v) && v.fallHandoffMs == 250,
-              "FALL TO SPIDYVR choices: with the timer / 100 / 150 / 250 / 400");
+        check(fallRow && fallRow->choices.size() == 11 && choose(Item::fallHandoff, 0, v) && v.fallHandoffMs == 0 &&
+                  choose(Item::fallHandoff, 8, v) && v.fallHandoffMs == 250 && choice(Item::fallHandoff, Values{}) == 5,
+              "FALL TO SPIDYVR choices: with the timer, then 50 to 400 ms in 25-50 ms steps, 150 the default");
         check(withTabOnly(Values{}, "fall_handoff_ms=400\n").fallHandoffMs == 400, "fall_handoff_ms read back");
         v.fallHandoffMs = 150;
         const Row* row = rowFor(Item::jumpHandoff);
-        check(row && row->choices.size() == 6 && std::strcmp(row->choices[0], "STAY TO LANDING") == 0 &&
-                  std::strcmp(row->choices[3], "500 MS") == 0 && std::strcmp(row->choices[5], "1000 MS") == 0,
-              "choices STAY TO LANDING / 300 / 400 / 500 / 700 / 1000");
+        check(row && row->choices.size() == 11 && std::strcmp(row->choices[0], "STAY TO LANDING") == 0 &&
+                  std::strcmp(row->choices[4], "300 MS (DEFAULT)") == 0 && std::strcmp(row->choices[10], "1000 MS") == 0 &&
+                  choice(Item::jumpHandoff, Values{}) == 4,
+              "choices STAY TO LANDING, then 150 to 1000 ms, 50 ms steps near the 300 ms default");
         check(choose(Item::jumpHandoff, 0, v) && v.jumpHandoffMs == 0, "STAY TO LANDING is 0");
         check(tabOnlyText(v).find("jump_handoff_ms=0") != std::string::npos, "saved as jump_handoff_ms");
         check(withTabOnly(Values{}, "jump_handoff_ms=700\n").jumpHandoffMs == 700, "read back");

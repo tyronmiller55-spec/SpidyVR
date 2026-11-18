@@ -1105,6 +1105,15 @@ enum class Item : uint8_t {
     fallHandoff,
     airLandingBlend,
     airLandingRelease,
+    // Handoff tune (Nov 18, the owner: "give me smaller increments to set"): the handoff and landing
+    // timing rows, ini-only until now.
+    landingBlend,
+    handoffGlideSpeed,
+    handoffGlideLongest,
+    handoffPlace,
+    handoffAngle,
+    headSeatGlide,
+    landingBodyEase,
     // 0.8.7 (Ilya): ENEMY TYPES, after the fork's items (the launcher's order is the enum's).
     enemyTypes,
 };
@@ -1138,14 +1147,14 @@ struct Row {
     Place place{};
 };
 // Stable row/setting numbers; categories below determine presentation order.
-const std::array<Row, 223>& rows();
+const std::array<Row, 230>& rows();
 const Row* rowFor(Item);
 // camera, shooters and legs (November 11, the user: "I can't find legs or
 // camera settings in any of the menus. Make sure it's clearly labeled"): tabs
 // of their own, after the older ones so their numbers stay.
 // pointJump (November 11): POINT JUMP's own tab, last so the others keep theirs.
 enum class Category : uint8_t { setup, webs, swinging, movement, flips, feedback, display, nativeAnimation,
-                                camera, shooters, legs, pointJump, showtime, count };
+                                camera, shooters, legs, pointJump, showtime, handoff, count };
 inline constexpr size_t categoryCount = static_cast<size_t>(Category::count);
 struct Screen {
     const char* title;

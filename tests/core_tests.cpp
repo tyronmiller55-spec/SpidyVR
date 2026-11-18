@@ -24915,7 +24915,8 @@ int main() {
         // then (still November 14) HAND GRAB STRENGTH and HOLD COST, then AIR KICKS, AIM and SPIN.
         // then (still November 14) WEB TETHERS, TETHER POINTS and TETHER STEPS, then GROUND KICKS, ENEMY JOINTS and ENEMY LIMB ZONES.
         // Polish pass: HEADSET FIRST, ANIM HEAD RIDE and SHOULDER LIMIT (launcher rows) after those.
-        constexpr size_t rowsAfter = 67; // (Nov 14: + AIR UPRIGHT TIME, POINT JUMP BULLET, FALL TO SPIDYVR, AIR LANDING BLEND, AIR LANDING RELEASE) + PUNCH AUTO-TARGET (4 rows), JUMP PULL (5 rows) and the handstand balance (4 rows), SHOWTIME (3 rows, then 8, Nov 14)
+        constexpr size_t rowsAfter = 74; // + the handoff tune's seven (Nov 18)
+        // // (Nov 14: + AIR UPRIGHT TIME, POINT JUMP BULLET, FALL TO SPIDYVR, AIR LANDING BLEND, AIR LANDING RELEASE) + PUNCH AUTO-TARGET (4 rows), JUMP PULL (5 rows) and the handstand balance (4 rows), SHOWTIME (3 rows, then 8, Nov 14)
         check(all.size() == firstRealistic + std::size(realistic) + rowsAfter,
               "the realistic flips' rows are not the last but the appended ones");
         for (size_t i = 0; i < std::size(realistic); ++i)
@@ -25185,15 +25186,15 @@ int main() {
                 row.item == Item::viewYawSource || row.item == Item::turnInPlace ||
                 // November 13 (torso update on): launcher rows, no room in the in-game tabs.
                 (row.item >= Item::animatedTorsoTwist && row.item < Item::showtime) ||
-                // November 14 (air takeover): launcher rows.
-                row.item >= Item::airCorrect;
+                // November 14 (air takeover): launcher rows; HANDOFF TIMING's seven (Nov 18), the game's own tab.
+                (row.item >= Item::airCorrect && !(row.item >= Item::landingBlend && row.item <= Item::landingBodyEase));
             check(row.place == (row.item == Item::view ? Place::page
                                 : launcherOnly           ? Place::launcher
                                                          : Place::tab),
                   "a row in the wrong place");
         }
         check(std::count_if(all.begin(), all.end(), [](const Row& r) { return r.place == Place::tab; }) ==
-                  158, // (Nov 14: +15 SHOWTIME) November 11: +8 (SHOOTERS, LOCK STRENGTH, CAMERA MOTION, PITCH, ROLL, BOB x2, HEAD ANGLE), -5 old wrist rows; +6 POINT JUMP; November 12: +1 PUNCH VIEW EASE, +3 MOVE HAPTICS, VIEW YAW SOURCE, SOUND TRACE, +2 JUMP TO SPIDYVR, AIR VIEW EASE, +2 ANIM YAW SWAY, TURN-IN-PLACE ANGLE, +4 PASSIVE LEGS, PASSIVE COUPLING, AIR CROUCH, REACH SPREAD
+                  165, // (Nov 18: +7 HANDOFF TIMING) (Nov 14: +15 SHOWTIME) November 11: +8 (SHOOTERS, LOCK STRENGTH, CAMERA MOTION, PITCH, ROLL, BOB x2, HEAD ANGLE), -5 old wrist rows; +6 POINT JUMP; November 12: +1 PUNCH VIEW EASE, +3 MOVE HAPTICS, VIEW YAW SOURCE, SOUND TRACE, +2 JUMP TO SPIDYVR, AIR VIEW EASE, +2 ANIM YAW SWAY, TURN-IN-PLACE ANGLE, +4 PASSIVE LEGS, PASSIVE COUPLING, AIR CROUCH, REACH SPREAD
               "the tab's own rows");
         check(all[1].item == Item::webStyle && std::strcmp(all[1].title, "WEB STYLE") == 0 &&
                   all[1].choices.size() == 2 && std::strcmp(all[1].choices[0], "REALISTIC") == 0 &&
@@ -32863,7 +32864,7 @@ int main() {
     test("Native Animation: combined menu inventory and upstream-compatible v39 settings packet", [] {
         using namespace vr_settings;
         const auto& all = rows();
-        check(all.size() == 223 && static_cast<unsigned>(lastItem) < 256, "row/Item bounds");
+        check(all.size() == 230 && static_cast<unsigned>(lastItem) < 256, "row/Item bounds");
         std::array<unsigned, 256> seen{};
         size_t start = all.size();
         for (size_t i = 0; i < all.size(); ++i) {
