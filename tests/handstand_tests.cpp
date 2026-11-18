@@ -244,7 +244,31 @@ int main() {
         auto lo = inverted();
         lost.update(lo, on());
         lo.tracked = false;
-        check(lost.update(lo, on()).exitNow == Exit::tracking, "tracking lost lets go");
+        // TRACKING LOST (the 2 AM log's 159.74 m): a glitch is held through the grace, then lets go.
+        {
+            const auto o = lost.update(lo, on());
+            check(o.exitNow == Exit::none && o.glitch && o.supporting, "one lost frame: held");
+        }
+        Exit lostWhy = Exit::none;
+        for (int i = 0; i < 40 && lostWhy == Exit::none; ++i)
+            lostWhy = lost.update(lo, on()).exitNow;
+        check(lostWhy == Exit::tracking, "tracking lost for the grace lets go");
+        {
+            // A palm read at the world's origin for a frame: the support keeps the last good palms.
+            Handstand g;
+            auto gi = inverted();
+            g.update(gi, on());
+            for (int i = 0; i < 5; ++i)
+                g.update(gi, on());
+            auto bad = gi;
+            bad.palms[0] = {0, 0, 0};
+            bad.palms[0].x -= 300.f;
+            const auto o = g.update(bad, on());
+            check(o.glitch && o.exitNow == Exit::none && length(o.lean) < 1.f,
+                  "a palm 300 m off in one frame: a glitch, the centre of mass still over the palms");
+            const auto back = g.update(gi, on());
+            check(!back.glitch && back.supporting, "the palm back: on as before");
+        }
         Handstand miss;
         auto mi = inverted();
         miss.update(mi, on());

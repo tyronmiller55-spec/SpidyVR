@@ -124,6 +124,12 @@ struct Params {
     // A palm centre that moves further than this in a frame while catching is the palms being re-placed (the
     // support tilt, the origin of the handoff), not a lean: the centre of mass goes with it.
     float reposeJump = .04f; // m
+    // TRACKING LOST (the 2 AM log of Nov 18, approved 1:53 PM): one handstand ended "tracking lost" with the centre of
+    // mass 159.74 m off the palms - a lost palm read at the world's origin (-1.00 m over the floor) became the support
+    // on the exit frame. Now a palm that is not tracked, not finite, or that moves more than glitchJump in a frame is
+    // a glitch: the support keeps the last good palms, the balance holds, and only a loss lasting trackingGrace ends
+    // the handstand.
+    float glitchJump = 1.f, trackingGrace = .25f;
 };
 
 template <class V> Params paramsOf(const V& v) {
@@ -488,6 +494,9 @@ class Handstand {
         // without a catch, `closedFailed` its last frame's gates, `gripHeld` a grip squeezed (no gate).
         float armsUpAge = 10.f, armsUpRun{};
         bool armsFromGrace{}, tipIn{}, windowClosed{}, gripHeld{};
+        // TRACKING LOST: this frame's palms were a glitch (untracked, not finite, or a jump past glitchJump): the last
+        // good support held.
+        bool glitch{};
         unsigned failedNow{}, closedFailed{};
         float closedAge{};
     };
@@ -495,8 +504,27 @@ class Handstand {
         Out out;
         const float dt = std::isfinite(in.seconds) ? std::clamp(in.seconds, 0.f, .1f) : 0.f;
         exit_ = Exit::none;
-        support_.a = in.palms[0];
-        support_.b = in.palms[1];
+        // TRACKING LOST: a glitching palm keeps the last good support.
+        const bool palmsGood = in.tracked && finite(in.palms[0]) && finite(in.palms[1]) &&
+                               (!haveGood_ || (length(in.palms[0] - goodPalms_[0]) <= p.glitchJump &&
+                                               length(in.palms[1] - goodPalms_[1]) <= p.glitchJump));
+        const bool holding = state_ == State::catching || state_ == State::balance;
+        if (palmsGood || !holding || !haveGood_) {
+            support_.a = in.palms[0];
+            support_.b = in.palms[1];
+            if (palmsGood) {
+                goodPalms_[0] = in.palms[0];
+                goodPalms_[1] = in.palms[1];
+                haveGood_ = true;
+            } else if (!holding) {
+                haveGood_ = false;
+            }
+        } else {
+            support_.a = goodPalms_[0];
+            support_.b = goodPalms_[1];
+        }
+        lostFor_ = palmsGood || !holding ? 0.f : lostFor_ + dt;
+        out.glitch = holding && !palmsGood;
         support_.radius = p.palmRadius + p.margin;
         const float pushed = push_.update(dt, in.pushInto, p.pushWindow);
         // LEAP INPUT: A's press (not a held one), the left stick held hard for leapStickSeconds.
@@ -691,8 +719,10 @@ class Handstand {
             Exit why = Exit::none;
             if (!p.enabled)
                 why = Exit::disabled;
-            else if (!in.tracked)
+            else if (out.glitch && lostFor_ >= p.trackingGrace)
                 why = Exit::tracking;
+            else if (out.glitch)
+                ; // TRACKING LOST: held through the grace (no other test on a glitching frame)
             else if (p.leap && (jumpPress || stickHeld_ >= p.leapStickSeconds))
                 why = Exit::leap;
             else if (in.grip && !gripCarried_)
@@ -704,7 +734,7 @@ class Handstand {
                 why = Exit::missed;
             else if (!palmsDown && state_ == State::balance)
                 why = Exit::stepDown;
-            if (why == Exit::none) {
+            if (why == Exit::none && !out.glitch) {
                 if (state_ == State::catching && age_ >= p.catchGrace && both)
                     state_ = State::balance;
                 // RE-SEED: the first frame after the catch (the handoff's origin, the support tilt) and any
@@ -811,6 +841,9 @@ class Handstand {
     Balance::Out last_{};
     Push push_{};
     Support support_{};
+    Vec3 goodPalms_[2]{};
+    bool haveGood_{};
+    float lostFor_{};
 };
 
 // The view's lean on the hands: the body's up straight down, turned toward

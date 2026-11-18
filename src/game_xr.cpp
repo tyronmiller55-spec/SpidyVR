@@ -1646,6 +1646,7 @@ DWORD WINAPI run(void*) {
         bool armWorldAnchorOk{};
         // ARM LINE-UP (aim_watch.hpp): where the hands were mapped from, and a source change's move.
         std::array<aim_watch::Lineup, 2> armLineup{};
+        bool handstandGlitchWas{}; // TRACKING LOST: the last frame's palms glitched
         // HAND SOURCE EASE: each hand's step at a source change, fading; the hand shown last frame.
         std::array<aim_watch::SourceEase, 2> handSourceEase{};
         Pose handShown[2]{};
@@ -4338,6 +4339,13 @@ DWORD WINAPI run(void*) {
                         if (hs.holdVr && hybridOwner.domain == hybrid_owner::Domain::vr && swingState.grounded &&
                             hs.caughtNow)
                             diag_log::write("owner: kept vr (handSupport)");
+                        // TRACKING LOST: a glitching palm held (handstand.hpp), once per run of glitches.
+                        if (hs.glitch && !handstandGlitchWas)
+                            diag_log::writef("handstand: palms glitch (tracked %d, palms left %.2f right %.2f m over the "
+                                             "floor): the last good support held",
+                                             frame.hands[0].valid && frame.hands[1].valid ? 1 : 0, hs.palmGaps[0],
+                                             hs.palmGaps[1]);
+                        handstandGlitchWas = hs.glitch;
                         if (hs.exitNow != handstand::Exit::none) {
                             // THE BALANCE PASS: one line with the reason in a word (fell, leap or other: the rest) and what
                             // the balance had been through: how long it held, the lean, how long the divergent component had
