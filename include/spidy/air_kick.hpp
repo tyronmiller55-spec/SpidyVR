@@ -97,7 +97,7 @@ struct Config {
     // feet, through sweepArc degrees in sweepExtend seconds. A ground blow knocks down rather than throws:
     // the enemy's flight is groundFlightShare of the foot's speed, at most groundFlightMax m/s, groundFlightUp
     // up.
-    float groundSpeed = 2.f, groundSlack = 1.5f;
+    float groundSpeed = 3.f, groundSlack = 1.5f; // 2 m/s until Nov 18 (ground kicks while walking: faster, more reliable)
     float sweepReach = .9f, sweepHeight = .12f, sweepArc = 180.f, sweepExtend = .35f;
     float groundFlightShare = .5f, groundFlightMax = 6.f, groundFlightUp = .5f;
     // ENEMY LIMB ZONES (R1, enemy_joints.hpp): the legs and the arms from an enemy's shin and forearm joints

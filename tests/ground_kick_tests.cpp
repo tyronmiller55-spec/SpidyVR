@@ -138,13 +138,24 @@ int main() {
     }
     // ---- a sideways flick waits for a sweep ----
     {
-        // The flick to the right side, held there: after 0.6 s a side kick.
+        // The flick to the right side, held there: a side kick 0.2 s on (0.6 s until Nov 18).
         Samples held = flickAt(90, 0);
         for (int i = 0; i < 70; ++i)
             held.push_back(at(90, 1.f));
         const auto side = run(held);
         check(side.count == 1 && side.last.gesture == Gesture::freeform && side.last.side == 1,
               "a flick sideways, held, is a side kick after the wait");
+        {
+            ground_kick::Gestures g;
+            int firedAt = -1;
+            const auto start = flickAt(90, 0);
+            for (const auto& [x, y] : start)
+                g.update(.011f, x, y, true);
+            for (int i = 0; i < 70 && firedAt < 0; ++i)
+                if (g.update(.011f, 1.f, 0.f, true).gesture == Gesture::freeform)
+                    firedAt = i;
+            check(firedAt >= 0 && firedAt * .011f <= .22f, "the side kick goes within about 0.2 s of the flick (Nov 18)");
+        }
         // The flick, the stick back at once: a side kick when it is back, well before the wait.
         Samples back = flickAt(90, 2);
         back.push_back(at(90, .4f));
@@ -221,12 +232,12 @@ int main() {
         check(k.ask(f, {Gesture::freeform, 1, 0, 1}).refusal == Refusal::grounded,
               "ground kicks off: refused on the ground");
         f.ground = true;
-        f.speed = 2.5f;
-        check(k.ask(f, {Gesture::freeform, 1, 0, 1}).refusal == Refusal::moving, "faster than 2 m/s: refused");
+        f.speed = 3.2f;
+        check(k.ask(f, {Gesture::freeform, 1, 0, 1}).refusal == Refusal::moving, "faster than 3 m/s: refused");
         f.speed = NAN;
         check(k.ask(f, {Gesture::freeform, 1, 0, 1}).refusal == Refusal::moving, "a speed that is not a number: refused");
-        f.speed = 1.9f;
-        check(k.ask(f, {Gesture::freeform, 1, 0, 1}).event == Kick::Event::started, "1.9 m/s is slow enough");
+        f.speed = 2.9f;
+        check(k.ask(f, {Gesture::freeform, 1, 0, 1}).event == Kick::Event::started, "2.9 m/s (a walk) is slow enough (Nov 18)");
         k.reset();
         f.legs = false;
         check(k.ask(f, {Gesture::freeform, 1, 0, 1}).refusal == Refusal::legs, "the legs must be engaged");
@@ -313,9 +324,9 @@ int main() {
         f.seconds = .02f;
         k.ask(f, {Gesture::freeform, 1, 0, 1});
         k.update(f);
-        f.speed = 3.2f; // 2 + 1.5 slack = 3.5: still fine
+        f.speed = 4.2f; // 3 + 1.5 slack = 4.5: still fine
         check(!k.update(f).lost, "a little speed does not end a standing kick");
-        f.speed = 4.f;
+        f.speed = 5.f;
         check(k.update(f).lost && !k.busy(), "running ends it");
         k.reset();
         k.ask(standing(none), {Gesture::freeform, 1, 0, 1});

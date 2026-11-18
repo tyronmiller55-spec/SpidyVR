@@ -1,11 +1,11 @@
 #pragma once
 // GROUND KICKS (K3; the plan's Pillar 5; ground_kicks, off until set, EXPERIMENTAL).
 //
-// Standing (and slow: the swing module refuses a kick above 2 m/s), with the legs engaged (Y + X, as in the
+// Standing (and slow: the swing module refuses a kick above 3 m/s; 2 until Nov 18), with the legs engaged (Y + X, as in the
 // air; leg_hold.hpp), the right stick kicks. Only a flick kicks; a slow push is nothing (the turn).
 //
 //   flick up (within 70 deg of up)          front kick: a freeform blow, the zone the gaze picks
-//   flick sideways (70..110 deg)            waits up to 0.6 s for a sweep; otherwise a freeform side kick
+//   flick sideways (70..110 deg)            waits up to 0.2 s for the sweep to head down; otherwise a side kick
 //   half circle across the bottom           sweep: the foot swings round the pelvis ankle-high, from one side
 //                                           through the front to the other, and takes the legs (a knock-down)
 //   flick down                              nothing
@@ -37,6 +37,9 @@ struct Config {
     // A sweep: where each end is (size, and the side's band), how far the bottom is, the least size on the
     // way, and the longest it takes.
     float rimSize = .6f, bottomDegrees = 135.f, wayMin = .5f, sweepSeconds = .6f;
+    // A side flick's wait for a sweep: if the stick has not reached the bottom by then, the side kick goes at once (the
+    // owner, Nov 18: ground kicks must be quick). Until Nov 18 a side flick held there waited the whole sweepSeconds.
+    float sideWaitSeconds = .2f;
 };
 
 class Gestures {
@@ -63,7 +66,7 @@ class Gestures {
                 armed_ = false;
                 return {Gesture::sweep, side, angle, size};
             }
-            if (size < c.wayMin || age_ > c.sweepSeconds) {
+            if (size < c.wayMin || age_ > c.sweepSeconds || (flick_ && !bottom_ && age_ > c.sideWaitSeconds)) {
                 // Lost the way (the stick came in, or too slow): a flick's side kick, a drawn start nothing.
                 const bool flick = flick_;
                 const Flick out{Gesture::freeform, side_, angle0_, size0_};

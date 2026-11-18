@@ -3054,7 +3054,7 @@ DWORD WINAPI run(void*) {
                                                     now.QuadPart - frequency.QuadPart / 10;
                         groundStand = values.groundKicks && swingStood && swingState.grounded != 0 &&
                                       finite(swingState.velocity) &&
-                                      std::hypot(swingState.velocity.x, swingState.velocity.z) <= 2.f;
+                                      std::hypot(swingState.velocity.x, swingState.velocity.z) <= 3.f; // 2 until Nov 18
                         const bool lively = viewing && gameplay && motion.active && spiderMan && !flatScreen &&
                                             !calibrationInput && !phone.open() && !padLayer.latched();
                         const bool master = (values.legControl && (values.controlledFlips || values.realisticFlips) &&
