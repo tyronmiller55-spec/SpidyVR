@@ -188,6 +188,23 @@ turning the hero's joints (another writer, a paused job, an unknown rig, no
 command), the eyes hide the hero with the game's visibility switch, as before,
 and the overlay draws gloves.
 
+### Torso channel (J1, Nov 18)
+
+Step 2 has a second part since the owner's Nov 18 1:09 PM answer ("Build the torso channel next"): after the spine's
+lean toward the head's pitch, `body::Targets::torso` (pitch: curl forward + / arch back -; roll: bend to the body's left
++; yaw: twist left +; radians, each clamped to 0.7) turns every spine joint by an even share, at `State::torsoWeight`,
+which eases in and out over 0.2 s (`torsoBlendSeconds`). Step 3 then still gives the head the headset's orientation
+(the neck takes back the difference) and step 4 hangs the body under the eyes, so the view never moves: a curl leans
+the chest over the hips and the hips swing back under the eyes. Only while `airLegsAllowed` (airborne, no kick, wall run,
+crawl, plant or kneel); a kick, wall or crawl drops it at once, a landing eases it out.
+
+It is an in-process call, as LEG CONTROL's is (`native_body::setTorsoControl`, read back with
+`native_body::torsoWeight`), not a field of the body command: the command's official layout (version 16, 304 bytes)
+is unchanged, so nothing on the other side of it has to agree and an older reader cannot misread it. Off (no call, or
+MIDAIR POSES off), the weight is 0 and the solve is exactly the old one. Today only the midair poses drive it
+(leg_layers.hpp; PASSIVE_LEGS.md). Log: `torso: channel on|off (<pose>, curl, side, twist rad; shown N%)`. Tests:
+core `TORSO CHANNEL (J1)`.
+
 ## Your size: the T-pose calibration (October 8)
 
 You asked for an in-game calibration on first start, and as an option in the

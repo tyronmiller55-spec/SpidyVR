@@ -45,7 +45,7 @@ No game address is used: the targets and the blow are the web strike's and the p
 
 ## Not built (needs a verified structure or a headset first)
 
-- **The torso** (pitch back up to 25 degrees for the dives, pelvis yaw 0.8 x the sweep and a counter-yaw of the chest for the roundhouse) and `kick_torso_pct`: body_ik has no torso channel for this and the body command's layout is the official one; a new field is a protocol change. Without it the kick moves the legs only.
+- **The torso** (pitch back up to 25 degrees for the dives, pelvis yaw 0.8 x the sweep and a counter-yaw of the chest for the roundhouse) and `kick_torso_pct`: body_ik has no torso channel for this and the body command's layout is the official one; a new field is a protocol change. Without it the kick moves the legs only. (Nov 18: a torso channel now exists in-process, BODY.md "Torso channel", used by the midair poses; the kicks do not drive it yet.)
 - **The spin vignette** (above 60 degrees a second): the mod has no vignette to drive.
 - **Kicking off an enemy** (the small rebound of the plan's extra ideas) and ground sweeps (built in K3: [GROUND_KICKS.md](GROUND_KICKS.md)).
 - **Enemy classes** (a heavy shrugging a kick off): no verified flag, as in G2.

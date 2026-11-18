@@ -1091,6 +1091,28 @@ Result solve(Pose& pose, const Rig& rig, const Targets& targets, const Config& c
     const float spineShare = w * (1 - straightRun) / static_cast<float>(rig.spine.size());
     for (const auto j : rig.spine)
         pose.turn(rig.below[j], partial(bend, spineShare), pose.position(j));
+    // 2b. TORSO CHANNEL (J1): the midair poses' curl, arch, side bend and twist, spread over the spine's joints, in
+    // and out over torsoBlendSeconds; only in the air (airLegsAllowed), never on a wall run or a crawl.
+    {
+        const bool torsoOn = t.torsoControl && airLegsAllowed(t) && !r.grounded;
+        const float amount = std::isfinite(t.torsoAmount) ? std::clamp(t.torsoAmount, 0.f, 1.f) : 1.f;
+        state.torsoWeight = approach(state.torsoWeight, torsoOn ? amount : 0.f, dt / torsoBlendSeconds);
+        if (!airLegsAllowed(t))
+            state.torsoWeight = 0; // a kick, a wall or a crawl takes the body at once
+        if (torsoOn)
+            state.torsoAngles = {torsoAngle(t.torso.pitch), torsoAngle(t.torso.roll), torsoAngle(t.torso.yaw)};
+        const float tw = w * state.torsoWeight;
+        if (tw > .001f && !rig.spine.empty()) {
+            const auto& a = state.torsoAngles;
+            const float share = tw / static_cast<float>(rig.spine.size());
+            // +pitch about the body's left takes its up toward its forward (a curl); -roll about the forward takes
+            // the up toward the left (Rodrigues: left x up = forward, forward x up = -left).
+            const Quat each = axisAngle(up, a.yaw * share) * axisAngle(left, a.pitch * share) *
+                              axisAngle(forward, -a.roll * share);
+            for (const auto j : rig.spine)
+                pose.turn(rig.below[j], each, pose.position(j));
+        }
+    }
     // 3. The head takes the headset's orientation, the neck some of the way.
     const auto headTurn = [&] {
         return between(pose.direction(rig.head, rig.headForward), pose.direction(rig.head, rig.headUp), F, U);

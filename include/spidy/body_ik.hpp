@@ -206,6 +206,19 @@ struct Targets {
     // The share of them shown, 0..1 (PASSIVE LEGS' percent; 1 for the stick,
     // the flail and the auto poses; leg_layers.hpp). legControlWeight eases to it.
     float legAmount = 1.f;
+    // TORSO CHANNEL (J1, the owner, Nov 18 1:09 PM: "Build the torso channel next"): the midair poses' upper body,
+    // radians, in the body's frame, spread evenly over the spine's joints after its lean (step 2): pitch curls the
+    // chest forward (+, the tuck) or arches it back (-), roll bends it to the body's left (+), yaw twists the chest
+    // to the left (+). The head still takes the headset afterwards (step 3: the neck takes back the difference) and
+    // the body hangs under the eyes (step 4), so the view never moves. Only while airLegsAllowed; in and out over
+    // torsoBlendSeconds. An in-process call like LEG CONTROL's (native_body::setTorsoControl), not a Command field:
+    // the body command's official layout (version 16) is untouched.
+    struct TorsoAngles {
+        float pitch{}, roll{}, yaw{};
+    };
+    bool torsoControl{};
+    TorsoAngles torso{};
+    float torsoAmount = 1.f;
     // Directional running cycle; head and arms remain tracked.
     bool wallRun{};
     Vec3 runNormal{}, runAhead{};
@@ -445,12 +458,21 @@ struct State {
     // LEG CONTROL's share, 0..1, in and out over airLegBlendSeconds.
     float legControlWeight{};
     std::array<Targets::LegAngles, 2> legAngles{}; // the last pose given, for the blend out
+    // TORSO CHANNEL's share, 0..1, in and out over torsoBlendSeconds; the last angles given, for the blend out.
+    float torsoWeight{};
+    Targets::TorsoAngles torsoAngles{};
 };
 // PROCEDURAL LEGS ONLY IN THE AIR (the user, November 10 21:03: "procedural
 // legs are only in midair or during swinging"): the momentum trail and the
 // tuck may move the legs only while airborne and on nothing - no kick, wall
 // run, crawl, vent hands, plant or kneel.
 constexpr float airLegBlendSeconds = .2f;
+// TORSO CHANNEL: its blend, and the most any of its angles may turn the spine (radians, ~40 degrees).
+constexpr float torsoBlendSeconds = .2f, torsoMaxRadians = .7f;
+inline float torsoAngle(float a) {
+    return std::isfinite(a) ? (a < -torsoMaxRadians ? -torsoMaxRadians : a > torsoMaxRadians ? torsoMaxRadians : a)
+                            : 0.f;
+}
 template <class T>
 inline bool airLegsAllowed(const T& t) {
     return t.airborne && !t.kick && !t.wallRun && !t.crawl && !t.surfaceHands && !t.plant && !t.kneel;

@@ -32139,6 +32139,120 @@ int main() {
             check(fresh.legControlWeight == 0.f, "the leg control posed legs off the air");
         }
     });
+    test("TORSO CHANNEL (J1): the midair poses curl and arch the spine in the air only, the head stays on the headset", [] {
+        const auto b = testBody();
+        const auto& rig = b.rig;
+        const int joints = static_cast<int>(rig.parent.size());
+        auto restCopy = b.rest;
+        const body::Pose snap(restCopy.data(), joints);
+        body::Targets t;
+        t.head = true;
+        t.up = {0, 1, 0};
+        t.facing = Quat::yaw(3.14159265f);
+        const Vec3 F = t.facing.rotate({0, 0, -1}), U = t.facing.rotate({0, 1, 0});
+        t.eyes = snap.position(rig.head) + F * rig.eyesFromHead.x + U * rig.eyesFromHead.y +
+                 cross(U, F) * rig.eyesFromHead.z + Vec3{0, .12f, 0};
+        for (int i = 0; i < 2; ++i) {
+            const Vec3 shoulder = snap.position(rig.arms[i].upper);
+            t.hands[i] = {true, shoulder + Vec3{0, -.15f, .35f}, gripFacing({0, 0, 1}), 0, 0};
+        }
+        const float dt = 1.f / 90;
+        body::Config c;
+        body::Targets air = t;
+        air.airborne = true;
+        // The pelvis from the head, after `frames` of a pose: a curl swings the hips forward of the chest line
+        // (the body hangs under the eyes), an arch swings them back.
+        const auto run = [&](body::Targets x, int frames, body::State& s) {
+            std::vector<float> data;
+            for (int k = 0; k < frames; ++k) {
+                data = b.rest;
+                body::Pose p(data.data(), joints);
+                body::solve(p, rig, x, c, s, true, dt);
+            }
+            body::Pose p(data.data(), joints);
+            struct Out {
+                Vec3 pelvisFromHead, headForward;
+                float headError;
+            } o{p.position(rig.pelvis) - p.position(rig.head), p.direction(rig.head, rig.headForward), 0};
+            return o;
+        };
+        body::State plainState;
+        body::seedFromPose(snap, rig, air, plainState);
+        const auto plain = run(air, 40, plainState);
+        body::Targets curl = air;
+        curl.torsoControl = true;
+        curl.torso = {.55f, 0, 0};
+        body::State curlState;
+        body::seedFromPose(snap, rig, curl, curlState);
+        float first = -1;
+        {
+            std::vector<float> data = b.rest;
+            body::Pose p(data.data(), joints);
+            body::solve(p, rig, curl, c, curlState, true, dt);
+            first = curlState.torsoWeight;
+        }
+        const auto curled = run(curl, 40, curlState);
+        check(first > 0 && first < .1f && curlState.torsoWeight >= 1 - 1e-4f, "the torso eased in over about 0.2 s");
+        // The chest leans forward over the hips; the body hangs under the fixed eyes, so the hips go back.
+        check(dot(curled.pelvisFromHead, F) < dot(plain.pelvisFromHead, F) - .05f,
+              "a curl (+pitch) leans the chest forward over the hips (the hips back under the eyes)");
+        check(dot(normalized(curled.headForward), normalized(plain.headForward)) > .99f,
+              "the head still faces the headset's way");
+        body::Targets arch = air;
+        arch.torsoControl = true;
+        arch.torso = {-.25f, 0, 0};
+        body::State archState;
+        body::seedFromPose(snap, rig, arch, archState);
+        const auto arched = run(arch, 40, archState);
+        check(dot(arched.pelvisFromHead, F) > dot(plain.pelvisFromHead, F) + .02f, "an arch (-pitch): the other way");
+        body::Targets side = air;
+        side.torsoControl = true;
+        side.torso = {0, .4f, 0};
+        body::State sideState;
+        body::seedFromPose(snap, rig, side, sideState);
+        const auto bent = run(side, 40, sideState);
+        const Vec3 L = cross(U, F);
+        check(dot(bent.pelvisFromHead, L) < dot(plain.pelvisFromHead, L) - .02f,
+              "a bend to the left (+roll) swings the hips out to the right under the head");
+        body::Targets wild = air;
+        wild.torsoControl = true;
+        wild.torso = {NAN, 9.f, -9.f};
+        body::State wildState;
+        body::seedFromPose(snap, rig, wild, wildState);
+        run(wild, 30, wildState);
+        check(wildState.torsoAngles.pitch == 0 && wildState.torsoAngles.roll == body::torsoMaxRadians &&
+                  wildState.torsoAngles.yaw == -body::torsoMaxRadians,
+              "not a number: none; past 0.7 rad: clamped");
+        // Landing: out over about 0.2 s; never on the ground, a wall run or with a kick.
+        body::Targets landed = curl;
+        landed.airborne = false;
+        landed.plant = true;
+        landed.floor = {0, 0, 0};
+        std::vector<float> w;
+        for (int k = 0; k < 30; ++k) {
+            std::vector<float> data = b.rest;
+            body::Pose p(data.data(), joints);
+            body::solve(p, rig, landed, c, curlState, true, dt);
+            w.push_back(curlState.torsoWeight);
+        }
+        check(w.back() == 0, "the torso left on landing");
+        for (auto change : {+[](body::Targets& x) { x.kick = true; }, +[](body::Targets& x) { x.airborne = false; },
+                            +[](body::Targets& x) {
+                                x.wallRun = true;
+                                x.runNormal = {1, 0, 0};
+                                x.runAhead = {0, 0, -1};
+                                x.floor = {-.5f, 0, 0};
+                                x.runPhase = .3f;
+                                x.runSpeed = 1;
+                            }}) {
+            body::Targets x = curl;
+            change(x);
+            body::State fresh;
+            body::seedFromPose(snap, rig, x, fresh);
+            run(x, 10, fresh);
+            check(fresh.torsoWeight == 0.f, "the torso posed off the air");
+        }
+    });
     test("LEG CONTROL settings: off by default, an advanced row under CONTROLLED FLIPS, ini keys", [] {
         using namespace vr_settings;
         Values v;

@@ -316,6 +316,11 @@ void setAirMomentum(const Vec3& worldVelocity);
 void setTuck(bool held);
 // Eased visual tuck 0..1 from the last pose job (0 if none).
 float tuckWeight();
+// TORSO CHANNEL (J1; body::Targets::torso): the midair poses' curl / arch, side bend and twist, radians (clamped to
+// body::torsoMaxRadians), shown at `amount`; only in the air. Off eases it out.
+void setTorsoControl(bool on, const body::Targets::TorsoAngles& torso, float amount = 1.f);
+// The torso channel's eased share, 0..1 (the solve's).
+float torsoWeight();
 // LEG CONTROL (leg_control.hpp): each leg's hip angles and knee bend for the
 // next bodyOn pose job (body::Targets::legAngles), used only while the body
 // may move its legs in the air (body::airLegsAllowed). on false: none, and the

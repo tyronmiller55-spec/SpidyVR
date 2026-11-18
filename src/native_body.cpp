@@ -103,6 +103,10 @@ bool airTuckHeld{};
 bool legControlOn{};
 std::array<body::Targets::LegAngles, 2> legControlAngles{};
 float legControlAmount = 1.f; // PASSIVE LEGS' shown share (setLegControl)
+// TORSO CHANNEL (setTorsoControl): mapped onto Targets::torsoControl when airborne.
+bool torsoControlOn{};
+body::Targets::TorsoAngles torsoControlAngles{};
+float torsoControlAmount = 1.f;
 // GROUND KICKS (setGroundKick): the standing kick's leg, mapped onto Targets::groundKick in the armsOnly path.
 bool groundKickOn{};
 int groundKickLeg{};
@@ -623,6 +627,9 @@ void solveHero(float* out, uintptr_t job, uintptr_t instance) {
             t.legControl = airLegs && legControlOn;
             t.legAngles = legControlAngles;
             t.legAmount = legControlAmount;
+            t.torsoControl = airLegs && torsoControlOn;
+            t.torso = torsoControlAngles;
+            t.torsoAmount = torsoControlAmount;
             t.eyes = toModel.rotate(wanted.eyes);
             t.facing = toModel * wanted.facing;
             if (const Quat tilt = wanted.tilt; tilt.x != 0 || tilt.y != 0 || tilt.z != 0)
@@ -1281,6 +1288,23 @@ void native_body::setLegControl(bool on, const std::array<body::Targets::LegAngl
         legControlAmount = std::isfinite(amount) ? std::clamp(amount, 0.f, 1.f) : 1.f;
     }
     ReleaseSRWLockExclusive(&solveLock);
+}
+
+void native_body::setTorsoControl(bool on, const body::Targets::TorsoAngles& torso, float amount) {
+    AcquireSRWLockExclusive(&solveLock);
+    torsoControlOn = on;
+    if (on) {
+        torsoControlAngles = {body::torsoAngle(torso.pitch), body::torsoAngle(torso.roll), body::torsoAngle(torso.yaw)};
+        torsoControlAmount = std::isfinite(amount) ? std::clamp(amount, 0.f, 1.f) : 1.f;
+    }
+    ReleaseSRWLockExclusive(&solveLock);
+}
+
+float native_body::torsoWeight() {
+    AcquireSRWLockShared(&solveLock);
+    const float w = state.torsoWeight;
+    ReleaseSRWLockShared(&solveLock);
+    return w;
 }
 
 float native_body::tuckWeight() {
