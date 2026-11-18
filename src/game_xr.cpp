@@ -1430,6 +1430,11 @@ DWORD WINAPI run(void*) {
         float webFireWaited[2]{}, webFireRigError[2]{-1.f, -1.f};
         Vec3 webFireRigLine[2]{};
         uint32_t gripCancelToken{};
+        // WEB LINE CANCEL (hybrid_owner::groundWebRefusal; the owner, Nov 18): a web fired in a ground animation hands to
+        // SpidyVR and holds it while the line lasts.
+        bool groundWebHolding{};
+        float groundWebAge{};
+        unsigned groundWebCancels{}, groundWebRefusals{};
         uint64_t actionFrameFloor{};
         uint64_t cancellationSerialFloor{};
         bool animatedOnlyHeldWas{};
@@ -5317,6 +5322,7 @@ DWORD WINAPI run(void*) {
                         }
                     }
                     animation_cancel::Decision gripCancel;
+                    unsigned groundWebPressed = 0; // WEB LINE CANCEL: this frame's web presses the air cancel did not take
                     if (swingStarted) {
                         unsigned webButtons{}, shotButtons{}, trackedHands{};
                         for (unsigned i = 0; i < 2; ++i) {
@@ -5360,6 +5366,7 @@ DWORD WINAPI run(void*) {
                             if (!webFocused)
                                 webFireTracker.dropped(i, "the swing is not driven (no control, a scene, flat screen or not Spider-Man)");
                         }
+                        groundWebPressed = gripCancel.cancel ? 0u : webPressed & ~webBlockedAtPress & (webFocused ? 3u : 0u);
                         webFireQueue.queue(webPressed & webBlockedAtPress & (webFocused ? 3u : 0u));
                         const auto webWf = webFireQueue.update(std::isfinite(frame.seconds) ? frame.seconds : 0.f, webButtons,
                                                                webFocused);
@@ -9611,9 +9618,52 @@ DWORD WINAPI run(void*) {
                             rideFighting = animState.fighting || animState.dodging;
                             rideOnWall = animState.wall != 0;
                         }
+                        // WEB LINE CANCEL (the owner, Nov 18: "make all web lines cancel into SpidyVR"): a web fired while
+                        // the animation has him on the ground or a perch hands to SpidyVR this frame, unless the state is
+                        // unsafe (a fight, a zip, the game's parkour, a scene); it holds while the line is held or attached.
+                        {
+                            const bool onGround = hybrid_owner::supported(animState) || hybridFrame.perched;
+                            if (groundWebPressed && hybridOn && hybridOwner.domain == hybrid_owner::Domain::anim && onGround) {
+                                if (const char* refused = hybrid_owner::groundWebRefusal(animState, hybridFrame.perched)) {
+                                    ++groundWebRefusals;
+                                    diag_log::writef("web cancel: refused (%s), the animation keeps him (%s), #%u", refused,
+                                                     head_probe::stateName(head_probe::classify(animState)),
+                                                     groundWebRefusals);
+                                } else {
+                                    hybridFrame.groundWeb = true;
+                                }
+                            }
+                            if (groundWebHolding) {
+                                groundWebAge += std::isfinite(frame.seconds) ? std::clamp(frame.seconds, 0.f, .1f) : 0.f;
+                                const bool line = animState.webbed || webAimIntent;
+                                const char* over = hybridOwner.domain != hybrid_owner::Domain::vr ? "the animation took him"
+                                                   : !onGround                                    ? "off the ground: the air's rules"
+                                                   : !line                                        ? "the line let go"
+                                                   : groundWebAge > 6.f                           ? "6 s cap"
+                                                                                                  : nullptr;
+                                if (over) {
+                                    groundWebHolding = false;
+                                    diag_log::writef("web cancel: hold over after %.0f ms (%s)", groundWebAge * 1000.f, over);
+                                }
+                            }
+                            hybridFrame.groundWebHold = groundWebHolding;
+                        }
                         legChordAirAnimLast = false;
                         if (hybridOn) {
                             hybridOwner.update(hybridFrame, handoffNs);
+                            if (hybridFrame.groundWeb) {
+                                if (hybridOwner.enterVr && hybridOwner.lastEnterVr == hybrid_owner::EnterVr::cancel) {
+                                    ++groundWebCancels;
+                                    groundWebHolding = true;
+                                    groundWebAge = 0;
+                                    diag_log::writef("web cancel: %s -> vr (%s web), #%u",
+                                                     hybridFrame.perched && !hybrid_owner::supported(animState) ? "perch" : "ground",
+                                                     groundWebPressed == 3 ? "both" : groundWebPressed & 2 ? "R" : "L",
+                                                     groundWebCancels);
+                                } else {
+                                    diag_log::write("web cancel: refused (the fight the game still holds)");
+                                }
+                            }
                             if (hybridOwner.enterAnim) {
                                 // HANDSTAND: a landing handed to the animation with no touchdown judged
                                 // (22:24 playtest: 28 judged of 63) says which input kept it out.

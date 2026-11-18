@@ -139,6 +139,9 @@ add_test(NAME leg_hold COMMAND spidy_leg_hold_tests)
 add_executable(spidy_sidestep_tests tests/sidestep_tests.cpp)
 target_link_libraries(spidy_sidestep_tests PRIVATE spidy_core)
 add_test(NAME sidestep COMMAND spidy_sidestep_tests)
+add_executable(spidy_ground_moves_tests tests/ground_moves_tests.cpp)
+target_link_libraries(spidy_ground_moves_tests PRIVATE spidy_core)
+add_test(NAME ground_moves COMMAND spidy_ground_moves_tests)
 # DIRECTION REPORT (direction_report.hpp) and the QUIET LOG (diag_log.hpp Throttle): rates, imposed view turn, skew,
 # momentum, the dedupe (portable).
 add_executable(spidy_direction_report_tests tests/direction_report_tests.cpp)

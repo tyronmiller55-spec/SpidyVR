@@ -360,6 +360,11 @@ struct Frame {
     // the burst still under way (VR stays on the ground until it ends; then
     // the ground hands back as any landing, with the position lock).
     bool sidestep{}, sidestepHold{};
+    // WEB LINE CANCEL (the owner, Nov 18, t119u: "for animation cancels, just make all web lines cancel into
+    // SpidyVR"): a web fired while the animation has him on the ground or a perch (a safe state:
+    // groundWebRefusal) takes the body this frame, and holds it while the line is held or attached; then the
+    // ground hands back as any landing. In the air the grip cancel (cancelGrip) already does this.
+    bool groundWeb{}, groundWebHold{};
     // FULL ARMS (the user, Nov 9 22:27): a SpidyVR web strike is under way (its
     // flight or hang). It pulls him out of the animation, ground included,
     // and holds SpidyVR until it ends; then the table as usual.
@@ -430,6 +435,26 @@ inline bool midairAnimation(bool animOwns, const head_probe::StateInputs& s) {
 // ground grip is the arms' SpidyVR web (no ownership change).
 inline bool cancelArmed(bool animOwns, bool supportedNow) {
     return animOwns && !supportedNow;
+}
+
+// WEB LINE CANCEL on the ground: why a web fired in a native animation there may NOT hand to SpidyVR (nullptr:
+// it may). Unsafe: a scene or a stale sample, a fight or a dodge (its finishers and counters are the game's), a
+// zip under way, Spidy's own wall (already SpidyVR's), the game's vault, mantle or wall run (NATIVE RUN's
+// parkour), and the air (the grip cancel's, not this).
+inline const char* groundWebRefusal(const head_probe::StateInputs& s, bool perched) {
+    if (!s.playing || !s.fresh)
+        return "cutscene";
+    if (s.fighting || s.dodging)
+        return "combat";
+    if (s.zipping)
+        return "zip";
+    if (s.wall == surfaceWall)
+        return "wall";
+    if (!s.owned && s.runRt && s.wall != 0)
+        return "parkour";
+    if (!supported(s) && !perched)
+        return "air";
+    return nullptr;
 }
 
 // FULL ARMS strike hold (EngineBot review M3/M4, Nov 9 23:01): what tells the
@@ -654,6 +679,20 @@ struct HybridOwner {
             airAnimNs = fallNs = -1;
             if (f.sidestep && domain == Domain::anim)
                 goVr(EnterVr::sidestep, nowNs);
+            return domain;
+        }
+
+        // WEB LINE CANCEL: a web fired on the ground or a perch takes the body there (the ground exception, as a
+        // sidestep) and holds it while the line lasts; off the ground the air's rules take over. Never out of a fight
+        // the game still holds (combatSticky).
+        const bool onGroundNow = supported(f.state) || (f.perched && f.state.wall != surfaceWall);
+        const bool groundWebGo = f.groundWeb && domain == Domain::anim && !combatSticky &&
+                                 groundWebRefusal(f.state, f.perched) == nullptr;
+        if (groundWebGo || (f.groundWebHold && domain == Domain::vr && onGroundNow)) {
+            clearZip();
+            airAnimNs = fallNs = -1;
+            if (groundWebGo)
+                goVr(EnterVr::cancel, nowNs);
             return domain;
         }
 
