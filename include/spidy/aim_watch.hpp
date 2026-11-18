@@ -82,4 +82,54 @@ struct MarkerJumps {
         worst = 0;
     }
 };
+// HAND SOURCE EASE (the 2 AM log of Nov 18, approved 1:53 PM): the mapped hands' source changing (the VR rig, the
+// head lock, the shown view of a handoff blend) moved hand, marker and web line in one frame - 2,839 marker jumps,
+// the worst 175 degrees, arm line-up steps up to 2.4 m and 140 degrees. The step is now carried as an offset that
+// fades over `seconds` (smoothstep), so the hand glides from where it was shown onto its new source; past
+// `snapMetres` it is a teleport and snaps. Pure.
+class SourceEase {
+  public:
+    static constexpr float seconds = .15f, snapMetres = 3.f;
+    // shownPos/shownOri: what was shown last frame; nowPos/nowOri: the new source's this frame.
+    void begin(Vec3 shownPos, Quat shownOri, Vec3 nowPos, Quat nowOri) {
+        const Vec3 d = shownPos - nowPos;
+        if (!finite(d) || length(d) > snapMetres) {
+            active_ = false;
+            return;
+        }
+        dPos_ = d;
+        dOri_ = shownOri * nowOri.conjugate();
+        if (dOri_.w < 0)
+            dOri_ = {-dOri_.x, -dOri_.y, -dOri_.z, -dOri_.w};
+        t_ = 0;
+        active_ = true;
+    }
+    // This frame's hand: the source's, with what is left of the step.
+    void apply(float dt, Vec3& pos, Quat& ori) {
+        if (!active_)
+            return;
+        t_ += std::isfinite(dt) ? std::clamp(dt, 0.f, .1f) : 0.f;
+        const float u = std::clamp(t_ / seconds, 0.f, 1.f);
+        const float w = 1.f - u * u * (3.f - 2.f * u);
+        if (w <= 0.f) {
+            active_ = false;
+            return;
+        }
+        pos = pos + dPos_ * w;
+        // nlerp from none to the step, by w.
+        Quat q{dOri_.x * w, dOri_.y * w, dOri_.z * w, 1.f - w + dOri_.w * w};
+        const float n = std::sqrt(q.x * q.x + q.y * q.y + q.z * q.z + q.w * q.w);
+        if (n > 1e-6f)
+            ori = Quat{q.x / n, q.y / n, q.z / n, q.w / n} * ori;
+    }
+    bool active() const {
+        return active_;
+    }
+
+  private:
+    bool active_{};
+    float t_{};
+    Vec3 dPos_{};
+    Quat dOri_{};
+};
 } // namespace spidy::aim_watch

@@ -506,6 +506,27 @@ int main() {
         check(t.handoffGlideCmS == 260 && t.jumpHandoffMs == 400 && t.handoffGlideMaxMs == 450, "tuned values stay, the rest move");
         check(vr_settings::withMovementDefaults(old, "movement_defaults=8\n").jumpHandoffMs == 300, "chosen after revision 8 stays");
     }
+    // HAND SOURCE EASE (the 2 AM log: 2,839 marker jumps, the worst 175 degrees): a source change's step glides out.
+    {
+        aim_watch::SourceEase e;
+        const Quat turned = Quat::yaw(1.5f);
+        e.begin({1, 1.4f, -.3f}, turned, {0, 1.4f, -.3f}, Quat{});
+        check(e.active(), "a 1 m, 86 degree step: eased");
+        Vec3 p{0, 1.4f, -.3f};
+        Quat q{};
+        e.apply(0.f, p, q);
+        check(std::abs(p.x - 1.f) < 1e-4f && std::abs(q.y - turned.y) < 1e-3f, "the first frame: where it was shown");
+        p = {0, 1.4f, -.3f};
+        q = {};
+        e.apply(.075f, p, q);
+        check(p.x > .4f && p.x < .6f, "half way through: half the step left");
+        p = {0, 1.4f, -.3f};
+        q = {};
+        e.apply(.1f, p, q);
+        check(p.x == 0.f && !e.active(), "after 150 ms: the new source alone");
+        e.begin({10, 0, 0}, Quat{}, {0, 0, 0}, Quat{});
+        check(!e.active(), "a 10 m step is a teleport: it snaps");
+    }
     std::printf("next pass: %d checks passed\n", passed);
     return 0;
 }

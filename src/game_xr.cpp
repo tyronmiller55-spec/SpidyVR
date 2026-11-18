@@ -1646,6 +1646,11 @@ DWORD WINAPI run(void*) {
         bool armWorldAnchorOk{};
         // ARM LINE-UP (aim_watch.hpp): where the hands were mapped from, and a source change's move.
         std::array<aim_watch::Lineup, 2> armLineup{};
+        // HAND SOURCE EASE: each hand's step at a source change, fading; the hand shown last frame.
+        std::array<aim_watch::SourceEase, 2> handSourceEase{};
+        Pose handShown[2]{};
+        bool handShownValid[2]{};
+        uint32_t handSourceEases{};
         uint32_t armLineupChanges{}, armBlendWorldFrames{}, armBlendRigFrames{};
         // HAND PREDICTION (review H1/L1): velocities in tracking space; a new
         // epoch (snap turn, re-latch, recenter, reseat, owner or frame-mode
@@ -5548,6 +5553,27 @@ DWORD WINAPI run(void*) {
                                     sourceNames[std::clamp(lu.from, 0, 4)], lu.jumpM, lu.jumpDeg, armBlendWorldFrames,
                                     armBlendRigFrames, armLineupChanges);
                             }
+                            // HAND SOURCE EASE (aim_watch::SourceEase): the source's step glides out over 150 ms.
+                            if (lu.changed && handShownValid[i] && kin.handValid[i]) {
+                                handSourceEase[i].begin(handShown[i].position, handShown[i].orientation,
+                                                        kin.grip[i].position, kin.grip[i].orientation);
+                                if (handSourceEase[i].active())
+                                    ++handSourceEases;
+                            }
+                            if (kin.handValid[i] && handSourceEase[i].active()) {
+                                const Vec3 gripWas = kin.grip[i].position;
+                                const Quat gripOriWas = kin.grip[i].orientation;
+                                handSourceEase[i].apply(std::isfinite(frame.seconds) ? frame.seconds : 0.f,
+                                                        kin.grip[i].position, kin.grip[i].orientation);
+                                // The aim goes with the grip: the same turn about it, and the same move.
+                                const Quat turn = kin.grip[i].orientation * gripOriWas.conjugate();
+                                kin.aim[i].position =
+                                    kin.grip[i].position + turn.rotate(kin.aim[i].position - gripWas);
+                                kin.aim[i].orientation = web_aim::unitOr(turn * kin.aim[i].orientation,
+                                                                         kin.aim[i].orientation);
+                            }
+                            handShown[i] = kin.grip[i];
+                            handShownValid[i] = kin.handValid[i] && finite(kin.grip[i].position);
                         }
                     }
                     animation_cancel::Decision gripCancel;
@@ -6173,11 +6199,11 @@ DWORD WINAPI run(void*) {
                                     diag_log::writef(
                                         "marker jumps: L %u R %u in the last 5 s (worst %.0f / %.0f deg beyond the "
                                         "controller in a frame; over 8 counts), total L %u R %u; twist steady %s, rate "
-                                        "%d deg/s, switch hold %d ms",
+                                        "%d deg/s, switch hold %d ms; hand source eases %u",
                                         markerJumps[0].jumps, markerJumps[1].jumps, markerJumps[0].worst,
                                         markerJumps[1].worst, markerJumpsTotal[0], markerJumpsTotal[1],
                                         values.markerTwistSteady ? "on" : "off", values.markerTurnRateDps,
-                                        values.markerSwitchHoldMs);
+                                        values.markerSwitchHoldMs, handSourceEases);
                                 for (auto& m : markerJumps)
                                     m.clearWindow();
                             }
