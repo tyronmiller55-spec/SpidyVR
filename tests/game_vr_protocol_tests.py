@@ -1658,10 +1658,16 @@ class ProtocolTests(unittest.TestCase):
             self.assertEqual(other_mods(game), ([], ['version.dll']))
             (game/'dinput8.dll').write_bytes(b'')
             self.assertEqual(other_mods(game), ([], ['dinput8.dll', 'version.dll']))
+            # Plugin loaders (the sky mod's winmm.dll, November 18): Spidy runs beside them.
             warning = other_mods_warning(game, ['dinput8.dll', 'version.dll'])
+            self.assertTrue(warning.startswith('Another mod loads into the game'))
+            self.assertIn('runs beside it', warning)
+            self.assertIn('move them out of', warning)
+            self.assertIn('move it out of', other_mods_warning(game, ['winmm.dll']))
+            # A graphics stand-in is still the warning.
+            warning = other_mods_warning(game, ['d3d12.dll', 'winmm.dll'])
             self.assertTrue(warning.startswith('WARNING: another mod or tool'))
             self.assertIn('move them out of', warning)
-            self.assertIn('move it out of', other_mods_warning(game, ['version.dll']))
         self.assertIn('Your setting returns', ASPECT_RATIO_AUTO)
 
     def test_a_lost_graphics_device_is_named_from_the_game_log(self):

@@ -296,8 +296,20 @@ def real_vr_refusal(folder, files):
             'Steam leaves them there), then press START VR.')
 
 
+# The names a plugin loader (an ASI loader: the sky mod of November 18 came as winmm.dll) takes: it loads
+# other mods' plugins and leaves the game's picture alone, so Spidy runs beside it. Spidy's own libraries are
+# put into the game by the launcher from Spidy's folder, under names no other mod has (spidy_*.dll), and
+# nothing of Spidy's goes into the game's folder (docs/MOD_COMPAT.md).
+LOADERS = ('winmm.dll', 'version.dll', 'dinput8.dll', 'winhttp.dll', 'dsound.dll')
+
+
 def other_mods_warning(folder, files):
     """The console's line on any other library in the game's folder that loads into the game."""
+    if all(name.lower() in LOADERS for name in files):
+        return (f"Another mod loads into the game from its folder ({', '.join(files)}): Spidy runs beside it, "
+                "going in front of any game function it hooks too (docs/MOD_COMPAT.md). If the headset stays "
+                f"black or the game closes, close the game, move {'it' if len(files) == 1 else 'them'} out of "
+                f"{folder} and press START VR again.")
     return (f"WARNING: another mod or tool loads into the game from its folder ({', '.join(files)}). Spidy "
             'has not been run beside it. If the headset stays black or the game closes, close the game, move '
             f"{'it' if len(files) == 1 else 'them'} out of {folder} and press START VR again.")
