@@ -293,6 +293,22 @@ class FlipMotion {
     // Preserve the A latch so a button held across the reset is not a press.
     void reset();
     void reset(bool jump) { reset(); held_ = jump; }
+    // GROUND FLIPS (ground_flip.hpp; the owner, Nov 18: "every flip mode"): a launched turn, `spin` (tracking-local
+    // axes, rad/s; its size the rate) for `radians` in the air, then held for the landing (or A) to upright as any
+    // flip's tilt. The stick's steering waits while it turns.
+    void launch(Vec3 spin, float radians) {
+        const float rate = finite(spin) ? length(spin) : 0.f;
+        if (!(rate > 1e-4f) || !(radians > 0))
+            return;
+        launchAxis_ = spin / rate;
+        launchRate_ = rate;
+        launchLeft_ = radians;
+        if (phase_ == Phase::level)
+            turned_ = 0;
+        phase_ = Phase::held;
+        spin_ = {};
+    }
+    bool launching() const { return launchLeft_ > 0; }
 
   private:
     enum class Phase { level, rotating, held, settling };
@@ -303,6 +319,8 @@ class FlipMotion {
     float total_{}, left_{}, returnRate_{}, turned_{}, landed_{};
     float scale_ = 1;
     bool held_{}, resetHeld_{}, stickReady_{}, active_{};
+    Vec3 launchAxis_{1, 0, 0};
+    float launchRate_{}, launchLeft_{};
 };
 // Converts one complete predicted tracking sample into world-space head, eyes,
 // hand aims, and physical swing input. The game adapter still owns collision and
@@ -322,8 +340,9 @@ class GameTrackingRig {
     // LEG CONTROL owns the right stick (CONTROLLED FLIPS, in the air): it
     // turns nothing, and a push held into the landing is no snap turn.
     // GROUND FLIPS (ground_flip.hpp, S2): the spin (world axes, rad/s) the realistic flips take on his first airborne
-    // frame after a flip jump's launch, as the handstand's leap lets go with its spin. Dropped if he is not off the
-    // ground within groundFlipWaitSeconds, or without REALISTIC FLIPS.
+    // frame after a flip jump's launch, as the handstand's leap lets go with its spin; with CONTROLLED or basic FLIPS
+    // the flip motion turns one full turn at that rate (FlipMotion::launch). Dropped if he is not off the ground within
+    // groundFlipWaitSeconds, or with no flip mode on. A fight does not stop it (the owner, Nov 18).
     static constexpr float groundFlipWaitSeconds = .5f;
     void groundFlip(Vec3 worldSpin) {
         groundFlipSpin_ = finite(worldSpin) ? worldSpin : Vec3{};
@@ -638,6 +657,7 @@ class GameTrackingRig {
     handstand::Handstand::Out handstandOut_{};
     Quat handstandCatchTilt_{};
     Vec3 groundFlipSpin_{};
+    bool groundFlipLive_{}; // released, until he lands: a fight does not calm the realistic flip
     float groundFlipWait_{};
     unsigned groundFlipsReleased_{}, groundFlipsLapsed_{};
     float handstandDrop_{};

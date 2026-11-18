@@ -1,6 +1,7 @@
 // GROUND MOVES AND CANCELS (the owner, Nov 18, t116u-t119u; plans/ground-moves-and-cancel.md): the web line
 // cancel into SpidyVR, intent breaks out of animation jumps, ground flips as jump types, and the ground kick's
 // handover.
+#include "spidy/game_tracking.hpp"
 #include "spidy/ground_flip.hpp"
 #include "spidy/hybrid_owner.hpp"
 #include <cmath>
@@ -292,6 +293,45 @@ int main() {
         check(airSeconds(6.5f) > 1.2f && airSeconds(6.5f) < 1.4f, "about 1.3 s up: one turn at 270-360 deg/s");
         check(std::strcmp(kindName(Kind::back), "backflip") == 0 && std::strcmp(kindName(Kind::front), "front flip") == 0,
               "the names");
+    }
+    // ---- GROUND FLIPS in every flip mode: FlipMotion's launched turn (CONTROLLED and basic FLIPS) ----
+    {
+        for (const bool controlled : {false, true}) {
+            FlipMotion flip;
+            FlipMotion::Sample sample;
+            sample.airborne = true;
+            sample.controlled = controlled;
+            sample.seconds = 1.f / 90;
+            flip.update(sample);
+            flip.launch(Vec3{6.2831853f, 0, 0}, 6.2831853f); // a backflip's axis, one turn a second
+            check(flip.launching(), "the launch is under way");
+            for (int i = 0; i < 22; ++i)
+                flip.update(sample);
+            const Vec3 nose = flip.tilt().rotate({0, 0, -1});
+            check(nose.y > .95f, controlled ? "CONTROLLED: a quarter turn in, nose up (a backflip)"
+                                            : "basic: a quarter turn in, nose up (a backflip)");
+            for (int i = 0; i < 80; ++i)
+                flip.update(sample);
+            check(!flip.launching() && std::abs(flip.turned() - 6.2831853f) < .02f, "one full turn, then it stops");
+            sample.airborne = false;
+            for (int i = 0; i < 200; ++i)
+                flip.update(sample);
+            check(flip.level(), "the landing uprights it");
+        }
+        // Cut short by the landing: the turn ends and the tilt comes upright.
+        FlipMotion flip;
+        FlipMotion::Sample sample;
+        sample.airborne = true;
+        sample.seconds = 1.f / 90;
+        flip.launch(Vec3{0, 0, -4.f}, 6.2831853f);
+        for (int i = 0; i < 20; ++i)
+            flip.update(sample);
+        sample.airborne = false;
+        for (int i = 0; i < 300; ++i)
+            flip.update(sample);
+        check(!flip.launching() && flip.level(), "a landing mid-turn ends it and uprights");
+        flip.launch(Vec3{std::nanf(""), 0, 0}, 6.f);
+        check(!flip.launching(), "a nan spin is nothing");
     }
     std::printf("ground moves: %d checks passed, %d failed\n", passed, failed);
     return failed ? EXIT_FAILURE : EXIT_SUCCESS;

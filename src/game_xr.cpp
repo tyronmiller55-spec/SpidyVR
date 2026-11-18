@@ -3498,8 +3498,8 @@ DWORD WINAPI run(void*) {
                         const char* blockedBy = nullptr;
                         if (!swingPointJump)
                             blockedBy = "no swing export";
-                        else if (!values.realisticFlips)
-                            blockedBy = "REALISTIC FLIPS off (the spin is theirs)";
+                        else if (!values.realisticFlips && !values.controlledFlips && !values.flips)
+                            blockedBy = "no flip mode on (the spin is the flips')";
                         else if (!(viewing && gameplay && motion.active && !flatScreen && spiderMan))
                             blockedBy = "not in play";
                         else if (phone.open() || gadgetWheel.open() || padLayer.latched() || calibrationInput)
@@ -3549,18 +3549,24 @@ DWORD WINAPI run(void*) {
                                                                                  : static_cast<DWORD>(2001);
                             if (result == 0) {
                                 ++groundFlips;
-                                const Vec3 spin = ground_flip::spin(out.fire, look, static_cast<float>(values.automaticSpeed));
+                                // The flip mode's own rate: REALISTIC's ROTATION SPEED, else FLIP SPEED (CONTROLLED, basic).
+                                const int rate = values.realisticFlips ? values.automaticSpeed : values.flipSpeed;
+                                const Vec3 spin = ground_flip::spin(out.fire, look, static_cast<float>(rate));
                                 rig.groundFlip(spin);
                                 pointJumpFired = pointJumpHold = true; // the ground exception: SpidyVR for the takeoff
                                 pointJumpHoldAge = 0;
                                 pointJumpOffLogged = false;
                                 stickPush.cancel(); // the flick is no zip or heal
                                 feel(body_haptics::Kind::leap);
-                                diag_log::writef("ground flip: %s, launch (%.1f, %.1f, %.1f) m/s, spin %d deg/s (ROTATION "
-                                                 "SPEED) about (%.2f, %.2f, %.2f), about %.2f s up, #%u",
+                                diag_log::writef("ground flip: %s, launch (%.1f, %.1f, %.1f) m/s, spin %d deg/s (%s) about "
+                                                 "(%.2f, %.2f, %.2f), about %.2f s up%s, #%u",
                                                  ground_flip::kindName(out.fire), ask.velocity.x, ask.velocity.y,
-                                                 ask.velocity.z, values.automaticSpeed, spin.x, spin.y, spin.z,
-                                                 ground_flip::airSeconds(ask.velocity.y), groundFlips);
+                                                 ask.velocity.z, rate,
+                                                 values.realisticFlips ? "REALISTIC, ROTATION SPEED"
+                                                 : values.controlledFlips ? "CONTROLLED, FLIP SPEED, one turn"
+                                                                          : "basic FLIPS, FLIP SPEED, one turn",
+                                                 spin.x, spin.y, spin.z, ground_flip::airSeconds(ask.velocity.y),
+                                                 fightLately ? ", in a fight" : "", groundFlips);
                             } else {
                                 ++groundFlipRefused;
                                 groundFlipTrigger.refused();

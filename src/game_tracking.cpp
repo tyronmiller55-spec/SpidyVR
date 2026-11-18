@@ -177,6 +177,8 @@ Quat FlipMotion::update(const Sample& sample) {
     else if (!pushed)
         stickReady_ = true;
 
+    if (launchLeft_ > 0 && (!air || landed || (press && air && !sample.controlled)))
+        launchLeft_ = 0; // a launched turn ends with the landing (or basic flips' A, which uprights)
     if (press && air && !sample.controlled) {
         toLevel();
         returnRate_ = returnRate;
@@ -184,6 +186,14 @@ Quat FlipMotion::update(const Sample& sample) {
         if (phase_ != Phase::level && phase_ != Phase::settling)
             toLevel();
         returnRate_ = 2 * returnRate;
+    } else if (air && launchLeft_ > 0) {
+        // GROUND FLIPS: the launched turn, at its rate, about its axis (as a stick's turn is applied).
+        const float step = std::min(launchLeft_, launchRate_ * dt);
+        launchLeft_ -= step;
+        if (phase_ == Phase::level || phase_ == Phase::settling)
+            phase_ = Phase::held;
+        tilt_ = unit(tilt_ * Quat::around(launchAxis_, step));
+        turned_ += step;
     } else if (air && canSteer && stickReady_ && pushed && !resetHeld_) {
         if (phase_ == Phase::level)
             turned_ = 0;
@@ -588,6 +598,8 @@ GameMotionFrame GameTrackingRig::update(const XrFrame& f, Vec3 feet, Vec3 gameFo
         auto flight = flight_;
         RealisticControls controls;
         const bool air = flip.airborne && !flip.surface;
+        if (air && (groundFlipLive_ || groundFlipWait_ > 0))
+            flight.fighting = false; // GROUND FLIPS: a fight does not calm a ground flip's spin (below)
         if (f.jump && !automaticBrakeHeld_)
             automaticBrakeFromAir_ = air;
         if (!f.jump || !air)
@@ -630,6 +642,7 @@ GameMotionFrame GameTrackingRig::update(const XrFrame& f, Vec3 feet, Vec3 gameFo
                 automatic_.release(Quat::yaw(-rig_.yaw).rotate(groundFlipSpin_));
                 automaticHands_.reset();
                 groundFlipWait_ = 0;
+                groundFlipLive_ = true;
                 ++groundFlipsReleased_;
             } else {
                 groundFlipWait_ -= std::isfinite(f.seconds) ? std::clamp(f.seconds, 0.f, .1f) : .1f;
@@ -639,6 +652,11 @@ GameMotionFrame GameTrackingRig::update(const XrFrame& f, Vec3 feet, Vec3 gameFo
                 }
             }
         }
+        if (!air)
+            groundFlipLive_ = false;
+        // A ground flip's spin goes on in a fight (the owner, Nov 18): FLIPS IN COMBAT off does not calm it.
+        if (groundFlipLive_)
+            flight.fighting = false;
         rig_.tilt = automatic_.update(flight, flip.airborne, flip.surface, rig_.yaw, f.seconds, autoSettings_,
                                       controls);
         // Where the spin leaves the player facing is the heading: the yaw
@@ -656,8 +674,19 @@ GameMotionFrame GameTrackingRig::update(const XrFrame& f, Vec3 feet, Vec3 gameFo
             rig_.tilt = automatic_.orientation();
         }
     } else if (flips_ || controlledFlips_) {
-        if (groundFlipWait_ > 0)
-            groundFlipWait_ = 0, ++groundFlipsLapsed_;
+        // GROUND FLIPS with CONTROLLED or basic FLIPS: one full turn at the flip jump's rate from his first frame off the
+        // ground (FlipMotion::launch); the landing uprights it as any flip's tilt.
+        if (groundFlipWait_ > 0) {
+            if (flip.airborne && !flip.surface) {
+                flip_.launch(Quat::yaw(-rig_.yaw).rotate(groundFlipSpin_), 6.2831853f);
+                groundFlipWait_ = 0;
+                ++groundFlipsReleased_;
+            } else {
+                groundFlipWait_ -= std::isfinite(f.seconds) ? std::clamp(f.seconds, 0.f, .1f) : .1f;
+                if (groundFlipWait_ <= 0)
+                    groundFlipWait_ = 0, ++groundFlipsLapsed_;
+            }
+        }
         automatic_.reset();
         automaticHands_.reset();
         rig_.tilt = flip_.update(flip);

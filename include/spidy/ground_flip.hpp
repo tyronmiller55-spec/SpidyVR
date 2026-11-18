@@ -4,9 +4,10 @@
 // On the ground under the animation, a FLICK of the right stick straight up or down (from under flickFrom to over
 // flickTo within flickSeconds, within coneDegrees of straight up or down) followed by A within aSeconds is a flip
 // jump: a backflip (down) or a front flip (up). The launch is the point jump's (the swing's SwingTakeoff: the game's
-// own jump to unstick, then the launch velocity), and on his first airborne frame the spin goes to the REALISTIC
-// FLIPS system (RealisticFlip::release, as the handstand's leap does) at ROTATION SPEED: the same rate, falloff, arms,
-// legs and A upright as any air flip. No second flip system, no canned rotation.
+// own jump to unstick, then the launch velocity), and on his first airborne frame the spin goes to the flip mode that is
+// on (the owner, Nov 18: "every flip mode", fights included): REALISTIC FLIPS (RealisticFlip::release, as the
+// handstand's leap does) at ROTATION SPEED, with its falloff, arms, legs and A upright; CONTROLLED or basic FLIPS
+// (FlipMotion::launch) one full turn at FLIP SPEED, uprighted on the landing. No second flip system, no canned rotation.
 //
 // Input rules (Trigger):
 //  - A alone, or A after a slow push, is the game's A exactly as before (nothing holds A back).
