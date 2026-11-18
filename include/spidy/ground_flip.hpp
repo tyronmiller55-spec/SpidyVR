@@ -15,7 +15,8 @@
 //    Side flips wait for another trigger (plans/ground-moves-and-cancel.md, S2 note).
 //  - B down, the legs engaged (Y+X), a blocked state or the cooldown: no flip; A goes on to the game (logged).
 //  - The A that fires is consumed until it is let go of.
-//  - Side flips: a directional A TAP with the left stick (TapTrigger, below).
+//  - Side flips: a directional A TAP with the left stick (TapTrigger, below); since Nov 18 1:09 PM ("Add forward and
+//    back A-tap flips") forward and back taps too: a front flip and a backflip.
 // Pure; no Windows.
 #pragma once
 #include "math.hpp"
@@ -139,12 +140,21 @@ class Trigger {
 // maxSpeed, so a running or strafing jump is never one), the LEFT stick held to a side (at least `deflect`, between
 // sideMinDegrees and sideMaxDegrees off straight ahead, the sidestep's side band) for steadySeconds, then a quick A TAP
 // (let go of within tapSeconds) is a side flip that way. Held longer, the A goes on to the game as a jump (late by
-// tapSeconds: only in this standing, stick-to-the-side case). Ahead (a running jump's start) and behind (HYBRID's rear
-// snap) are never flips here. A fresh flick then A is QUICK SIDESTEP's (it runs first and takes the A).
+// tapSeconds: only in this standing, stick-held case). A fresh flick then A is QUICK SIDESTEP's (it runs first and
+// takes the A).
+// FORWARD AND BACK TAPS (the owner, Nov 18 1:09 PM): the same rules, the stick held within straightDegrees of straight
+// ahead (a front flip) or straight back (a backflip), slower than straightMaxSpeed (2 m/s: a running jump - the stick
+// held ahead a while - is past it, and a stick only just pushed has not held steadySeconds: both stay plain jumps).
+// HYBRID's rear snap: a back stick at the snap's tilt or more (0.5) turns the view within 60 ms, so where the rear snap
+// is live (`rearSnap`) the back tap counts only a held back stick UNDER the snap's tilt (backSoftMin..backSoftMax: there
+// HYBRID neither snaps nor moves him), and never while the snap holds (`snapHeld`: he runs on the snapped heading).
+// Elsewhere (STABLE, OLD, HEADSET FIRST) the back stick at `deflect` counts.
 struct TapParams {
     float deflect = .8f, steadySeconds = .15f, tapSeconds = .18f, maxSpeed = 3.f;
     float sideMinDegrees = 55, sideMaxDegrees = 100;
     float cooldownSeconds = .6f;
+    float straightDegrees = 25, straightMaxSpeed = 2.f;
+    float backSoftMin = .3f, backSoftMax = .5f; // HYBRID's rear snap fires at 0.5 (hybrid_movement::snapTilt)
 };
 class TapTrigger {
   public:
@@ -155,6 +165,8 @@ class TapTrigger {
         bool a{}, b{}, legs{};
         bool ground{}, blocked{};
         float speed{}; // horizontal, m/s (NaN: refused)
+        bool sides = true, straight = true; // DIRECTIONAL FLIPS: side taps; forward and back taps
+        bool rearSnap{}, snapHeld{};        // HYBRID's rear snap live; it has snapped and holds (see above)
     };
     struct Out {
         Kind fire = Kind::none;
@@ -168,12 +180,17 @@ class TapTrigger {
         Out out;
         const float dt = std::isfinite(in.seconds) ? std::clamp(in.seconds, 0.f, .1f) : 0.f;
         clock_ += dt;
-        Kind side = Kind::none;
+        Kind side = Kind::none; // the held direction (any of the four)
         if (in.stickValid && std::isfinite(in.stickX) && std::isfinite(in.stickY)) {
             const float tilt = std::hypot(in.stickX, in.stickY);
             const float off = std::atan2(std::abs(in.stickX), in.stickY) * 57.29578f; // 0 ahead, 180 behind
-            if (tilt >= p.deflect && off >= p.sideMinDegrees && off <= p.sideMaxDegrees)
+            if (in.sides && tilt >= p.deflect && off >= p.sideMinDegrees && off <= p.sideMaxDegrees)
                 side = in.stickX > 0 ? Kind::right : Kind::left;
+            else if (in.straight && tilt >= p.deflect && off <= p.straightDegrees)
+                side = Kind::front;
+            else if (in.straight && off >= 180 - p.straightDegrees && !in.snapHeld &&
+                     (in.rearSnap ? tilt >= p.backSoftMin && tilt < p.backSoftMax : tilt >= p.deflect))
+                side = Kind::back;
         }
         steady_ = side != Kind::none && side == side_ ? steady_ + dt : 0.f;
         side_ = side;
@@ -210,7 +227,7 @@ class TapTrigger {
             out.denied = Deny::legs;
         else if (in.b)
             out.denied = Deny::b;
-        else if (!(in.speed <= p.maxSpeed))
+        else if (!(in.speed <= (side == Kind::front || side == Kind::back ? p.straightMaxSpeed : p.maxSpeed)))
             out.denied = Deny::moving;
         else if (lastFire_ >= 0 && clock_ - lastFire_ < p.cooldownSeconds)
             out.denied = Deny::cooldown;

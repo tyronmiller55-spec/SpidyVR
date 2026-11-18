@@ -3596,19 +3596,24 @@ DWORD WINAPI run(void*) {
                             tin.speed = gfFresh && finite(swingState.velocity)
                                             ? std::hypot(swingState.velocity.x, swingState.velocity.z)
                                             : NAN;
+                            // FORWARD AND BACK TAPS (the owner, Nov 18 1:09 PM): HYBRID's rear snap is live in HYBRID
+                            // (not HEADSET FIRST); there the back tap counts only under the snap's tilt, never the snap.
+                            tin.rearSnap = hybrid_movement::modeOf(values.movementMode) == hybrid_movement::Mode::hybrid &&
+                                           !values.headsetFirst;
+                            tin.snapHeld = hybridStick.zone == hybrid_movement::Zone::held;
                             const ground_flip::TapParams tp;
                             const auto tap = groundFlipTap.update(tin, tp);
                             frame.jump = tap.a;
                             if (tap.denied != ground_flip::Deny::none) {
                                 ++groundFlipDenied;
-                                diag_log::writef("side flip: denied %s (stick %.2f, %.2f, %.1f m/s; A went on to the game), #%u",
+                                diag_log::writef("tap flip: denied %s (stick %.2f, %.2f, %.1f m/s; A went on to the game), #%u",
                                                  tap.denied == ground_flip::Deny::blocked && blockedBy
                                                      ? blockedBy
                                                      : ground_flip::denyName(tap.denied),
                                                  tin.stickX, tin.stickY, tap.speed, groundFlipDenied);
                             }
                             if (tap.late)
-                                diag_log::writef("side flip: A held past %.0f ms, the game's jump (late by that)",
+                                diag_log::writef("tap flip: A held past %.0f ms, the game's jump (late by that)",
                                                  tp.tapSeconds * 1000.f);
                             if (tap.fire != ground_flip::Kind::none)
                                 fireFlip(tap.fire, "tap");

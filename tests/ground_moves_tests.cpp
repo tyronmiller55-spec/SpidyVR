@@ -404,13 +404,13 @@ int main() {
             r.frame(.6f, 0, true);
             check(r.last.a && r.fired == Kind::none, "a half push to the side: a jump");
             Tap f;
-            f.hold(0, 1, 20); // ahead: a running jump's start
-            f.frame(0, 1, true);
-            check(f.last.a && f.fired == Kind::none, "the stick ahead: a jump");
-            Tap b;
-            b.hold(0, -1, 20); // behind: the rear snap
-            b.frame(0, -1, true);
-            check(b.last.a && b.fired == Kind::none, "the stick behind: a jump");
+            f.hold(0, 1, 20, 4.f); // ahead, running: a running jump
+            f.frame(0, 1, true, 4.f);
+            check(f.last.a && f.fired == Kind::none && f.last.denied == Deny::moving, "the stick ahead, running: a jump");
+            Tap f2;
+            f2.hold(0, 1, 20, 2.5f); // ahead at 2.5 m/s: past the straight taps' 2 m/s (the sides' 3 does not apply)
+            f2.frame(0, 1, true, 2.5f);
+            check(f2.last.a && f2.fired == Kind::none, "the stick ahead at 2.5 m/s: a jump");
             Tap n;
             n.frame(0, 0, true);
             check(n.last.a && !n.last.waiting, "A alone: at once, never held back");
@@ -424,6 +424,58 @@ int main() {
             l.hold(1, 0, 16);
             l.frame(1, 0, true, 0, true, true);
             check(l.last.a && l.last.denied == Deny::legs, "the legs engaged: denied");
+        }
+        // FORWARD AND BACK TAPS (the owner, Nov 18 1:09 PM).
+        {
+            Tap f;
+            f.hold(.1f, .95f, 16, 1.f);
+            f.frame(.1f, .95f, true, 1.f);
+            f.frame(.1f, .95f, false, 1.f);
+            check(f.fired == Kind::front && f.aOut == 0, "the stick held ahead, slow, a tap: a front flip");
+            Tap fresh;
+            fresh.hold(0, 1, 4);
+            fresh.frame(0, 1, true);
+            check(fresh.last.a && fresh.fired == Kind::none, "the stick only just pushed ahead: a plain jump at once");
+            Tap held;
+            held.hold(0, 1, 16);
+            for (int i = 0; i < 30; ++i)
+                held.frame(0, 1, true);
+            check(held.fired == Kind::none && held.late == 1, "ahead, A held: the game's jump");
+            Tap b;
+            b.hold(0, -1, 16);
+            b.frame(0, -1, true);
+            b.frame(0, -1, false);
+            check(b.fired == Kind::back, "STABLE or OLD (no rear snap): the stick held back, a tap: a backflip");
+            Tap off;
+            for (int i = 0; i < 17; ++i) {
+                TapTrigger::Input in;
+                in.seconds = .011f, in.stickValid = true, in.stickY = 1, in.ground = true, in.a = i == 16;
+                in.straight = false;
+                off.last = off.t.update(in, TapParams{});
+            }
+            check(off.last.a && !off.last.waiting, "forward and back taps off: the jump at once");
+        }
+        {
+            // HYBRID's rear snap: only a held back stick under the snap's tilt, never the snap.
+            const auto hybrid = [](float tilt, bool snapHeld) {
+                TapTrigger t;
+                Kind fired = Kind::none;
+                TapTrigger::Out o;
+                for (int i = 0; i < 19; ++i) {
+                    TapTrigger::Input in;
+                    in.seconds = .011f, in.stickValid = true, in.stickY = -tilt, in.ground = true;
+                    in.a = i == 16 || i == 17;
+                    in.rearSnap = true, in.snapHeld = snapHeld;
+                    o = t.update(in, TapParams{});
+                    if (o.fire != Kind::none)
+                        fired = o.fire;
+                }
+                return fired;
+            };
+            check(hybrid(.4f, false) == Kind::back, "HYBRID: the stick held back at 0.4 (no snap, no run), a tap: a backflip");
+            check(hybrid(1.f, false) == Kind::none, "HYBRID: the full back stick is the rear snap's, never a flip");
+            check(hybrid(.4f, true) == Kind::none, "HYBRID: snapped and holding (running the new way): no flip");
+            check(hybrid(.2f, false) == Kind::none, "HYBRID: under 0.3, nothing");
         }
         const Vec3 ahead{0, 0, -1};
         const Vec3 sr = spin(Kind::right, ahead, 360);
