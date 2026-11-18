@@ -1733,6 +1733,11 @@ DWORD WINAPI run(void*) {
         // seconds into it) for the legs.
         air_kick::Gestures airGestures;
         ground_kick::Gestures groundGestures;
+        // A kick gesture finished in a midair animation (its flick breaks the animation on that same frame) waits this
+        // long for SpidyVR to take it: the break hands over by the next frame.
+        static constexpr float kickHoldSeconds = .12f;
+        air_kick::Flick airFlickHeld;
+        float airFlickHeldAge{}, swingFlickHeld = -1;
         uint32_t airSerial{}, airFlagsSent = ~0u, airEventsSeen{}, airState{};
         float airSentAge{}, airAngle{}, airSeconds{};
         // GROUND KICKS: the player stands slow with the setting on (this frame); the kick under way began
@@ -3071,12 +3076,32 @@ DWORD WINAPI run(void*) {
                     // here the stick is read as it came (the legs own it from the game's side) and the
                     // settings go over whenever they change (swing_kick_auto too: it holds the dive back).
                     {
-                        const bool kickHere = swingKick && values.swingKickManual && !flatScreen &&
-                                              !calibrationInput && legHoldOut.engaged &&
-                                              frame.hands[1].valid &&
-                                              hybridOwner.domain == hybrid_owner::Domain::vr;
-                        const bool flicked = kickFlick.update(frame.seconds, frame.hands[1].stickX,
-                                                              frame.hands[1].stickY, kickHere);
+                        // The flick is watched from the legs' chord on, in the animation too: a flick that
+                        // breaks a midair animation (the right stick's pitch past 0.2) reaches 0.8 a frame or
+                        // two later in SpidyVR, and a watch that started only there never saw the stick at
+                        // rest, so that flick was lost. It is still only taken in SpidyVR.
+                        const bool kickWatch = swingKick && values.swingKickManual && !flatScreen &&
+                                               !calibrationInput && legHoldOut.engaged && frame.hands[1].valid;
+                        const bool kickHere = kickWatch && hybridOwner.domain == hybrid_owner::Domain::vr;
+                        bool flicked = kickFlick.update(frame.seconds, frame.hands[1].stickX,
+                                                        frame.hands[1].stickY, kickWatch);
+                        // A flick finished while the animation still had him (the stick past 0.8 on the very
+                        // frame its pitch breaks the animation) waits up to kickHoldSeconds for SpidyVR.
+                        const float kickDt = std::isfinite(frame.seconds) ? std::clamp(frame.seconds, 0.f, .1f) : 0.f;
+                        if (flicked && !kickHere) {
+                            swingFlickHeld = 0;
+                            flicked = false;
+                        } else if (swingFlickHeld >= 0) {
+                            swingFlickHeld += kickDt;
+                            if (!kickWatch || swingFlickHeld > kickHoldSeconds) {
+                                diag_log::writef("swing kick: flick in the animation, not taken (%.0f ms)",
+                                                 swingFlickHeld * 1000.f);
+                                swingFlickHeld = -1;
+                            } else if (kickHere) {
+                                flicked = true;
+                                swingFlickHeld = -1;
+                            }
+                        }
                         if (flicked)
                             ++kickFlickSerial;
                         game_swing::SwingKickAsk ask;
@@ -3103,11 +3128,34 @@ DWORD WINAPI run(void*) {
                     {
                         const bool groundHere = airKick && groundStand && !flatScreen && !calibrationInput &&
                                                 legHoldOut.engaged && frame.hands[1].valid;
-                        const bool kickHere = airKick && values.kicks && !flatScreen && !calibrationInput &&
-                                              legHoldOut.engaged && frame.hands[1].valid && !groundStand &&
-                                              hybridOwner.domain == hybrid_owner::Domain::vr;
-                        const air_kick::Flick airFlick = airGestures.update(
-                            frame.seconds, frame.hands[1].stickX, frame.hands[1].stickY, kickHere);
+                        // Watched from the legs' chord on, in a midair animation too (as the swing kick's
+                        // flick above): the flick that breaks the animation is the kick, not lost to a watch
+                        // that started after it. A gesture finished while the animation still has him (a
+                        // sideways flick does not break it) is logged and not taken.
+                        const bool kickWatch = airKick && values.kicks && !flatScreen && !calibrationInput &&
+                                               legHoldOut.engaged && frame.hands[1].valid && !groundStand;
+                        const bool kickHere = kickWatch && hybridOwner.domain == hybrid_owner::Domain::vr;
+                        air_kick::Flick airFlick = airGestures.update(
+                            frame.seconds, frame.hands[1].stickX, frame.hands[1].stickY, kickWatch);
+                        const float airDt = std::isfinite(frame.seconds) ? std::clamp(frame.seconds, 0.f, .1f) : 0.f;
+                        if (airFlick.gesture != air_kick::Gesture::none && !kickHere) {
+                            airFlickHeld = airFlick; // waits up to kickHoldSeconds for SpidyVR
+                            airFlickHeldAge = 0;
+                            airFlick = {};
+                        } else if (airFlickHeld.gesture != air_kick::Gesture::none) {
+                            airFlickHeldAge += airDt;
+                            if (!kickWatch || airFlickHeldAge > kickHoldSeconds) {
+                                diag_log::writef("air kick: gesture %s in the animation, not taken (%.0f ms)",
+                                                 air_kick::gestureName(airFlickHeld.gesture), airFlickHeldAge * 1000.f);
+                                airFlickHeld = {};
+                            } else if (kickHere) {
+                                if (airFlick.gesture == air_kick::Gesture::none)
+                                    airFlick = airFlickHeld;
+                                diag_log::writef("air kick: gesture %s from the animation, taken in SpidyVR after %.0f ms",
+                                                 air_kick::gestureName(airFlickHeld.gesture), airFlickHeldAge * 1000.f);
+                                airFlickHeld = {};
+                            }
+                        }
                         // GROUND KICKS: standing, the stick's flicks and half circle (ground_kick.hpp).
                         const air_kick::Flick groundFlick = groundGestures.update(
                             frame.seconds, frame.hands[1].stickX, frame.hands[1].stickY, groundHere);

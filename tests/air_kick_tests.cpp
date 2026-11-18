@@ -535,6 +535,28 @@ int main() {
         f.seconds = NAN;
         check(k.update(f).event == Kick::Event::none, "NaN steps do nothing");
     }
+    // The flick that breaks a midair animation (Nov 18): the stick passes the break's 0.2 in the animation and 0.8
+    // a frame later in SpidyVR. A watch that starts only in SpidyVR never saw the stick at rest and loses the
+    // flick; watched from the legs' chord on (game_xr's kickWatch), it is the kick.
+    {
+        Gestures late;
+        late.update(.014f, 0.f, .1f, false);           // the animation: not watched
+        late.update(.014f, 0.f, .25f, false);          // the break's frame: still the animation
+        const Flick lost = late.update(.014f, 0.f, .9f, true); // SpidyVR: over 0.8, no rest seen
+        check(lost.gesture == Gesture::none, "a watch begun mid-flick cannot see it (the old loss)");
+        Gestures watched;
+        watched.update(.014f, 0.f, .1f, true);
+        watched.update(.014f, 0.f, .25f, true);
+        const Flick taken = watched.update(.014f, 0.f, .9f, true);
+        check(taken.gesture == Gesture::doubleDive, "watched from the chord on, the breaking flick is the kick");
+    }
+    {
+        swing_kick::Flick late, watched;
+        late.update(.014f, 0.f, .2f, false);
+        check(!late.update(.014f, 0.f, .9f, true), "the swing kick's flick: lost to a late watch");
+        watched.update(.014f, 0.f, .2f, true);
+        check(watched.update(.014f, 0.f, .9f, true), "the swing kick's flick: taken when watched from the chord");
+    }
     std::printf("air_kick: %d checks passed\n", passed);
     return 0;
 }
