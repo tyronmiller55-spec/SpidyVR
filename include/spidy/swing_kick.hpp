@@ -33,7 +33,7 @@ struct Config {
     float minSpeed = 9.f;
     // The flick: the stick's size from under flickLow to over flickHigh within flickSeconds, its push
     // within upDegrees of straight up.
-    float flickLow = .3f, flickHigh = .8f, flickSeconds = .08f, upDegrees = 50.f;
+    float flickLow = .35f, flickHigh = .75f, flickSeconds = .15f, upDegrees = 50.f; // .3, .8, 80 ms until Nov 18
     // The rope assist: at most ropeMetres in all, ropeRate m/s; the steering at most steer m/s^2.
     float ropeMetres = 1.2f, ropeRate = 2.f, steer = 2.5f;
     // A miss's fade, and the longest a kick stays armed.

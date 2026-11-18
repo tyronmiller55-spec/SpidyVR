@@ -76,7 +76,7 @@ struct Config {
     // A blow this strong or more flies the enemy (a kinetic blow, as every dive).
     float flyStrength = .7f;
     // The flick: the stick's size from under flickLow to over flickHigh within flickSeconds.
-    float flickLow = .3f, flickHigh = .8f, flickSeconds = .08f;
+    float flickLow = .35f, flickHigh = .75f, flickSeconds = .15f; // .3, .8, 80 ms until Nov 18 (the owner: kicks unreliable)
     // Straight up within straightDegrees (double dive), a side's dive within diveDegrees, else freeform.
     float straightDegrees = 20.f, diveDegrees = 70.f, sideDegrees = 110.f;
     // A roundhouse: the side (size and share of the stick's width), the longest the quarter circle takes,

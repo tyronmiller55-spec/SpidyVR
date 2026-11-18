@@ -114,22 +114,25 @@ int main() {
         check(coneDot({}, {1, 0, 0}) == 0 && !inCone({}, {1, 0, 0}, 30), "no velocity, no cone");
         check(near(std::cos(30 * deg), .866f, 1e-3f), "cos 30 = .866");
     }
-    // The flick: under 0.3 to over 0.8 within 80 ms; a slow push stays the pose; up only.
+    // The flick: under 0.35 to over 0.75 within 150 ms (0.3, 0.8, 80 ms until Nov 18); a slow push stays the pose; up only.
     {
         check(flicks({{0, 0}, {0, .95f}}), "rest to a full push in one sample is a flick");
         check(flicks({{0, .1f}, {0, .5f}, {0, .95f}}), "three samples (22 ms) is a flick");
         check(flicks({{0, .29f}, {0, .5f}, {0, .7f}, {0, .85f}}), "0.3 to 0.8 in 33 ms is a flick");
+        check(flicks({{0, .3f}, {0, .4f}, {0, .45f}, {0, .5f}, {0, .55f}, {0, .6f}, {0, .65f}, {0, .7f}, {0, .78f}}),
+              "a lazier flick (0.3 to 0.78 in ~90 ms) is a kick now (Nov 18: kicks unreliable)");
         std::vector<std::pair<float, float>> slow{{0, 0}};
-        for (int i = 1; i <= 20; ++i)
-            slow.push_back({0, i * .05f});
-        check(!flicks(slow), "a slow push (220 ms) is the jackknife pose, not a kick");
+        for (int i = 1; i <= 34; ++i)
+            slow.push_back({0, i * .03f});
+        check(!flicks(slow), "a slow push (0.35 to 0.75 in about 150 ms) is the jackknife pose, not a kick");
         check(!flicks({{0, 0}, {0, .6f}}), "a push that does not pass 0.8 is not a flick");
         check(!flicks({{0, 0}, {0, -.95f}}), "down is not a kick");
         check(!flicks({{0, 0}, {.95f, 0}}), "sideways is not a kick");
         check(!flicks({{0, 0}, {.95f, .1f}}), "nearly sideways is not a kick");
         check(flicks({{0, 0}, {.5f, .8f}}), "up and a little right is (within 50 degrees of up)");
-        // Over 80 ms: 0.29 ... then 90 ms to 0.9.
+        // Over 150 ms: 0.2, held at 0.5 ~165 ms, then 0.95.
         check(!flicks({{0, .2f},
+                       {0, .5f}, {0, .5f}, {0, .5f}, {0, .5f}, {0, .5f}, {0, .5f},
                        {0, .5f},
                        {0, .5f},
                        {0, .5f},
@@ -139,7 +142,7 @@ int main() {
                        {0, .5f},
                        {0, .5f},
                        {0, .95f}}),
-              "100 ms past the rest mark is a push");
+              "over 150 ms past the rest mark is a push");
         // One flick per push: held up, no second; it needs the stick to rest again.
         Flick f;
         int fired = 0;

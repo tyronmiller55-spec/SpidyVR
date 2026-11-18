@@ -128,8 +128,8 @@ int main() {
         // A slow push is the turn's, never a kick.
         Samples slow;
         rest(slow);
-        for (int i = 1; i <= 20; ++i)
-            slow.push_back(at(0, i * .05f));
+        for (int i = 1; i <= 34; ++i)
+            slow.push_back(at(0, i * .03f)); // 0.35 to 0.75 in ~150 ms: past the 150 ms window (80 ms until Nov 18)
         check(run(slow).count == 0, "a slow push kicks nothing");
         check(run(flickAt(0), .011f, false).count == 0, "not engaged: nothing");
         Samples bad = flickAt(0);
