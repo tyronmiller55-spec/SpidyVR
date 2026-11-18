@@ -443,8 +443,8 @@ inline bool cancelArmed(bool animOwns, bool supportedNow) {
 }
 
 // WEB LINE CANCEL on the ground: why a web fired in a native animation there may NOT hand to SpidyVR (nullptr:
-// it may). Unsafe: a scene or a stale sample, a fight or a dodge (its finishers and counters are the game's), a
-// zip under way, Spidy's own wall (already SpidyVR's), the game's vault, mantle or wall run (NATIVE RUN's
+// it may). Unsafe: a scene or a stale sample, a fight or a dodge (its finishers and counters are the game's), Spidy's
+// own wall (already SpidyVR's), the game's vault, mantle or wall run (NATIVE RUN's
 // parkour) in its first parkourCutSeconds, and the air (the grip cancel's, not this).
 // The game's parkour may be cut once it has run parkourCutSeconds (the owner, Nov 18: "Allow web cancel during parkour after
 // 150 ms"): its first frames carry the mantle's or vault's geometry (the body may be inside the ledge).
@@ -454,8 +454,7 @@ inline const char* groundWebRefusal(const head_probe::StateInputs& s, bool perch
         return "cutscene";
     if (s.fighting || s.dodging)
         return "combat";
-    if (s.zipping)
-        return "zip";
+    // A zip is cut at once (the owner, Nov 18: "Zip cancel happens immediately"), its pull too.
     if (s.wall == surfaceWall)
         return "wall";
     if (!s.owned && s.runRt && s.wall != 0 && !(parkourSeconds >= parkourCutSeconds))

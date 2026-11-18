@@ -41,7 +41,7 @@ int main() {
         t = s, t.dodging = true;
         check(std::strcmp(groundWebRefusal(t, false), "combat") == 0, "a dodge: refused");
         t = s, t.zipping = true;
-        check(std::strcmp(groundWebRefusal(t, false), "zip") == 0, "a zip: refused");
+        check(groundWebRefusal(t, false) == nullptr, "a zip: cut at once (the owner, Nov 18)");
         t = s, t.wall = surfaceWall, t.grounded = false;
         check(std::strcmp(groundWebRefusal(t, false), "wall") == 0, "Spidy's wall: refused (already SpidyVR's)");
         t = s, t.runRt = true, t.wall = surfaceGame;
@@ -102,8 +102,30 @@ int main() {
                 g.state.playing = false, g.cutscene = true;
             g.groundWeb = true;
             o.update(g, t += step);
-            check(o.domain == Domain::anim, which == 0 ? "a fight keeps the animation" : which == 1 ? "a zip keeps it"
-                                                                                                    : "a scene keeps it");
+            if (which == 1)
+                check(o.domain == Domain::vr && o.lastEnterVr == EnterVr::cancel, "a zip: the web cuts it at once");
+            else
+                check(o.domain == Domain::anim, which == 0 ? "a fight keeps the animation" : "a scene keeps it");
+        }
+        // A zip's pull in the air: the grip cancel cuts it on the frame (immediate, no wait for the pull to end).
+        {
+            HybridOwner o;
+            Frame g;
+            g.state.playing = g.state.fresh = g.state.grounded = true;
+            int64_t t = 1'000'000'000;
+            for (int i = 0; i < 5; ++i)
+                o.update(g, t += step);
+            g.zipPress = true;
+            g.state.grounded = false;
+            o.update(g, t += step);
+            g.zipPress = false;
+            g.state.zipping = true;
+            g.velY = 12;
+            o.update(g, t += step);
+            check(o.domain == Domain::anim, "a zip pulls: the animation's");
+            g.cancelGrip = true;
+            o.update(g, t += step);
+            check(o.domain == Domain::vr && o.lastEnterVr == EnterVr::cancel, "a grip mid-pull: SpidyVR at once");
         }
         // The game's parkour on its crawl: refused in its first 150 ms, cut after.
         {

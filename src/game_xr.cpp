@@ -5553,8 +5553,9 @@ DWORD WINAPI run(void*) {
                                                                ? frame.predictedDisplayTime
                                                                : static_cast<int64_t>(GetTickCount64()) *
                                                                      1'000'000ll))
-                                diag_log::writef("grip cancel: anim->vr this frame (display %lld ns)",
-                                                 static_cast<long long>(frame.predictedDisplayTime));
+                                diag_log::writef("grip cancel: anim->vr this frame (display %lld ns)%s",
+                                                 static_cast<long long>(frame.predictedDisplayTime),
+                                                 zipping ? ", a zip cut at once" : "");
                             if (!++gripCancelToken) ++gripCancelToken;
                             hybridZipPress = hybridJumpAsk = false;
                             stickPush.cancel();
