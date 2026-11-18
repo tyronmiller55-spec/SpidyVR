@@ -5,6 +5,7 @@
 #include "spidy/leg_layers.hpp"
 #include <cmath>
 #include <cstdio>
+#include <string>
 #include <cstdlib>
 #include <vector>
 
@@ -556,6 +557,42 @@ int main() {
         check(!late.update(.014f, 0.f, .9f, true), "the swing kick's flick: lost to a late watch");
         watched.update(.014f, 0.f, .2f, true);
         check(watched.update(.014f, 0.f, .9f, true), "the swing kick's flick: taken when watched from the chord");
+    }
+    // KICK TARGET FALLBACK (the 2 AM log: 25 of 25 kicks started with target=0): an enemy 60 degrees off the gaze,
+    // within reach, is the target, and the kick goes his way; one behind is not.
+    {
+        const float a = 60.f * 3.14159265f / 180.f;
+        const Kick::Target side[] = {enemy(9, Vec3{std::sin(a) * 1.2f, 10, -std::cos(a) * 1.2f})};
+        Kick k;
+        const auto o = k.ask(frame(side), {Gesture::dive, 1, 30, .9f});
+        check(o.target == 9 && k.fallback(), "60 degrees off the gaze, in reach: the fallback target");
+        const Kick::Target behind[] = {enemy(9, Vec3{0, 10, 1.2f})};
+        Kick b;
+        check(b.ask(frame(behind), {Gesture::dive, 1, 30, .9f}).target == 0 && !b.fallback(), "behind: none");
+        const Kick::Target ahead[] = {enemy(5, Vec3{0, 10, -1.2f})};
+        Kick g;
+        check(g.ask(frame(ahead), {Gesture::dive, 1, 30, .9f}).target == 5 && !g.fallback(), "in the gaze: no fallback");
+    }
+    // KICK FLICK MISSES: a slow push and a short one are logged with why; a flick and a resting thumb are not.
+    {
+        FlickWatch w;
+        const float dt = 1.f / 72;
+        FlickMiss m;
+        for (int i = 0; i <= 30; ++i)
+            m = w.update(dt, 0, std::min(1.f, .3f + i * .03f), true, false); // 0.3 -> 1 over ~0.33 s
+        check(!m.why, "still out: nothing yet");
+        m = w.update(dt, 0, 0, true, false);
+        check(m.why && std::string(m.why) == "too slow" && m.peak > .99f && m.highSeconds > .15f, "a slow push: too slow");
+        for (int i = 0; i < 10; ++i)
+            m = w.update(dt, 0, .6f, true, false);
+        m = w.update(dt, 0, .1f, true, false);
+        check(m.why && std::string(m.why) == "too small" && near(m.peak, .6f) && m.highSeconds < 0, "a short push: too small");
+        w.update(dt, 0, .9f, true, true);
+        m = w.update(dt, 0, .1f, true, false);
+        check(!m.why, "a push a kick came of: no miss");
+        w.update(dt, 0, .45f, true, false);
+        m = w.update(dt, 0, .1f, true, false);
+        check(!m.why, "a resting thumb: no try");
     }
     std::printf("air_kick: %d checks passed\n", passed);
     return 0;

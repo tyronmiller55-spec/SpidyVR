@@ -301,7 +301,7 @@ struct Values {
     // from before it gets RUN CURVE on and EARLY JUMP QUICK TAP once (the
     // user: "movement fixes will be defaults"); after that the player's own
     // choice stands. Not a row. movement_defaults.
-    int movementDefaults = 9; // movementDefaultsRevision: a new file has seen them
+    int movementDefaults = 10; // movementDefaultsRevision: a new file has seen them
     // SOFT LANDING (the tab's SOFT LANDING; Swing::allowSoftLanding,
     // run_update::softLandVertical): a fall the swing flies, with no web
     // holding, eases to 9 m/s down over its last 3 m (or 0.35 s), its speed
@@ -585,7 +585,7 @@ struct Values {
     // kick_gaze_cone_deg: how far from your gaze a zone point can be and still be aimed at (25).
     // kick_spin_pct: how much of the kick's spin reaction the legs' coupling keeps (30).
     bool kicks = false;
-    int kickGazeConeDeg = 25, kickSpinPct = 30;
+    int kickGazeConeDeg = 40, kickSpinPct = 30; // cone 25 until the 2 AM log (Nov 18): 25 of 25 kicks found no enemy
     // GROUND KICKS (K3, ground_kick.hpp; November 14): on by default since Nov 18 (the owner, t119u; revision 9
     // moves an untuned off). ground_kicks: standing
     // (slower than 2 m/s) with the legs engaged (Y + X), a quick flick of the right stick kicks: up a front
@@ -1208,7 +1208,7 @@ std::string tabOnlyText(const Values&);
 // key, or whose value is no whole number, is passed over.
 Values withTabOnly(Values, std::string_view text);
 // The movement defaults' revision (Values::movementDefaults) this build has.
-inline constexpr int movementDefaultsRevision = 9;
+inline constexpr int movementDefaultsRevision = 10;
 // November 12 movement cleanup: a settings file (that text) older than
 // movementDefaultsRevision gets the new movement defaults once - RUN CURVE
 // on, EARLY JUMP at least QUICK TAP - and is marked as having seen them; a

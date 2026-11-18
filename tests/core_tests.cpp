@@ -25092,7 +25092,7 @@ int main() {
                   "the movement defaults overrode a choice made after them");
             check(withMovementDefaults(withTabOnly({}, ""), "").runCurve,
                   "no file: not the movement defaults");
-            check(tabOnlyText(migrated).find("movement_defaults=9\n") != std::string::npos,
+            check(tabOnlyText(migrated).find("movement_defaults=10\n") != std::string::npos,
                   "the migration is not remembered");
         }
         {
@@ -25486,7 +25486,7 @@ int main() {
                   "camera_stabilization=0\ncamera_vertical_ms=0\ncamera_horizontal_ms=0\ncamera_angle_ms=0\n"
                   "camera_light_vertical_ms=75\ncamera_light_horizontal_ms=50\ncamera_light_angle_ms=75\n"
                   "camera_heavy_vertical_ms=200\ncamera_heavy_horizontal_ms=150\ncamera_heavy_angle_ms=200\n"
-                  "spherical_aim=1\nleg_control=0\nleg_stiffness_pct=100\nleg_damping_pct=100\nleg_coupling_pct=50\nleg_double_tap_ms=300\npunch_view_ease_ms=250\nmove_haptics_pct=100\nview_yaw_source=1\nsound_trace=1\njump_handoff_ms=250\nair_view_ease_ms=200\nanim_yaw_sway_pct=20\nturn_in_place_deg=35\npassive_legs_pct=60\npassive_coupling_pct=15\nmovement_mode=0\nrear_snap_turn_ms=200\nanimated_torso_twist=80\nanim_forearm_fallback_deg=60\ncamera_steady_vertical_ms=200\ncamera_steady_horizontal_ms=200\ncamera_steady_angle_ms=200\ncamera_horizon_level_pct=0\ncamera_vr_stabilization=1\nswing_kick_manual=0\nswing_kick_auto=1\nwall_brake=0\ngrip_fling=0\ngrip_stop_pct=200\ngrip_fling_gain_pct=130\ngrip_fling_max=9\nhand_grab=0\nhand_grab_force=1200\nenemy_hold_cost=1\nkicks=0\nkick_gaze_cone_deg=25\nkick_spin_pct=30\nground_kicks=1\nenemy_joints=0\nenemy_limb_zones=0\nphysical_tethers=0\ntether_particles=24\ntether_substeps=8\nleg_air_crouch=1\nleg_reach_spread=1\nair_poses=1\ndirectional_flips=1\nair_fists=1\n"
+                  "spherical_aim=1\nleg_control=0\nleg_stiffness_pct=100\nleg_damping_pct=100\nleg_coupling_pct=50\nleg_double_tap_ms=300\npunch_view_ease_ms=250\nmove_haptics_pct=100\nview_yaw_source=1\nsound_trace=1\njump_handoff_ms=250\nair_view_ease_ms=200\nanim_yaw_sway_pct=20\nturn_in_place_deg=35\npassive_legs_pct=60\npassive_coupling_pct=15\nmovement_mode=0\nrear_snap_turn_ms=200\nanimated_torso_twist=80\nanim_forearm_fallback_deg=60\ncamera_steady_vertical_ms=200\ncamera_steady_horizontal_ms=200\ncamera_steady_angle_ms=200\ncamera_horizon_level_pct=0\ncamera_vr_stabilization=1\nswing_kick_manual=0\nswing_kick_auto=1\nwall_brake=0\ngrip_fling=0\ngrip_stop_pct=200\ngrip_fling_gain_pct=130\ngrip_fling_max=9\nhand_grab=0\nhand_grab_force=1200\nenemy_hold_cost=1\nkicks=0\nkick_gaze_cone_deg=40\nkick_spin_pct=30\nground_kicks=1\nenemy_joints=0\nenemy_limb_zones=0\nphysical_tethers=0\ntether_particles=24\ntether_substeps=8\nleg_air_crouch=1\nleg_reach_spread=1\nair_poses=1\ndirectional_flips=1\nair_fists=1\n"
                   "camera_pitch_pct=100\ncamera_roll_pct=100\ncamera_bob_vertical_pct=100\ncamera_bob_side_pct=100\n"
                   "camera_head_angle_deg=0\n"
                   "sidestep=1\nsidestep_distance_cm=200\nsidestep_ms=180\nsidestep_cooldown_ms=300\n"
@@ -25544,7 +25544,7 @@ int main() {
                   "marker_twist_steady=1\n"
                   "marker_turn_rate_dps=360\n"
                   "marker_switch_hold_ms=150\n"
-                  "movement_defaults=9\n",
+                  "movement_defaults=10\n",
               "the defaults' text");
         Values changed = defaults;
         changed.recordingFov = 140;
@@ -32578,9 +32578,9 @@ int main() {
                   std::strstr(row->title, "EXPERIMENTAL"),
               "the air kicks row, labelled experimental");
         Values defaults;
-        check(!defaults.kicks && defaults.kickGazeConeDeg == 25 && defaults.kickSpinPct == 30 &&
+        check(!defaults.kicks && defaults.kickGazeConeDeg == 40 && defaults.kickSpinPct == 30 &&
                   choice(Item::kicks, defaults) == 0 && defaultChoice(Item::kicks) == 0,
-              "air kicks are off by default, aim 25 degrees, spin 30%");
+              "air kicks are off by default, aim 40 degrees (25 until the 2 AM log), spin 30%");
         Values v;
         check(choose(Item::kicks, 1, v) && v.kicks && choose(Item::kicks, 0, v) && !v.kicks,
               "the switch sets the value");
@@ -32604,7 +32604,7 @@ int main() {
             int Values::* number;
         };
         const Entry numbers[] = {
-            {Item::kickGazeCone, "kick_gaze_cone_deg", 10, 50, 25, &Values::kickGazeConeDeg},
+            {Item::kickGazeCone, "kick_gaze_cone_deg", 10, 50, 40, &Values::kickGazeConeDeg},
             {Item::kickSpin, "kick_spin_pct", 0, 100, 30, &Values::kickSpinPct},
         };
         check(onLegs(Item::kicks), "the switch is on the legs page");
@@ -32678,6 +32678,15 @@ int main() {
                                     "ground_kicks=0\nmovement_defaults=9\n")
                        .groundKicks,
               "off chosen after revision 9 stays off");
+        // Revision 10 (the 2 AM log): KICK GAZE CONE 25 -> 40; a tuned value stays.
+        check(withMovementDefaults(withTabOnly({}, "kick_gaze_cone_deg=25\nmovement_defaults=9\n"),
+                                   "kick_gaze_cone_deg=25\nmovement_defaults=9\n")
+                      .kickGazeConeDeg == 40,
+              "revision 10: the old 25 degrees become 40");
+        check(withMovementDefaults(withTabOnly({}, "kick_gaze_cone_deg=30\nmovement_defaults=9\n"),
+                                   "kick_gaze_cone_deg=30\nmovement_defaults=9\n")
+                      .kickGazeConeDeg == 30,
+              "a tuned cone stays");
         Values aim;
         aim.groundKicks = false;
         check(inactiveReason(Item::kickGazeCone, aim) && std::strstr(inactiveReason(Item::kickGazeCone, aim), "GROUND KICKS"),

@@ -65,7 +65,11 @@ inline const char* zoneName(Zone z) {
 
 struct Config {
     // The gaze: zone points within gazeCone of it, full weight inside gazeFull.
-    float gazeCone = 25.f, gazeFull = 8.f;
+    float gazeCone = 25.f, gazeFull = 8.f; // KICK GAZE CONE sets it (40 by default since the 2 AM log)
+    // KICK TARGET FALLBACK (the 2 AM log, approved Nov 18 1:53 PM): with no zone point inside the gaze cone, the
+    // nearest enemy in front (within frontDegrees of the gaze, level) and within the foot's reach is the target:
+    // the kick goes his way and his zone is the gesture's own.
+    float frontDegrees = 75.f, frontSlack = 0.f;
     // The leg's reach from the pelvis, and the air's lunge on top; the foot's sphere; the pelvis' height
     // over the feet.
     float reach = 1.15f, lunge = .4f, footRadius = .1f, hipHeight = .9f;
@@ -209,6 +213,61 @@ class Gestures {
     float sinceLow_ = 1e3f, pendingAge_{}, minSize_{};
     int pendingSide_{};
     float pendingAngle_{}, pendingSize_{};
+};
+
+// KICK FLICK MISSES (the 2 AM log, approved Nov 18 1:53 PM: 7 Y+X holds there had no kick and the log said not
+// why). Watches the same stick as Gestures while the legs are engaged: each push out of the low mark that no
+// gesture came of, once the stick is back under it (or the legs let go), is a miss - its peak size, the time from
+// the low mark to the peak and to the high mark (if it got there), and why: too small (never past flickHigh) or
+// too slow (past it after flickSeconds). Pushes that never pass `watchSize` are resting thumbs, not tries.
+struct FlickMiss {
+    const char* why{}; // nullptr: none
+    float peak{}, peakSeconds{}, highSeconds = -1.f, angle{};
+};
+class FlickWatch {
+  public:
+    static constexpr float watchSize = .5f;
+    // fired: a gesture came of this sample (or is pending, the roundhouse's wait).
+    FlickMiss update(float seconds, float x, float y, bool engaged, bool fired, const Config& c = {}) {
+        FlickMiss miss;
+        const float size = std::isfinite(x) && std::isfinite(y) ? std::hypot(x, y) : 0.f;
+        const float dt = std::isfinite(seconds) ? std::clamp(seconds, 0.f, .1f) : 0.f;
+        if (fired)
+            out_ = false, done_ = true;
+        if (!engaged || size < c.flickLow) {
+            if (out_ && !done_ && peak_ >= watchSize) {
+                miss.why = peak_ <= c.flickHigh ? "too small" : "too slow";
+                miss.peak = peak_;
+                miss.peakSeconds = peakAt_;
+                miss.highSeconds = highAt_;
+                miss.angle = angle_;
+            }
+            out_ = done_ = false;
+            age_ = peak_ = peakAt_ = 0;
+            highAt_ = -1.f;
+            return miss;
+        }
+        if (!out_ && !done_) {
+            out_ = true;
+            age_ = peak_ = peakAt_ = 0;
+            highAt_ = -1.f;
+        }
+        if (!out_)
+            return miss;
+        age_ += dt;
+        if (size > peak_) {
+            peak_ = size;
+            peakAt_ = age_;
+            angle_ = stickAngle(x, y);
+        }
+        if (highAt_ < 0 && size > c.flickHigh)
+            highAt_ = age_;
+        return miss;
+    }
+
+  private:
+    bool out_{}, done_{};
+    float age_{}, peak_{}, peakAt_{}, highAt_ = -1.f, angle_{};
 };
 
 // ---- the zone ----
@@ -505,6 +564,10 @@ class Kick {
     std::uint64_t target() const {
         return target_;
     }
+    // KICK TARGET FALLBACK: the target is the nearest in front, none being in the gaze cone.
+    bool fallback() const {
+        return fallback_;
+    }
     Vec3 foot() const {
         return lastFoot_;
     }
@@ -546,6 +609,7 @@ class Kick {
         eye_ = f.feet + f.eyeOffset;
         // The gaze picks the enemy and his zone.
         target_ = 0;
+        fallback_ = false;
         zone_ = Zone::chest;
         float best = 0;
         const Vec3 pelvis = f.feet + Vec3{0, c.hipHeight, 0};
@@ -581,6 +645,38 @@ class Kick {
                     askedByJoints = byJoints;
                 }
             }
+        }
+        // KICK TARGET FALLBACK: none in the gaze cone - the nearest in front within reach (and the slack).
+        if (target_ == 0 && gesture_ != Gesture::sweep) {
+            Vec3 aim = gaze_;
+            const Vec3 ahead{gaze_.x, 0, gaze_.z};
+            const float la = length(ahead);
+            float nearest = 1e9f;
+            for (const auto& t : f.targets) {
+                const Zone z = zonesFor(gesture_) & (1u << static_cast<int>(Zone::chest)) ? Zone::chest
+                               : zonesFor(gesture_) & (1u << static_cast<int>(Zone::head)) ? Zone::head
+                                                                                          : Zone::legs;
+                bool byJoints = false;
+                const Vec3 p = zonePoint(t.feet, t.height, z, t.joints, c.limbZones, gazeRef(t), &byJoints);
+                const float d = length(p - pelvis);
+                if (!(d <= c.reach + c.lunge + t.radius + c.frontSlack) || d >= nearest)
+                    continue;
+                const Vec3 to{p.x - pelvis.x, 0, p.z - pelvis.z};
+                const float lt = length(to);
+                if (la > 1e-3f && lt > 1e-3f && dot(ahead / la, to / lt) < std::cos(c.frontDegrees * deg))
+                    continue;
+                nearest = d;
+                target_ = t.id;
+                zone_ = z;
+                askedByJoints = byJoints;
+                fallback_ = true;
+                // The kick goes his way: its direction is the line to him (the gaze's height kept out).
+                const Vec3 line = p - eye_;
+                if (finite(line) && length(line) > 1e-3f)
+                    aim = normalized(line);
+            }
+            if (fallback_)
+                gaze_ = aim;
         }
         out.event = Event::started;
         out.target = target_;
@@ -689,6 +785,6 @@ class Kick {
     Zone zone_ = Zone::chest;
     std::uint64_t target_{};
     Vec3 gaze_{0, 0, -1}, eye_{}, lastFoot_{};
-    bool footSet_{}, hit_{}, startedGrounded_{};
+    bool footSet_{}, hit_{}, startedGrounded_{}, fallback_{};
 };
 } // namespace spidy::air_kick

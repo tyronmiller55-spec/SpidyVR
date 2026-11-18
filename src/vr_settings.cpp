@@ -313,7 +313,7 @@ static_assert(std::size(enemyHoldCostChoices) == std::size(enemyHoldCostSteps));
 // AIR KICKS (air_kick.hpp): how far from the gaze a zone point can be aimed at, and the share of the kick's spin
 // reaction the legs keep.
 constexpr int kickGazeConeSteps[] = {10, 15, 20, 25, 30, 40, 50};
-constexpr const char* kickGazeConeChoices[] = {"10 DEG", "15 DEG", "20 DEG", "25 DEG (DEFAULT)", "30 DEG", "40 DEG", "50 DEG"};
+constexpr const char* kickGazeConeChoices[] = {"10 DEG", "15 DEG", "20 DEG", "25 DEG", "30 DEG", "40 DEG (DEFAULT)", "50 DEG"};
 static_assert(std::size(kickGazeConeChoices) == std::size(kickGazeConeSteps));
 constexpr int kickSpinSteps[] = {0, 10, 20, 30, 40, 60, 80, 100};
 constexpr const char* kickSpinChoices[] = {"NONE", "10%", "20%", "30% (DEFAULT)", "40%", "60%", "80%", "100%"};
@@ -3257,6 +3257,13 @@ Values withMovementDefaults(Values v, std::string_view text) {
         // Revision 9 (the owner, Nov 18, t119u: "All of these are good, let's do them all"): GROUND KICKS on. An ini
         // from before wrote ground_kicks=0 as the old default, so it is untuned and moves.
         v.groundKicks = true;
+    }
+    if (seen < 10) {
+        // Revision 10 (the owner, Nov 18 1:53 PM, the 2 AM log's fixes): KICK GAZE CONE 25 -> 40 degrees (all 25 kicks
+        // of s020952 started with target=0: no enemy inside the cone). Still at the old default is untuned.
+        const Values fresh;
+        if (v.kickGazeConeDeg == 25)
+            v.kickGazeConeDeg = fresh.kickGazeConeDeg;
     }
     v.movementDefaults = movementDefaultsRevision;
     return sanitized(v);

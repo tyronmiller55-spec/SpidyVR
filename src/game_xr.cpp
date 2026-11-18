@@ -1756,6 +1756,7 @@ DWORD WINAPI run(void*) {
         // seconds into it) for the legs.
         air_kick::Gestures airGestures;
         ground_kick::Gestures groundGestures;
+        air_kick::FlickWatch kickFlickWatch; // KICK FLICK MISSES: the tries no kick came of
         // A kick gesture finished in a midair animation (its flick breaks the animation on that same frame) waits this
         // long for SpidyVR to take it: the break hands over by the next frame.
         static constexpr float kickHoldSeconds = .12f;
@@ -3196,6 +3197,27 @@ DWORD WINAPI run(void*) {
                         const air_kick::Flick groundFlick = groundGestures.update(
                             frame.seconds, frame.hands[1].stickX, frame.hands[1].stickY, groundHere);
                         const air_kick::Flick flick = groundHere ? groundFlick : airFlick;
+                        // KICK FLICK MISSES: a push past half the stick with the legs' chord held that no kick
+                        // came of, and why (the 2 AM log: 7 such holds and no word on them).
+                        {
+                            const bool fired = flick.gesture != air_kick::Gesture::none || airGestures.pending() ||
+                                               groundGestures.pending() ||
+                                               airFlickHeld.gesture != air_kick::Gesture::none;
+                            const air_kick::Config kc{};
+                            const auto miss = kickFlickWatch.update(frame.seconds, frame.hands[1].stickX,
+                                                                    frame.hands[1].stickY, kickWatch || groundHere,
+                                                                    fired, kc);
+                            if (miss.why) {
+                                char high[24] = "never";
+                                if (miss.highSeconds >= 0)
+                                    std::snprintf(high, sizeof high, "%.0f ms", miss.highSeconds * 1000.f);
+                                diag_log::writef("kick flick: missed (%s) peak %.2f at %.0f ms, past %.2f at %s, angle "
+                                                 "%.0f; a kick needs under %.2f to over %.2f within %.0f ms (%s)",
+                                                 miss.why, miss.peak, miss.peakSeconds * 1000.f, kc.flickHigh, high,
+                                                 miss.angle, kc.flickLow, kc.flickHigh, kc.flickSeconds * 1000.f,
+                                                 groundStand ? "ground" : "air");
+                            }
+                        }
                         game_swing::AirKickAsk ask;
                         if (flick.gesture != air_kick::Gesture::none) {
                             ++airSerial;
