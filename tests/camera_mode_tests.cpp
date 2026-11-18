@@ -183,19 +183,35 @@ int main() {
         check(!o.fire, "still out");
         o = s.update(.05f, .1f, true, 30);
         check(o.fire && near(o.turn, -30 * deg), "smooth: back within 0.12 s: one snap right");
-        // SNAP TAP WINDOW (snap_tap_ms, 120): a 0.15 s push is the smooth turn now; at 250 ms it was a snap.
+        // SNAP TAP WINDOW (snap_tap_ms, 250; the owner, Nov 18): s131456's 167-375 ms flicks; 120 ms missed them.
         {
             SnapRealign w;
-            check(near(w.tapSeconds, .12f) && near(SnapRealign::tapSecondsOf(120), .12f) &&
+            check(near(w.tapSeconds, .25f) && near(SnapRealign::tapSecondsOf(250), .25f) &&
                       near(SnapRealign::tapSecondsOf(5), .06f) && near(SnapRealign::tapSecondsOf(9000), .4f),
-                  "the tap window: 120 ms by default, clamped 60-400 ms");
+                  "the tap window: 250 ms by default, clamped 60-400 ms");
             w.update(.01f, .9f, true, 30);
             w.update(.1f, .9f, true, 30);
-            check(!w.update(.05f, .1f, true, 30).fire, "a 0.15 s push: no snap at 120 ms");
-            w.tapSeconds = SnapRealign::tapSecondsOf(250);
-            w.update(.01f, .9f, true, 30);
-            w.update(.1f, .9f, true, 30);
-            check(w.update(.05f, .1f, true, 30).fire, "the same push snaps at 250 ms (the old window)");
+            check(w.update(.05f, .1f, true, 30).fire, "a 0.15 s push: a snap at 250 ms");
+            // 0.24 s out and back: still a tap; 0.26 s and longer: the smooth turn, never a snap.
+            const auto push = [](SnapRealign& r, float seconds) {
+                r.update(.01f, .9f, true, 30);
+                float t = 0;
+                const float step = 1.f / 90.f;
+                while (t + step < seconds) {
+                    r.update(step, .9f, true, 30);
+                    t += step;
+                }
+                return r.update(seconds - t, .1f, true, 30).fire;
+            };
+            SnapRealign a;
+            check(push(a, .24f), "0.24 s: a tap");
+            SnapRealign b;
+            check(!push(b, .26f), "0.26 s: a smooth turn hold, no snap");
+            SnapRealign c;
+            check(!push(c, .375f), "0.375 s: a smooth turn hold, no snap");
+            SnapRealign d;
+            d.tapSeconds = SnapRealign::tapSecondsOf(120);
+            check(!push(d, .15f), "a tuned 120 ms window: a 0.15 s push is the smooth turn");
         }
         // SNAP FROM THE LIVE VIEW (Nov 17, realign #6): the snap returns to the live view less this push's own
         // smooth turn, whatever re-latched the view meanwhile.

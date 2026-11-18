@@ -146,13 +146,13 @@ int main() {
     {
         const spidy::vr_settings::Values fresh;
         check(fresh.punchTrackConeDeg == 90 && fresh.punchTrackRangeM == 10 && !fresh.punchTrackByLook &&
-                  fresh.movementDefaults == 6 && spidy::vr_settings::movementDefaultsRevision == 6,
-              "the defaults: 90 deg, 10 m, by look off, revision 6");
+                  fresh.movementDefaults == spidy::vr_settings::movementDefaultsRevision,
+              "the defaults: 90 deg, 10 m, by look off, the current revision");
         spidy::vr_settings::Values old;
         old.punchTrackConeDeg = 60;
         old.punchTrackRangeM = 8;
         auto m = spidy::vr_settings::withMovementDefaults(old, "movement_defaults=5\n");
-        check(m.punchTrackConeDeg == 90 && m.punchTrackRangeM == 10 && m.movementDefaults == 6, "60 / 8 become 90 / 10");
+        check(m.punchTrackConeDeg == 90 && m.punchTrackRangeM == 10 && m.movementDefaults == spidy::vr_settings::movementDefaultsRevision, "60 / 8 become 90 / 10");
         old.punchTrackConeDeg = 45;
         old.punchTrackRangeM = 4;
         m = spidy::vr_settings::withMovementDefaults(old, "movement_defaults=5\n");

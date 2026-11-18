@@ -301,7 +301,7 @@ struct Values {
     // from before it gets RUN CURVE on and EARLY JUMP QUICK TAP once (the
     // user: "movement fixes will be defaults"); after that the player's own
     // choice stands. Not a row. movement_defaults.
-    int movementDefaults = 6; // movementDefaultsRevision: a new file has seen them
+    int movementDefaults = 7; // movementDefaultsRevision: a new file has seen them
     // SOFT LANDING (the tab's SOFT LANDING; Swing::allowSoftLanding,
     // run_update::softLandVertical): a fall the swing flies, with no web
     // holding, eases to 9 m/s down over its last 3 m (or 0.35 s), its speed
@@ -735,9 +735,10 @@ struct Values {
     // too - the walk stick brings him round, fights included - and the turn is logged as a "realign" hero turn.
     // Off: the view snaps and the body stays where it was.
     bool snapBodyTurn = true;
-    // SNAP TAP WINDOW (snap_tap_ms, 120; was 250): with SMOOTH TURN on, a right-stick push out and back within this
-    // many milliseconds is a snap realign; a longer push is the smooth turn. Shorter: fewer snaps by accident.
-    int snapTapMs = 120;
+    // SNAP TAP WINDOW (snap_tap_ms, 250; 120 Nov 16-18, 250 before): with SMOOTH TURN on, a right-stick push out and
+    // back within this many milliseconds is a snap realign; a longer push is the smooth turn. Shorter: fewer snaps by
+    // accident. The owner, Nov 18: "Raise the snap tap window to 250 ms" (s131456: 67 flicks of 167-375 ms missed).
+    int snapTapMs = 250;
     // DODGE RE-FACE (dodge_reface, on): when a dodge has settled (0.4 s after the button is let go) and the body faces
     // more than 10 degrees off where the player looks, the walk stick turns him back onto the view - a smooth turn,
     // never a snap, fights included; the view is never written. Off: as before (only the turn-in-place angle).
@@ -1187,7 +1188,7 @@ std::string tabOnlyText(const Values&);
 // key, or whose value is no whole number, is passed over.
 Values withTabOnly(Values, std::string_view text);
 // The movement defaults' revision (Values::movementDefaults) this build has.
-inline constexpr int movementDefaultsRevision = 6;
+inline constexpr int movementDefaultsRevision = 7;
 // November 12 movement cleanup: a settings file (that text) older than
 // movementDefaultsRevision gets the new movement defaults once - RUN CURVE
 // on, EARLY JUMP at least QUICK TAP - and is marked as having seen them; a

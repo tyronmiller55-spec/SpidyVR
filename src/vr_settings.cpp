@@ -3115,6 +3115,13 @@ Values withMovementDefaults(Values v, std::string_view text) {
         if (v.handstandReachCm == 130)
             v.handstandReachCm = fresh.handstandReachCm;
     }
+    if (seen < 7) {
+        // Revision 7 (the owner, Nov 18): SNAP TAP WINDOW 120 -> 250 ms (s131456: 67 right-stick flicks of 167-375 ms
+        // were taken as the smooth turn). Still at the old default is untuned; a tuned value stays.
+        const Values fresh;
+        if (v.snapTapMs == 120)
+            v.snapTapMs = fresh.snapTapMs;
+    }
     v.movementDefaults = movementDefaultsRevision;
     return sanitized(v);
 }

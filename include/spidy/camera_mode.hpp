@@ -248,7 +248,7 @@ inline float shouldersYaw(bool chestOk, float chestYaw, float heroYaw, bool* use
 // (snap_tap_ms, 120 ms; it was 0.25 s; a longer push is the smooth turn, as before); without it, the flick fires on
 // the way out (the old snap's feel). `turn`: radians, + left (the rig's yaw).
 struct SnapRealign {
-    static constexpr float on = .7f, off = .4f, defaultTapSeconds = .12f;
+    static constexpr float on = .7f, off = .4f, defaultTapSeconds = .25f;
     float tapSeconds = defaultTapSeconds;
     static float tapSecondsOf(int ms) {
         return static_cast<float>(std::clamp(ms, 60, 400)) * .001f;

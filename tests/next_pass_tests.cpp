@@ -56,8 +56,8 @@ int main() {
     // SNAP BODY TURN / SNAP TAP WINDOW: on by default, 120 ms, the turn named in the logs.
     {
         const vr_settings::Values v{};
-        check(v.snapBodyTurn && v.snapTapMs == 120, "snap body turn on, tap window 120 ms");
-        check(near(camera_mode::SnapRealign::tapSecondsOf(v.snapTapMs), .12f), "the window in seconds");
+        check(v.snapBodyTurn && v.snapTapMs == 250, "snap body turn on, tap window 250 ms (Nov 18)");
+        check(near(camera_mode::SnapRealign::tapSecondsOf(v.snapTapMs), .25f), "the window in seconds");
         check(std::string(facing_check::eventName(facing_check::Event::realign)) == "snap realign" &&
                   std::string(facing_check::eventName(facing_check::Event::dodge)) == "dodge re-face",
               "the hero turns' names");
@@ -443,6 +443,20 @@ int main() {
             h.update(true, dt, .15f);
         check(h.value, "held 150 ms: taken");
         check(h.update(false, dt, 0.f) == false, "0: at once");
+    }
+    // SNAP TAP WINDOW 120 -> 250 ms (the owner, Nov 18): revision 7 moves an untuned 120 once; a tuned value stays.
+    {
+        check(vr_settings::movementDefaultsRevision == 7 && vr_settings::Values{}.movementDefaults == 7, "revision 7");
+        vr_settings::Values old;
+        old.snapTapMs = 120;
+        check(vr_settings::withMovementDefaults(old, "movement_defaults=6\n").snapTapMs == 250, "120 becomes 250");
+        check(vr_settings::withMovementDefaults(old, "").snapTapMs == 250, "an old file with no revision: 250");
+        old.snapTapMs = 180;
+        check(vr_settings::withMovementDefaults(old, "movement_defaults=6\n").snapTapMs == 180, "a tuned 180 stays");
+        old.snapTapMs = 120;
+        check(vr_settings::withMovementDefaults(old, "movement_defaults=7\n").snapTapMs == 120,
+              "120 chosen after revision 7 stays");
+        check(vr_settings::withTabOnly({}, "snap_tap_ms=250\n").snapTapMs == 250, "the ini key reads");
     }
     std::printf("next pass: %d checks passed\n", passed);
     return 0;

@@ -25091,7 +25091,7 @@ int main() {
                   "the movement defaults overrode a choice made after them");
             check(withMovementDefaults(withTabOnly({}, ""), "").runCurve,
                   "no file: not the movement defaults");
-            check(tabOnlyText(migrated).find("movement_defaults=6\n") != std::string::npos,
+            check(tabOnlyText(migrated).find("movement_defaults=7\n") != std::string::npos,
                   "the migration is not remembered");
         }
         {
@@ -25515,7 +25515,7 @@ int main() {
                   "punch_camera_lock_ms=300\n"
                   "view_relatch_fix=1\n"
                   "snap_body_turn=1\n"
-                  "snap_tap_ms=120\n"
+                  "snap_tap_ms=250\n"
                   "dodge_reface=1\n"
                   "landing_body_to_view=1\n"
                   "landing_body_ease_ms=500\n"
@@ -25543,7 +25543,7 @@ int main() {
                   "marker_twist_steady=1\n"
                   "marker_turn_rate_dps=360\n"
                   "marker_switch_hold_ms=150\n"
-                  "movement_defaults=6\n",
+                  "movement_defaults=7\n",
               "the defaults' text");
         Values changed = defaults;
         changed.recordingFov = 140;
