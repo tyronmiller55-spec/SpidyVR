@@ -2444,6 +2444,10 @@ void App::options(ImVec2 origin, ImVec2 size) {
                    "Off: while enemies are near, and 3 s after, arms and webs stop turning you and you come "
                    "upright.",
                    S(42), [&] { tabToggle("##combat", Item::automaticCombat); });
+        settingOption(Item::directionalFlips, "Directional flips",
+                   "Standing, hold the left stick to a side, ahead or back and tap A (let go within 0.18 s): a side "
+                   "flip, front flip or backflip that way. Holding A is still the normal jump. On by default.",
+                   S(42), [&] { tabToggle("##directionalflips", Item::directionalFlips); });
     });
     group(4, 1, "Advanced rotation tuning", [&] {
         if (ImGui::CollapsingHeader("Show fine tuning")) {
@@ -2810,6 +2814,10 @@ void App::options(ImVec2 origin, ImVec2 size) {
                    "A hand reaching down between your legs: they spread and lift forward with bent knees to "
                    "clear your arm. On by default.",
                    S(42), [&] { tabToggle("##legreachspread", Item::legReachSpread); });
+            settingOption(Item::airPoses, "Midair poses",
+                   "Tuck in a flip, dive when looking down while falling fast, superhero with one fist up and the "
+                   "other low while rising, starfish with your arms spread wide. On by default.",
+                   S(42), [&] { tabToggle("##airposes", Item::airPoses); });
         });
         group(legsPage, 1, "Swing kick (experimental)", [&] {
             settingOption(

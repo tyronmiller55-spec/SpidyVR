@@ -44,7 +44,7 @@ Once B is held in the air with Y+X physically held, B is taken **before** POINT 
 ## First midair poses (Nov 18)
 
 The owner's first four poses, **legs only** for now (the spine and arms need the torso channel, all-jumps plan J1,
-not built). They ride the AIR CROUCH setting (`leg_air_crouch=0` turns them off too) and the auto-pose layer: one at
+not built). Their own switch since Nov 18 1:09 PM: **MIDAIR POSES** (`air_poses`, on; VR LEGS (ADVANCED) and the launcher's Legs page). They use the auto-pose layer: one at
 a time, in this order, eased in over 0.2 s and out over 0.25 s; on, a pose stays at least 0.3 s (only TUCK cuts in)
 and leaves when its reason has been gone 0.12 s. While one shows, AIR CROUCH and REACH SPREAD give way (not added on
 top). Gone at once on landing.

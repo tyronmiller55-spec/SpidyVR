@@ -786,6 +786,9 @@ int main() {
                 continue;
             if (key == "handoff_place_cm")
                 continue;
+            // MIDAIR POSES, DIRECTIONAL FLIPS (Nov 18): the player's own feel, as the rows after TORSO TWIST.
+            if (key == "air_poses" || key == "directional_flips")
+                continue;
             if (key == "punch_track_by_look")
                 continue;
             if (key == "handstand_grace_before_ms")

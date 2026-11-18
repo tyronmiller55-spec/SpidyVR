@@ -24915,7 +24915,7 @@ int main() {
         // then (still November 14) HAND GRAB STRENGTH and HOLD COST, then AIR KICKS, AIM and SPIN.
         // then (still November 14) WEB TETHERS, TETHER POINTS and TETHER STEPS, then GROUND KICKS, ENEMY JOINTS and ENEMY LIMB ZONES.
         // Polish pass: HEADSET FIRST, ANIM HEAD RIDE and SHOULDER LIMIT (launcher rows) after those.
-        constexpr size_t rowsAfter = 74; // + the handoff tune's seven (Nov 18)
+        constexpr size_t rowsAfter = 76; // + the handoff tune's seven (Nov 18), + DIRECTIONAL FLIPS and MIDAIR POSES (Nov 18 1:09 PM)
         // // (Nov 14: + AIR UPRIGHT TIME, POINT JUMP BULLET, FALL TO SPIDYVR, AIR LANDING BLEND, AIR LANDING RELEASE) + PUNCH AUTO-TARGET (4 rows), JUMP PULL (5 rows) and the handstand balance (4 rows), SHOWTIME (3 rows, then 8, Nov 14)
         check(all.size() == firstRealistic + std::size(realistic) + rowsAfter,
               "the realistic flips' rows are not the last but the appended ones");
@@ -25187,14 +25187,14 @@ int main() {
                 // November 13 (torso update on): launcher rows, no room in the in-game tabs.
                 (row.item >= Item::animatedTorsoTwist && row.item < Item::showtime) ||
                 // November 14 (air takeover): launcher rows; HANDOFF TIMING's seven (Nov 18), the game's own tab.
-                (row.item >= Item::airCorrect && !(row.item >= Item::landingBlend && row.item <= Item::landingBodyEase));
+                (row.item >= Item::airCorrect && !(row.item >= Item::landingBlend && row.item <= Item::airPoses));
             check(row.place == (row.item == Item::view ? Place::page
                                 : launcherOnly           ? Place::launcher
                                                          : Place::tab),
                   "a row in the wrong place");
         }
         check(std::count_if(all.begin(), all.end(), [](const Row& r) { return r.place == Place::tab; }) ==
-                  165, // (Nov 18: +7 HANDOFF TIMING) (Nov 14: +15 SHOWTIME) November 11: +8 (SHOOTERS, LOCK STRENGTH, CAMERA MOTION, PITCH, ROLL, BOB x2, HEAD ANGLE), -5 old wrist rows; +6 POINT JUMP; November 12: +1 PUNCH VIEW EASE, +3 MOVE HAPTICS, VIEW YAW SOURCE, SOUND TRACE, +2 JUMP TO SPIDYVR, AIR VIEW EASE, +2 ANIM YAW SWAY, TURN-IN-PLACE ANGLE, +4 PASSIVE LEGS, PASSIVE COUPLING, AIR CROUCH, REACH SPREAD
+                  167, // (Nov 18 1:09 PM: +2 DIRECTIONAL FLIPS, MIDAIR POSES) (Nov 18: +7 HANDOFF TIMING) (Nov 14: +15 SHOWTIME) November 11: +8 (SHOOTERS, LOCK STRENGTH, CAMERA MOTION, PITCH, ROLL, BOB x2, HEAD ANGLE), -5 old wrist rows; +6 POINT JUMP; November 12: +1 PUNCH VIEW EASE, +3 MOVE HAPTICS, VIEW YAW SOURCE, SOUND TRACE, +2 JUMP TO SPIDYVR, AIR VIEW EASE, +2 ANIM YAW SWAY, TURN-IN-PLACE ANGLE, +4 PASSIVE LEGS, PASSIVE COUPLING, AIR CROUCH, REACH SPREAD
               "the tab's own rows");
         check(all[1].item == Item::webStyle && std::strcmp(all[1].title, "WEB STYLE") == 0 &&
                   all[1].choices.size() == 2 && std::strcmp(all[1].choices[0], "REALISTIC") == 0 &&
@@ -25486,7 +25486,7 @@ int main() {
                   "camera_stabilization=0\ncamera_vertical_ms=0\ncamera_horizontal_ms=0\ncamera_angle_ms=0\n"
                   "camera_light_vertical_ms=75\ncamera_light_horizontal_ms=50\ncamera_light_angle_ms=75\n"
                   "camera_heavy_vertical_ms=200\ncamera_heavy_horizontal_ms=150\ncamera_heavy_angle_ms=200\n"
-                  "spherical_aim=1\nleg_control=0\nleg_stiffness_pct=100\nleg_damping_pct=100\nleg_coupling_pct=50\nleg_double_tap_ms=300\npunch_view_ease_ms=250\nmove_haptics_pct=100\nview_yaw_source=1\nsound_trace=1\njump_handoff_ms=250\nair_view_ease_ms=200\nanim_yaw_sway_pct=20\nturn_in_place_deg=35\npassive_legs_pct=60\npassive_coupling_pct=15\nmovement_mode=0\nrear_snap_turn_ms=200\nanimated_torso_twist=80\nanim_forearm_fallback_deg=60\ncamera_steady_vertical_ms=200\ncamera_steady_horizontal_ms=200\ncamera_steady_angle_ms=200\ncamera_horizon_level_pct=0\ncamera_vr_stabilization=1\nswing_kick_manual=0\nswing_kick_auto=1\nwall_brake=0\ngrip_fling=0\ngrip_stop_pct=200\ngrip_fling_gain_pct=130\ngrip_fling_max=9\nhand_grab=0\nhand_grab_force=1200\nenemy_hold_cost=1\nkicks=0\nkick_gaze_cone_deg=25\nkick_spin_pct=30\nground_kicks=1\nenemy_joints=0\nenemy_limb_zones=0\nphysical_tethers=0\ntether_particles=24\ntether_substeps=8\nleg_air_crouch=1\nleg_reach_spread=1\nair_fists=1\n"
+                  "spherical_aim=1\nleg_control=0\nleg_stiffness_pct=100\nleg_damping_pct=100\nleg_coupling_pct=50\nleg_double_tap_ms=300\npunch_view_ease_ms=250\nmove_haptics_pct=100\nview_yaw_source=1\nsound_trace=1\njump_handoff_ms=250\nair_view_ease_ms=200\nanim_yaw_sway_pct=20\nturn_in_place_deg=35\npassive_legs_pct=60\npassive_coupling_pct=15\nmovement_mode=0\nrear_snap_turn_ms=200\nanimated_torso_twist=80\nanim_forearm_fallback_deg=60\ncamera_steady_vertical_ms=200\ncamera_steady_horizontal_ms=200\ncamera_steady_angle_ms=200\ncamera_horizon_level_pct=0\ncamera_vr_stabilization=1\nswing_kick_manual=0\nswing_kick_auto=1\nwall_brake=0\ngrip_fling=0\ngrip_stop_pct=200\ngrip_fling_gain_pct=130\ngrip_fling_max=9\nhand_grab=0\nhand_grab_force=1200\nenemy_hold_cost=1\nkicks=0\nkick_gaze_cone_deg=25\nkick_spin_pct=30\nground_kicks=1\nenemy_joints=0\nenemy_limb_zones=0\nphysical_tethers=0\ntether_particles=24\ntether_substeps=8\nleg_air_crouch=1\nleg_reach_spread=1\nair_poses=1\ndirectional_flips=1\nair_fists=1\n"
                   "camera_pitch_pct=100\ncamera_roll_pct=100\ncamera_bob_vertical_pct=100\ncamera_bob_side_pct=100\n"
                   "camera_head_angle_deg=0\n"
                   "sidestep=1\nsidestep_distance_cm=200\nsidestep_ms=180\nsidestep_cooldown_ms=300\n"
@@ -32876,7 +32876,7 @@ int main() {
     test("Native Animation: combined menu inventory and upstream-compatible v39 settings packet", [] {
         using namespace vr_settings;
         const auto& all = rows();
-        check(all.size() == 230 && static_cast<unsigned>(lastItem) < 256, "row/Item bounds");
+        check(all.size() == 232 && static_cast<unsigned>(lastItem) < 256, "row/Item bounds");
         std::array<unsigned, 256> seen{};
         size_t start = all.size();
         for (size_t i = 0; i < all.size(); ++i) {

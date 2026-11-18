@@ -3605,6 +3605,7 @@ DWORD WINAPI run(void*) {
                             tin.legs = in.legs;
                             tin.ground = in.ground;
                             tin.blocked = in.blocked;
+                            tin.sides = tin.straight = values.directionalFlips; // DIRECTIONAL FLIPS
                             tin.speed = gfFresh && finite(swingState.velocity)
                                             ? std::hypot(swingState.velocity.x, swingState.velocity.z)
                                             : NAN;
@@ -10908,7 +10909,7 @@ DWORD WINAPI run(void*) {
                             layerSet.passiveCouplingPct = values.passiveCouplingPct;
                             layerSet.crouch = values.legAirCrouch;
                             layerSet.reach = values.legReachSpread;
-                            layerSet.poses = values.legAirCrouch; // FIRST MIDAIR POSES ride AIR CROUCH's setting
+                            layerSet.poses = values.airPoses; // MIDAIR POSES (their own switch since Nov 18 1:09 PM)
                             const auto layered = legMixer.update(layerIn, layerSet);
                             const bool legMode = layered.run;
                             const Vec3 vel = swingState.velocity;

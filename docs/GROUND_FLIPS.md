@@ -14,6 +14,8 @@ Code: `include/spidy/ground_flip.hpp`, wired in `src/game_xr.cpp` (GROUND FLIPS 
 
 ### Directional A taps
 
+Switch: **DIRECTIONAL FLIPS** (`directional_flips`, on; the FLIPS tab and the launcher's flips page). Off, A is never held back.
+
 Common rules: on the ground under the animation, the stick held steady in its band for at least **150 ms** (a stick
 only just pushed is QUICK SIDESTEP's or a plain jump), A let go of within **180 ms** (held longer, it goes on to the
 game as its normal jump, 180 ms late), 0.6 s between flips. B down, the legs chord (Y+X) or a blocked state: no flip,

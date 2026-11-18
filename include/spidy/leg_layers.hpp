@@ -15,7 +15,7 @@
 //      FIRST MIDAIR POSES (the owner, Nov 18: "tuck, starfish, dive, superhero"), legs only for now
 //      (the torso channel, all-jumps plan J1, is not built): TUCK (tumbling), DIVE (looking steeply
 //      down while falling fast), SUPERHERO (one fist up and ahead, the other low, rising) and
-//      STARFISH (arms spread wide, falling). One at a time (that order wins), with hysteresis, a
+//      STARFISH (arms spread wide, falling); MIDAIR POSES (air_poses) switches them. One at a time (that order wins), with hysteresis, a
 //      minimum on-time, eased in and out; while one shows, the crouch and the reach give way.
 //   4. PASSIVE - PASSIVE LEGS: the centre pose with no stick at all, so only
 //      the body's motion (swing, spin, deceleration) moves them; shown at
@@ -225,7 +225,7 @@ struct Settings {
     int passivePct = 60;         // PASSIVE LEGS: 0 off, else the shown share
     int passiveCouplingPct = 15; // of LEG COUPLING
     bool crouch = true, reach = true;
-    bool poses = true; // FIRST MIDAIR POSES (with AIR CROUCH's setting for now)
+    bool poses = true; // MIDAIR POSES (air_poses)
 };
 struct Input {
     float dt = 0;

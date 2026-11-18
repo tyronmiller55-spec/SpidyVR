@@ -1096,6 +1096,10 @@ template <class V> auto switchOf(Item item, V& v) -> decltype(&v.aimMarkers) {
         return &v.legAirCrouch;
     case Item::legReachSpread:
         return &v.legReachSpread;
+    case Item::airPoses:
+        return &v.airPoses;
+    case Item::directionalFlips:
+        return &v.directionalFlips;
     case Item::animatedMoves:
         return &v.animatedMoves;
     case Item::animatedAir:
@@ -1301,9 +1305,9 @@ Values sanitized(Values v) {
     v.targetScanIdleMs = std::clamp(v.targetScanIdleMs, 250, 2000);
     return v;
 }
-const std::array<Row, 230>& rows() {
+const std::array<Row, 232>& rows() {
     // The help fits the game's description column beside the rows.
-    static const std::array<Row, 230> all{{
+    static const std::array<Row, 232> all{{
         {Item::none, "WEBS", nullptr, {}},
         {Item::webStyle, "WEB STYLE",
          "Arcade: webs pass lamp posts, signs and cars, and swings stay above the street.", webStyleChoices},
@@ -2020,6 +2024,10 @@ const std::array<Row, 230>& rows() {
          "How long the view slides when your head is re-seated on the hero's. 165 ms.", headSeatGlideChoices},
         {Item::landingBodyEase, "LANDING BODY EASE",
          "How long the drawn body takes to ease onto your view after a landing. 500 ms.", landingBodyEaseChoices},
+        {Item::directionalFlips, "DIRECTIONAL FLIPS",
+         "Standing, hold the left stick a way and tap A: flip that way. Hold A to jump.", {}},
+        {Item::airPoses, "MIDAIR POSES",
+         "Tuck in a flip, dive looking down, superhero fist up, starfish arms wide.", {}},
     }};
     return all;
 }
@@ -2063,7 +2071,7 @@ const std::array<Screen, categoryCount>& screens() {
         Item::automaticStrength, Item::automaticSpeed, Item::automaticMinimumSpeed, Item::automaticReleaseFlip,
         Item::automaticResponse, Item::automaticHandStrength, Item::automaticFalloff, Item::automaticHandThreshold,
         Item::automaticAirBrake, Item::automaticCombat, Item::dodgeTumble, Item::flipReprojection,
-        Item::airCorrect,
+        Item::airCorrect, Item::directionalFlips,
     };
     static constexpr Item feedback[] = {
         Item::haptics, Item::moveHaptics, Item::reelHaptics, Item::swingHaptics, Item::bodyHaptics,
@@ -2115,7 +2123,7 @@ const std::array<Screen, categoryCount>& screens() {
     // saying why (shownWhenInactive).
     static constexpr Item legs[] = {
         Item::legControl,      Item::legStiffness,    Item::legDamping,   Item::legCoupling,
-        Item::passiveLegs,     Item::passiveCoupling, Item::legAirCrouch, Item::legReachSpread,
+        Item::passiveLegs,     Item::passiveCoupling, Item::legAirCrouch, Item::legReachSpread, Item::airPoses,
         Item::swingKickManual, Item::swingKickAuto, Item::kicks, Item::kickGazeCone, Item::kickSpin, Item::groundKicks,
         Item::enemyJoints, Item::enemyLimbZones,
         Item::handstand, Item::handstandAssist, Item::handstandFall, Item::handstandSupport,
@@ -2177,6 +2185,9 @@ const char* inactiveReason(Item item, const Values& v) {
     switch (item) {
     case Item::rearSnap:
         return v.movementMode != 0 ? "Set MOVEMENT MODE to HYBRID to use the rear snap." : nullptr;
+    case Item::directionalFlips:
+        return !v.realisticFlips && !v.controlledFlips && !v.flips ? "Turn a flip mode on first (the spin is theirs)."
+                                                                    : nullptr;
     case Item::viewYawSource:
         return "MOVEMENT MODE sets it now (OLD: body; HYBRID, STABLE: stable).";
     case Item::animYawSway:
@@ -3001,6 +3012,8 @@ constexpr TabOnly tabOnly[] = {
     {"tether_substeps", nullptr, &Values::tetherSubsteps},
     {"leg_air_crouch", &Values::legAirCrouch, nullptr},
     {"leg_reach_spread", &Values::legReachSpread, nullptr},
+    {"air_poses", &Values::airPoses, nullptr},
+    {"directional_flips", &Values::directionalFlips, nullptr},
     {"air_fists", &Values::airFists, nullptr},
     {"camera_pitch_pct", nullptr, &Values::cameraPitchPct},
     {"camera_roll_pct", nullptr, &Values::cameraRollPct},

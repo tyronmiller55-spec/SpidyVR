@@ -616,6 +616,12 @@ struct Values {
     // AIR CROUCH / REACH SPREAD (leg_layers.hpp's auto poses). leg_air_crouch, leg_reach_spread.
     bool legAirCrouch = true;
     bool legReachSpread = true;
+    // MIDAIR POSES (leg_layers.hpp: tuck, dive, superhero, starfish; the owner, Nov 18): their own switch since Nov 18
+    // 1:09 PM (they rode AIR CROUCH's before). air_poses.
+    bool airPoses = true;
+    // DIRECTIONAL FLIPS (ground_flip.hpp's TapTrigger): standing, the left stick held to a side, ahead or back and a
+    // quick A tap flips that way. Off, A is never held back. directional_flips.
+    bool directionalFlips = true;
     // POINT JUMP (point_jump.hpp; the user, November 11; EngineBot's plan):
     // touching a surface, A+B (or hold B, then A) charges a jump the way you
     // look. A tap is a quick jump at the tap speed; held up to CHARGE TIME a
@@ -1115,6 +1121,10 @@ enum class Item : uint8_t {
     handoffAngle,
     headSeatGlide,
     landingBodyEase,
+    // Nov 18 1:09 PM (the owner: "Give poses and side flips their own toggles"): DIRECTIONAL FLIPS (ground_flip.hpp's
+    // A taps), FLIPS tab; MIDAIR POSES (leg_layers.hpp's first poses), VR LEGS (ADVANCED).
+    directionalFlips,
+    airPoses,
     // 0.8.7 (Ilya): ENEMY TYPES, after the fork's items (the launcher's order is the enum's).
     enemyTypes,
 };
@@ -1148,7 +1158,7 @@ struct Row {
     Place place{};
 };
 // Stable row/setting numbers; categories below determine presentation order.
-const std::array<Row, 230>& rows();
+const std::array<Row, 232>& rows();
 const Row* rowFor(Item);
 // camera, shooters and legs (November 11, the user: "I can't find legs or
 // camera settings in any of the menus. Make sure it's clearly labeled"): tabs
