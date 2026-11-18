@@ -548,7 +548,7 @@ int main() {
     {
         using namespace vr_settings;
         Values v;
-        check(v.jumpHandoffMs == 300, "JUMP TO SPIDYVR: 300 ms by default (air takeover, Nov 14)");
+        check(v.jumpHandoffMs == 250, "JUMP TO SPIDYVR: 250 ms by default (the handoff tune, Nov 18)");
         check(v.fallHandoffMs == 150, "FALL TO SPIDYVR: 150 ms by default");
         const Row* fallRow = rowFor(Item::fallHandoff);
         check(fallRow && fallRow->choices.size() == 11 && choose(Item::fallHandoff, 0, v) && v.fallHandoffMs == 0 &&
@@ -558,8 +558,8 @@ int main() {
         v.fallHandoffMs = 150;
         const Row* row = rowFor(Item::jumpHandoff);
         check(row && row->choices.size() == 11 && std::strcmp(row->choices[0], "STAY TO LANDING") == 0 &&
-                  std::strcmp(row->choices[4], "300 MS (DEFAULT)") == 0 && std::strcmp(row->choices[10], "1000 MS") == 0 &&
-                  choice(Item::jumpHandoff, Values{}) == 4,
+                  std::strcmp(row->choices[3], "250 MS (DEFAULT)") == 0 && std::strcmp(row->choices[10], "1000 MS") == 0 &&
+                  choice(Item::jumpHandoff, Values{}) == 3,
               "choices STAY TO LANDING, then 150 to 1000 ms, 50 ms steps near the 300 ms default");
         check(choose(Item::jumpHandoff, 0, v) && v.jumpHandoffMs == 0, "STAY TO LANDING is 0");
         check(tabOnlyText(v).find("jump_handoff_ms=0") != std::string::npos, "saved as jump_handoff_ms");
@@ -568,7 +568,7 @@ int main() {
         for (Item item : screens()[static_cast<size_t>(Category::nativeAnimation)].items)
             listed = listed || item == Item::jumpHandoff;
         check(listed, "on NATIVE ANIMATION");
-        check(v.airViewEaseMs == 250, "AIR VIEW EASE: 250 ms by default");
+        check(v.airViewEaseMs == 200, "AIR VIEW EASE: 200 ms by default (Nov 18)");
         const Row* ease = rowFor(Item::airViewEase);
         check(ease && std::strcmp(ease->choices[0], "OFF (SNAP)") == 0, "OFF (SNAP) keeps the old snap");
         check(choose(Item::airViewEase, 0, v) && v.airViewEaseMs == 0, "OFF is 0");

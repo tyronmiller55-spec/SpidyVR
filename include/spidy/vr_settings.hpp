@@ -301,7 +301,7 @@ struct Values {
     // from before it gets RUN CURVE on and EARLY JUMP QUICK TAP once (the
     // user: "movement fixes will be defaults"); after that the player's own
     // choice stands. Not a row. movement_defaults.
-    int movementDefaults = 7; // movementDefaultsRevision: a new file has seen them
+    int movementDefaults = 8; // movementDefaultsRevision: a new file has seen them
     // SOFT LANDING (the tab's SOFT LANDING; Swing::allowSoftLanding,
     // run_update::softLandVertical): a fall the swing flies, with no web
     // holding, eases to 9 m/s down over its last 3 m (or 0.35 s), its speed
@@ -520,12 +520,12 @@ struct Values {
     // plain jumps, zip launches, vaults and wall launches hand off to SpidyVR
     // after a timer): ms into a midair animation's air; 0 STAY TO LANDING (the
     // November 11 23:39 rule). 500 by default. jump_handoff_ms.
-    int jumpHandoffMs = 300;
+    int jumpHandoffMs = 250; // 300 until the handoff tune (Nov 18)
     // AIR VIEW EASE (view_ease.hpp, the punch's hold and ease): the timed
     // jump handoff, a flip break and the grip cancel hold the view where the
     // animation showed it and ease it onto the feet over this; 0 OFF (SNAP),
     // the old snap. 250 by default. air_view_ease_ms.
-    int airViewEaseMs = 250;
+    int airViewEaseMs = 200; // 250 until the handoff tune (Nov 18)
     // ANIM YAW SWAY (view_yaw_lock.hpp, rotation desync Step B): with HEAD
     // LOCK FULL and VIEW YAW SOURCE STABLE the eyes' yaw is the stable heading
     // plus this share of the head bone's yaw sway; 100 is the old feel (the eyes
@@ -717,7 +717,7 @@ struct Values {
     // HEAD HEIGHT FADE (head_height_fade_ms, 500; 0: off): at a switch to SpidyVR the animation head's height over
     // where tracking puts the eyes (median 0.27 m seated) fades out over this, on its own, instead of riding the view
     // ease's 250 ms (view_ease.hpp). Only with a view ease.
-    int headHeightFadeMs = 500;
+    int headHeightFadeMs = 275; // 500 until the handoff tune (Nov 18): it set every takeover's end (493 ms)
     // ONE HANDOFF BLEND (handoff_one_blend, on): a switch's eye blend runs as long as AIR VIEW EASE (250 ms; 180 ms when
     // that is off), and when the view ease carries the eyes' place, the blend turns only their angle: one ease of one
     // length instead of a 180 ms blend on top of a 250 ms ease (the 9790d67 playtest). Off: as before.
@@ -761,23 +761,23 @@ struct Values {
     // long enough that the camera never moves faster than this - a 0.3 m offset still takes the ease's 250 ms, a 0.6 m
     // one about 560 ms (d591229: offsets up to 0.94 m level and 1.31 m in height were crossed in 250 ms). Takeovers'
     // glides and the height fade, and the landing's blend onto the head.
-    int handoffGlideCmS = 200;
+    int handoffGlideCmS = 350; // 200 until the handoff tune (Nov 18)
     // HANDOFF GLIDE LONGEST (handoff_glide_max_ms, 700): the longest a glide is stretched to by HANDOFF GLIDE SPEED.
-    int handoffGlideMaxMs = 700;
+    int handoffGlideMaxMs = 450; // 700 until the handoff tune (Nov 18)
     // HANDOFF HEAD LEADS (handoff_head_leads, on): through a handoff's blend your head turns move the view 1:1; only
     // the difference between the two views at the switch (the animation's pitch and roll, mostly) fades out. Off: the old
     // blend from the switch's view to the live one, which follows head turns only partly until it ends.
     bool handoffHeadLeads = true;
     // HANDOFF ANGLE TIME (handoff_angle_ms, 300; 0: the blend's own length): how long the pitch and roll the animation's
     // head gave the view take to fade out after a switch (the place glides on its own clock).
-    int handoffAngleMs = 300;
+    int handoffAngleMs = 200; // 300 until the handoff tune (Nov 18)
     // LANDING BLEND (landing_blend_ms, 250; 0: air_view_ease_ms as before): how long a landing's view takes to glide
     // onto the hero's head when the animation takes over (HANDOFF GLIDE SPEED stretches a long one). Was tied to
     // air_view_ease_ms; now tunable on its own.
-    int landingBlendMs = 250;
+    int landingBlendMs = 200; // 250 until the handoff tune (Nov 18)
     // HEAD SEAT GLIDE (head_seat_glide_ms, 250; 180 was the old fixed length): how long the view takes to slide when
     // the mod re-seats your head on the hero's (after a move change, an action, a zip or drift; up to ~0.2 m).
-    int headSeatGlideMs = 250;
+    int headSeatGlideMs = 165; // 250 until the handoff tune (Nov 18)
     // HANDSTAND ARMS OVER HEAD (handstand_arms_over_head_cm, 10; 0: the old test): at a landing, both hands count as up
     // when they are at least this far over your real head (as you hold them), whatever the flip's angle. The old test
     // wanted the palms 20 cm below the head in the flipped world, which hands held over the head only met when he was
@@ -808,7 +808,7 @@ struct Values {
     // HANDOFF PLACE (handoff_place_cm, 200; 0: always glide): a landing or zip handoff whose view has farther than this to go
     // onto the head is placed there at once (the position only; the angle still blends, the headset leads) instead of
     // sliding at many metres a second (b318cb1: 26 of 85 landing glides had over 1.4 m to go, up to 47 m in 700 ms).
-    int handoffPlaceCm = 200;
+    int handoffPlaceCm = 125; // 200 until the handoff tune (Nov 18)
     // PUNCH TRACK BY LOOK (Nov 17; off by default): a throw also tracks when you LOOK within the cone of the
     // targeted enemy, the fist thrown off it (punch_track.hpp). punch_track_by_look.
     bool punchTrackByLook = false;
@@ -1197,7 +1197,7 @@ std::string tabOnlyText(const Values&);
 // key, or whose value is no whole number, is passed over.
 Values withTabOnly(Values, std::string_view text);
 // The movement defaults' revision (Values::movementDefaults) this build has.
-inline constexpr int movementDefaultsRevision = 7;
+inline constexpr int movementDefaultsRevision = 8;
 // November 12 movement cleanup: a settings file (that text) older than
 // movementDefaultsRevision gets the new movement defaults once - RUN CURVE
 // on, EARLY JUMP at least QUICK TAP - and is marked as having seen them; a

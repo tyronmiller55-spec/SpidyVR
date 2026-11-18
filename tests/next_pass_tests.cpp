@@ -162,7 +162,7 @@ int main() {
     {
         using namespace hybrid_handoff;
         const vr_settings::Values v{};
-        check(v.handoffGlideCmS == 200 && v.handoffGlideMaxMs == 700 && v.handoffEaseCurve == 1, "defaults 2 m/s, 700 ms, gentle");
+        check(v.handoffGlideCmS == 350 && v.handoffGlideMaxMs == 450 && v.handoffEaseCurve == 1, "defaults 3.5 m/s, 450 ms, gentle (Nov 18)");
         check(glideMs(.3f, 250, 200, 700, peakSmootherstep) == 282, "0.3 m gentle at 2 m/s: 282 ms");
         check(glideMs(.2f, 250, 200, 700, peakSmootherstep) == 250, "a short offset keeps the ease's 250 ms");
         check(glideMs(.6f, 250, 200, 700, peakSmootherstep) == 563, "0.6 m: 563 ms");
@@ -177,7 +177,7 @@ int main() {
     {
         using namespace hybrid_handoff;
         const vr_settings::Values v{};
-        check(v.handoffHeadLeads && v.handoffAngleMs == 300, "defaults on, 300 ms");
+        check(v.handoffHeadLeads && v.handoffAngleMs == 200, "defaults on, 200 ms (Nov 18)");
         const auto qdot = [](Quat a, Quat b) { return a.x * b.x + a.y * b.y + a.z * b.z + a.w * b.w; };
         const Quat from = arc({0, 0, 1}, normalized(Vec3{0, -.6f, 1}));
         const Quat to0 = Quat::yaw(0);
@@ -196,13 +196,13 @@ int main() {
     // LANDING BLEND: its own setting, defaulting to the old length.
     {
         const vr_settings::Values v{};
-        check(v.landingBlendMs == 250 && v.landingBlendMs == v.airViewEaseMs, "landing blend 250 ms, as before");
-        check(hybrid_handoff::oneBlendNs(true, v.landingBlendMs) == 250'000'000, "250 ms blend");
+        check(v.landingBlendMs == 200 && v.landingBlendMs == v.airViewEaseMs, "landing blend 200 ms, as the air view ease (Nov 18)");
+        check(hybrid_handoff::oneBlendNs(true, v.landingBlendMs) == 200'000'000, "200 ms blend");
     }
     // HEAD SEAT GLIDE: the glide runs its own length.
     {
         const vr_settings::Values v{};
-        check(v.headSeatGlideMs == 250, "head seat glide 250 ms");
+        check(v.headSeatGlideMs == 165, "head seat glide 165 ms (Nov 18)");
         check(head_seat::alpha(125'000'000, 250'000'000) == .5f && head_seat::alpha(180'000'000) == 1.f &&
                   head_seat::alpha(180'000'000, 250'000'000) < 1.f,
               "250 ms glide halfway at 125 ms; the old 180 ms default stays");
@@ -310,7 +310,7 @@ int main() {
     {
         using namespace hybrid_handoff;
         const vr_settings::Values v{};
-        check(v.handoffPlaceCm == 200, "the default: placed past 2 m");
+        check(v.handoffPlaceCm == 125, "the default: placed past 1.25 m (Nov 18)");
         auto g = landingGlide(46.76f, 250, 200, 700, 200, peakSmoothstep);
         check(g.place && g.ms == 250, "47 m (b318cb1's zip): placed, never a 67 m/s slide");
         g = landingGlide(2.5f, 250, 200, 700, 200, peakSmoothstep);
@@ -464,7 +464,7 @@ int main() {
     }
     // SNAP TAP WINDOW 120 -> 250 ms (the owner, Nov 18): revision 7 moves an untuned 120 once; a tuned value stays.
     {
-        check(vr_settings::movementDefaultsRevision == 7 && vr_settings::Values{}.movementDefaults == 7, "revision 7");
+        check(vr_settings::Values{}.movementDefaults == vr_settings::movementDefaultsRevision, "the revision");
         vr_settings::Values old;
         old.snapTapMs = 120;
         check(vr_settings::withMovementDefaults(old, "movement_defaults=6\n").snapTapMs == 250, "120 becomes 250");
@@ -475,6 +475,30 @@ int main() {
         check(vr_settings::withMovementDefaults(old, "movement_defaults=7\n").snapTapMs == 120,
               "120 chosen after revision 7 stays");
         check(vr_settings::withTabOnly({}, "snap_tap_ms=250\n").snapTapMs == 250, "the ini key reads");
+    }
+    // THE HANDOFF TUNE (the owner, Nov 18: "Change the handoff defaults"): revision 8 moves untuned values once.
+    {
+        using vr_settings::Values;
+        check(vr_settings::movementDefaultsRevision >= 8, "revision 8");
+        const Values fresh{};
+        check(fresh.headHeightFadeMs == 275 && fresh.handoffGlideCmS == 350 && fresh.handoffGlideMaxMs == 450 &&
+                  fresh.handoffPlaceCm == 125 && fresh.landingBlendMs == 200 && fresh.handoffAngleMs == 200 &&
+                  fresh.airViewEaseMs == 200 && fresh.headSeatGlideMs == 165 && fresh.jumpHandoffMs == 250,
+              "the new defaults");
+        Values old;
+        old.headHeightFadeMs = 500, old.handoffGlideCmS = 200, old.handoffGlideMaxMs = 700, old.handoffPlaceCm = 200;
+        old.landingBlendMs = 250, old.handoffAngleMs = 300, old.airViewEaseMs = 250, old.headSeatGlideMs = 250;
+        old.jumpHandoffMs = 300;
+        const Values m = vr_settings::withMovementDefaults(old, "movement_defaults=7\n");
+        check(m.headHeightFadeMs == 275 && m.handoffGlideCmS == 350 && m.handoffGlideMaxMs == 450 && m.handoffPlaceCm == 125 &&
+                  m.landingBlendMs == 200 && m.handoffAngleMs == 200 && m.airViewEaseMs == 200 && m.headSeatGlideMs == 165 &&
+                  m.jumpHandoffMs == 250,
+              "every old default moves");
+        Values tuned = old;
+        tuned.handoffGlideCmS = 260, tuned.jumpHandoffMs = 400;
+        const Values t = vr_settings::withMovementDefaults(tuned, "movement_defaults=7\n");
+        check(t.handoffGlideCmS == 260 && t.jumpHandoffMs == 400 && t.handoffGlideMaxMs == 450, "tuned values stay, the rest move");
+        check(vr_settings::withMovementDefaults(old, "movement_defaults=8\n").jumpHandoffMs == 300, "chosen after revision 8 stays");
     }
     std::printf("next pass: %d checks passed\n", passed);
     return 0;

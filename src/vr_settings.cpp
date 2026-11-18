@@ -235,13 +235,11 @@ constexpr const char* viewYawSourceChoices[] = {"BODY (OLD)", "STABLE"};
 static_assert(std::size(viewYawSourceChoices) == std::size(viewYawSources));
 // JUMP TO SPIDYVR (hybrid_owner.hpp): jump_handoff_ms; 0 stays to the landing.
 constexpr int jumpHandoffs[] = {0, 150, 200, 250, 300, 350, 400, 500, 600, 800, 1000};
-constexpr const char* jumpHandoffChoices[] = {"STAY TO LANDING", "150 MS", "200 MS", "250 MS", "300 MS (DEFAULT)", "350 MS",
-                                              "400 MS", "500 MS", "600 MS", "800 MS", "1000 MS"};
+constexpr const char* jumpHandoffChoices[] = {"STAY TO LANDING", "150 MS", "200 MS", "250 MS (DEFAULT)", "300 MS", "350 MS", "400 MS", "500 MS", "600 MS", "800 MS", "1000 MS"};
 static_assert(std::size(jumpHandoffChoices) == std::size(jumpHandoffs));
 // AIR VIEW EASE (view_ease.hpp): air_view_ease_ms; 0 is the old snap.
 constexpr int airViewEases[] = {0, 100, 125, 150, 175, 200, 225, 250, 300, 350, 400};
-constexpr const char* airViewEaseChoices[] = {"OFF (SNAP)", "100 MS", "125 MS", "150 MS", "175 MS", "200 MS",
-                                              "225 MS", "250 MS (DEFAULT)", "300 MS", "350 MS", "400 MS"};
+constexpr const char* airViewEaseChoices[] = {"OFF (SNAP)", "100 MS", "125 MS", "150 MS", "175 MS", "200 MS (DEFAULT)", "225 MS", "250 MS", "300 MS", "350 MS", "400 MS"};
 static_assert(std::size(airViewEaseChoices) == std::size(airViewEases));
 // ANIM YAW SWAY (view_yaw_lock.hpp): anim_yaw_sway_pct; 100 is the old feel.
 constexpr int animYawSways[] = {0, 10, 20, 30, 40, 50, 60, 80, 100};
@@ -386,22 +384,22 @@ constexpr const char* fallHandoffChoices[] = {"WITH THE JUMP TIMER", "50 MS", "7
 static_assert(std::size(fallHandoffChoices) == std::size(fallHandoffSteps));
 // HANDOFF TUNE (Nov 18): finer steps for the handoff and landing timing (in-game rows hold 11 at most).
 constexpr int landingBlendSteps[] = {0, 100, 125, 150, 175, 200, 225, 250, 300, 400, 500};
-constexpr const char* landingBlendChoices[] = {"AIR VIEW EASE", "100 MS", "125 MS", "150 MS", "175 MS", "200 MS", "225 MS", "250 MS (DEFAULT)", "300 MS", "400 MS", "500 MS"};
+constexpr const char* landingBlendChoices[] = {"AIR VIEW EASE", "100 MS", "125 MS", "150 MS", "175 MS", "200 MS (DEFAULT)", "225 MS", "250 MS", "300 MS", "400 MS", "500 MS"};
 static_assert(std::size(landingBlendChoices) == std::size(landingBlendSteps));
 constexpr int handoffGlideSpeedSteps[] = {0, 150, 200, 250, 300, 350, 400, 450, 500, 600, 800};
-constexpr const char* handoffGlideSpeedChoices[] = {"OFF (BASE TIME)", "150 CM/S", "200 CM/S (DEFAULT)", "250 CM/S", "300 CM/S", "350 CM/S", "400 CM/S", "450 CM/S", "500 CM/S", "600 CM/S", "800 CM/S"};
+constexpr const char* handoffGlideSpeedChoices[] = {"OFF (BASE TIME)", "150 CM/S", "200 CM/S", "250 CM/S", "300 CM/S", "350 CM/S (DEFAULT)", "400 CM/S", "450 CM/S", "500 CM/S", "600 CM/S", "800 CM/S"};
 static_assert(std::size(handoffGlideSpeedChoices) == std::size(handoffGlideSpeedSteps));
 constexpr int handoffGlideLongestSteps[] = {150, 200, 250, 300, 350, 400, 450, 500, 600, 700, 1000};
-constexpr const char* handoffGlideLongestChoices[] = {"150 MS", "200 MS", "250 MS", "300 MS", "350 MS", "400 MS", "450 MS", "500 MS", "600 MS", "700 MS (DEFAULT)", "1000 MS"};
+constexpr const char* handoffGlideLongestChoices[] = {"150 MS", "200 MS", "250 MS", "300 MS", "350 MS", "400 MS", "450 MS (DEFAULT)", "500 MS", "600 MS", "700 MS", "1000 MS"};
 static_assert(std::size(handoffGlideLongestChoices) == std::size(handoffGlideLongestSteps));
 constexpr int handoffPlaceSteps[] = {0, 25, 50, 75, 100, 125, 150, 200, 300, 500, 1000};
-constexpr const char* handoffPlaceChoices[] = {"ALWAYS GLIDE", "25 CM", "50 CM", "75 CM", "100 CM", "125 CM", "150 CM", "200 CM (DEFAULT)", "300 CM", "500 CM", "1000 CM"};
+constexpr const char* handoffPlaceChoices[] = {"ALWAYS GLIDE", "25 CM", "50 CM", "75 CM", "100 CM", "125 CM (DEFAULT)", "150 CM", "200 CM", "300 CM", "500 CM", "1000 CM"};
 static_assert(std::size(handoffPlaceChoices) == std::size(handoffPlaceSteps));
 constexpr int handoffAngleSteps[] = {0, 100, 150, 200, 250, 300, 350, 400, 500, 700, 1000};
-constexpr const char* handoffAngleChoices[] = {"BLEND LENGTH", "100 MS", "150 MS", "200 MS", "250 MS", "300 MS (DEFAULT)", "350 MS", "400 MS", "500 MS", "700 MS", "1000 MS"};
+constexpr const char* handoffAngleChoices[] = {"BLEND LENGTH", "100 MS", "150 MS", "200 MS (DEFAULT)", "250 MS", "300 MS", "350 MS", "400 MS", "500 MS", "700 MS", "1000 MS"};
 static_assert(std::size(handoffAngleChoices) == std::size(handoffAngleSteps));
-constexpr int headSeatGlideSteps[] = {60, 100, 125, 150, 180, 200, 225, 250, 300, 400, 500};
-constexpr const char* headSeatGlideChoices[] = {"60 MS", "100 MS", "125 MS", "150 MS", "180 MS (OLD)", "200 MS", "225 MS", "250 MS (DEFAULT)", "300 MS", "400 MS", "500 MS"};
+constexpr int headSeatGlideSteps[] = {60, 100, 125, 150, 165, 180, 200, 250, 300, 400, 500};
+constexpr const char* headSeatGlideChoices[] = {"60 MS", "100 MS", "125 MS", "150 MS", "165 MS (DEFAULT)", "180 MS", "200 MS", "250 MS", "300 MS", "400 MS", "500 MS"};
 static_assert(std::size(headSeatGlideChoices) == std::size(headSeatGlideSteps));
 constexpr int landingBodyEaseSteps[] = {100, 150, 200, 250, 300, 350, 400, 500, 600, 800, 1000};
 constexpr const char* landingBodyEaseChoices[] = {"100 MS", "150 MS", "200 MS", "250 MS", "300 MS", "350 MS", "400 MS", "500 MS (DEFAULT)", "600 MS", "800 MS", "1000 MS"};
@@ -2009,17 +2007,17 @@ const std::array<Row, 230>& rows() {
          "Hands the body to the game 0.2 s before landing. Unverified; needs the blend on.",
          {}, Place::launcher},
         {Item::landingBlend, "LANDING BLEND",
-         "A landing: how long the view takes to glide onto the hero's head. 250 ms.", landingBlendChoices},
+         "A landing: how long the view takes to glide onto the hero's head. 200 ms.", landingBlendChoices},
         {Item::handoffGlideSpeed, "HANDOFF GLIDE SPEED",
          "A long handoff glide is stretched so the view stays under this. Faster: shorter.", handoffGlideSpeedChoices},
         {Item::handoffGlideLongest, "HANDOFF GLIDE LONGEST",
-         "The longest HANDOFF GLIDE SPEED may stretch a glide. 700 ms by default.", handoffGlideLongestChoices},
+         "The longest HANDOFF GLIDE SPEED may stretch a glide. 450 ms by default.", handoffGlideLongestChoices},
         {Item::handoffPlace, "HANDOFF PLACE",
          "A landing or zip view farther than this from the head is placed, not glided.", handoffPlaceChoices},
         {Item::handoffAngle, "HANDOFF ANGLE TIME",
-         "How long the animation head's tilt takes to fade after a switch. 300 ms.", handoffAngleChoices},
+         "How long the animation head's tilt takes to fade after a switch. 200 ms.", handoffAngleChoices},
         {Item::headSeatGlide, "HEAD SEAT GLIDE",
-         "How long the view slides when your head is re-seated on the hero's. 250 ms.", headSeatGlideChoices},
+         "How long the view slides when your head is re-seated on the hero's. 165 ms.", headSeatGlideChoices},
         {Item::landingBodyEase, "LANDING BODY EASE",
          "How long the drawn body takes to ease onto your view after a landing. 500 ms.", landingBodyEaseChoices},
     }};
@@ -3222,6 +3220,25 @@ Values withMovementDefaults(Values v, std::string_view text) {
         const Values fresh;
         if (v.snapTapMs == 120)
             v.snapTapMs = fresh.snapTapMs;
+    }
+    if (seen < 8) {
+        // Revision 8 (the owner, Nov 18: "Change the handoff defaults"): the handoff tune. s131456: every takeover's
+        // ease ended with the 500 ms height fade (493 ms on average), and 43 of 85 landing glides ran to the 700 ms cap.
+        // Each value still at its old default is untuned and moves; a tuned value stays.
+        const Values fresh;
+        const auto move = [](int& value, int old, int now) {
+            if (value == old)
+                value = now;
+        };
+        move(v.headHeightFadeMs, 500, fresh.headHeightFadeMs);
+        move(v.handoffGlideCmS, 200, fresh.handoffGlideCmS);
+        move(v.handoffGlideMaxMs, 700, fresh.handoffGlideMaxMs);
+        move(v.handoffPlaceCm, 200, fresh.handoffPlaceCm);
+        move(v.landingBlendMs, 250, fresh.landingBlendMs);
+        move(v.handoffAngleMs, 300, fresh.handoffAngleMs);
+        move(v.airViewEaseMs, 250, fresh.airViewEaseMs);
+        move(v.headSeatGlideMs, 250, fresh.headSeatGlideMs);
+        move(v.jumpHandoffMs, 300, fresh.jumpHandoffMs);
     }
     v.movementDefaults = movementDefaultsRevision;
     return sanitized(v);

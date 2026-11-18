@@ -25092,7 +25092,7 @@ int main() {
                   "the movement defaults overrode a choice made after them");
             check(withMovementDefaults(withTabOnly({}, ""), "").runCurve,
                   "no file: not the movement defaults");
-            check(tabOnlyText(migrated).find("movement_defaults=7\n") != std::string::npos,
+            check(tabOnlyText(migrated).find("movement_defaults=8\n") != std::string::npos,
                   "the migration is not remembered");
         }
         {
@@ -25486,7 +25486,7 @@ int main() {
                   "camera_stabilization=0\ncamera_vertical_ms=0\ncamera_horizontal_ms=0\ncamera_angle_ms=0\n"
                   "camera_light_vertical_ms=75\ncamera_light_horizontal_ms=50\ncamera_light_angle_ms=75\n"
                   "camera_heavy_vertical_ms=200\ncamera_heavy_horizontal_ms=150\ncamera_heavy_angle_ms=200\n"
-                  "spherical_aim=1\nleg_control=0\nleg_stiffness_pct=100\nleg_damping_pct=100\nleg_coupling_pct=50\nleg_double_tap_ms=300\npunch_view_ease_ms=250\nmove_haptics_pct=100\nview_yaw_source=1\nsound_trace=1\njump_handoff_ms=300\nair_view_ease_ms=250\nanim_yaw_sway_pct=20\nturn_in_place_deg=35\npassive_legs_pct=60\npassive_coupling_pct=15\nmovement_mode=0\nrear_snap_turn_ms=200\nanimated_torso_twist=80\nanim_forearm_fallback_deg=60\ncamera_steady_vertical_ms=200\ncamera_steady_horizontal_ms=200\ncamera_steady_angle_ms=200\ncamera_horizon_level_pct=0\ncamera_vr_stabilization=1\nswing_kick_manual=0\nswing_kick_auto=1\nwall_brake=0\ngrip_fling=0\ngrip_stop_pct=200\ngrip_fling_gain_pct=130\ngrip_fling_max=9\nhand_grab=0\nhand_grab_force=1200\nenemy_hold_cost=1\nkicks=0\nkick_gaze_cone_deg=25\nkick_spin_pct=30\nground_kicks=0\nenemy_joints=0\nenemy_limb_zones=0\nphysical_tethers=0\ntether_particles=24\ntether_substeps=8\nleg_air_crouch=1\nleg_reach_spread=1\nair_fists=1\n"
+                  "spherical_aim=1\nleg_control=0\nleg_stiffness_pct=100\nleg_damping_pct=100\nleg_coupling_pct=50\nleg_double_tap_ms=300\npunch_view_ease_ms=250\nmove_haptics_pct=100\nview_yaw_source=1\nsound_trace=1\njump_handoff_ms=250\nair_view_ease_ms=200\nanim_yaw_sway_pct=20\nturn_in_place_deg=35\npassive_legs_pct=60\npassive_coupling_pct=15\nmovement_mode=0\nrear_snap_turn_ms=200\nanimated_torso_twist=80\nanim_forearm_fallback_deg=60\ncamera_steady_vertical_ms=200\ncamera_steady_horizontal_ms=200\ncamera_steady_angle_ms=200\ncamera_horizon_level_pct=0\ncamera_vr_stabilization=1\nswing_kick_manual=0\nswing_kick_auto=1\nwall_brake=0\ngrip_fling=0\ngrip_stop_pct=200\ngrip_fling_gain_pct=130\ngrip_fling_max=9\nhand_grab=0\nhand_grab_force=1200\nenemy_hold_cost=1\nkicks=0\nkick_gaze_cone_deg=25\nkick_spin_pct=30\nground_kicks=0\nenemy_joints=0\nenemy_limb_zones=0\nphysical_tethers=0\ntether_particles=24\ntether_substeps=8\nleg_air_crouch=1\nleg_reach_spread=1\nair_fists=1\n"
                   "camera_pitch_pct=100\ncamera_roll_pct=100\ncamera_bob_vertical_pct=100\ncamera_bob_side_pct=100\n"
                   "camera_head_angle_deg=0\n"
                   "sidestep=1\nsidestep_distance_cm=200\nsidestep_ms=180\nsidestep_cooldown_ms=300\n"
@@ -25511,7 +25511,7 @@ int main() {
                   "handstand_catch_hold_cm=35\n"
                   "handstand_reach_cm=160\n"
                   "takeover_view_ease=1\n"
-                  "head_height_fade_ms=500\n"
+                  "head_height_fade_ms=275\n"
                   "handoff_one_blend=1\n"
                   "punch_camera_lock_ms=300\n"
                   "view_relatch_fix=1\n"
@@ -25522,19 +25522,19 @@ int main() {
                   "landing_body_ease_ms=500\n"
                   "landing_rear_turn=1\n"
                   "handoff_ease_curve=1\n"
-                  "handoff_glide_cm_s=200\n"
-                  "handoff_glide_max_ms=700\n"
+                  "handoff_glide_cm_s=350\n"
+                  "handoff_glide_max_ms=450\n"
                   "handoff_head_leads=1\n"
-                  "handoff_angle_ms=300\n"
-                  "landing_blend_ms=250\n"
-                  "head_seat_glide_ms=250\n"
+                  "handoff_angle_ms=200\n"
+                  "landing_blend_ms=200\n"
+                  "head_seat_glide_ms=165\n"
                   "handstand_arms_over_head_cm=10\n"
                   "turn_push_pct=55\n"
                   "landing_body_hold_turn=1\n"
                   "web_zip_instant=1\n"
                   "point_jump_fire_full=1\n"
                   "target_scan_idle_ms=500\n"
-                  "handoff_place_cm=200\n"
+                  "handoff_place_cm=125\n"
                   "punch_track_by_look=0\n"
                   "handstand_grace_before_ms=300\n"
                   "handstand_grace_after_ms=400\n"
@@ -25544,7 +25544,7 @@ int main() {
                   "marker_twist_steady=1\n"
                   "marker_turn_rate_dps=360\n"
                   "marker_switch_hold_ms=150\n"
-                  "movement_defaults=7\n",
+                  "movement_defaults=8\n",
               "the defaults' text");
         Values changed = defaults;
         changed.recordingFov = 140;
