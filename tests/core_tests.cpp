@@ -25092,7 +25092,7 @@ int main() {
                   "the movement defaults overrode a choice made after them");
             check(withMovementDefaults(withTabOnly({}, ""), "").runCurve,
                   "no file: not the movement defaults");
-            check(tabOnlyText(migrated).find("movement_defaults=8\n") != std::string::npos,
+            check(tabOnlyText(migrated).find("movement_defaults=9\n") != std::string::npos,
                   "the migration is not remembered");
         }
         {
@@ -25486,7 +25486,7 @@ int main() {
                   "camera_stabilization=0\ncamera_vertical_ms=0\ncamera_horizontal_ms=0\ncamera_angle_ms=0\n"
                   "camera_light_vertical_ms=75\ncamera_light_horizontal_ms=50\ncamera_light_angle_ms=75\n"
                   "camera_heavy_vertical_ms=200\ncamera_heavy_horizontal_ms=150\ncamera_heavy_angle_ms=200\n"
-                  "spherical_aim=1\nleg_control=0\nleg_stiffness_pct=100\nleg_damping_pct=100\nleg_coupling_pct=50\nleg_double_tap_ms=300\npunch_view_ease_ms=250\nmove_haptics_pct=100\nview_yaw_source=1\nsound_trace=1\njump_handoff_ms=250\nair_view_ease_ms=200\nanim_yaw_sway_pct=20\nturn_in_place_deg=35\npassive_legs_pct=60\npassive_coupling_pct=15\nmovement_mode=0\nrear_snap_turn_ms=200\nanimated_torso_twist=80\nanim_forearm_fallback_deg=60\ncamera_steady_vertical_ms=200\ncamera_steady_horizontal_ms=200\ncamera_steady_angle_ms=200\ncamera_horizon_level_pct=0\ncamera_vr_stabilization=1\nswing_kick_manual=0\nswing_kick_auto=1\nwall_brake=0\ngrip_fling=0\ngrip_stop_pct=200\ngrip_fling_gain_pct=130\ngrip_fling_max=9\nhand_grab=0\nhand_grab_force=1200\nenemy_hold_cost=1\nkicks=0\nkick_gaze_cone_deg=25\nkick_spin_pct=30\nground_kicks=0\nenemy_joints=0\nenemy_limb_zones=0\nphysical_tethers=0\ntether_particles=24\ntether_substeps=8\nleg_air_crouch=1\nleg_reach_spread=1\nair_fists=1\n"
+                  "spherical_aim=1\nleg_control=0\nleg_stiffness_pct=100\nleg_damping_pct=100\nleg_coupling_pct=50\nleg_double_tap_ms=300\npunch_view_ease_ms=250\nmove_haptics_pct=100\nview_yaw_source=1\nsound_trace=1\njump_handoff_ms=250\nair_view_ease_ms=200\nanim_yaw_sway_pct=20\nturn_in_place_deg=35\npassive_legs_pct=60\npassive_coupling_pct=15\nmovement_mode=0\nrear_snap_turn_ms=200\nanimated_torso_twist=80\nanim_forearm_fallback_deg=60\ncamera_steady_vertical_ms=200\ncamera_steady_horizontal_ms=200\ncamera_steady_angle_ms=200\ncamera_horizon_level_pct=0\ncamera_vr_stabilization=1\nswing_kick_manual=0\nswing_kick_auto=1\nwall_brake=0\ngrip_fling=0\ngrip_stop_pct=200\ngrip_fling_gain_pct=130\ngrip_fling_max=9\nhand_grab=0\nhand_grab_force=1200\nenemy_hold_cost=1\nkicks=0\nkick_gaze_cone_deg=25\nkick_spin_pct=30\nground_kicks=1\nenemy_joints=0\nenemy_limb_zones=0\nphysical_tethers=0\ntether_particles=24\ntether_substeps=8\nleg_air_crouch=1\nleg_reach_spread=1\nair_fists=1\n"
                   "camera_pitch_pct=100\ncamera_roll_pct=100\ncamera_bob_vertical_pct=100\ncamera_bob_side_pct=100\n"
                   "camera_head_angle_deg=0\n"
                   "sidestep=1\nsidestep_distance_cm=200\nsidestep_ms=180\nsidestep_cooldown_ms=300\n"
@@ -25544,7 +25544,7 @@ int main() {
                   "marker_twist_steady=1\n"
                   "marker_turn_rate_dps=360\n"
                   "marker_switch_hold_ms=150\n"
-                  "movement_defaults=8\n",
+                  "movement_defaults=9\n",
               "the defaults' text");
         Values changed = defaults;
         changed.recordingFov = 140;
@@ -32520,6 +32520,7 @@ int main() {
             Values past;
             check(!choose(e.item, static_cast<int>(list.size()), past), "a choice past the end");
             Values off;
+            off.groundKicks = false; // on by default since Nov 18; the aim is either switch's
             check(inactiveReason(e.item, off) && std::strstr(inactiveReason(e.item, off), "AIR KICKS") &&
                       shownWhenInactive(e.item),
                   "the tuning waits for the switch");
@@ -32527,7 +32528,7 @@ int main() {
             check(inactiveReason(e.item, off) == nullptr, "available with the switch on");
         }
     });
-    test("ground kicks settings: the switch on the legs page, off by default, the ini key, the aim row waits for either", [] {
+    test("ground kicks settings: the switch on the legs page, on by default (Nov 18), the ini key, the aim row waits for either", [] {
         using namespace vr_settings;
         const auto legsItems = screens()[static_cast<size_t>(Category::legs)].items;
         check(std::find(legsItems.begin(), legsItems.end(), Item::groundKicks) != legsItems.end(),
@@ -32535,13 +32536,14 @@ int main() {
         const Row* row = rowFor(Item::groundKicks);
         check(row && row->choices.empty() && row->place == Place::launcher && row->help &&
                   std::strlen(row->help) <= 80 && std::strstr(row->title, "GROUND KICKS") &&
-                  std::strstr(row->title, "EXPERIMENTAL"),
-              "the ground kicks row, labelled experimental");
+                  !std::strstr(row->title, "EXPERIMENTAL"),
+              "the ground kicks row, no longer experimental (on by default)");
         Values defaults;
-        check(!defaults.groundKicks && choice(Item::groundKicks, defaults) == 0 &&
-                  defaultChoice(Item::groundKicks) == 0,
-              "ground kicks are off by default");
+        check(defaults.groundKicks && choice(Item::groundKicks, defaults) == 1 &&
+                  defaultChoice(Item::groundKicks) == 1,
+              "ground kicks are on by default (the owner, Nov 18)");
         Values v;
+        v.groundKicks = false;
         check(choose(Item::groundKicks, 1, v) && v.groundKicks && choose(Item::groundKicks, 0, v) && !v.groundKicks,
               "the switch turns on and off");
         const auto read = withTabOnly({}, "ground_kicks=1\n");
@@ -32549,8 +32551,18 @@ int main() {
         Values on;
         on.groundKicks = true;
         check(tabOnlyText(on).find("ground_kicks=1\n") != std::string::npos, "the ini key writes");
-        check(tabOnlyText(defaults).find("ground_kicks=0\n") != std::string::npos, "and writes 0 by default");
+        check(tabOnlyText(defaults).find("ground_kicks=1\n") != std::string::npos, "and writes 1 by default");
+        check(!withTabOnly({}, "ground_kicks=0\n").groundKicks, "an ini's 0 reads as off");
+        check(withMovementDefaults(withTabOnly({}, "ground_kicks=0\nmovement_defaults=8\n"),
+                                   "ground_kicks=0\nmovement_defaults=8\n")
+                      .groundKicks,
+              "revision 9: an old file's ground_kicks=0 (the old default) turns on");
+        check(!withMovementDefaults(withTabOnly({}, "ground_kicks=0\nmovement_defaults=9\n"),
+                                    "ground_kicks=0\nmovement_defaults=9\n")
+                       .groundKicks,
+              "off chosen after revision 9 stays off");
         Values aim;
+        aim.groundKicks = false;
         check(inactiveReason(Item::kickGazeCone, aim) && std::strstr(inactiveReason(Item::kickGazeCone, aim), "GROUND KICKS"),
               "the aim waits for a kick switch");
         aim.groundKicks = true;
@@ -32580,7 +32592,7 @@ int main() {
         check(choose(Item::enemyJoints, 1, v) && v.enemyJoints && !v.enemyLimbZones, "the joints switch");
         check(choose(Item::enemyLimbZones, 1, v) && v.enemyLimbZones && v.enemyJoints, "the limb switch");
         const auto read = withTabOnly({}, "enemy_joints=1\nenemy_limb_zones=1\n");
-        check(read.enemyJoints && read.enemyLimbZones && !read.kicks && !read.groundKicks, "the ini keys read");
+        check(read.enemyJoints && read.enemyLimbZones && !read.kicks && read.groundKicks == Values{}.groundKicks, "the ini keys read");
         Values on;
         on.enemyJoints = on.enemyLimbZones = true;
         check(tabOnlyText(on).find("enemy_joints=1\nenemy_limb_zones=1\n") != std::string::npos, "and write");

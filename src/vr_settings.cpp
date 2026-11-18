@@ -1786,7 +1786,7 @@ const std::array<Row, 230>& rows() {
          "How much of a kick's spin the legs pass to your body. NONE: no spin.",
          kickSpinChoices, Place::launcher},
         {Item::groundKicks,
-         "GROUND KICKS (EXPERIMENTAL)",
+         "GROUND KICKS",
          "Standing, Y+X, flick the right stick: front kick, side kick or a leg sweep.",
          {},
          Place::launcher},
@@ -3239,6 +3239,11 @@ Values withMovementDefaults(Values v, std::string_view text) {
         move(v.airViewEaseMs, 250, fresh.airViewEaseMs);
         move(v.headSeatGlideMs, 250, fresh.headSeatGlideMs);
         move(v.jumpHandoffMs, 300, fresh.jumpHandoffMs);
+    }
+    if (seen < 9) {
+        // Revision 9 (the owner, Nov 18, t119u: "All of these are good, let's do them all"): GROUND KICKS on. An ini
+        // from before wrote ground_kicks=0 as the old default, so it is untuned and moves.
+        v.groundKicks = true;
     }
     v.movementDefaults = movementDefaultsRevision;
     return sanitized(v);

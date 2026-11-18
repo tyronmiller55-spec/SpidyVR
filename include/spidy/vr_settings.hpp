@@ -301,7 +301,7 @@ struct Values {
     // from before it gets RUN CURVE on and EARLY JUMP QUICK TAP once (the
     // user: "movement fixes will be defaults"); after that the player's own
     // choice stands. Not a row. movement_defaults.
-    int movementDefaults = 8; // movementDefaultsRevision: a new file has seen them
+    int movementDefaults = 9; // movementDefaultsRevision: a new file has seen them
     // SOFT LANDING (the tab's SOFT LANDING; Swing::allowSoftLanding,
     // run_update::softLandVertical): a fall the swing flies, with no web
     // holding, eases to 9 m/s down over its last 3 m (or 0.35 s), its speed
@@ -586,13 +586,14 @@ struct Values {
     // kick_spin_pct: how much of the kick's spin reaction the legs' coupling keeps (30).
     bool kicks = false;
     int kickGazeConeDeg = 25, kickSpinPct = 30;
-    // GROUND KICKS (K3, ground_kick.hpp; November 14), EXPERIMENTAL: off until set. ground_kicks: standing
+    // GROUND KICKS (K3, ground_kick.hpp; November 14): on by default since Nov 18 (the owner, t119u; revision 9
+    // moves an untuned off). ground_kicks: standing
     // (slower than 2 m/s) with the legs engaged (Y + X), a quick flick of the right stick kicks: up a front
     // kick, sideways a side kick, a half circle across the bottom sweeps the legs (a knock-down). The Y + X
     // chord is then the kicks' on the ground (no web strike or zip with both held). The kick's leg shows
     // while the animation owns the body (ANIMATED moves); the blow lands either way. kick_gaze_cone_deg aims
     // these too.
-    bool groundKicks = false;
+    bool groundKicks = true; // false until Nov 18
     // ENEMY JOINTS (R1, enemy_joints.hpp; November 14), EXPERIMENTAL: off until set. enemy_joints: a kick (air
     // or ground) reads the enemy's head and chest joints, so the zone it aims at and the zone it hits are the
     // enemy's own, not a capsule's bands (the bands remain the fallback for any joint a rig lacks).
@@ -1197,7 +1198,7 @@ std::string tabOnlyText(const Values&);
 // key, or whose value is no whole number, is passed over.
 Values withTabOnly(Values, std::string_view text);
 // The movement defaults' revision (Values::movementDefaults) this build has.
-inline constexpr int movementDefaultsRevision = 8;
+inline constexpr int movementDefaultsRevision = 9;
 // November 12 movement cleanup: a settings file (that text) older than
 // movementDefaultsRevision gets the new movement defaults once - RUN CURVE
 // on, EARLY JUMP at least QUICK TAP - and is marked as having seen them; a
