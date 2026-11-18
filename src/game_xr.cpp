@@ -4068,17 +4068,21 @@ DWORD WINAPI run(void*) {
                     // INTENT BREAKS (S1; the owner, Nov 18: "every move available out of animation jumping"): the legs
                     // engaged with Y+X, or a kick gesture finished, in a midair animation break it on this frame, as a
                     // flip's input does: the kicks and the legs' pose are SpidyVR's at once (a sideways flick or a
-                    // roundhouse no longer waits for a pitch). The game's zip pull is left alone (its rise first).
+                    // roundhouse no longer waits for a pitch). Since Nov 18 1:09 PM ("Y+X can cut a zip") the game's zip
+                    // too, at once, as the grip cancel cuts it (the chord's Y never reaches the game, so the chord
+                    // starts no zip of its own).
                     if (flipBreakHybrid && flipAir && hybridOwner.domain == hybrid_owner::Domain::anim &&
-                        (moveBreakLegs || moveBreakKick) && !groundStand && !zipping) {
+                        (moveBreakLegs || moveBreakKick) && !groundStand) {
                         const int64_t at = frame.predictedDisplayTime > 0
                                                ? frame.predictedDisplayTime
                                                : static_cast<int64_t>(GetTickCount64()) * 1'000'000ll;
                         if (hybridOwner.breakForMove(flipBreakState, !flipBreakState.playing || !flipBreakState.fresh, at)) {
                             ++moveBreaks;
-                            diag_log::writef("move break: %s, anim->vr this frame (display %lld ns), #%u",
+                            diag_log::writef("move break: %s, anim->vr this frame (display %lld ns)%s, #%u",
                                              moveBreakKick ? "kick gesture" : "legs (Y+X)", static_cast<long long>(at),
-                                             moveBreaks);
+                                             zipping ? ", a zip cut at once" : "", moveBreaks);
+                            if (zipping)
+                                hybridZipPress = false; // as the grip cancel: no zip asked again
                         } else {
                             diag_log::writef("move break: %s refused (%s)", moveBreakKick ? "kick gesture" : "legs (Y+X)",
                                              !flipBreakState.playing ? "not in play" : !flipBreakState.fresh ? "stale swing"
