@@ -9973,6 +9973,7 @@ DWORD WINAPI run(void*) {
                                 // the head lock's pitch/roll is left for the blend.
                                 const bool shownOk = hybrid_handoff::validShown(hybridShown, handoffNs);
                                 float shownLook = 0.f;
+                                bool yawFromShown = false;
                                 if (shownOk && hybrid_handoff::shownYaw(hybridShown, shownLook)) {
                                     const Vec3 shownEyes =
                                         hybrid_handoff::shownCentre(hybridShown) +
@@ -9981,7 +9982,24 @@ DWORD WINAPI run(void*) {
                                         worldEyes = shownEyes;
                                         worldYaw = shownLook;
                                         eyesOk = true;
+                                        yawFromShown = true;
                                     }
+                                }
+                                // TAKEOVER YAW (the 2 AM log of Nov 18, approved 1:53 PM): 46 of 382 takeovers had
+                                // the animation's head over 90 degrees off the player's view (up to 173). The
+                                // headset leads and the animation never writes the view's yaw: with no shown view to
+                                // keep, the look stays the headset's own (the VR head's), not the animation head's or
+                                // the actor's; only the place comes from the animation.
+                                const float headsetLook =
+                                    hybrid_handoff::lookYaw(motion.headPose.orientation.rotate({0, 0, -1}));
+                                if (!yawFromShown && std::isfinite(headsetLook)) {
+                                    const float animGap =
+                                        std::abs(hybrid_handoff::wrapPi(worldYaw - headsetLook)) * (180.f / 3.14159265f);
+                                    if (animGap > 90.f)
+                                        diag_log::writef("takeover yaw: no shown view; the animation's look was %.0f deg "
+                                                         "off the headset's, the view kept the headset's",
+                                                         animGap);
+                                    worldYaw = headsetLook;
                                 }
                                 float dPos = 0.f, dYaw = 0.f;
                                 if (eyesOk) {
