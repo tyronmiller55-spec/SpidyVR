@@ -294,6 +294,104 @@ int main() {
         check(std::strcmp(kindName(Kind::back), "backflip") == 0 && std::strcmp(kindName(Kind::front), "front flip") == 0,
               "the names");
     }
+    // ---- SIDE FLIPS: a directional A tap ----
+    {
+        using namespace ground_flip;
+        struct Tap {
+            TapTrigger t;
+            TapTrigger::Out last;
+            Kind fired = Kind::none;
+            int aOut = 0, late = 0;
+            void frame(float x, float y, bool a, float speed = 0, bool ground = true, bool legs = false) {
+                TapTrigger::Input in;
+                in.seconds = .011f;
+                in.stickValid = true;
+                in.stickX = x, in.stickY = y;
+                in.a = a, in.legs = legs, in.ground = ground, in.speed = speed;
+                last = t.update(in, TapParams{});
+                if (last.fire != Kind::none)
+                    fired = last.fire;
+                aOut += last.a ? 1 : 0;
+                late += last.late ? 1 : 0;
+            }
+            void hold(float x, float y, int frames, float speed = 0) {
+                for (int i = 0; i < frames; ++i)
+                    frame(x, y, false, speed);
+            }
+        };
+        {
+            Tap r;
+            r.hold(1, 0, 16); // 176 ms to the right
+            r.frame(1, 0, true);
+            check(r.fired == Kind::none && !r.last.a && r.last.waiting, "the press is held back to see if it is a tap");
+            for (int i = 0; i < 6; ++i)
+                r.frame(1, 0, true);
+            r.frame(1, 0, false);
+            check(r.fired == Kind::right && r.aOut == 0, "stick right held, a quick A tap: a side flip right, no jump");
+        }
+        {
+            Tap r;
+            r.hold(-.9f, .1f, 16);
+            r.frame(-.9f, .1f, true);
+            r.frame(-.9f, .1f, false);
+            check(r.fired == Kind::left, "to the left: a side flip left");
+        }
+        {
+            Tap r;
+            r.hold(1, 0, 16);
+            for (int i = 0; i < 30; ++i)
+                r.frame(1, 0, true);
+            check(r.fired == Kind::none && r.late == 1 && r.last.a, "A held past 180 ms: the game's jump (late)");
+        }
+        {
+            Tap r;
+            r.hold(1, 0, 16, 4.5f);
+            r.frame(1, 0, true, 4.5f);
+            check(r.fired == Kind::none && r.last.a && r.last.denied == Deny::moving,
+                  "running or strafing sideways (4.5 m/s): a plain jump at once, never a flip");
+        }
+        {
+            Tap r;
+            r.hold(1, 0, 5); // 55 ms: a fresh push (the sidestep's flick)
+            r.frame(1, 0, true);
+            check(r.fired == Kind::none && r.last.a, "a stick pushed only just now: the jump (or the sidestep)");
+        }
+        {
+            Tap r;
+            r.hold(.6f, 0, 20); // under 0.8
+            r.frame(.6f, 0, true);
+            check(r.last.a && r.fired == Kind::none, "a half push to the side: a jump");
+            Tap f;
+            f.hold(0, 1, 20); // ahead: a running jump's start
+            f.frame(0, 1, true);
+            check(f.last.a && f.fired == Kind::none, "the stick ahead: a jump");
+            Tap b;
+            b.hold(0, -1, 20); // behind: the rear snap
+            b.frame(0, -1, true);
+            check(b.last.a && b.fired == Kind::none, "the stick behind: a jump");
+            Tap n;
+            n.frame(0, 0, true);
+            check(n.last.a && !n.last.waiting, "A alone: at once, never held back");
+        }
+        {
+            Tap r;
+            r.hold(1, 0, 16);
+            r.frame(1, 0, true, 0, false);
+            check(r.last.a && r.fired == Kind::none, "in the air: no side flip");
+            Tap l;
+            l.hold(1, 0, 16);
+            l.frame(1, 0, true, 0, true, true);
+            check(l.last.a && l.last.denied == Deny::legs, "the legs engaged: denied");
+        }
+        const Vec3 ahead{0, 0, -1};
+        const Vec3 sr = spin(Kind::right, ahead, 360);
+        check(std::abs(sr.z + 6.2831853f) < 1e-3f && std::abs(sr.x) < 1e-6f,
+              "a side flip right turns about the level forward (-Z), as the stick turned right does");
+        check(std::abs(spin(Kind::left, ahead, 360).z - 6.2831853f) < 1e-3f, "left: the other way");
+        const Vec3 lr = launch(Kind::right, ahead, {}, Params{});
+        check(lr.x > 1.4f && std::abs(lr.y - 6.5f) < 1e-5f, "it launches up and to its side");
+        check(std::strcmp(kindName(Kind::left), "side flip left") == 0, "named");
+    }
     // ---- GROUND FLIPS in every flip mode: FlipMotion's launched turn (CONTROLLED and basic FLIPS) ----
     {
         for (const bool controlled : {false, true}) {

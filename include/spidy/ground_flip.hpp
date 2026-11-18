@@ -15,6 +15,7 @@
 //    Side flips wait for another trigger (plans/ground-moves-and-cancel.md, S2 note).
 //  - B down, the legs engaged (Y+X), a blocked state or the cooldown: no flip; A goes on to the game (logged).
 //  - The A that fires is consumed until it is let go of.
+//  - Side flips: a directional A TAP with the left stick (TapTrigger, below).
 // Pure; no Windows.
 #pragma once
 #include "math.hpp"
@@ -23,17 +24,24 @@
 
 namespace spidy::ground_flip {
 
-enum class Kind { none, back, front };
+enum class Kind { none, back, front, left, right };
 inline const char* kindName(Kind k) {
-    return k == Kind::back ? "backflip" : k == Kind::front ? "front flip" : "none";
+    switch (k) {
+    case Kind::back: return "backflip";
+    case Kind::front: return "front flip";
+    case Kind::left: return "side flip left";
+    case Kind::right: return "side flip right";
+    default: return "none";
+    }
 }
-enum class Deny { none, blocked, legs, b, cooldown };
+enum class Deny { none, blocked, legs, b, cooldown, moving };
 inline const char* denyName(Deny d) {
     switch (d) {
     case Deny::blocked: return "blocked";
     case Deny::legs: return "the legs are engaged (Y+X)";
     case Deny::b: return "B held";
     case Deny::cooldown: return "cooldown";
+    case Deny::moving: return "moving too fast (a running jump)";
     default: return "none";
     }
 }
@@ -44,7 +52,7 @@ struct Params {
     float cooldownSeconds = .6f;
     // The launch, m/s: up, and along the look (back for a backflip, ahead for a front flip). About 1.3 s in the air at
     // the game's gravity: one turn at 270-360 deg/s.
-    float upSpeed = 6.5f, backSpeed = 1.5f, frontSpeed = 2.5f;
+    float upSpeed = 6.5f, backSpeed = 1.5f, frontSpeed = 2.5f, sideSpeed = 1.5f;
     float keepHorizontal = 8.f; // the run's speed kept, at most
 };
 
@@ -127,6 +135,103 @@ class Trigger {
     Kind flick_ = Kind::none;
 };
 
+// SIDE FLIPS BY A DIRECTIONAL A TAP (the owner, Nov 18: "Just make it directional A taps"). Standing (slower than
+// maxSpeed, so a running or strafing jump is never one), the LEFT stick held to a side (at least `deflect`, between
+// sideMinDegrees and sideMaxDegrees off straight ahead, the sidestep's side band) for steadySeconds, then a quick A TAP
+// (let go of within tapSeconds) is a side flip that way. Held longer, the A goes on to the game as a jump (late by
+// tapSeconds: only in this standing, stick-to-the-side case). Ahead (a running jump's start) and behind (HYBRID's rear
+// snap) are never flips here. A fresh flick then A is QUICK SIDESTEP's (it runs first and takes the A).
+struct TapParams {
+    float deflect = .8f, steadySeconds = .15f, tapSeconds = .18f, maxSpeed = 3.f;
+    float sideMinDegrees = 55, sideMaxDegrees = 100;
+    float cooldownSeconds = .6f;
+};
+class TapTrigger {
+  public:
+    struct Input {
+        float seconds{};
+        bool stickValid{};
+        float stickX{}, stickY{}; // the left stick (x right, y ahead)
+        bool a{}, b{}, legs{};
+        bool ground{}, blocked{};
+        float speed{}; // horizontal, m/s (NaN: refused)
+    };
+    struct Out {
+        Kind fire = Kind::none;
+        bool a{};       // A to pass on
+        bool late{};    // this A is a held-back press let go on to the game (held past tapSeconds)
+        bool waiting{}; // an A is held back to see whether it is a tap
+        Deny denied = Deny::none;
+        float speed{};
+    };
+    Out update(const Input& in, const TapParams& p) {
+        Out out;
+        const float dt = std::isfinite(in.seconds) ? std::clamp(in.seconds, 0.f, .1f) : 0.f;
+        clock_ += dt;
+        Kind side = Kind::none;
+        if (in.stickValid && std::isfinite(in.stickX) && std::isfinite(in.stickY)) {
+            const float tilt = std::hypot(in.stickX, in.stickY);
+            const float off = std::atan2(std::abs(in.stickX), in.stickY) * 57.29578f; // 0 ahead, 180 behind
+            if (tilt >= p.deflect && off >= p.sideMinDegrees && off <= p.sideMaxDegrees)
+                side = in.stickX > 0 ? Kind::right : Kind::left;
+        }
+        steady_ = side != Kind::none && side == side_ ? steady_ + dt : 0.f;
+        side_ = side;
+        const bool rising = in.a && !aWas_;
+        aWas_ = in.a;
+        if (consuming_) {
+            if (!in.a)
+                consuming_ = false;
+            return out;
+        }
+        if (pending_ != Kind::none) {
+            pendingAge_ += dt;
+            if (!in.a) { // let go of in time: the tap
+                out.fire = pending_;
+                pending_ = Kind::none;
+                lastFire_ = clock_;
+                return out;
+            }
+            if (pendingAge_ > p.tapSeconds + 1e-5f) { // held: the game's jump after all
+                pending_ = Kind::none;
+                out.a = out.late = true;
+                return out;
+            }
+            out.waiting = true;
+            return out;
+        }
+        out.a = in.a;
+        if (!rising || !in.ground || side == Kind::none || steady_ < p.steadySeconds - 1e-5f)
+            return out;
+        out.speed = in.speed;
+        if (in.blocked)
+            out.denied = Deny::blocked;
+        else if (in.legs)
+            out.denied = Deny::legs;
+        else if (in.b)
+            out.denied = Deny::b;
+        else if (!(in.speed <= p.maxSpeed))
+            out.denied = Deny::moving;
+        else if (lastFire_ >= 0 && clock_ - lastFire_ < p.cooldownSeconds)
+            out.denied = Deny::cooldown;
+        if (out.denied != Deny::none)
+            return out;
+        pending_ = side;
+        pendingAge_ = 0;
+        out.a = false;
+        out.waiting = true;
+        return out;
+    }
+    void refused() {
+        lastFire_ = -1;
+    }
+
+  private:
+    float clock_{}, steady_{}, pendingAge_{}, lastFire_ = -1;
+    Kind side_ = Kind::none, pending_ = Kind::none;
+    bool aWas_{}, consuming_{};
+};
+
 // The look laid level (world axes; -Z when it points straight up or down).
 inline Vec3 levelForward(Vec3 look) {
     Vec3 f{look.x, 0, look.z};
@@ -142,6 +247,12 @@ inline Vec3 spin(Kind k, Vec3 look, float degreesPerSecond) {
     const Vec3 f = levelForward(look);
     const Vec3 right{-f.z, 0, f.x};
     const float rate = std::clamp(degreesPerSecond, 0.f, 720.f) * .017453293f;
+    // A side flip (cartwheel) turns about the level forward axis, toward its side (the stick turn's convention: the
+    // stick right is +forward).
+    if (k == Kind::right)
+        return f * rate;
+    if (k == Kind::left)
+        return f * -rate;
     return right * (k == Kind::back ? rate : -rate);
 }
 // The launch velocity, world axes: up, along the look (back or ahead), the run's horizontal speed kept (capped).
@@ -151,7 +262,9 @@ inline Vec3 launch(Kind k, Vec3 look, Vec3 before, const Params& p) {
     if (length(h) > p.keepHorizontal)
         h = normalized(h) * p.keepHorizontal;
     const float along = k == Kind::back ? -p.backSpeed : k == Kind::front ? p.frontSpeed : 0.f;
-    return h + f * along + Vec3{0, p.upSpeed, 0};
+    const Vec3 right{-f.z, 0, f.x};
+    const float aside = k == Kind::right ? p.sideSpeed : k == Kind::left ? -p.sideSpeed : 0.f;
+    return h + f * along + right * aside + Vec3{0, p.upSpeed, 0};
 }
 // A turn's worth of air: how long a launch of upSpeed stays up (s) at gravity g.
 inline float airSeconds(float upSpeed, float g = 9.8f) {

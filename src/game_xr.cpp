@@ -1439,6 +1439,7 @@ DWORD WINAPI run(void*) {
         unsigned moveBreaks{}; // INTENT BREAKS (S1)
         // GROUND FLIPS (ground_flip.hpp, S2): the right stick's flick up or down, then A, on the ground.
         ground_flip::Trigger groundFlipTrigger;
+        ground_flip::TapTrigger groundFlipTap; // side flips: a directional A tap
         unsigned groundFlips{}, groundFlipDenied{}, groundFlipRefused{}, groundFlipReleasedSeen{}, groundFlipLapsedSeen{};
         uint64_t actionFrameFloor{};
         uint64_t cancellationSerialFloor{};
@@ -3538,12 +3539,12 @@ DWORD WINAPI run(void*) {
                                                                                                    : ground_flip::denyName(out.denied),
                                              groundFlipDenied);
                         }
-                        if (out.fire != ground_flip::Kind::none) {
+                        const auto fireFlip = [&](ground_flip::Kind kind, const char* how) {
                             const Vec3 look = motion.headPose.orientation.rotate({0, 0, -1});
                             const Vec3 before = gfFresh && finite(swingState.velocity) ? swingState.velocity : Vec3{};
                             game_swing::PointJumpAsk ask;
                             ask.serial = ++pointJumpSerial;
-                            ask.velocity = ground_flip::launch(out.fire, look, before, gp);
+                            ask.velocity = ground_flip::launch(kind, look, before, gp);
                             ask.normal = Vec3{0, 1, 0};
                             const DWORD result = game_swing::validPointJump(ask) ? swingPointJump(&ask)
                                                                                  : static_cast<DWORD>(2001);
@@ -3551,7 +3552,7 @@ DWORD WINAPI run(void*) {
                                 ++groundFlips;
                                 // The flip mode's own rate: REALISTIC's ROTATION SPEED, else FLIP SPEED (CONTROLLED, basic).
                                 const int rate = values.realisticFlips ? values.automaticSpeed : values.flipSpeed;
-                                const Vec3 spin = ground_flip::spin(out.fire, look, static_cast<float>(rate));
+                                const Vec3 spin = ground_flip::spin(kind, look, static_cast<float>(rate));
                                 rig.groundFlip(spin);
                                 pointJumpFired = pointJumpHold = true; // the ground exception: SpidyVR for the takeoff
                                 pointJumpHoldAge = 0;
@@ -3559,20 +3560,58 @@ DWORD WINAPI run(void*) {
                                 stickPush.cancel(); // the flick is no zip or heal
                                 feel(body_haptics::Kind::leap);
                                 diag_log::writef("ground flip: %s, launch (%.1f, %.1f, %.1f) m/s, spin %d deg/s (%s) about "
-                                                 "(%.2f, %.2f, %.2f), about %.2f s up%s, #%u",
-                                                 ground_flip::kindName(out.fire), ask.velocity.x, ask.velocity.y,
+                                                 "(%.2f, %.2f, %.2f), about %.2f s up%s, by %s, #%u",
+                                                 ground_flip::kindName(kind), ask.velocity.x, ask.velocity.y,
                                                  ask.velocity.z, rate,
                                                  values.realisticFlips ? "REALISTIC, ROTATION SPEED"
                                                  : values.controlledFlips ? "CONTROLLED, FLIP SPEED, one turn"
                                                                           : "basic FLIPS, FLIP SPEED, one turn",
                                                  spin.x, spin.y, spin.z, ground_flip::airSeconds(ask.velocity.y),
-                                                 fightLately ? ", in a fight" : "", groundFlips);
+                                                 fightLately ? ", in a fight" : "", how, groundFlips);
                             } else {
                                 ++groundFlipRefused;
-                                groundFlipTrigger.refused();
-                                diag_log::writef("ground flip: %s, the swing refused the launch (%lu)",
-                                                 ground_flip::kindName(out.fire), static_cast<unsigned long>(result));
+                                if (std::strcmp(how, "tap") == 0)
+                                    groundFlipTap.refused();
+                                else
+                                    groundFlipTrigger.refused();
+                                diag_log::writef("ground flip: %s (%s), the swing refused the launch (%lu)",
+                                                 ground_flip::kindName(kind), how, static_cast<unsigned long>(result));
                             }
+                        };
+                        if (out.fire != ground_flip::Kind::none)
+                            fireFlip(out.fire, "right stick flick + A");
+                        // SIDE FLIPS (the owner, Nov 18: "Just make it directional A taps"): standing, the left stick held
+                        // to a side, a quick A tap.
+                        {
+                            ground_flip::TapTrigger::Input tin;
+                            tin.seconds = frame.seconds;
+                            tin.stickValid = frame.hands[0].valid;
+                            tin.stickX = frame.hands[0].stickX;
+                            tin.stickY = frame.hands[0].stickY;
+                            tin.a = frame.jump;
+                            tin.b = in.b;
+                            tin.legs = in.legs;
+                            tin.ground = in.ground;
+                            tin.blocked = in.blocked;
+                            tin.speed = gfFresh && finite(swingState.velocity)
+                                            ? std::hypot(swingState.velocity.x, swingState.velocity.z)
+                                            : NAN;
+                            const ground_flip::TapParams tp;
+                            const auto tap = groundFlipTap.update(tin, tp);
+                            frame.jump = tap.a;
+                            if (tap.denied != ground_flip::Deny::none) {
+                                ++groundFlipDenied;
+                                diag_log::writef("side flip: denied %s (stick %.2f, %.2f, %.1f m/s; A went on to the game), #%u",
+                                                 tap.denied == ground_flip::Deny::blocked && blockedBy
+                                                     ? blockedBy
+                                                     : ground_flip::denyName(tap.denied),
+                                                 tin.stickX, tin.stickY, tap.speed, groundFlipDenied);
+                            }
+                            if (tap.late)
+                                diag_log::writef("side flip: A held past %.0f ms, the game's jump (late by that)",
+                                                 tp.tapSeconds * 1000.f);
+                            if (tap.fire != ground_flip::Kind::none)
+                                fireFlip(tap.fire, "tap");
                         }
                         if (rig.groundFlipsReleased() != groundFlipReleasedSeen) {
                             groundFlipReleasedSeen = rig.groundFlipsReleased();
