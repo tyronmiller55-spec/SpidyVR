@@ -79,6 +79,26 @@ inline LandingGlide landingGlide(float metres, int baseMs, int speedCmS, int max
     return g;
 }
 
+// A blend stretched after it began (the landing's, once the head's first frame tells the distance; 14-28 ms in, up to
+// 278 ms in b318cb1): the same smoothstep at the same progress t, so the view does not step back. Keeping the start
+// and changing only the length moved the view back by s(t_old) - s(t_new) of the distance in one frame (a 1.5 m glide
+// stretched 250 -> 700 ms at 28 ms: 4.5 cm back; at 100 ms: 0.45 m back), and a blend already finished started over.
+// Returns the clock the place runs on now: its start (moved earlier) and its new length. A blend already done, or a
+// length not longer, keeps its own clock.
+struct BlendClock {
+    int64_t startNs{}, durNs{};
+};
+inline BlendClock stretchKeepingProgress(int64_t nowNs, int64_t startNs, int64_t durNs, int64_t newDurNs) {
+    const int64_t d = durNs > 0 ? durNs : handoffNs;
+    const int64_t elapsed = nowNs - startNs;
+    if (newDurNs <= d || elapsed >= d)
+        return {startNs, d};
+    if (elapsed <= 0)
+        return {startNs, newDurNs};
+    const double t = static_cast<double>(elapsed) / static_cast<double>(d);
+    return {nowNs - static_cast<int64_t>(t * static_cast<double>(newDurNs)), newDurNs};
+}
+
 // World look yaw from a level forward (0 = facing −Z, same as the tracking rig).
 inline float lookYaw(Vec3 forward) {
     if (!finite(forward))

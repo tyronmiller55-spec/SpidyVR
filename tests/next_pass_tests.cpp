@@ -330,6 +330,24 @@ int main() {
         const Vec3 far = shownSource(eyes, {0, 0, 0}, {30, 0, 0});
         check(near(far.x, 0.f), "past the carry limit: not carried (a teleport)");
     }
+    // A landing glide stretched once the head's first frame tells its distance (Nov 18): no step back.
+    {
+        using namespace hybrid_handoff;
+        const int64_t ms = 1'000'000;
+        // The old way: same start, longer length - the view went back by s(28/250) - s(28/700) of the way.
+        const float before = blendAlphaFor(28 * ms, 250 * ms), oldAfter = blendAlphaFor(28 * ms, 700 * ms);
+        check(before - oldAfter > .02f, "the old stretch stepped the view back (3% of the way at 28 ms)");
+        const auto c = stretchKeepingProgress(1000 * ms + 28 * ms, 1000 * ms, 250 * ms, 700 * ms);
+        check(c.durNs == 700 * ms && near(blendAlphaFor(1028 * ms - c.startNs, c.durNs), before, 1e-4f),
+              "stretched at the same progress: the view stays where it was");
+        check(blendAlphaFor(1028 * ms + 11 * ms - c.startNs, c.durNs) > before, "and keeps going onto the head");
+        const auto late = stretchKeepingProgress(1000 * ms + 278 * ms, 1000 * ms, 250 * ms, 700 * ms);
+        check(late.startNs == 1000 * ms && late.durNs == 250 * ms, "a blend already done (278 ms in) is not restarted");
+        const auto shorter = stretchKeepingProgress(1010 * ms, 1000 * ms, 250 * ms, 200 * ms);
+        check(shorter.durNs == 250 * ms && shorter.startNs == 1000 * ms, "never shortened");
+        const auto atOnce = stretchKeepingProgress(1000 * ms, 1000 * ms, 250 * ms, 700 * ms);
+        check(atOnce.startNs == 1000 * ms && atOnce.durNs == 700 * ms, "at the start: just longer");
+    }
     // ARM LINE-UP THROUGH THE HANDOFF (the owner, Nov 17): in the landing blend's WORLD frame a hand goes through the
     // shown eyes, carried with the player as the render carries them; a source change's move is measured.
     {

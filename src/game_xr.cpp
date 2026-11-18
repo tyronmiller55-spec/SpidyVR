@@ -1590,6 +1590,9 @@ DWORD WINAPI run(void*) {
             bool posFollowsEase{};
             // HANDOFF PLACE (handoff_place_cm): the view's place is the destination's at once; only the angle blends.
             bool placed{};
+            // HANDOFF GLIDE SPEED's stretch after the blend began (stretchKeepingProgress): the place's own clock
+            // (posDurNs 0: startNs and durNs), so a later, longer length never steps the view back.
+            int64_t posStartNs{}, posDurNs{};
             // HANDOFF HEAD LEADS / ANGLE TIME: the angle's own length (0: durNs) and the switch's angle, per eye.
             int64_t angleNs{};
             bool oriOffsetSet[2]{};
@@ -10020,10 +10023,25 @@ DWORD WINAPI run(void*) {
                                                              landHeadProbe.why, gap, values.handoffPlaceCm,
                                                              handoffPlaces);
                                         } else if (plan.ms > baseMs) {
-                                            hybridBlend.durNs = static_cast<int64_t>(plan.ms) * 1'000'000;
-                                            diag_log::writef("handoff glide: landing %.2f m onto the head over %d ms (was "
-                                                             "%d), at most %.1f m/s",
-                                                             gap, plan.ms, baseMs, values.handoffGlideCmS * .01f);
+                                            // Stretched at the progress it has (a few ms in): no step back.
+                                            const auto clock = hybrid_handoff::stretchKeepingProgress(
+                                                handoffNs, hybridBlend.startNs, hybridBlend.durNs,
+                                                static_cast<int64_t>(plan.ms) * 1'000'000);
+                                            if (clock.durNs != hybridBlend.durNs) {
+                                                hybridBlend.posStartNs = clock.startNs;
+                                                hybridBlend.posDurNs = clock.durNs;
+                                                // From the switch, when the place arrives (the blend's end checks).
+                                                hybridBlend.durNs = clock.startNs + clock.durNs - hybridBlend.startNs;
+                                                diag_log::writef("handoff glide: landing %.2f m onto the head over %d ms (was "
+                                                                 "%d), at most %.1f m/s; %.0f ms in, ends %.0f ms after the switch",
+                                                                 gap, plan.ms, baseMs, values.handoffGlideCmS * .01f,
+                                                                 static_cast<float>(handoffNs - hybridBlend.startNs) / 1e6f,
+                                                                 static_cast<float>(hybridBlend.durNs) / 1e6f);
+                                            } else {
+                                                diag_log::writef("handoff glide: landing %.2f m onto the head, %.0f ms in: the "
+                                                                 "blend was already done, not stretched",
+                                                                 gap, static_cast<float>(handoffNs - hybridBlend.startNs) / 1e6f);
+                                            }
                                         }
                                     }
                                 } else if (landHeadProbe.frames >= 30 || !hybridOn) {
@@ -11042,14 +11060,19 @@ DWORD WINAPI run(void*) {
                     const int64_t eyeBlendElapsed =
                         hybridBlend.active ? (eyeBlendNow - hybridBlend.startNs)
                                            : hybridBlend.durNs;
-                    const float eyeBlendW =
-                        hybridBlend.active && !hybridBlend.placed
-                            ? hybrid_handoff::blendAlphaFor(eyeBlendElapsed, hybridBlend.durNs)
-                            : 1.f;
+                    // The place's clock: the blend's, or its own once a glide was stretched mid-blend.
+                    const float eyeBlendPosW =
+                        !hybridBlend.active ? 1.f
+                        : hybridBlend.posDurNs > 0
+                            ? hybrid_handoff::blendAlphaFor(eyeBlendNow - hybridBlend.posStartNs, hybridBlend.posDurNs)
+                            : hybrid_handoff::blendAlphaFor(eyeBlendElapsed, hybridBlend.durNs);
+                    const float eyeBlendW = hybridBlend.active && !hybridBlend.placed ? eyeBlendPosW : 1.f;
                     // HANDOFF ANGLE TIME (handoff_angle_ms): the angle on its own clock (0: the blend's).
                     const int64_t eyeBlendAngleNs = hybridBlend.angleNs > 0 ? hybridBlend.angleNs : hybridBlend.durNs;
                     const float eyeBlendOriW =
-                        hybridBlend.active ? hybrid_handoff::blendAlphaFor(eyeBlendElapsed, eyeBlendAngleNs) : 1.f;
+                        !hybridBlend.active        ? 1.f
+                        : hybridBlend.angleNs > 0 ? hybrid_handoff::blendAlphaFor(eyeBlendElapsed, eyeBlendAngleNs)
+                                                  : eyeBlendPosW;
                     const int64_t eyeBlendAllNs = (std::max)(hybridBlend.durNs, eyeBlendAngleNs);
                     const bool hybridEyeBlend = hybridBlend.active && hybridBlend.fromValid &&
                                                 (std::min)(eyeBlendW, eyeBlendOriW) < 1.f - 1e-4f && !flatScreen;
