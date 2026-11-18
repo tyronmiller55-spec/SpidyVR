@@ -1434,7 +1434,7 @@ DWORD WINAPI run(void*) {
         // WEB LINE CANCEL (hybrid_owner::groundWebRefusal; the owner, Nov 18): a web fired in a ground animation hands to
         // SpidyVR and holds it while the line lasts.
         bool groundWebHolding{};
-        float groundWebAge{};
+        float groundWebAge{}, groundWebParkourAge{};
         unsigned groundWebCancels{}, groundWebRefusals{};
         unsigned moveBreaks{}; // INTENT BREAKS (S1)
         // GROUND FLIPS (ground_flip.hpp, S2): the right stick's flick up or down, then A, on the ground.
@@ -9789,8 +9789,15 @@ DWORD WINAPI run(void*) {
                         // unsafe (a fight, a zip, the game's parkour, a scene); it holds while the line is held or attached.
                         {
                             const bool onGround = hybrid_owner::supported(animState) || hybridFrame.perched;
+                            // The game's parkour: how long it has run (a web may cut it after its first 150 ms).
+                            if (head_probe::classify(animState) == head_probe::State::parkour)
+                                groundWebParkourAge += std::isfinite(frame.seconds) ? std::clamp(frame.seconds, 0.f, .1f) : 0.f;
+                            else
+                                groundWebParkourAge = 0;
+                            hybridFrame.parkourSeconds = groundWebParkourAge;
                             if (groundWebPressed && hybridOn && hybridOwner.domain == hybrid_owner::Domain::anim && onGround) {
-                                if (const char* refused = hybrid_owner::groundWebRefusal(animState, hybridFrame.perched)) {
+                                if (const char* refused =
+                                        hybrid_owner::groundWebRefusal(animState, hybridFrame.perched, groundWebParkourAge)) {
                                     ++groundWebRefusals;
                                     diag_log::writef("web cancel: refused (%s), the animation keeps him (%s), #%u", refused,
                                                      head_probe::stateName(head_probe::classify(animState)),
@@ -9822,10 +9829,11 @@ DWORD WINAPI run(void*) {
                                     ++groundWebCancels;
                                     groundWebHolding = true;
                                     groundWebAge = 0;
-                                    diag_log::writef("web cancel: %s -> vr (%s web), #%u",
+                                    diag_log::writef("web cancel: %s -> vr (%s web, state %s%s), #%u",
                                                      hybridFrame.perched && !hybrid_owner::supported(animState) ? "perch" : "ground",
                                                      groundWebPressed == 3 ? "both" : groundWebPressed & 2 ? "R" : "L",
-                                                     groundWebCancels);
+                                                     head_probe::stateName(head_probe::classify(animState)),
+                                                     groundWebParkourAge > 0 ? ", parkour cut" : "", groundWebCancels);
                                 } else {
                                     diag_log::write("web cancel: refused (the fight the game still holds)");
                                 }

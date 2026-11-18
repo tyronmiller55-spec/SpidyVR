@@ -45,7 +45,9 @@ int main() {
         t = s, t.wall = surfaceWall, t.grounded = false;
         check(std::strcmp(groundWebRefusal(t, false), "wall") == 0, "Spidy's wall: refused (already SpidyVR's)");
         t = s, t.runRt = true, t.wall = surfaceGame;
-        check(std::strcmp(groundWebRefusal(t, false), "parkour") == 0, "the game's mantle: refused");
+        check(std::strncmp(groundWebRefusal(t, false), "parkour", 7) == 0, "the game's mantle, just begun: refused");
+        check(groundWebRefusal(t, false, .149f) != nullptr, "149 ms in: still refused");
+        check(groundWebRefusal(t, false, .15f) == nullptr, "150 ms in: a web may cut it (the owner, Nov 18)");
         t = s, t.grounded = false;
         check(std::strcmp(groundWebRefusal(t, false), "air") == 0, "the air: the grip cancel's, not this");
         check(groundWebRefusal(t, true) == nullptr, "a perch: may cancel");
@@ -102,6 +104,24 @@ int main() {
             o.update(g, t += step);
             check(o.domain == Domain::anim, which == 0 ? "a fight keeps the animation" : which == 1 ? "a zip keeps it"
                                                                                                     : "a scene keeps it");
+        }
+        // The game's parkour on its crawl: refused in its first 150 ms, cut after.
+        {
+            HybridOwner o;
+            Frame g;
+            g.state.playing = g.state.fresh = true;
+            g.state.runRt = true;
+            g.state.wall = surfaceGame;
+            int64_t t = 1'000'000'000;
+            for (int i = 0; i < 5; ++i)
+                o.update(g, t += step);
+            g.groundWeb = true;
+            g.parkourSeconds = .05f;
+            o.update(g, t += step);
+            check(o.domain == Domain::anim, "parkour 50 ms in: the animation keeps him");
+            g.parkourSeconds = .2f;
+            o.update(g, t += step);
+            check(o.domain == Domain::vr && o.lastEnterVr == EnterVr::cancel, "parkour 200 ms in: the web cuts it");
         }
         // The hold alone (no fresh web) never takes the body from the animation.
         HybridOwner o;

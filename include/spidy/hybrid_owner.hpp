@@ -368,6 +368,7 @@ struct Frame {
     // groundWebRefusal) takes the body this frame, and holds it while the line is held or attached; then the
     // ground hands back as any landing. In the air the grip cancel (cancelGrip) already does this.
     bool groundWeb{}, groundWebHold{};
+    float parkourSeconds{}; // how long the game's parkour (head_probe's parkour state) has run; 0 when none
     // FULL ARMS (the user, Nov 9 22:27): a SpidyVR web strike is under way (its
     // flight or hang). It pulls him out of the animation, ground included,
     // and holds SpidyVR until it ends; then the table as usual.
@@ -444,8 +445,11 @@ inline bool cancelArmed(bool animOwns, bool supportedNow) {
 // WEB LINE CANCEL on the ground: why a web fired in a native animation there may NOT hand to SpidyVR (nullptr:
 // it may). Unsafe: a scene or a stale sample, a fight or a dodge (its finishers and counters are the game's), a
 // zip under way, Spidy's own wall (already SpidyVR's), the game's vault, mantle or wall run (NATIVE RUN's
-// parkour), and the air (the grip cancel's, not this).
-inline const char* groundWebRefusal(const head_probe::StateInputs& s, bool perched) {
+// parkour) in its first parkourCutSeconds, and the air (the grip cancel's, not this).
+// The game's parkour may be cut once it has run parkourCutSeconds (the owner, Nov 18: "Allow web cancel during parkour after
+// 150 ms"): its first frames carry the mantle's or vault's geometry (the body may be inside the ledge).
+constexpr float parkourCutSeconds = .15f;
+inline const char* groundWebRefusal(const head_probe::StateInputs& s, bool perched, float parkourSeconds = 0) {
     if (!s.playing || !s.fresh)
         return "cutscene";
     if (s.fighting || s.dodging)
@@ -454,8 +458,8 @@ inline const char* groundWebRefusal(const head_probe::StateInputs& s, bool perch
         return "zip";
     if (s.wall == surfaceWall)
         return "wall";
-    if (!s.owned && s.runRt && s.wall != 0)
-        return "parkour";
+    if (!s.owned && s.runRt && s.wall != 0 && !(parkourSeconds >= parkourCutSeconds))
+        return "parkour (its first 150 ms)";
     if (!supported(s) && !perched)
         return "air";
     return nullptr;
@@ -697,7 +701,7 @@ struct HybridOwner {
         // the game still holds (combatSticky).
         const bool onGroundNow = supported(f.state) || (f.perched && f.state.wall != surfaceWall);
         const bool groundWebGo = f.groundWeb && domain == Domain::anim && !combatSticky &&
-                                 groundWebRefusal(f.state, f.perched) == nullptr;
+                                 groundWebRefusal(f.state, f.perched, f.parkourSeconds) == nullptr;
         if (groundWebGo || (f.groundWebHold && domain == Domain::vr && onGroundNow)) {
             clearZip();
             airAnimNs = fallNs = -1;
