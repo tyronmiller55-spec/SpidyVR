@@ -1440,6 +1440,7 @@ DWORD WINAPI run(void*) {
         // GROUND FLIPS (ground_flip.hpp, S2): the right stick's flick up or down, then A, on the ground.
         ground_flip::Trigger groundFlipTrigger;
         ground_flip::TapTrigger groundFlipTap; // side flips: a directional A tap
+        bool torsoChannelLogged{}; // TORSO CHANNEL (J1): last logged on/off
         unsigned groundFlips{}, groundFlipDenied{}, groundFlipRefused{}, groundFlipReleasedSeen{}, groundFlipLapsedSeen{};
         uint64_t actionFrameFloor{};
         uint64_t cancellationSerialFloor{};
@@ -10950,6 +10951,22 @@ DWORD WINAPI run(void*) {
                             for (int i = 0; i < 2; ++i)
                                 angles[i] = {legOut.legs[i].pitch, legOut.legs[i].side, legOut.legs[i].knee};
                             native_body::setLegControl(legMode, angles, layered.amount);
+                            // TORSO CHANNEL (J1; the owner, Nov 18 1:09 PM): the midair poses' upper body.
+                            {
+                                const bool torsoNow = legMode && layered.torsoOn;
+                                native_body::setTorsoControl(torsoNow, {layered.torso.pitch, layered.torso.roll,
+                                                                        layered.torso.yaw});
+                                if (torsoNow != torsoChannelLogged) {
+                                    torsoChannelLogged = torsoNow;
+                                    diag_log::writef("torso: channel %s (%s, curl %+.2f, side %+.2f, twist %+.2f rad; shown %.0f%%)",
+                                                     torsoNow ? "on" : "off",
+                                                     leg_layers::airPoseName(layered.airPose != leg_layers::AirPose::none
+                                                                                 ? layered.airPose
+                                                                                 : layered.airPoseWas),
+                                                     layered.torso.pitch, layered.torso.roll, layered.torso.yaw,
+                                                     native_body::torsoWeight() * 100.f);
+                                }
+                            }
                             // The legs' turn on the body: the flips' momentum models take it
                             // (CONTROLLED: FlipMotion; REALISTIC: RealisticFlip).
                             if (legMode && (values.controlledFlips || values.realisticFlips))

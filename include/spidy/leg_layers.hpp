@@ -12,8 +12,8 @@
 //      SPREAD (a hand below the pelvis and between the thighs: the legs spread
 //      and lift forward with bent knees, clearing the arm). Each eased in and
 //      out on its own weight.
-//      FIRST MIDAIR POSES (the owner, Nov 18: "tuck, starfish, dive, superhero"), legs only for now
-//      (the torso channel, all-jumps plan J1, is not built): TUCK (tumbling), DIVE (looking steeply
+//      FIRST MIDAIR POSES (the owner, Nov 18: "tuck, starfish, dive, superhero"), legs and (Nov 18 1:09 PM) torso
+//      (the torso channel, J1, body_ik.hpp Targets::torso): TUCK (tumbling), DIVE (looking steeply
 //      down while falling fast), SUPERHERO (one fist up and ahead, the other low, rising) and
 //      STARFISH (arms spread wide, falling); MIDAIR POSES (air_poses) switches them. One at a time (that order wins), with hysteresis, a
 //      minimum on-time, eased in and out; while one shows, the crouch and the reach give way.
@@ -75,6 +75,29 @@ inline constexpr Legs tuckPose{{{1.6f, .08f, 1.2f}, {1.6f, -.08f, 1.2f}}};
 inline constexpr Legs divePose{{{-.25f, .04f, .05f}, {-.25f, -.04f, .05f}}};
 inline constexpr Legs superheroPose{{{-.2f, .05f, .05f}, {.45f, -.1f, 1.1f}}};
 inline constexpr Legs starfishPose{{{.1f, .65f, .1f}, {.1f, -.65f, .1f}}};
+// The poses' upper body on the TORSO CHANNEL (J1, body::Targets::torso; the owner, Nov 18 1:09 PM): radians, pitch
+// curls the chest forward (+) or arches it back (-), roll bends it left (+), yaw twists it left (+). TUCK curls in
+// (chest to the knees); DIVE stretches out with a slight arch, the body in line with the look; SUPERHERO arches
+// toward the raised fist (the chest twists a little toward it: the caller gives the side); STARFISH opens the chest.
+struct Torso {
+    float pitch = 0, roll = 0, yaw = 0;
+};
+inline constexpr Torso tuckTorso{.55f, 0, 0}, diveTorso{-.25f, 0, 0}, superheroTorso{-.2f, 0, .15f},
+                       starfishTorso{-.18f, 0, 0};
+inline Torso airPoseTorso(AirPose p, int heroSide = 0) {
+    switch (p) {
+    case AirPose::tuck: return tuckTorso;
+    case AirPose::dive: return diveTorso;
+    case AirPose::superhero: {
+        // heroSide: +1 the left fist up, -1 the right (the chest twists toward it), 0 neither known.
+        Torso t = superheroTorso;
+        t.yaw *= static_cast<float>(heroSide > 0 ? 1 : heroSide < 0 ? -1 : 0);
+        return t;
+    }
+    case AirPose::starfish: return starfishTorso;
+    default: return {};
+    }
+}
 inline const Legs& airPoseLegs(AirPose p) {
     switch (p) {
     case AirPose::tuck: return tuckPose;
@@ -137,6 +160,16 @@ inline bool poseWanted(AirPose p, const PoseInput& in, float airSeconds, bool wa
     default:
         return false;
     }
+}
+
+// SUPERHERO's raised fist: +1 left, -1 right, 0 none (poseWanted's rule, `was` thresholds).
+inline int heroSide(const PoseInput& in) {
+    for (int i = 0; i < 2; ++i) {
+        const Vec3 up = in.hand[i], low = in.hand[1 - i];
+        if (finite(up) && finite(low) && up.z > heroUpOut && up.x > heroAheadOut && low.z < heroLowOut)
+            return i == 0 ? 1 : -1;
+    }
+    return 0;
 }
 
 // AIR CROUCH thresholds.
@@ -257,6 +290,10 @@ struct Output {
     AirPose airPose = AirPose::none, airPoseWas = AirPose::none;
     bool airPoseChanged = false;
     float airPoseWeight = 0; // the strongest pose's eased weight
+    // TORSO CHANNEL (J1): the poses' upper body, weighted by each pose's eased weight (0 with none), and whether it
+    // runs (a pose shows and the layer is the auto poses': the stick, a kick, the flail keep the torso the solve's).
+    Torso torso{};
+    bool torsoOn = false;
 };
 
 class Mixer {
@@ -311,6 +348,13 @@ class Mixer {
         }
         out.airPose = pose;
         out.airPoseWeight = poseMax;
+        const int side = heroSide(in.pose);
+        for (int i = 1; i < airPoseCount; ++i) {
+            const Torso t = airPoseTorso(static_cast<AirPose>(i), side);
+            out.torso.pitch += t.pitch * poseW_[i];
+            out.torso.roll += t.roll * poseW_[i];
+            out.torso.yaw += t.yaw * poseW_[i];
+        }
         out.crouchChanged = crouch != crouchOn_;
         out.reachChanged = reach != reachOn_;
         crouchOn_ = crouch;
@@ -341,6 +385,9 @@ class Mixer {
             else if (passiveOn)
                 layer = Layer::passive;
         }
+        out.torsoOn = layer == Layer::autoPose && poseMax > .001f;
+        if (!out.torsoOn)
+            out.torso = {};
         out.layer = layer;
         out.layerChanged = layer != layer_;
         layer_ = layer;

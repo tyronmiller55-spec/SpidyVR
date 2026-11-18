@@ -454,6 +454,7 @@ int main() {
         for (int i = 0; i < 40; ++i)
             o = m.update(in, set);
         check(legsDelta(o.pose, divePose) < .02f, "the dive's legs");
+        check(o.torsoOn && std::abs(o.torso.pitch - diveTorso.pitch) < .02f, "the dive's torso: a slight arch (J1)");
         Settings noPoses = set;
         noPoses.poses = false;
         Mixer m2;
@@ -477,6 +478,19 @@ int main() {
         for (int i = 0; i < 60; ++i)
             o = m3.update(up, set);
         check(legsDelta(o.pose, tuckPose) < .02f, "the tuck replaces it, not added on top");
+        check(o.torsoOn && std::abs(o.torso.pitch - tuckTorso.pitch) < .02f, "the tuck curls the torso in (J1)");
+        Input kick = up;
+        kick.kick = true;
+        o = m3.update(kick, set);
+        check(!o.torsoOn && o.torso.pitch == 0, "a kick: the torso is not the poses'");
+        // SUPERHERO twists toward the raised fist.
+        PoseInput h;
+        h.hand[0] = {.4f, .1f, .1f};
+        h.hand[1] = {0.f, -.3f, -.6f};
+        check(heroSide(h) == 1 && airPoseTorso(AirPose::superhero, heroSide(h)).yaw > 0, "the left fist up: twist left");
+        std::swap(h.hand[0], h.hand[1]);
+        check(heroSide(h) == -1 && airPoseTorso(AirPose::superhero, heroSide(h)).yaw < 0, "the right: right");
+        check(airPoseTorso(AirPose::starfish).pitch < 0 && airPoseTorso(AirPose::none).pitch == 0, "starfish opens");
     }
     std::printf("passive legs: %d checks passed\n", passed);
     return 0;
