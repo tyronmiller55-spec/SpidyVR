@@ -122,6 +122,34 @@ int main() {
         p.update(h, t += step);
         check(p.domain == Domain::vr, "a web on the perch: VR");
     }
+    // ---- S1: INTENT BREAKS: breakForMove takes a midair animation on the frame, never the ground ----
+    {
+        HybridOwner owner;
+        Frame f;
+        f.state.playing = f.state.fresh = true;
+        int64_t now = 1'000'000'000;
+        f.state.grounded = true;
+        for (int i = 0; i < 10; ++i)
+            owner.update(f, now += step);
+        head_probe::StateInputs ground = f.state;
+        check(!owner.breakForMove(ground, false, now), "on the ground: no move break");
+        f.state.grounded = false; // the game's jump
+        f.velY = 5;
+        owner.update(f, now += step);
+        check(owner.domain == Domain::anim, "a jump: the animation's");
+        head_probe::StateInputs air = f.state;
+        check(!owner.breakForMove(air, true, now), "a scene: no move break");
+        check(owner.breakForMove(air, false, now += step) && owner.domain == Domain::vr, "in the air: VR at once");
+        owner.update(f, now += step);
+        check(owner.enterVr && owner.lastEnterVr == EnterVr::move, "the frame's switch is the move break's");
+        check(std::strcmp(enterVrName(EnterVr::move), "move-break") == 0, "named move-break");
+        check(viewEaseMs(EnterVr::move, 250, 200) == 200, "AIR VIEW EASE, as a flip break");
+        check(!owner.breakForMove(air, false, now += step), "already VR: nothing");
+        head_probe::StateInputs wall = air;
+        wall.wall = surfaceWall;
+        HybridOwner o2;
+        check(!o2.breakForMove(wall, false, now), "Spidy's wall: nothing");
+    }
     std::printf("ground moves: %d checks passed, %d failed\n", passed, failed);
     return failed ? EXIT_FAILURE : EXIT_SUCCESS;
 }

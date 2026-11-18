@@ -1435,6 +1435,7 @@ DWORD WINAPI run(void*) {
         bool groundWebHolding{};
         float groundWebAge{};
         unsigned groundWebCancels{}, groundWebRefusals{};
+        unsigned moveBreaks{}; // INTENT BREAKS (S1)
         uint64_t actionFrameFloor{};
         uint64_t cancellationSerialFloor{};
         bool animatedOnlyHeldWas{};
@@ -3032,6 +3033,7 @@ DWORD WINAPI run(void*) {
                             }
                         }
                     }
+                    bool moveBreakLegs = false, moveBreakKick = false; // INTENT BREAKS (S1), read below
                     // LEG HOLD (leg_hold.hpp; the user, November 12 01:33, t67u): Y+X
                     // held engage LEG CONTROL's legs, before anything reads X, Y or the
                     // right stick this frame. From the chord until both are let go of,
@@ -3071,6 +3073,7 @@ DWORD WINAPI run(void*) {
                                         (legHoldOut.y ? static_cast<uint32_t>(buttonY) : 0u);
                         frame.reset = legHoldOut.y;
                         if (legHoldOut.engagedNow) {
+                            moveBreakLegs = legChordAirAnimLast;
                             runtime.haptic(0, .2f);
                             diag_log::writef("legs: engaged (%s)", leg_hold::whyName(legHoldOut.why));
                         }
@@ -3147,6 +3150,7 @@ DWORD WINAPI run(void*) {
                             frame.seconds, frame.hands[1].stickX, frame.hands[1].stickY, kickWatch);
                         const float airDt = std::isfinite(frame.seconds) ? std::clamp(frame.seconds, 0.f, .1f) : 0.f;
                         if (airFlick.gesture != air_kick::Gesture::none && !kickHere) {
+                            moveBreakKick = kickWatch; // INTENT BREAKS: the gesture breaks the animation (below)
                             airFlickHeld = airFlick; // waits up to kickHoldSeconds for SpidyVR
                             airFlickHeldAge = 0;
                             airFlick = {};
@@ -3913,6 +3917,26 @@ DWORD WINAPI run(void*) {
                         // frame (a double tap's first push counts toward the zip/heal).
                         if (tryFlipBreak(in) && in.legs)
                             legStickOwns = true;
+                    }
+                    // INTENT BREAKS (S1; the owner, Nov 18: "every move available out of animation jumping"): the legs
+                    // engaged with Y+X, or a kick gesture finished, in a midair animation break it on this frame, as a
+                    // flip's input does: the kicks and the legs' pose are SpidyVR's at once (a sideways flick or a
+                    // roundhouse no longer waits for a pitch). The game's zip pull is left alone (its rise first).
+                    if (flipBreakHybrid && flipAir && hybridOwner.domain == hybrid_owner::Domain::anim &&
+                        (moveBreakLegs || moveBreakKick) && !groundStand && !zipping) {
+                        const int64_t at = frame.predictedDisplayTime > 0
+                                               ? frame.predictedDisplayTime
+                                               : static_cast<int64_t>(GetTickCount64()) * 1'000'000ll;
+                        if (hybridOwner.breakForMove(flipBreakState, !flipBreakState.playing || !flipBreakState.fresh, at)) {
+                            ++moveBreaks;
+                            diag_log::writef("move break: %s, anim->vr this frame (display %lld ns), #%u",
+                                             moveBreakKick ? "kick gesture" : "legs (Y+X)", static_cast<long long>(at),
+                                             moveBreaks);
+                        } else {
+                            diag_log::writef("move break: %s refused (%s)", moveBreakKick ? "kick gesture" : "legs (Y+X)",
+                                             !flipBreakState.playing ? "not in play" : !flipBreakState.fresh ? "stale swing"
+                                                                                                               : "on a surface");
+                        }
                     }
                     // LEG CONTROL owns the right stick (last frame's finding, in
                     // play): it turns nothing and goes to the game as rest.
@@ -9884,6 +9908,7 @@ DWORD WINAPI run(void*) {
                                             else if (why == hybrid_owner::EnterVr::timed ||
                                                      why == hybrid_owner::EnterVr::flip ||
                                                      why == hybrid_owner::EnterVr::cancel ||
+                                                     why == hybrid_owner::EnterVr::move ||
                                                      (values.takeoverViewEase && why != hybrid_owner::EnterVr::punch))
                                                 diag_log::writef("%s view ease: off (snap)", easeName);
                                             rig.cancelViewEase(view_ease::End::handoff);

@@ -83,6 +83,7 @@ enum class EnterVr : uint8_t {
                // exception)
     handstand, // HANDSTAND (November 13): the hands caught him in the landing's first frames
                // (Frame::handSupport)
+    move,      // INTENT BREAK (Nov 18, breakForMove): a move's intent in a midair animation (the legs engaged, a kick)
 };
 // A landing's hand-off to the animation still takes a handstand catch back to SpidyVR this long
 // after it (handstand::Params::touchdownGrace is the same 0.25 s): the catch is judged on the
@@ -156,6 +157,8 @@ inline const char* enterVrName(EnterVr e) {
         return "sidestep";
     case EnterVr::handstand:
         return "handstand";
+    case EnterVr::move:
+        return "move-break";
     default:
         return "none";
     }
@@ -411,6 +414,7 @@ inline int viewEaseMs(EnterVr why, int punchMs, int airMs, bool everyTakeover = 
     case EnterVr::timed:
     case EnterVr::flip:
     case EnterVr::cancel:
+    case EnterVr::move:
         return std::max(airMs, 0);
     default:
         return everyTakeover ? std::max(airMs, 0) : 0;
@@ -583,6 +587,12 @@ struct HybridOwner {
     // switches (the jump then breaks on its first airborne frame).
     bool breakForFlip(const head_probe::StateInputs& s, bool cutscene, int64_t nowNs) {
         return breakNow(EnterVr::flip, s, cutscene, nowNs);
+    }
+    // INTENT BREAK (the owner, Nov 18, t116u: "every move available out of animation jumping"): a move's intent (the
+    // legs engaged with Y+X, a kick finished in the animation) breaks a midair animation on the frame it is read, as a
+    // flip's input does. Only in a midair animation.
+    bool breakForMove(const head_probe::StateInputs& s, bool cutscene, int64_t nowNs) {
+        return breakNow(EnterVr::move, s, cutscene, nowNs);
     }
     // The grip cancel, the same way: on the frame the gate consumes the grip.
     bool breakForCancel(const head_probe::StateInputs& s, bool cutscene, int64_t nowNs) {
