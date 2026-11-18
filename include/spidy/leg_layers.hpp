@@ -12,6 +12,11 @@
 //      SPREAD (a hand below the pelvis and between the thighs: the legs spread
 //      and lift forward with bent knees, clearing the arm). Each eased in and
 //      out on its own weight.
+//      FIRST MIDAIR POSES (the owner, Nov 18: "tuck, starfish, dive, superhero"), legs only for now
+//      (the torso channel, all-jumps plan J1, is not built): TUCK (tumbling), DIVE (looking steeply
+//      down while falling fast), SUPERHERO (one fist up and ahead, the other low, rising) and
+//      STARFISH (arms spread wide, falling). One at a time (that order wins), with hysteresis, a
+//      minimum on-time, eased in and out; while one shows, the crouch and the reach give way.
 //   4. PASSIVE - PASSIVE LEGS: the centre pose with no stick at all, so only
 //      the body's motion (swing, spin, deceleration) moves them; shown at
 //      PASSIVE LEGS percent, its turn on the body at PASSIVE COUPLING percent
@@ -50,6 +55,89 @@ inline const char* layerName(Layer l) {
 inline constexpr Legs crouchPose{{{1.f, .14f, 1.15f}, {1.f, -.14f, 1.15f}}};
 // Clearing a hand between the legs: spread, lifted forward, knees bent.
 inline constexpr Legs reachPose{{{.7f, .45f, .85f}, {.7f, -.45f, .85f}}};
+
+// FIRST MIDAIR POSES' legs. TUCK: thighs to the chest, knees fully bent, together (deeper than the
+// crouch). DIVE: legs together, straight, trailing a little back. SUPERHERO: the left leg straight
+// and trailing, the right knee bent forward (the flying pose). STARFISH: legs spread wide, nearly
+// straight.
+enum class AirPose : uint8_t { none, tuck, dive, superhero, starfish };
+inline constexpr int airPoseCount = 5;
+inline const char* airPoseName(AirPose p) {
+    switch (p) {
+    case AirPose::tuck: return "tuck";
+    case AirPose::dive: return "dive";
+    case AirPose::superhero: return "superhero";
+    case AirPose::starfish: return "starfish";
+    default: return "none";
+    }
+}
+inline constexpr Legs tuckPose{{{1.6f, .08f, 1.2f}, {1.6f, -.08f, 1.2f}}};
+inline constexpr Legs divePose{{{-.25f, .04f, .05f}, {-.25f, -.04f, .05f}}};
+inline constexpr Legs superheroPose{{{-.2f, .05f, .05f}, {.45f, -.1f, 1.1f}}};
+inline constexpr Legs starfishPose{{{.1f, .65f, .1f}, {.1f, -.65f, .1f}}};
+inline const Legs& airPoseLegs(AirPose p) {
+    switch (p) {
+    case AirPose::tuck: return tuckPose;
+    case AirPose::dive: return divePose;
+    case AirPose::superhero: return superheroPose;
+    case AirPose::starfish: return starfishPose;
+    default: return leg_control::centrePose;
+    }
+}
+// The poses' thresholds (the second number of each pair: to stay on):
+//  - TUCK: tumbling - the body's pitch and roll turn (not its yaw) over 3 rad/s, out under 2 (a
+//    ground flip spins at 2pi; a swing's own turn stays under 2);
+//  - DIVE: the head looks over 45 degrees down (out above 35) and he falls faster than 4 m/s (out
+//    slower than 2.5);
+//  - SUPERHERO: one hand above the head (out 10 cm below it) and 25 cm ahead of it (out 15), the
+//    other 45 cm below the head (out 35) - while rising (vy over 1 m/s, out under -0.5);
+//  - STARFISH: both hands over 1.1 m apart (out under 0.9) while falling (vy under 0, out over 1);
+//  - every one but TUCK with no web attached and 0.15 s airborne (a swing's own arms are its);
+//  - on, it stays poseMinOnSeconds, and leaves when its reason has been gone poseExitSeconds.
+inline constexpr float tumbleIn = 3.f, tumbleOut = 2.f;
+inline constexpr float diveLookIn = -45.f, diveLookOut = -35.f, diveFallIn = -4.f, diveFallOut = -2.5f;
+inline constexpr float heroUpIn = 0.f, heroUpOut = -.1f, heroAheadIn = .25f, heroAheadOut = .15f,
+                       heroLowIn = -.45f, heroLowOut = -.35f, heroRiseIn = 1.f, heroRiseOut = -.5f;
+inline constexpr float starSpanIn = 1.1f, starSpanOut = .9f, starFallIn = 0.f, starFallOut = 1.f;
+inline constexpr float poseAirAfter = .15f, poseMinOnSeconds = .3f, poseExitSeconds = .12f;
+inline constexpr float poseInSeconds = .2f, poseOutSeconds = .25f;
+struct PoseInput {
+    float tumble = 0;        // the body's pitch + roll turn, rad/s
+    float lookPitch = 0;     // the head's look, degrees (down -)
+    float vy = 0;            // m/s
+    bool webbed = false;
+    bool hands = false;      // both hands tracked
+    Vec3 hand[2]{};          // each hand from the head, the level frame he faces (forward, left, up), m
+};
+inline bool poseWanted(AirPose p, const PoseInput& in, float airSeconds, bool was) {
+    if (!std::isfinite(in.tumble) || !std::isfinite(in.lookPitch) || !std::isfinite(in.vy))
+        return false;
+    if (p == AirPose::tuck)
+        return in.tumble > (was ? tumbleOut : tumbleIn);
+    if (in.webbed || airSeconds < poseAirAfter)
+        return false;
+    switch (p) {
+    case AirPose::dive:
+        return in.lookPitch < (was ? diveLookOut : diveLookIn) && in.vy < (was ? diveFallOut : diveFallIn);
+    case AirPose::superhero: {
+        if (!in.hands || !finite(in.hand[0]) || !finite(in.hand[1]) || !(in.vy > (was ? heroRiseOut : heroRiseIn)))
+            return false;
+        for (int i = 0; i < 2; ++i) {
+            const Vec3 up = in.hand[i], low = in.hand[1 - i];
+            if (up.z > (was ? heroUpOut : heroUpIn) && up.x > (was ? heroAheadOut : heroAheadIn) &&
+                low.z < (was ? heroLowOut : heroLowIn))
+                return true;
+        }
+        return false;
+    }
+    case AirPose::starfish:
+        return in.hands && finite(in.hand[0]) && finite(in.hand[1]) &&
+               length(in.hand[0] - in.hand[1]) > (was ? starSpanOut : starSpanIn) &&
+               in.vy < (was ? starFallOut : starFallIn);
+    default:
+        return false;
+    }
+}
 
 // AIR CROUCH thresholds.
 //  - upright: the body's up within 30 degrees of the world's (the user's ~30),
@@ -137,6 +225,7 @@ struct Settings {
     int passivePct = 60;         // PASSIVE LEGS: 0 off, else the shown share
     int passiveCouplingPct = 15; // of LEG COUPLING
     bool crouch = true, reach = true;
+    bool poses = true; // FIRST MIDAIR POSES (with AIR CROUCH's setting for now)
 };
 struct Input {
     float dt = 0;
@@ -147,6 +236,7 @@ struct Input {
     bool flail = false;        // in the air, Y+X and B physically held (the caller's gate)
     CrouchInput crouch{};
     bool handBetween[2]{};     // already with hysteresis (handBetween)
+    PoseInput pose{};
     // AIR KICKS (air_kick.hpp): a kick is under way; its pose, and the share of the legs' spin reaction
     // it keeps (KICK SPIN).
     bool kick = false;
@@ -164,6 +254,9 @@ struct Output {
     float crouchWeight = 0, reachWeight = 0;
     bool layerChanged = false, crouchChanged = false, reachChanged = false;
     bool crouchOn = false, reachOn = false;
+    AirPose airPose = AirPose::none, airPoseWas = AirPose::none;
+    bool airPoseChanged = false;
+    float airPoseWeight = 0; // the strongest pose's eased weight
 };
 
 class Mixer {
@@ -187,6 +280,37 @@ class Mixer {
             crouchOnFor_ = exitFor_ = 0.f;
         }
         const bool reach = in.air && s.reach && (in.handBetween[0] || in.handBetween[1]);
+        // FIRST MIDAIR POSES: the first wanted in priority order; the one on keeps its minimum on-time
+        // (only TUCK cuts in) and leaves when its reason has lasted gone poseExitSeconds.
+        AirPose pose = AirPose::none;
+        if (in.air && s.poses) {
+            for (AirPose p : {AirPose::tuck, AirPose::dive, AirPose::superhero, AirPose::starfish})
+                if (poseWanted(p, in.pose, airSeconds_, p == pose_)) {
+                    pose = p;
+                    break;
+                }
+            if (pose_ != AirPose::none) {
+                poseOnFor_ += dt;
+                const bool still = poseWanted(pose_, in.pose, airSeconds_, true);
+                poseExitFor_ = still ? 0.f : poseExitFor_ + dt;
+                const bool hold = poseOnFor_ < poseMinOnSeconds || poseExitFor_ < poseExitSeconds;
+                if (pose != pose_ && hold && pose != AirPose::tuck)
+                    pose = pose_;
+            }
+        }
+        out.airPoseWas = pose_;
+        out.airPoseChanged = pose != pose_;
+        if (out.airPoseChanged)
+            poseOnFor_ = poseExitFor_ = 0.f;
+        pose_ = pose;
+        float poseMax = 0;
+        for (int i = 1; i < airPoseCount; ++i) {
+            const bool on = static_cast<int>(pose) == i;
+            poseW_[i] = in.air ? approach(poseW_[i], on ? 1.f : 0.f, dt / (on ? poseInSeconds : poseOutSeconds)) : 0.f;
+            poseMax = std::max(poseMax, poseW_[i]);
+        }
+        out.airPose = pose;
+        out.airPoseWeight = poseMax;
         out.crouchChanged = crouch != crouchOn_;
         out.reachChanged = reach != reachOn_;
         crouchOn_ = crouch;
@@ -212,7 +336,7 @@ class Mixer {
                 layer = Layer::flail;
             else if (in.easing)
                 layer = Layer::easing;
-            else if (crouchW_ > .001f || reachW_ > .001f)
+            else if (crouchW_ > .001f || reachW_ > .001f || poseMax > .001f)
                 layer = Layer::autoPose;
             else if (passiveOn)
                 layer = Layer::passive;
@@ -246,10 +370,15 @@ class Mixer {
             want = 1;
             break;
         case Layer::autoPose: {
-            out.pose = mix(mix(leg_control::centrePose, crouchPose, crouchW_), reachPose, reachW_);
+            // A pose shows over the crouch and the reach: they give way as it eases in.
+            const float giveWay = 1 - poseMax;
+            out.pose = mix(mix(leg_control::centrePose, crouchPose, crouchW_ * giveWay), reachPose, reachW_ * giveWay);
+            for (int i = 1; i < airPoseCount; ++i)
+                if (poseW_[i] > .001f)
+                    out.pose = mix(out.pose, airPoseLegs(static_cast<AirPose>(i)), poseW_[i]);
             out.couplingScale = passiveCoupling(s);
             const float passive = passiveOn ? s.passivePct * .01f : 0.f;
-            want = passive + (1 - passive) * std::max(crouchW_, reachW_);
+            want = passive + (1 - passive) * std::max({crouchW_, reachW_, poseMax});
             break;
         }
         case Layer::passive:
@@ -287,6 +416,9 @@ class Mixer {
     float airSeconds_ = 0, crouchW_ = 0, reachW_ = 0, amount_ = 0, flailPhase_ = 0;
     bool crouchOn_ = false, reachOn_ = false;
     float crouchOnFor_ = 0, exitFor_ = 0;
+    AirPose pose_ = AirPose::none;
+    float poseW_[airPoseCount]{};
+    float poseOnFor_ = 0, poseExitFor_ = 0;
 };
 
 // FLAIL's B: once B is held in the air with Y+X physically held, B is the

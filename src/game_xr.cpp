@@ -10856,6 +10856,24 @@ DWORD WINAPI run(void*) {
                             layerIn.crouch.webbed = swingState.webs[0].attached || swingState.webs[1].attached;
                             layerIn.handBetween[0] = reachHand[0];
                             layerIn.handBetween[1] = reachHand[1];
+                            // FIRST MIDAIR POSES (the owner, Nov 18): the body's tumble, the look's pitch, the
+                            // hands from the head in the level frame he faces.
+                            {
+                                layerIn.pose.tumble = std::hypot(dot(bodySpin, fwd), dot(bodySpin, leftB));
+                                const Vec3 lookFull = frame.head.orientation.rotate({0, 0, -1});
+                                layerIn.pose.lookPitch =
+                                    std::asin(std::clamp(finite(lookFull) ? lookFull.y : 0.f, -1.f, 1.f)) * (180.f / 3.14159265f);
+                                layerIn.pose.vy = layerIn.crouch.vy;
+                                layerIn.pose.webbed = layerIn.crouch.webbed;
+                                const Vec3 leftT = cross(Vec3{0, 1, 0}, levelLook);
+                                layerIn.pose.hands = validTrackedPose(frame.head);
+                                for (int i = 0; i < 2; ++i) {
+                                    layerIn.pose.hands = layerIn.pose.hands && frame.hands[i].valid &&
+                                                         validTrackedPose(frame.hands[i].grip);
+                                    const Vec3 d = frame.hands[i].grip.position - frame.head.position;
+                                    layerIn.pose.hand[i] = {dot(d, levelLook), dot(d, leftT), d.y};
+                                }
+                            }
                             // AIR KICKS: a kick under way is the legs' top layer (its pose, the spin reaction at
                             // KICK SPIN).
                             if (airState != 0 && airGesture != air_kick::Gesture::none && values.kicks &&
@@ -10869,6 +10887,7 @@ DWORD WINAPI run(void*) {
                             layerSet.passiveCouplingPct = values.passiveCouplingPct;
                             layerSet.crouch = values.legAirCrouch;
                             layerSet.reach = values.legReachSpread;
+                            layerSet.poses = values.legAirCrouch; // FIRST MIDAIR POSES ride AIR CROUCH's setting
                             const auto layered = legMixer.update(layerIn, layerSet);
                             const bool legMode = layered.run;
                             const Vec3 vel = swingState.velocity;
@@ -10925,6 +10944,25 @@ DWORD WINAPI run(void*) {
                                                  std::acos(std::clamp(upB.y, -1.f, 1.f)) * (180.f / 3.14159265f),
                                                  legMixer.airSeconds(), layerIn.crouch.vy, layerIn.crouch.spin,
                                                  layerIn.crouch.webbed ? ", webbed" : "");
+                            if (layered.airPoseChanged) {
+                                const auto& pi = layerIn.pose;
+                                diag_log::writef("legs: air pose %s %s (tumble %.1f rad/s, look %.0f deg, vy %.1f m/s, "
+                                                 "hands %s %.2f m apart, L %.2f/%.2f R %.2f/%.2f up/ahead of the head, "
+                                                 "air %.2f s%s)",
+                                                 leg_layers::airPoseName(layered.airPose != leg_layers::AirPose::none
+                                                                             ? layered.airPose
+                                                                             : layered.airPoseWas),
+                                                 layered.airPose != leg_layers::AirPose::none ? "on" : "off",
+                                                 pi.tumble, pi.lookPitch, pi.vy, pi.hands ? "tracked" : "untracked",
+                                                 length(pi.hand[0] - pi.hand[1]), pi.hand[0].z, pi.hand[0].x,
+                                                 pi.hand[1].z, pi.hand[1].x, legMixer.airSeconds(),
+                                                 pi.webbed ? ", webbed" : "");
+                                if (layered.airPose != leg_layers::AirPose::none &&
+                                    layered.airPoseWas != leg_layers::AirPose::none)
+                                    diag_log::writef("legs: air pose %s off (to %s)",
+                                                     leg_layers::airPoseName(layered.airPoseWas),
+                                                     leg_layers::airPoseName(layered.airPose));
+                            }
                             if (layered.reachChanged)
                                 diag_log::writef("legs: reach spread %s (%s)", layered.reachOn ? "on" : "off",
                                                  reachHand[0] && reachHand[1] ? "both hands"

@@ -362,6 +362,122 @@ int main() {
         check(found == 4, "on VR LEGS (ADVANCED)");
         check(inactiveReason(Item::passiveLegs, Values{}) == nullptr, "PASSIVE LEGS needs no LEG CONTROL");
     }
+    // FIRST MIDAIR POSES (the owner, Nov 18): tuck, dive, superhero, starfish.
+    {
+        PoseInput p;
+        p.hands = true;
+        p.hand[0] = {.3f, .3f, -.5f};
+        p.hand[1] = {.3f, -.3f, -.5f};
+        check(!poseWanted(AirPose::tuck, p, 1, false), "no tumble: no tuck");
+        p.tumble = 3.5f;
+        check(poseWanted(AirPose::tuck, p, 0, false), "tumbling past 3 rad/s: tuck (no hang time needed)");
+        p.tumble = 2.5f;
+        check(!poseWanted(AirPose::tuck, p, 1, false) && poseWanted(AirPose::tuck, p, 1, true), "2.5: not in, stays");
+        p.tumble = 0;
+        p.lookPitch = -60;
+        p.vy = -5;
+        check(poseWanted(AirPose::dive, p, 1, false), "looking 60 deg down, falling 5 m/s: dive");
+        p.vy = -3;
+        check(!poseWanted(AirPose::dive, p, 1, false) && poseWanted(AirPose::dive, p, 1, true), "falling 3: stays only");
+        p.webbed = true;
+        check(!poseWanted(AirPose::dive, p, 1, true), "a web attached: no dive");
+        p.webbed = false;
+        p.lookPitch = 0;
+        p.vy = 3;
+        p.hand[0] = {.4f, .1f, .1f};
+        p.hand[1] = {0.f, -.3f, -.6f};
+        check(poseWanted(AirPose::superhero, p, 1, false), "left fist up and ahead, right low, rising: superhero");
+        std::swap(p.hand[0], p.hand[1]);
+        check(poseWanted(AirPose::superhero, p, 1, false), "either fist");
+        check(!poseWanted(AirPose::superhero, p, .1f, false), "not in the first 0.15 s");
+        p.vy = -2;
+        check(!poseWanted(AirPose::superhero, p, 1, true), "falling: no superhero");
+        p.hand[0] = {0.f, .65f, -.3f};
+        p.hand[1] = {0.f, -.65f, -.3f};
+        check(poseWanted(AirPose::starfish, p, 1, false), "hands 1.3 m apart, falling: starfish");
+        p.hands = false;
+        check(!poseWanted(AirPose::starfish, p, 1, true), "hands not tracked: no starfish");
+        p.hands = true;
+        p.hand[0].y = p.hand[1].y = 0;
+        check(!poseWanted(AirPose::starfish, p, 1, true), "hands together: none");
+        PoseInput bad = p;
+        bad.vy = NAN;
+        check(!poseWanted(AirPose::starfish, bad, 1, true) && !poseWanted(AirPose::tuck, bad, 1, true), "not a number: none");
+    }
+    {
+        // The mixer: eased in, the minimum on-time, tuck cuts in, the crouch gives way, settings off.
+        Mixer m;
+        Input in = air();
+        in.pose.hands = true;
+        in.pose.hand[0] = {0.f, .65f, -.3f};
+        in.pose.hand[1] = {0.f, -.65f, -.3f};
+        in.pose.vy = -1;
+        Output o;
+        bool changed = false;
+        for (int i = 0; i < 12; ++i) {
+            o = m.update(in, set);
+            changed = changed || o.airPoseChanged;
+        }
+        check(o.airPose == AirPose::none, "not in the first 0.15 s of air");
+        for (int i = 0; i < 40; ++i) {
+            o = m.update(in, set);
+            changed = changed || o.airPoseChanged;
+        }
+        check(o.airPose == AirPose::starfish && changed && o.layer == Layer::autoPose, "starfish on");
+        check(o.airPoseWeight > .99f && std::abs(o.pose[0].side - starfishPose[0].side) < .02f, "eased fully in");
+        in.pose.hand[0].y = in.pose.hand[1].y = 0;
+        o = m.update(in, set);
+        check(o.airPose == AirPose::starfish, "a frame without the reason: still on (the exit has to last)");
+        int offAt = -1;
+        for (int i = 0; i < 15; ++i) {
+            o = m.update(in, set);
+            if (o.airPoseChanged && o.airPose == AirPose::none && o.airPoseWas == AirPose::starfish)
+                offAt = i;
+        }
+        check(o.airPose == AirPose::none && offAt >= 8 && offAt <= 11, "off after 0.12 s");
+        in.pose.hand[0].y = .65f;
+        in.pose.hand[1].y = -.65f;
+        for (int i = 0; i < 5; ++i)
+            o = m.update(in, set);
+        in.pose.tumble = 4;
+        o = m.update(in, set);
+        check(o.airPose == AirPose::tuck && o.airPoseWas == AirPose::starfish && o.airPoseChanged,
+              "tuck cuts in inside the minimum on-time");
+        in.pose.tumble = 0;
+        in.pose.lookPitch = -60;
+        in.pose.vy = -6;
+        o = m.update(in, set);
+        check(o.airPose == AirPose::tuck, "the tuck keeps its 0.3 s against a dive");
+        for (int i = 0; i < 40; ++i)
+            o = m.update(in, set);
+        check(o.airPose == AirPose::dive, "then the dive");
+        for (int i = 0; i < 40; ++i)
+            o = m.update(in, set);
+        check(legsDelta(o.pose, divePose) < .02f, "the dive's legs");
+        Settings noPoses = set;
+        noPoses.poses = false;
+        Mixer m2;
+        for (int i = 0; i < 60; ++i)
+            o = m2.update(in, noPoses);
+        check(o.airPose == AirPose::none, "AIR CROUCH off: no poses");
+        Input ground = in;
+        ground.air = false;
+        o = m.update(ground, set);
+        check(o.airPose == AirPose::none && o.airPoseWeight == 0, "landed: gone at once");
+        // The crouch gives way under a pose.
+        Mixer m3;
+        Input up = air();
+        up.crouch.upDot = 1;
+        up.crouch.vy = 0;
+        for (int i = 0; i < 60; ++i)
+            o = m3.update(up, set);
+        check(o.crouchOn && legsDelta(o.pose, crouchPose) < .02f, "the crouch alone");
+        up.pose.tumble = 4;
+        up.crouch.spin = 0; // (the crouch's own spin left calm: the pose alone must win)
+        for (int i = 0; i < 60; ++i)
+            o = m3.update(up, set);
+        check(legsDelta(o.pose, tuckPose) < .02f, "the tuck replaces it, not added on top");
+    }
     std::printf("passive legs: %d checks passed\n", passed);
     return 0;
 }
