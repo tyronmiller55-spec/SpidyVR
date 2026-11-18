@@ -301,7 +301,7 @@ struct Values {
     // from before it gets RUN CURVE on and EARLY JUMP QUICK TAP once (the
     // user: "movement fixes will be defaults"); after that the player's own
     // choice stands. Not a row. movement_defaults.
-    int movementDefaults = 10; // movementDefaultsRevision: a new file has seen them
+    int movementDefaults = 11; // movementDefaultsRevision: a new file has seen them
     // SOFT LANDING (the tab's SOFT LANDING; Swing::allowSoftLanding,
     // run_update::softLandVertical): a fall the swing flies, with no web
     // holding, eases to 9 m/s down over its last 3 m (or 0.35 s), its speed
@@ -672,7 +672,7 @@ struct Values {
     // Nov 16 (the owner; s165800: 99 of 136 untracked punches outside 45 degrees, 37 past 6 m): 60 degrees, 8 m.
     // Nov 17 (the owner, "open up punch tracking and lengthen it to 10m"; s131456: 29 of 49 throws outside 60
     // degrees, 17 of them within 90): 90 degrees, 10 m.
-    int punchTrackConeDeg = 90, punchTrackRangeM = 10;
+    int punchTrackConeDeg = 120, punchTrackRangeM = 10; // cone 90 until the 2 AM log (Nov 18): 41 throws at 90-120
     // JUMP PULL (the polish pass, slice 8; the user, t65u: "a soft pull that gently pulls you toward enemies you jump toward"):
     // in SpidyVR's own air, with no web out, an enemy within jumpPullGazeDeg of where you look (or within jumpPullStickDeg of
     // the left stick's way while it is held) and jumpPullRangeM pulls a little (4 m/s^2, fading at the cone's edge and the
@@ -1208,7 +1208,7 @@ std::string tabOnlyText(const Values&);
 // key, or whose value is no whole number, is passed over.
 Values withTabOnly(Values, std::string_view text);
 // The movement defaults' revision (Values::movementDefaults) this build has.
-inline constexpr int movementDefaultsRevision = 10;
+inline constexpr int movementDefaultsRevision = 11;
 // November 12 movement cleanup: a settings file (that text) older than
 // movementDefaultsRevision gets the new movement defaults once - RUN CURVE
 // on, EARLY JUMP at least QUICK TAP - and is marked as having seen them; a

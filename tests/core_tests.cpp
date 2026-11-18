@@ -25092,7 +25092,7 @@ int main() {
                   "the movement defaults overrode a choice made after them");
             check(withMovementDefaults(withTabOnly({}, ""), "").runCurve,
                   "no file: not the movement defaults");
-            check(tabOnlyText(migrated).find("movement_defaults=10\n") != std::string::npos,
+            check(tabOnlyText(migrated).find("movement_defaults=11\n") != std::string::npos,
                   "the migration is not remembered");
         }
         {
@@ -25497,7 +25497,7 @@ int main() {
                   "point_jump_normal_bias=25\npoint_jump_min_out_degrees=10\npoint_jump_keep=25\n"
                   "point_jump_coyote_ms=120\npoint_jump_buffer_ms=200\npoint_jump_cooldown_ms=250\n"
                   "point_jump_zip_guard_ms=400\npoint_jump_dodge_hold_ms=250\npoint_jump_in_combat=1\n"
-                  "headset_first=1\npunch_autotarget=1\npunch_track_cone_deg=90\npunch_track_range_m=10\npunch_view_snap=0\n"
+                  "headset_first=1\npunch_autotarget=1\npunch_track_cone_deg=120\npunch_track_range_m=10\npunch_view_snap=0\n"
                   "jump_pull=1\njump_pull_gaze_deg=20\njump_pull_stick_deg=25\njump_pull_range_m=12\njump_pull_cap_dmps=15\n"
                   "anim_head_ride=0\nshoulder_limit=0\nsnap_realign=1\n"
                   "showtime=0\nshowtime_while=0\nshowtime_fade_ms=150\nshowtime_body=0\nshowtime_chord=0\nshowtime_auto_dodge=0\n"
@@ -25544,7 +25544,7 @@ int main() {
                   "marker_twist_steady=1\n"
                   "marker_turn_rate_dps=360\n"
                   "marker_switch_hold_ms=150\n"
-                  "movement_defaults=10\n",
+                  "movement_defaults=11\n",
               "the defaults' text");
         Values changed = defaults;
         changed.recordingFov = 140;

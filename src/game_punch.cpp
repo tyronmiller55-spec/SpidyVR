@@ -1274,7 +1274,7 @@ extern "C" __declspec(dllexport) DWORD WINAPI SpidyPunchStart(void* input) {
 extern "C" __declspec(dllexport) DWORD WINAPI SpidyPunchTrack(void* input) {
     TrackAsk a{};
     if (!read(reinterpret_cast<uintptr_t>(input), &a, sizeof(a)) || a.magic != 0x5350544b || a.version != 1 ||
-        a.bytes != sizeof(a) || (a.flags & ~1u) || !std::isfinite(a.coneDeg) || a.coneDeg < 5.f || a.coneDeg > 120.f ||
+        a.bytes != sizeof(a) || (a.flags & ~3u) || !std::isfinite(a.coneDeg) || a.coneDeg < 5.f || a.coneDeg > 120.f ||
         !std::isfinite(a.rangeM) || a.rangeM < 1.f || a.rangeM > 30.f)
         return 2001;
     AcquireSRWLockExclusive(&trackLock);

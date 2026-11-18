@@ -319,8 +319,8 @@ constexpr int kickSpinSteps[] = {0, 10, 20, 30, 40, 60, 80, 100};
 constexpr const char* kickSpinChoices[] = {"NONE", "10%", "20%", "30% (DEFAULT)", "40%", "60%", "80%", "100%"};
 static_assert(std::size(kickSpinChoices) == std::size(kickSpinSteps));
 // PUNCH AUTO-TARGET (punch_track.hpp): the cone round the targeted enemy a punch must be thrown in, and the range.
-constexpr int punchTrackConeSteps[] = {15, 30, 45, 60, 90};
-constexpr const char* punchTrackConeChoices[] = {"15 DEG", "30 DEG", "45 DEG", "60 DEG", "90 DEG (DEFAULT)"};
+constexpr int punchTrackConeSteps[] = {15, 30, 45, 60, 90, 120};
+constexpr const char* punchTrackConeChoices[] = {"15 DEG", "30 DEG", "45 DEG", "60 DEG", "90 DEG", "120 DEG (DEFAULT)"};
 static_assert(std::size(punchTrackConeChoices) == std::size(punchTrackConeSteps));
 constexpr int punchTrackRangeSteps[] = {3, 4, 6, 8, 10};
 constexpr const char* punchTrackRangeChoices[] = {"3 M", "4 M", "6 M", "8 M", "10 M (DEFAULT)"};
@@ -1248,7 +1248,7 @@ Values sanitized(Values v) {
     v.handGrabForce = std::clamp(v.handGrabForce, 400, 4000);
     v.enemyHoldCost = std::clamp(v.enemyHoldCost, 0, 5);
     v.kickGazeConeDeg = std::clamp(v.kickGazeConeDeg, 10, 50);
-    v.punchTrackConeDeg = std::clamp(v.punchTrackConeDeg, 15, 90);
+    v.punchTrackConeDeg = std::clamp(v.punchTrackConeDeg, 15, 120);
     v.punchTrackRangeM = std::clamp(v.punchTrackRangeM, 3, 10);
     v.jumpPullGazeDeg = std::clamp(v.jumpPullGazeDeg, 10, 45);
     v.jumpPullStickDeg = std::clamp(v.jumpPullStickDeg, 15, 45);
@@ -3264,6 +3264,13 @@ Values withMovementDefaults(Values v, std::string_view text) {
         const Values fresh;
         if (v.kickGazeConeDeg == 25)
             v.kickGazeConeDeg = fresh.kickGazeConeDeg;
+    }
+    if (seen < 11) {
+        // Revision 11 (the owner, Nov 18 1:53 PM, the 2 AM log's fixes): PUNCH TRACK CONE 90 -> 120 degrees (s020952:
+        // 41 throws just outside 90, inside 120). Still at the old default is untuned.
+        const Values fresh;
+        if (v.punchTrackConeDeg == 90)
+            v.punchTrackConeDeg = fresh.punchTrackConeDeg;
     }
     v.movementDefaults = movementDefaultsRevision;
     return sanitized(v);
