@@ -624,6 +624,21 @@ GameMotionFrame GameTrackingRig::update(const XrFrame& f, Vec3 feet, Vec3 gameFo
             flight.supportTilt = handstand::supportTilt(handstandCatchTilt_, leanLocal, handstandParams_.comHeight);
             flight.supportAngular = {};
         }
+        // GROUND FLIPS: a flip jump's spin, on his first frame off the ground (the flip system from then on).
+        if (groundFlipWait_ > 0) {
+            if (air) {
+                automatic_.release(Quat::yaw(-rig_.yaw).rotate(groundFlipSpin_));
+                automaticHands_.reset();
+                groundFlipWait_ = 0;
+                ++groundFlipsReleased_;
+            } else {
+                groundFlipWait_ -= std::isfinite(f.seconds) ? std::clamp(f.seconds, 0.f, .1f) : .1f;
+                if (groundFlipWait_ <= 0) {
+                    groundFlipWait_ = 0;
+                    ++groundFlipsLapsed_;
+                }
+            }
+        }
         rig_.tilt = automatic_.update(flight, flip.airborne, flip.surface, rig_.yaw, f.seconds, autoSettings_,
                                       controls);
         // Where the spin leaves the player facing is the heading: the yaw
@@ -641,11 +656,15 @@ GameMotionFrame GameTrackingRig::update(const XrFrame& f, Vec3 feet, Vec3 gameFo
             rig_.tilt = automatic_.orientation();
         }
     } else if (flips_ || controlledFlips_) {
+        if (groundFlipWait_ > 0)
+            groundFlipWait_ = 0, ++groundFlipsLapsed_;
         automatic_.reset();
         automaticHands_.reset();
         rig_.tilt = flip_.update(flip);
         out.controlledFlipControls = controlledFlipAir && flip_.active();
     } else {
+        if (groundFlipWait_ > 0)
+            groundFlipWait_ = 0, ++groundFlipsLapsed_;
         automatic_.reset();
         automaticHands_.reset();
         flip_.reset(f.jump);

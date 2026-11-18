@@ -321,6 +321,21 @@ class GameTrackingRig {
     }
     // LEG CONTROL owns the right stick (CONTROLLED FLIPS, in the air): it
     // turns nothing, and a push held into the landing is no snap turn.
+    // GROUND FLIPS (ground_flip.hpp, S2): the spin (world axes, rad/s) the realistic flips take on his first airborne
+    // frame after a flip jump's launch, as the handstand's leap lets go with its spin. Dropped if he is not off the
+    // ground within groundFlipWaitSeconds, or without REALISTIC FLIPS.
+    static constexpr float groundFlipWaitSeconds = .5f;
+    void groundFlip(Vec3 worldSpin) {
+        groundFlipSpin_ = finite(worldSpin) ? worldSpin : Vec3{};
+        groundFlipWait_ = length(groundFlipSpin_) > 0 ? groundFlipWaitSeconds : 0.f;
+    }
+    // How many ground flips' spins were let go into the air, and how many ran out on the ground.
+    unsigned groundFlipsReleased() const {
+        return groundFlipsReleased_;
+    }
+    unsigned groundFlipsLapsed() const {
+        return groundFlipsLapsed_;
+    }
     void legStick(bool on) {
         legStick_ = on;
     }
@@ -622,6 +637,9 @@ class GameTrackingRig {
     handstand::Handstand handstand_{};
     handstand::Handstand::Out handstandOut_{};
     Quat handstandCatchTilt_{};
+    Vec3 groundFlipSpin_{};
+    float groundFlipWait_{};
+    unsigned groundFlipsReleased_{}, groundFlipsLapsed_{};
     float handstandDrop_{};
     vr_stabilize::Settings vrStab_{};
     vr_stabilize::TiltFilter vrTilt_{};

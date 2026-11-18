@@ -4,6 +4,7 @@
 #include "spidy/showtime.hpp"
 #include "spidy/showtime_rig.hpp"
 #include "spidy/web_fire.hpp"
+#include "spidy/ground_flip.hpp"
 // Bounded first-person OpenXR integration using the game's two native views.
 #include "spidy/native_appearance.hpp"
 #include "spidy/native_body.hpp"
@@ -1436,6 +1437,9 @@ DWORD WINAPI run(void*) {
         float groundWebAge{};
         unsigned groundWebCancels{}, groundWebRefusals{};
         unsigned moveBreaks{}; // INTENT BREAKS (S1)
+        // GROUND FLIPS (ground_flip.hpp, S2): the right stick's flick up or down, then A, on the ground.
+        ground_flip::Trigger groundFlipTrigger;
+        unsigned groundFlips{}, groundFlipDenied{}, groundFlipRefused{}, groundFlipReleasedSeen{}, groundFlipLapsedSeen{};
         uint64_t actionFrameFloor{};
         uint64_t cancellationSerialFloor{};
         bool animatedOnlyHeldWas{};
@@ -3479,6 +3483,99 @@ DWORD WINAPI run(void*) {
                         if (sidestepHold) {
                             // The left stick still while the burst lasts.
                             frame.hands[0].stickX = frame.hands[0].stickY = 0;
+                        }
+                    }
+                    // GROUND FLIPS (S2; the owner, Nov 18: "Flips can just be types of jumps that spin you at a specific
+                    // rate from the ground ... tied into the flips system"): on the ground under the animation, the right
+                    // stick flicked up or down and then A is a front flip or a backflip: the point jump's launch (SpidyVR
+                    // takes the ground for the takeoff, as the point jump's exception), then REALISTIC FLIPS spins him at
+                    // ROTATION SPEED from his first airborne frame (the same falloff, arms, legs and A upright as in the air).
+                    {
+                        const ground_flip::Params gp;
+                        const bool gfFresh = swingState.status && swingState.qpc &&
+                                             static_cast<int64_t>(swingState.qpc) > now.QuadPart - frequency.QuadPart / 10;
+                        const bool gfHybrid = values.animatedHybrid && values.animatedMoves;
+                        const char* blockedBy = nullptr;
+                        if (!swingPointJump)
+                            blockedBy = "no swing export";
+                        else if (!values.realisticFlips)
+                            blockedBy = "REALISTIC FLIPS off (the spin is theirs)";
+                        else if (!(viewing && gameplay && motion.active && !flatScreen && spiderMan))
+                            blockedBy = "not in play";
+                        else if (phone.open() || gadgetWheel.open() || padLayer.latched() || calibrationInput)
+                            blockedBy = "phone, wheel, pad layer or calibration";
+                        else if (namedPress.claimed() & game_pad::NamedPress::controlA)
+                            blockedBy = "prompt";
+                        else if (motion.ventCrawl)
+                            blockedBy = "vent";
+                        else if (values.webLines && lineState.phase == 2 && lineState.onLine)
+                            blockedBy = "line";
+                        else if (gfFresh && swingState.wall != 0)
+                            blockedBy = "on a wall or the game's crawl";
+                        else if (gfFresh && (swingState.takeoff || swingState.takeoffPhase))
+                            blockedBy = "takeoff";
+                        else if (pointJumpHold || sidestepHold || sidestepFired)
+                            blockedBy = "a point jump or sidestep under way";
+                        else if (gfFresh && (swingState.webs[0].attached || swingState.webs[1].attached))
+                            blockedBy = "a web held";
+                        ground_flip::Trigger::Input in;
+                        in.seconds = frame.seconds;
+                        in.stickValid = frame.hands[1].valid;
+                        in.stickX = frame.hands[1].stickX;
+                        in.stickY = frame.hands[1].stickY;
+                        in.a = frame.jump;
+                        in.b = (frame.buttons & buttonB) != 0;
+                        in.legs = legHoldOut.engaged;
+                        in.ground = gfHybrid && gfFresh && swingState.grounded && !swingState.owned &&
+                                    hybridOwner.domain == hybrid_owner::Domain::anim;
+                        in.blocked = blockedBy != nullptr;
+                        const auto out = groundFlipTrigger.update(in, gp);
+                        frame.jump = out.a;
+                        if (out.denied != ground_flip::Deny::none) {
+                            ++groundFlipDenied;
+                            diag_log::writef("ground flip: denied %s (A went on to the game), #%u",
+                                             out.denied == ground_flip::Deny::blocked && blockedBy ? blockedBy
+                                                                                                   : ground_flip::denyName(out.denied),
+                                             groundFlipDenied);
+                        }
+                        if (out.fire != ground_flip::Kind::none) {
+                            const Vec3 look = motion.headPose.orientation.rotate({0, 0, -1});
+                            const Vec3 before = gfFresh && finite(swingState.velocity) ? swingState.velocity : Vec3{};
+                            game_swing::PointJumpAsk ask;
+                            ask.serial = ++pointJumpSerial;
+                            ask.velocity = ground_flip::launch(out.fire, look, before, gp);
+                            ask.normal = Vec3{0, 1, 0};
+                            const DWORD result = game_swing::validPointJump(ask) ? swingPointJump(&ask)
+                                                                                 : static_cast<DWORD>(2001);
+                            if (result == 0) {
+                                ++groundFlips;
+                                const Vec3 spin = ground_flip::spin(out.fire, look, static_cast<float>(values.automaticSpeed));
+                                rig.groundFlip(spin);
+                                pointJumpFired = pointJumpHold = true; // the ground exception: SpidyVR for the takeoff
+                                pointJumpHoldAge = 0;
+                                pointJumpOffLogged = false;
+                                stickPush.cancel(); // the flick is no zip or heal
+                                feel(body_haptics::Kind::leap);
+                                diag_log::writef("ground flip: %s, launch (%.1f, %.1f, %.1f) m/s, spin %d deg/s (ROTATION "
+                                                 "SPEED) about (%.2f, %.2f, %.2f), about %.2f s up, #%u",
+                                                 ground_flip::kindName(out.fire), ask.velocity.x, ask.velocity.y,
+                                                 ask.velocity.z, values.automaticSpeed, spin.x, spin.y, spin.z,
+                                                 ground_flip::airSeconds(ask.velocity.y), groundFlips);
+                            } else {
+                                ++groundFlipRefused;
+                                groundFlipTrigger.refused();
+                                diag_log::writef("ground flip: %s, the swing refused the launch (%lu)",
+                                                 ground_flip::kindName(out.fire), static_cast<unsigned long>(result));
+                            }
+                        }
+                        if (rig.groundFlipsReleased() != groundFlipReleasedSeen) {
+                            groundFlipReleasedSeen = rig.groundFlipsReleased();
+                            diag_log::write("ground flip: off the ground, the spin is the flips' now");
+                        }
+                        if (rig.groundFlipsLapsed() != groundFlipLapsedSeen) {
+                            groundFlipLapsedSeen = rig.groundFlipsLapsed();
+                            diag_log::writef("ground flip: still on the ground after %.0f ms, the spin dropped",
+                                             GameTrackingRig::groundFlipWaitSeconds * 1000.f);
                         }
                     }
                     if (!frame.jump)

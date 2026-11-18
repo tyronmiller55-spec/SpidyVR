@@ -1,7 +1,9 @@
 // GROUND MOVES AND CANCELS (the owner, Nov 18, t116u-t119u; plans/ground-moves-and-cancel.md): the web line
 // cancel into SpidyVR, intent breaks out of animation jumps, ground flips as jump types, and the ground kick's
 // handover.
+#include "spidy/ground_flip.hpp"
 #include "spidy/hybrid_owner.hpp"
+#include <cmath>
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
@@ -149,6 +151,147 @@ int main() {
         wall.wall = surfaceWall;
         HybridOwner o2;
         check(!o2.breakForMove(wall, false, now), "Spidy's wall: nothing");
+    }
+    // ---- S2: GROUND FLIPS: the trigger ----
+    {
+        using namespace ground_flip;
+        const Params p;
+        const float dt = .011f;
+        struct Run {
+            Trigger t;
+            Trigger::Out last;
+            Kind fired = Kind::none;
+            int aOut = 0;
+            void frame(float x, float y, bool a, bool ground = true, bool legs = false, bool b = false,
+                       bool blocked = false) {
+                Trigger::Input in;
+                in.seconds = .011f;
+                in.stickValid = true;
+                in.stickX = x, in.stickY = y;
+                in.a = a, in.b = b, in.legs = legs, in.ground = ground, in.blocked = blocked;
+                last = t.update(in, Params{});
+                if (last.fire != Kind::none)
+                    fired = last.fire;
+                aOut += last.a ? 1 : 0;
+            }
+        };
+        {
+            Run r;
+            r.frame(0, 0, false);
+            r.frame(0, -.9f, false); // flick down
+            r.frame(0, -.9f, true);  // A
+            check(r.fired == Kind::back && !r.last.a, "down, then A: a backflip, A consumed");
+            for (int i = 0; i < 5; ++i)
+                r.frame(0, 0, true);
+            check(r.aOut == 0, "the firing A stays the flip's while held");
+            r.frame(0, 0, false);
+            r.frame(0, 0, true);
+            check(r.last.a && r.last.fire == Kind::none, "a later plain A is the game's");
+        }
+        {
+            Run r;
+            r.frame(0, 0, false);
+            r.frame(0, .9f, false);
+            r.frame(0, .9f, true);
+            check(r.fired == Kind::front, "up, then A: a front flip");
+        }
+        {
+            Run r;
+            r.frame(0, 0, true);
+            check(r.last.a && r.fired == Kind::none, "A alone: the game's jump, at once");
+        }
+        {
+            Run r;
+            r.frame(0, 0, false);
+            r.frame(.9f, 0, false); // a snap turn's flick
+            r.frame(.9f, 0, true);
+            check(r.fired == Kind::none && r.last.a, "a sideways flick (the snap turn) then A: a jump");
+            Run d;
+            d.frame(0, 0, false);
+            d.frame(.6f, -.6f, false); // 45 degrees: outside the 35 degree cone
+            d.frame(.6f, -.6f, true);
+            check(d.fired == Kind::none, "a diagonal: no flip");
+        }
+        {
+            Run r;
+            r.frame(0, 0, false);
+            for (int i = 1; i <= 30; ++i)
+                r.frame(0, -.03f * i, false); // a slow push down (the heal's)
+            r.frame(0, -.9f, true);
+            check(r.fired == Kind::none && r.last.a, "a slow push then A: a jump");
+        }
+        {
+            Run r;
+            r.frame(0, 0, false);
+            r.frame(0, -.9f, false);
+            for (int i = 0; i < 16; ++i)
+                r.frame(0, -.9f, false); // 176 ms
+            r.frame(0, -.9f, true);
+            check(r.fired == Kind::none && r.last.a, "A later than 150 ms after the flick: a jump");
+        }
+        {
+            Run r;
+            r.frame(0, 0, false);
+            r.frame(0, -.9f, false);
+            r.frame(0, -.9f, true, false);
+            check(r.fired == Kind::none && r.last.a, "in the air: no ground flip");
+            Run l;
+            l.frame(0, 0, false);
+            l.frame(0, -.9f, false);
+            l.frame(0, -.9f, true, true, true);
+            check(l.fired == Kind::none && l.last.a && l.last.denied == Deny::legs, "the legs engaged: denied, A goes on");
+            Run b;
+            b.frame(0, 0, false);
+            b.frame(0, -.9f, false);
+            b.frame(0, -.9f, true, true, false, true);
+            check(b.last.denied == Deny::b, "B held: denied");
+            Run k;
+            k.frame(0, 0, false);
+            k.frame(0, -.9f, false);
+            k.frame(0, -.9f, true, true, false, false, true);
+            check(k.last.denied == Deny::blocked && k.last.a, "blocked: denied, A goes on");
+        }
+        {
+            Run r;
+            r.frame(0, 0, false);
+            r.frame(0, -.9f, false);
+            r.frame(0, -.9f, true);
+            r.frame(0, 0, false);
+            r.frame(0, -.9f, false);
+            r.frame(0, -.9f, true);
+            check(r.last.denied == Deny::cooldown, "a second flip inside the cooldown: denied");
+            for (int i = 0; i < 60; ++i)
+                r.frame(0, 0, false);
+            r.fired = Kind::none;
+            r.frame(0, -.9f, false);
+            r.frame(0, -.9f, true);
+            check(r.fired == Kind::back, "after the cooldown: again");
+        }
+        (void)dt;
+    }
+    // ---- S2: the spin and the launch ----
+    {
+        using namespace ground_flip;
+        const Vec3 ahead{0, 0, -1};
+        const Vec3 back = spin(Kind::back, ahead, 360);
+        check(std::abs(back.x - 6.2831853f) < 1e-3f && std::abs(back.y) < 1e-6f && std::abs(back.z) < 1e-6f,
+              "a backflip: 360 deg/s about the level right (+X looking -Z), nose up");
+        const Vec3 front = spin(Kind::front, ahead, 240);
+        check(std::abs(front.x + 4.1887902f) < 1e-3f, "a front flip: the other way, at ROTATION SPEED");
+        const Vec3 turned = spin(Kind::back, Vec3{1, -.9f, 0}, 360); // looking +X and down
+        check(std::abs(turned.z - 6.2831853f) < 1e-3f && std::abs(turned.x) < 1e-4f,
+              "the axis from the level look: looking +X, right is +Z");
+        check(length(spin(Kind::back, Vec3{0, -1, 0}, 360)) > 6.f, "looking straight down: still a spin (-Z ahead)");
+        check(length(spin(Kind::none, ahead, 360)) == 0, "none: no spin");
+        const Params p;
+        const Vec3 up = launch(Kind::back, ahead, {}, p);
+        check(std::abs(up.y - p.upSpeed) < 1e-5f && std::abs(up.z - p.backSpeed) < 1e-5f, "a backflip launches up and back");
+        const Vec3 run = launch(Kind::front, ahead, Vec3{0, -3, -20}, p);
+        check(std::abs(run.z + p.keepHorizontal + p.frontSpeed) < 1e-4f && std::abs(run.y - p.upSpeed) < 1e-5f,
+              "a front flip out of a run keeps the run (capped) and adds ahead; the fall is not kept");
+        check(airSeconds(6.5f) > 1.2f && airSeconds(6.5f) < 1.4f, "about 1.3 s up: one turn at 270-360 deg/s");
+        check(std::strcmp(kindName(Kind::back), "backflip") == 0 && std::strcmp(kindName(Kind::front), "front flip") == 0,
+              "the names");
     }
     std::printf("ground moves: %d checks passed, %d failed\n", passed, failed);
     return failed ? EXIT_FAILURE : EXIT_SUCCESS;
