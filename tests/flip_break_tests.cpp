@@ -173,6 +173,7 @@ void gripCancel() {
     f.cancelGrip = false;
     check(o.update(f, t += frame) == Domain::vr, "the cancel did not hold the air");
     f.state.grounded = true;
+    t += landMinStintNs; // HANDOFF CHURN: past the takeover's least stint
     check(o.update(f, t += frame) == Domain::anim && o.lastEnterAnim == EnterAnim::land, "landing kept VR");
 }
 

@@ -575,7 +575,7 @@ class GameTrackingRig {
     // over `seconds`. The lock (rig origin) is not changed. Returns whether
     // an ease began; the offset is startOffset() of viewEase().
     bool beginViewEase(Vec3 worldEyes, const Pose& head, float seconds, float verticalSeconds = 0, float holdSeconds = 0,
-                       bool gentle = false);
+                       bool gentle = false, float farKeep = 0);
     bool retimeViewEase(float seconds, float verticalSeconds) {
         return viewEase_.retime(seconds, verticalSeconds);
     }

@@ -312,7 +312,13 @@ int main() {
         const vr_settings::Values v{};
         check(v.handoffPlaceCm == 125, "the default: placed past 1.25 m (Nov 18)");
         auto g = landingGlide(46.76f, 250, 200, 700, 200, peakSmoothstep);
-        check(g.place && g.ms == 250, "47 m (b318cb1's zip): placed, never a 67 m/s slide");
+        check(g.place && g.ms == glideMs(2.f, 250, 200, 700, peakSmoothstep),
+              "47 m (b318cb1's zip): placed, never a 67 m/s slide");
+        // HANDOFF SOFT PLACE: the far part at once, the last placeCm glides.
+        check(std::abs(g.placed - 44.76f) < 1e-3f, "47 m: 44.76 m placed, the last 2 m glide");
+        g = landingGlide(43.62f, 200, 350, 450, 125, peakSmoothstep);
+        check(g.place && std::abs(g.placed - 42.37f) < 1e-3f && g.ms == glideMs(1.25f, 200, 350, 450, peakSmoothstep),
+              "the 2 AM log's 43.6 m at today's defaults: 42.4 m placed, 1.25 m glide");
         g = landingGlide(2.5f, 250, 200, 700, 200, peakSmoothstep);
         check(g.place, "2.5 m: placed");
         g = landingGlide(.6f, 250, 200, 700, 200, peakSmoothstep);
@@ -322,7 +328,7 @@ int main() {
         g = landingGlide(46.f, 250, 200, 700, 0, peakSmoothstep);
         check(!g.place && g.ms == 700, "0: always glide (the old way)");
         g = landingGlide(NAN, 250, 200, 700, 200, peakSmoothstep);
-        check(!g.place && g.ms == 250, "a bad distance: the base, no place");
+        check(!g.place && g.ms == 250 && g.placed == 0, "a bad distance: the base, no place");
         // The source is the shown view carried with the player, not the tracked eyes.
         const Vec3 eyes[2] = {{-.03f, 1.6f, 0}, {.03f, 1.6f, 0}};
         const Vec3 s = shownSource(eyes, {0, 0, 0}, {5, 0, 0});

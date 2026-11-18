@@ -62,9 +62,13 @@ inline constexpr float peakSmoothstep = 1.5f, peakSmootherstep = 1.875f, peakEas
 // view has to go - glide (stretched by HANDOFF GLIDE SPEED, glideMs) or, farther than `placeCm`, place the view on the
 // head at once (the position only: the angle blends as before, so the headset still leads and no view yaw is
 // written). b318cb1: glides of 5 to 47 m squeezed into 700 ms were a slide at up to 67 m/s. placeCm <= 0: always glide.
+// HANDOFF SOFT PLACE (the 2 AM log of Nov 18, approved 1:53 PM): 39 places of 2.0 to 43.6 m arrived in one frame.
+// Now only the far part is placed at once (`placed` metres), and the last placeCm glide onto the head over `ms`
+// (glideMs of that remainder), so the view settles onto him instead of landing in one frame.
 struct LandingGlide {
     bool place{};
     int ms{};
+    float placed{}; // metres placed at once (0: none); the rest glides
 };
 inline LandingGlide landingGlide(float metres, int baseMs, int speedCmS, int maxMs, int placeCm, float peak) {
     LandingGlide g;
@@ -73,6 +77,9 @@ inline LandingGlide landingGlide(float metres, int baseMs, int speedCmS, int max
         return g;
     if (placeCm > 0 && metres * 100.f > static_cast<float>(placeCm)) {
         g.place = true;
+        const float rest = static_cast<float>(placeCm) * .01f;
+        g.placed = metres - rest;
+        g.ms = glideMs(rest, baseMs, speedCmS, maxMs, peak);
         return g;
     }
     g.ms = glideMs(metres, baseMs, speedCmS, maxMs, peak);

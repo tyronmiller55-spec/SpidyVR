@@ -232,6 +232,11 @@ constexpr int64_t airAnimMaxNs = 2'500'000'000;
 // AIR TAKEOVER (Nov 14): a jump's vertical speed under this, after this long in the air, takes the air early.
 constexpr float takeoffDoneVel = 4.f;
 constexpr int64_t takeoffMinNs = 250'000'000;
+// HANDOFF CHURN (the 2 AM log of Nov 18, approved 1:53 PM): a punch or a grip cancel that took him into SpidyVR
+// just as he touched down handed him straight back to the animation on the same frame - 24 view eases ended
+// "(landed)" under 50 ms, 20 of them at 0 ms, the hands jumping up to 2.4 m to the shown view and back. A
+// landing hands back only once such a takeover has lasted this long.
+constexpr int64_t landMinStintNs = 120'000'000;
 // LANDING BLEND-IN's early hand-back (air_landing_release, unverified): no sooner than this after the owner changed (the owner's 0.25 s
 // minimum dwell), the animation keeps the body while the impact is predicted within landKeepEta; if the prediction is lost for
 // landLostNs, or no landing came in landHandBackMaxNs, SpidyVR takes the air again.
@@ -738,7 +743,8 @@ struct HybridOwner {
         if (supported(f.state) || (f.perched && f.state.wall != surfaceWall)) {
             airAnimNs = fallNs = -1;
             handedBack_ = false; // the landing came
-            if (domain == Domain::vr && !f.groundAction && !f.pointJumpHold)
+            const bool churn = (vrBy == EnterVr::punch || vrBy == EnterVr::cancel) && nowNs - sinceNs < landMinStintNs;
+            if (domain == Domain::vr && !f.groundAction && !f.pointJumpHold && !churn)
                 goAnim(nowNs, f.state.grounded || f.perched ? EnterAnim::land : EnterAnim::mount);
             if (f.zipPress || f.state.zipping) {
                 zipNs = nowNs;

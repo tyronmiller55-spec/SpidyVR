@@ -30036,6 +30036,9 @@ int main() {
         f.cancelGrip = false;
         check(o.update(f, t += 11'000'000) == Domain::vr, "cancel did not stay in the air");
         f.state.grounded = true;
+        // HANDOFF CHURN: a landing within landMinStintNs of the takeover waits for it.
+        check(o.update(f, t += 11'000'000) == Domain::vr && !o.enterAnim, "a landing 33 ms in handed back at once");
+        t = landMinStintNs + 11'000'000;
         check(o.update(f, t += 11'000'000) == Domain::anim && o.lastEnterAnim == EnterAnim::land,
               "a held cancel grip kept VR on the ground");
         // In a Y zip.

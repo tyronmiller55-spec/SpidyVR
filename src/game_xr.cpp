@@ -10050,7 +10050,19 @@ DWORD WINAPI run(void*) {
                                                                     : 0.f;
                                         if (easeMs > 0 && eyesOk &&
                                             rig.beginViewEase(worldEyes, frame.head, static_cast<float>(easeMs) * .001f,
-                                                              heightFade, punchHold, values.handoffEaseCurve != 0)) {
+                                                              heightFade, punchHold, values.handoffEaseCurve != 0,
+                                                              // HANDOFF SOFT PLACE: past 3 m, the last handoff_place_cm eases.
+                                                              values.handoffPlaceCm > 0
+                                                                  ? (std::min)(3.f, values.handoffPlaceCm * .01f)
+                                                                  : 0.f)) {
+                                            if (rig.viewEase().farPlaced() > 0)
+                                                diag_log::writef("handoff place: %s takeover %.2f m placed at once, the last "
+                                                                 "%.2f m eased",
+                                                                 easeName, rig.viewEase().farPlaced(),
+                                                                 length(rig.viewEase().startOffset() > 0
+                                                                            ? Vec3{rig.viewEase().startOffset(),
+                                                                                   rig.viewEase().startHeight(), 0}
+                                                                            : Vec3{}));
                                             if (punchHold > 0)
                                                 diag_log::writef("punch camera lock: held %.0f ms before the ease (a punch "
                                                                  "on the ground)", punchHold * 1000.f);
@@ -10282,14 +10294,30 @@ DWORD WINAPI run(void*) {
                                                 hybridBlend.fromValid ? "" : " (no shown view: the tracked eyes)",
                                                 finite(feetNow) ? length(motion.anchor - feetNow) : -1.f,
                                                 landHeadProbe.stintMs);
-                                        if (plan.place) {
+                                        // HANDOFF SOFT PLACE: the far part placed at once (the blend's source moved
+                                        // that far toward the head), the last handoff_place_cm glides on.
+                                        bool softPlaced = false;
+                                        if (plan.place && hybridBlend.fromValid && gap > 1e-3f && finite(hb - source)) {
+                                            const Vec3 shift = (hb - source) * (plan.placed / gap);
+                                            for (auto& e : hybridBlend.fromEyePos)
+                                                e = e + shift;
+                                            softPlaced = true;
+                                        }
+                                        if (plan.place && !softPlaced) {
                                             hybridBlend.placed = true;
                                             ++handoffPlaces;
                                             diag_log::writef("handoff place: %s %.2f m onto the head, placed at once (over "
                                                              "%d cm; the angle still blends), #%u",
                                                              landHeadProbe.why, gap, values.handoffPlaceCm,
                                                              handoffPlaces);
-                                        } else if (plan.ms > baseMs) {
+                                        } else if (plan.place || plan.ms > baseMs) {
+                                            if (softPlaced) {
+                                                ++handoffPlaces;
+                                                diag_log::writef("handoff place: %s %.2f m onto the head, %.2f m placed at once, "
+                                                                 "the last %.2f m glide over %d ms, #%u",
+                                                                 landHeadProbe.why, gap, plan.placed, gap - plan.placed,
+                                                                 plan.ms, handoffPlaces);
+                                            }
                                             // Stretched at the progress it has (a few ms in): no step back.
                                             const auto clock = hybrid_handoff::stretchKeepingProgress(
                                                 handoffNs, hybridBlend.startNs, hybridBlend.durNs,

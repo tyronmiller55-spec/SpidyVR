@@ -330,7 +330,7 @@ int main() {
             late.update(l, t += 11'000'000);
             l.cancelGrip = false;
             l.state.grounded = true;
-            late.update(l, t += 11'000'000);
+            late.update(l, t += landMinStintNs); // HANDOFF CHURN: past the takeover's least stint
             check(late.domain == Domain::anim && late.lastEnterAnim == EnterAnim::land, "landed: ANIM");
             for (int i = 0; i < 4; ++i)
                 late.update(l, t += 11'000'000);
@@ -351,7 +351,7 @@ int main() {
             slow.update(s2, u += 11'000'000);
             s2.cancelGrip = false;
             s2.state.grounded = true;
-            slow.update(s2, u += 11'000'000);
+            slow.update(s2, u += landMinStintNs); // HANDOFF CHURN: past the takeover's least stint
             for (int i = 0; i < 30; ++i)
                 slow.update(s2, u += 11'000'000);
             s2.handSupport = true;

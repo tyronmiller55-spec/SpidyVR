@@ -28,6 +28,10 @@ inline constexpr float teleportMetres = 5.f;
 inline constexpr float turnFrame = .35f, turnTotal = .8f;
 // Offsets smaller than this are no ease; larger than this are no handoff's.
 inline constexpr float minOffset = .01f, maxOffset = 3.f;
+// HANDOFF SOFT PLACE (the 2 AM log of Nov 18, approved 1:53 PM): an offset over maxOffset (6 takeovers of 3.9 to
+// 11.2 m had no ease at all, the view cut there in one frame) keeps its last `farKeep` metres (begin()'s argument;
+// 0 the old refusal) and eases those; the rest is placed at once. Past farMax it is a teleport: none.
+inline constexpr float farMax = 60.f;
 
 enum class End : uint8_t { none, finished, teleport, turn, handoff, recenter, invalid, reset, landed };
 inline const char* endName(End e) {
@@ -81,12 +85,19 @@ class Ease {
     // PUNCH CAMERA LOCK (punch_camera_lock_ms; the owner, Nov 15: "keep the camera locked"): `holdSeconds` holds the
     // whole offset (no bleed) before the ease starts, so a punch that lands back in the animation within it never
     // moves the view; the turn and teleport cancels still apply.
-    bool begin(Vec3 offset, float durationSeconds, float verticalSeconds = 0, float holdSeconds = 0, bool gentle = false) {
+    bool begin(Vec3 offset, float durationSeconds, float verticalSeconds = 0, float holdSeconds = 0, bool gentle = false,
+               float farKeep = 0) {
         if (active_)
             stop(End::handoff);
+        farPlaced_ = 0;
         if (!finite(offset) || !std::isfinite(durationSeconds) || durationSeconds <= 0)
             return false;
-        const float m = length(offset);
+        float m = length(offset);
+        if (m > maxOffset && std::isfinite(farKeep) && farKeep > minOffset && farKeep <= maxOffset && m <= farMax) {
+            farPlaced_ = m - farKeep;
+            offset = offset * (farKeep / m);
+            m = farKeep;
+        }
         if (!(m >= minOffset) || m > maxOffset)
             return false;
         split_ = std::isfinite(verticalSeconds) && verticalSeconds > durationSeconds;
@@ -174,7 +185,9 @@ class Ease {
             return false;
         const uint32_t begins = begins_;
         active_ = false;
+        const float placed = farPlaced_;
         const bool ok = begin(offset0_, durationSeconds, verticalSeconds, hold_, gentle_);
+        farPlaced_ = placed;
         begins_ = begins;
         return ok;
     }
@@ -184,6 +197,10 @@ class Ease {
     }
     bool active() const {
         return active_;
+    }
+    // HANDOFF SOFT PLACE: of the last begin()'s offset, the metres placed at once (0: all eased).
+    float farPlaced() const {
+        return farPlaced_;
     }
     float startOffset() const {
         return start_;
@@ -232,6 +249,7 @@ class Ease {
     }
 
   private:
+    float farPlaced_{};
     void stop(End why) {
         active_ = false;
         magnitude_ = 0;

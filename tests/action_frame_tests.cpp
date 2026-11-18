@@ -221,7 +221,7 @@ void activationTests() {
         handoff.update(owner.animOwns(true,f.state));
         // Landing always comes back to the animation, the grip still held or not.
         f.state.grounded=true;
-        owner.update(f,6);
+        owner.update(f,4+hybrid_owner::landMinStintNs); // HANDOFF CHURN: past the takeover's least stint
         handoff.update(owner.animOwns(true,f.state));
         check(owner.enterAnim && owner.lastEnterAnim==hybrid_owner::EnterAnim::land,"landing did not hand back");
         check(handoff.enter && handoff.yielding,"owner returned but production handoff deferred native ownership");

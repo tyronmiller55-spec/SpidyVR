@@ -258,6 +258,17 @@ int main() {
         n.begin({.3f, .4f, 0}, .25f, .5f);
         check(n.retime(.6f, .5f) && n.heightSeconds() == 0 && near(n.startOffset(), .5f), "a level glide past the fade: one offset");
     }
+    // HANDOFF SOFT PLACE (2 AM log, Nov 18): 3.9-11.2 m takeovers had no ease; now the last farKeep eases.
+    {
+        Ease e;
+        check(!e.begin({9.74f, 0, 0}, .25f), "9.7 m without farKeep: none (the old way)");
+        check(e.begin({9.74f, 0, 0}, .25f, 0, 0, true, 1.25f), "9.7 m with farKeep 1.25: an ease");
+        check(near(e.startOffset(), 1.25f) && near(e.farPlaced(), 8.49f), "the last 1.25 m eases, 8.49 m placed");
+        check(e.retime(.45f, 0) && near(e.farPlaced(), 8.49f) && near(e.startOffset(), 1.25f), "retime keeps it");
+        check(e.begin({2.f, 0, 0}, .25f, 0, 0, true, 1.25f) && near(e.startOffset(), 2.f) && e.farPlaced() == 0,
+              "under 3 m: all of it eases");
+        check(!e.begin({70.f, 0, 0}, .25f, 0, 0, true, 1.25f), "past 60 m: a teleport, none");
+    }
     std::printf("punch view ease: %d checks passed\n", passed);
     return 0;
 }
