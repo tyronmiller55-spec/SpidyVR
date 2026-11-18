@@ -33,3 +33,12 @@ the A goes to the game at once. Plain A with the stick centred is never held bac
   nor moves him, and never once the snap holds (he runs the snapped way).
 - Logs: `ground flip: <kind>, launch ..., by tap`, `tap flip: denied <why> (stick x, y, speed)`,
   `tap flip: A held past 180 ms, the game's jump`.
+
+## Where flips are refused
+
+Cutscenes and menus, a prompt on A, a vent, a web line, a takeoff, a point jump or sidestep under way, a web held,
+Spidy's own wall or the game's **wall** crawl (the launch is straight up from a floor; off a wall it would drive him
+into the wall the game holds him on). The game's **floor** crawl flag (the mover's 0x1, DEVELOPMENT.md: also its crouch
+under anything low, seen in fights) no longer refuses since Nov 18 1:09 PM, unless `FloorCrawlRoof` has confirmed a
+duct's roof over him (`ground flip: denied the game's crawl in a duct`). A flip from the flag logs
+`ground flip: from the game's floor crawl flag (no duct roof)`.

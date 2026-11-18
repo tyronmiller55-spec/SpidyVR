@@ -3511,8 +3511,18 @@ DWORD WINAPI run(void*) {
                             blockedBy = "vent";
                         else if (values.webLines && lineState.phase == 2 && lineState.onLine)
                             blockedBy = "line";
-                        else if (gfFresh && swingState.wall != 0)
-                            blockedBy = "on a wall or the game's crawl";
+                        // The game's FLOOR crawl flag (the mover's 0x1) is also its crouch under anything low and shows
+                        // up in fights (DEVELOPMENT.md, the floor crawl): since Nov 18 1:09 PM ("Relax the floor-crawl
+                        // block") it no longer refuses a flip unless a duct's roof is confirmed over him (FloorCrawlRoof:
+                        // the headroom ray saw a roof within 1.5 m of the feet). A wall - Spidy's own or the game's wall
+                        // crawl - still refuses: the launch is straight up from a floor, off a wall it would drive him
+                        // into the wall the game holds him on.
+                        else if (gfFresh && swingState.wall == static_cast<uint32_t>(game_swing::Surface::floor) &&
+                                 floorRoof.duct())
+                            blockedBy = "the game's crawl in a duct (a roof over him)";
+                        else if (gfFresh && swingState.wall != 0 &&
+                                 swingState.wall != static_cast<uint32_t>(game_swing::Surface::floor))
+                            blockedBy = "on a wall or the game's wall crawl";
                         else if (gfFresh && (swingState.takeoff || swingState.takeoffPhase))
                             blockedBy = "takeoff";
                         else if (pointJumpHold || sidestepHold || sidestepFired)
@@ -3568,6 +3578,8 @@ DWORD WINAPI run(void*) {
                                                                           : "basic FLIPS, FLIP SPEED, one turn",
                                                  spin.x, spin.y, spin.z, ground_flip::airSeconds(ask.velocity.y),
                                                  fightLately ? ", in a fight" : "", how, groundFlips);
+                                if (gfFresh && swingState.wall == static_cast<uint32_t>(game_swing::Surface::floor))
+                                    diag_log::write("ground flip: from the game's floor crawl flag (no duct roof)");
                             } else {
                                 ++groundFlipRefused;
                                 if (std::strcmp(how, "tap") == 0)
