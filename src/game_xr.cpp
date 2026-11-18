@@ -1117,11 +1117,19 @@ DWORD WINAPI run(void*) {
         padInstalled = !game_pad::install();
         uint64_t padRetryMs = GetTickCount64() + 1000;
         // The VR settings are a tab of the game's own Settings (game_menu).
+        // Each of its hooks goes in on its own, in front of another mod's
+        // where one has the function (docs/MOD_COMPAT.md); the diagnostics
+        // name what it found (logSettings, below).
         const uint32_t menuCode = game_menu::install(config.base);
         if (menuCode) {
             const auto text = "No SPIDY VR tab in the game's Settings (" + std::to_string(menuCode) +
-                              "); the launcher's settings apply";
+                              "); the launcher's settings apply" +
+                              (game_menu::promptsRead() ? std::string("; the button prompts (X: LB + RB where shown) still work")
+                                                        : std::string("; X cannot read the game's LB + RB prompts"));
             message(3, 0, text.c_str());
+        } else if (!game_menu::report().empty()) {
+            message(3, 0, "Another mod hooks the game's menu code: the SPIDY VR tab and button prompts go in "
+                          "alongside it (the diag log names it)");
         }
         // The game's request for a Steam ticket, on its way back to the main
         // menu, closed every VR session that quit to it (game_steam). The
@@ -2330,8 +2338,18 @@ DWORD WINAPI run(void*) {
                 return;
             const bool first = diagSettings.empty();
             diagSettings = text;
-            if (first)
+            if (first) {
                 diag_log::writef("build: %s", diag_log::build());
+                // What the menu's hooks found that was another mod's (game_menu::report).
+                const std::string& found = game_menu::report();
+                for (size_t at = 0; at < found.size();) {
+                    const size_t end = found.find('\n', at);
+                    diag_log::writef("mods: %s", found.substr(at, end == std::string::npos ? end : end - at).c_str());
+                    if (end == std::string::npos)
+                        break;
+                    at = end + 1;
+                }
+            }
             // In pieces a line holds, each ending at a setting's end.
             constexpr size_t piece = 200;
             unsigned part = 0;

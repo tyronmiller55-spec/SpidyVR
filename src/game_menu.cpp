@@ -10,14 +10,17 @@
 // its items name settings 0x200 and up, which only Spidy answers for.
 #include "spidy/game_menu.hpp"
 #include "spidy/game_prompts.hpp"
+#include "spidy/hook_chain.hpp"
 #include <MinHook.h>
 #include <algorithm>
 #include <array>
 #include <atomic>
 #include <bitset>
 #include <cmath>
+#include <cstdio>
 #include <cstring>
 #include <iterator>
+#include <string>
 #include <string_view>
 #include <type_traits>
 #include <intrin.h>
@@ -146,6 +149,8 @@ static_assert(static_cast<size_t>(vr_settings::lastItem) < itemBits, "more setti
 std::atomic<uint64_t> tabsBuilt{}, changesMade{};
 std::atomic<uint32_t> failure{};
 std::atomic<bool> hooked{}, created{};
+// The tab's hooks are in (every one), and the button prompts' (game_menu::promptsRead).
+std::atomic<bool> menuReady{}, promptsReady{};
 // The tab and its items: 0 not built yet, 1 ready, 2 cannot be built.
 std::atomic<int> built{};
 alignas(16) unsigned char tab[screenCount][tabBytes];
@@ -484,7 +489,7 @@ void trace(uint32_t kind, void* ui, uint32_t hash, const char* name, const GfxVa
 bool __fastcall invokeHook(void* ui, const char* name, GfxValue* args, uint32_t count, uint64_t a, float b,
                            uint32_t c, uint64_t d) {
     trace(1, ui, 0, name, args, count, _ReturnAddress());
-    if (name == reinterpret_cast<const char*>(imageBase + openOptionsName) && args && count >= 1 &&
+    if (menuReady && name == reinterpret_cast<const char*>(imageBase + openOptionsName) && args && count >= 1 &&
         (args[0].type & typeMask) == arrayType && args[0].objects)
         addTab(args[0]);
     // MinHook takes this target once, so the prompts are read from here
@@ -624,10 +629,12 @@ struct Hook {
     // The function's first bytes in the supported game.
     unsigned char bytes[10];
     size_t count;
+    // Only the tab uses it; the rest the button prompts need too.
+    bool menuOnly = true;
 };
 const Hook hooks[] = {
     {0x1d1cf30, reinterpret_cast<void*>(&invokeHook), reinterpret_cast<void**>(&originalInvoke),
-     {0x80, 0xb9, 0xb0, 0x00, 0x00, 0x00, 0x00, 0x75, 0x03}, 9},
+     {0x80, 0xb9, 0xb0, 0x00, 0x00, 0x00, 0x00, 0x75, 0x03}, 9, false},
     {0x7dc400, reinterpret_cast<void*>(&callbackHook), reinterpret_cast<void**>(&originalCallback),
      {0x48, 0x89, 0x5c, 0x24, 0x08, 0x48, 0x89, 0x74, 0x24, 0x10}, 10},
     {0x72d640, reinterpret_cast<void*>(&typeHook), reinterpret_cast<void**>(&originalType),
@@ -645,16 +652,18 @@ const Hook hooks[] = {
     {0x730ae0, reinterpret_cast<void*>(&resetHook), reinterpret_cast<void**>(&originalReset),
      {0x48, 0x89, 0x5c, 0x24, 0x08, 0x48, 0x89, 0x74, 0x24, 0x10}, 10},
     {0x1749970, reinterpret_cast<void*>(&textHook), reinterpret_cast<void**>(&originalText),
-     {0x48, 0x89, 0x5c, 0x24, 0x08, 0x48, 0x89, 0x74, 0x24, 0x10}, 10},
+     {0x48, 0x89, 0x5c, 0x24, 0x08, 0x48, 0x89, 0x74, 0x24, 0x10}, 10, false},
     {0x1749ae0, reinterpret_cast<void*>(&hasTextHook), reinterpret_cast<void**>(&originalHasText),
      {0x48, 0x83, 0xec, 0x28, 0x8b, 0xd1, 0x48, 0x8b, 0x0d}, 9},
     {addItem, reinterpret_cast<void*>(&addItemHook), reinterpret_cast<void**>(&originalAddItem),
      {0x48, 0x89, 0x5c, 0x24, 0x08, 0x48, 0x89, 0x74, 0x24, 0x10}, 10},
     {0x7793d0, reinterpret_cast<void*>(&promptShowHook), reinterpret_cast<void**>(&originalPromptShow),
-     {0x48, 0x8b, 0xc4, 0x48, 0x89, 0x58, 0x08, 0x48, 0x89, 0x70}, 10},
+     {0x48, 0x8b, 0xc4, 0x48, 0x89, 0x58, 0x08, 0x48, 0x89, 0x70}, 10, false},
     {0x77a1e0, reinterpret_cast<void*>(&promptHideHook), reinterpret_cast<void**>(&originalPromptHide),
-     {0x48, 0x89, 0x5c, 0x24, 0x08, 0x48, 0x89, 0x6c, 0x24, 0x10}, 10},
+     {0x48, 0x89, 0x5c, 0x24, 0x08, 0x48, 0x89, 0x6c, 0x24, 0x10}, 10, false},
 };
+constexpr size_t hookCount = std::size(hooks);
+static_assert(hookCount <= 32);
 bool matches(uintptr_t at, const unsigned char* bytes, size_t count) {
     __try {
         return std::memcmp(reinterpret_cast<const void*>(at), bytes, count) == 0;
@@ -662,6 +671,80 @@ bool matches(uintptr_t at, const unsigned char* bytes, size_t count) {
         return false;
     }
 }
+bool readBytes(uintptr_t at, void* to, size_t count) {
+    __try {
+        std::memcpy(to, reinterpret_cast<const void*>(at), count);
+        return true;
+    } __except (EXCEPTION_EXECUTE_HANDLER) {
+        return false;
+    }
+}
+// The library `at` is in ("" for none: memory a hooking library allocated,
+// such as MinHook's relay near its target).
+std::string moduleOf(uintptr_t at) {
+    HMODULE module{};
+    if (!GetModuleHandleExW(GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS | GET_MODULE_HANDLE_EX_FLAG_UNCHANGED_REFCOUNT,
+                            reinterpret_cast<LPCWSTR>(at), &module))
+        return {};
+    char path[MAX_PATH]{};
+    const DWORD n = GetModuleFileNameA(module, path, MAX_PATH);
+    std::string name(path, n);
+    const auto slash = name.find_last_of("\\/");
+    return slash == std::string::npos ? name : name.substr(slash + 1);
+}
+// A jump at `at`, read through: a pointer jump's pointer, and up to three
+// jumps on (MinHook's relay is a pointer jump of its own), to name the
+// library that has the function. dest: where the first jump ends up.
+hook_chain::Jump follow(uintptr_t at, std::string& owner) {
+    unsigned char bytes[16]{};
+    if (!readBytes(at, bytes, sizeof bytes))
+        return {};
+    auto first = hook_chain::decode(bytes, at);
+    auto resolve = [](hook_chain::Jump j) {
+        if (j.kind == hook_chain::Kind::pointer) {
+            uintptr_t to{};
+            j.dest = readBytes(j.dest, &to, sizeof to) ? to : 0;
+        }
+        return j;
+    };
+    first = resolve(first);
+    uintptr_t to = first.dest;
+    for (int hop = 0; hop < 3 && to; ++hop) {
+        owner = moduleOf(to);
+        if (!owner.empty())
+            break;
+        unsigned char next[16]{};
+        if (!readBytes(to, next, sizeof next))
+            break;
+        const auto j = resolve(hook_chain::decode(next, to));
+        if (j.kind == hook_chain::Kind::none || j.kind == hook_chain::Kind::rel8)
+            break;
+        to = j.dest;
+    }
+    return first;
+}
+std::string hex(uintptr_t v) {
+    char text[24];
+    std::snprintf(text, sizeof text, "0x%llx", static_cast<unsigned long long>(v));
+    return text;
+}
+std::string hexBytes(uintptr_t at, size_t count) {
+    unsigned char bytes[16]{};
+    count = std::min(count, sizeof bytes);
+    if (!readBytes(at, bytes, count))
+        return "unreadable";
+    std::string text;
+    for (size_t i = 0; i < count; ++i) {
+        char b[4];
+        std::snprintf(b, sizeof b, i ? " %02x" : "%02x", bytes[i]);
+        text += b;
+    }
+    return text;
+}
+// install()'s account of what it found, a line each, and its result.
+std::string installReport;
+uint32_t installCode{};
+uint32_t madeHooks{};
 vr_settings::Values copyItems(const vr_settings::Values& from, vr_settings::Values to,
                               const ItemBits& which) {
     for (unsigned i = 1; i <= static_cast<unsigned>(vr_settings::lastItem); ++i)
@@ -672,43 +755,117 @@ vr_settings::Values copyItems(const vr_settings::Values& from, vr_settings::Valu
 } // namespace
 
 uint32_t game_menu::install(uintptr_t base) {
-    if (hooked)
-        return 0;
-    if (!created) {
-        for (size_t i = 0; i < std::size(hooks); ++i)
-            if (!matches(base + hooks[i].offset, hooks[i].bytes, hooks[i].count))
-                return 9301 + static_cast<uint32_t>(i);
-        imageBase = base;
+    if (hooked || created)
+        return installCode;
+    // Each hook on its own (docs/MOD_COMPAT.md): another mod's jump at one is
+    // gone in front of, and code Spidy does not know keeps that hook out -
+    // the tab with it, but not the button prompts' other hooks.
+    uintptr_t gameEnd = base;
+    if (const auto dos = reinterpret_cast<const IMAGE_DOS_HEADER*>(base); dos->e_magic == IMAGE_DOS_SIGNATURE) {
+        const auto nt = reinterpret_cast<const IMAGE_NT_HEADERS*>(base + dos->e_lfanew);
+        gameEnd = base + nt->OptionalHeader.SizeOfImage;
+    }
+    hook_chain::Found found[hookCount];
+    bool menuOnly[hookCount];
+    installReport.clear();
+    uint32_t firstUnknown = 0;
+    for (size_t i = 0; i < hookCount; ++i) {
+        const uintptr_t at = base + hooks[i].offset;
+        menuOnly[i] = hooks[i].menuOnly;
+        const bool same = matches(at, hooks[i].bytes, hooks[i].count);
+        std::string owner;
+        const auto jump = same ? hook_chain::Jump{} : follow(at, owner);
+        found[i] = hook_chain::classify(same, jump, base, gameEnd);
+        if (found[i] == hook_chain::Found::original)
+            continue;
+        if (found[i] == hook_chain::Found::chained)
+            installReport += "game function " + hex(hooks[i].offset) + " is hooked by another mod (" +
+                             (owner.empty() ? std::string("an unnamed library") : owner) + ", jump to " +
+                             hex(jump.dest) + "): Spidy goes in front of it and passes every call on\n";
+        else {
+            if (!firstUnknown)
+                firstUnknown = 9301 + static_cast<uint32_t>(i);
+            installReport += "game function " + hex(hooks[i].offset) + " starts with " +
+                             hexBytes(at, hooks[i].count) + ", not the supported game's" +
+                             (owner.empty() ? std::string() : " (jump into " + owner + ")") + ": left alone" +
+                             (hooks[i].menuOnly ? "" : ", so its part of the button prompts is off") + "\n";
+        }
+    }
+    auto p = hook_chain::plan(found, menuOnly, hookCount);
+    imageBase = base;
+    auto status = MH_Initialize();
+    if (status != MH_OK && status != MH_ERROR_ALREADY_INITIALIZED)
+        return installCode = 9400 + status;
+    uint32_t createFailed = 0;
+    // The prompts' hooks first: a tab hook that fails takes only the tab's with it.
+    for (int pass = 0; pass < 2; ++pass)
+        for (size_t i = 0; i < hookCount; ++i) {
+            if (!(p.use & (1u << i)) || hooks[i].menuOnly != (pass == 1))
+                continue;
+            if (pass == 1 && !p.menu)
+                continue;
+            status = MH_CreateHook(reinterpret_cast<void*>(base + hooks[i].offset), hooks[i].detour, hooks[i].original);
+            if (status == MH_OK) {
+                madeHooks |= 1u << i;
+                continue;
+            }
+            installReport += "game function " + hex(hooks[i].offset) + " could not be hooked (MinHook " +
+                             std::to_string(status) + ")\n";
+            if (!createFailed)
+                createFailed = 9420 + status;
+            if (hooks[i].menuOnly || p.menu) {
+                // No tab: the tab's hooks made so far come out again.
+                p.menu = false;
+                for (size_t k = 0; k < hookCount; ++k)
+                    if (hooks[k].menuOnly && (madeHooks & (1u << k))) {
+                        MH_RemoveHook(reinterpret_cast<void*>(base + hooks[k].offset));
+                        madeHooks &= ~(1u << k);
+                    }
+            }
+        }
+    created = true;
+    if (p.menu) {
         addTexts();
         pageReady = matches(base + pageRefresh, pageRefreshBytes, sizeof(pageRefreshBytes));
-        auto status = MH_Initialize();
-        if (status != MH_OK && status != MH_ERROR_ALREADY_INITIALIZED)
-            return 9400 + status;
-        for (size_t i = 0; i < std::size(hooks); ++i)
-            if ((status = MH_CreateHook(reinterpret_cast<void*>(base + hooks[i].offset), hooks[i].detour,
-                                        hooks[i].original)) != MH_OK) {
-                while (i--)
-                    MH_RemoveHook(reinterpret_cast<void*>(base + hooks[i].offset));
-                return 9420 + status;
-            }
-        created = true;
     }
     // All at once: the tab never reaches the game before the answers about its rows.
-    for (const auto& h : hooks)
-        if (const auto status = MH_QueueEnableHook(reinterpret_cast<void*>(imageBase + h.offset)); status != MH_OK)
-            return 9440 + status;
-    if (const auto status = MH_ApplyQueued(); status != MH_OK)
-        return 9460 + status;
-    hooked = true;
-    return 0;
+    for (size_t i = 0; i < hookCount; ++i)
+        if (madeHooks & (1u << i))
+            if (const auto s = MH_QueueEnableHook(reinterpret_cast<void*>(base + hooks[i].offset)); s != MH_OK)
+                return installCode = 9440 + s;
+    if (madeHooks)
+        if (const auto s = MH_ApplyQueued(); s != MH_OK)
+            return installCode = 9460 + s;
+    hooked = madeHooks != 0;
+    menuReady = p.menu;
+    // The prompts are read with the call wrapper (POI, placeable prompts) and
+    // the HUD prompt list's show and hide (what X names, LB + RB).
+    const auto made = [](uintptr_t offset) {
+        for (size_t i = 0; i < hookCount; ++i)
+            if (hooks[i].offset == offset)
+                return (madeHooks & (1u << i)) != 0;
+        return false;
+    };
+    promptsReady = made(0x1d1cf30) && made(0x7793d0) && made(0x77a1e0);
+    installCode = p.menu ? 0 : (firstUnknown ? firstUnknown : createFailed);
+    return installCode;
 }
 void game_menu::uninstall() {
     if (!hooked)
         return;
-    for (const auto& h : hooks)
-        MH_QueueDisableHook(reinterpret_cast<void*>(imageBase + h.offset));
+    for (size_t i = 0; i < hookCount; ++i)
+        if (madeHooks & (1u << i))
+            MH_QueueDisableHook(reinterpret_cast<void*>(imageBase + hooks[i].offset));
     MH_ApplyQueued();
     hooked = false;
+    menuReady = false;
+    promptsReady = false;
+}
+const std::string& game_menu::report() {
+    return installReport;
+}
+bool game_menu::promptsRead() {
+    return promptsReady;
 }
 void game_menu::publish(const vr_settings::Values& values) {
     AcquireSRWLockExclusive(&lock);

@@ -1,6 +1,7 @@
 #pragma once
 #include "vr_settings.hpp"
 #include <cstdint>
+#include <string>
 
 // Spidy's VR settings as seven category tabs after the game's own Settings.
 // The list wraps: Up from GAME reaches VR DISPLAY. VR VIEW stays
@@ -13,9 +14,18 @@
 // texts and values) and takes the changes; the game's own settings and save
 // never see them. The title screen's Options have no such tab.
 namespace spidy::game_menu {
-// Hooks the game's settings menu. 0 when hooked; 9301-9312 when the code at
-// a hook is not this game's, 9400-9499 when hooking failed.
+// Hooks the game's settings menu, and the button prompts' functions with it
+// (game_prompts reads them through these hooks). 0 when the tab is hooked;
+// 9301-9314 when the code at hook N is neither this game's nor another mod's
+// hook to go in front of (no tab; the prompts' other hooks still go in),
+// 9400-9499 when hooking failed. Each hook goes in on its own, in front of
+// another mod's where one has it (docs/MOD_COMPAT.md).
 uint32_t install(uintptr_t base);
+// What install() found that was not the supported game's own code, a line
+// each: another mod's hooks gone in front of, code left alone.
+const std::string& report();
+// The prompts' hooks are in: X can send the game's LB + RB where it names them.
+bool promptsRead();
 // Unhooks. A tab still open shows its rows until the game rebuilds it; then
 // they are gone, and a change made in them meanwhile does nothing.
 void uninstall();
