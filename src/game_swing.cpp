@@ -916,7 +916,7 @@ void visit(const native_rays::QueryContext& world) {
         AcquireSRWLockExclusive(&handGrabLock);
         const HandGrabAsk ask = handGrabAsk;
         ReleaseSRWLockExclusive(&handGrabLock);
-        game_grab::handGrab((ask.flags & 1u) != 0, ask.force, ask.holdCost);
+        game_grab::handGrab((ask.flags & 1u) != 0, ask.force, ask.holdCost, (ask.flags & 2u) == 0);
     }
     // PHYSICAL WEB TETHERS (tether.hpp; off until XR sends physical_tethers).
     {

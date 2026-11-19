@@ -3396,7 +3396,7 @@ DWORD WINAPI run(void*) {
                     if (swingHandGrab) {
                         game_swing::HandGrabAsk ask;
                         ask.serial = handGrabSerial;
-                        ask.flags = values.handGrab ? 1u : 0u;
+                        ask.flags = (values.handGrab ? 1u : 0u) | (values.handGrabClassRules ? 0u : 2u);
                         ask.force = static_cast<float>(values.handGrabForce);
                         ask.holdCost = static_cast<float>(values.enemyHoldCost);
                         handGrabSentAge += std::isfinite(frame.seconds) ? std::max(frame.seconds, 0.f) : 0.f;
@@ -3405,9 +3405,9 @@ DWORD WINAPI run(void*) {
                         if (key != handGrabKeySent || handGrabSentAge > 1.f) {
                             if (swingHandGrab(&ask) == 0) {
                                 if (key != handGrabKeySent)
-                                    diag_log::writef("hand grab: settings sent (%s, %d N, hold cost %d)",
+                                    diag_log::writef("hand grab: settings sent (%s, %d N, hold cost %d, class rules %s)",
                                                      values.handGrab ? "on" : "off", values.handGrabForce,
-                                                     values.enemyHoldCost);
+                                                     values.enemyHoldCost, values.handGrabClassRules ? "on" : "off");
                                 handGrabKeySent = key;
                                 handGrabSentAge = 0;
                             }
@@ -6826,12 +6826,18 @@ DWORD WINAPI run(void*) {
                         if (const volatile game_swing::HandGrabLive* hl = handGrabLive) {
                             if (const uint32_t serial = hl->serial; serial != handGrabSeen) {
                                 handGrabSeen = serial;
-                                const uint32_t action = hl->lastAction, kind = hl->lastKind;
+                                const uint32_t action = hl->lastAction, bits = hl->lastKind, kind = bits & 0xffu;
                                 const float speed = hl->lastSpeed;
-                                diag_log::writef("hand grab: %s mass=%.0f kg %s v=%.1f m/s (taken %u: "
+                                // G2b: lastKind's class bits (hand_grab::kindBits): his Foe, open, resisted.
+                                const char* foe =
+                                    kind != 1 ? ""
+                                              : hand_grab::foeName(static_cast<hand_grab::Foe>((bits >> 8) & 0xfu));
+                                diag_log::writef("hand grab: %s%s%s%s%s mass=%.0f kg %s v=%.1f m/s (taken %u: "
                                                  "enemies %u, props %u; "
                                                  "throws %u, slams %u, let go %u, lost %u, knocks %u)",
-                                                 kind == 1 ? "enemy" : "prop", hl->lastMass,
+                                                 kind == 1 ? "enemy" : "prop", kind == 1 ? " " : "", foe,
+                                                 (bits & (1u << 12)) ? " open" : "",
+                                                 (bits & (1u << 13)) ? " resisted" : "", hl->lastMass,
                                                  action == 1   ? "hold"
                                                  : action == 2 ? "throw"
                                                  : action == 3 ? "slam"

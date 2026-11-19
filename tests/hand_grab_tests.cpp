@@ -674,6 +674,99 @@ int main() {
               "a web press away from every body still shoots the web");
     }
 
+    // G2b, ENEMY CLASS RULES (hand_grab_class_rules): the math.
+    {
+        const Config k;
+        check(k.classRules && valid(k), "class rules on by default, valid");
+        check(classify(80, false, false) == Foe::standard, "a street thug: standard");
+        check(classify(130, false, false) == Foe::heavy, "a big capsule (130 kg): heavy");
+        check(classify(80, false, false, true) == Foe::heavy, "a brute's guard: heavy");
+        check(classify(80, true, false) == Foe::armored, "a shield guard: armored");
+        check(classify(80, true, true) == Foe::super && classify(300, false, true) == Foe::super, "a boss: super");
+        check(resists(Foe::heavy, false) && resists(Foe::super, false) && !resists(Foe::armored, false) &&
+                  !resists(Foe::standard, false),
+              "heavies and supers resist throws");
+        check(!resists(Foe::heavy, true) && !resists(Foe::super, true), "open for a finisher: none resists");
+        check(costScale(Foe::standard, false) == 1 && costScale(Foe::heavy, false) == 1 &&
+                  costScale(Foe::armored, false) == 3 && costScale(Foe::super, false) == 3,
+              "armored and super tire the hand 3x (heavy already by his mass)");
+        check(costScale(Foe::super, true) == 0 && near(tirednessOf(60, 200, Foe::super, true), 1),
+              "open: no hold cost");
+        check(tirednessOf(10, 80, Foe::armored, false) < tirednessOf(10, 80, Foe::standard, false),
+              "an armored enemy tires the hand sooner");
+        check(near(tirednessOf(10, 80, Foe::standard, false), tiredness(10, 80)), "standard: G2's cost unchanged");
+        check(near(handledMass(250, true), liftMass(k)) && near(handledMass(250, false), 250) &&
+                  near(handledMass(60, true), 60),
+              "open: at most one hand's load (full manipulation)");
+        auto r = releaseOf({0, 0, -7}, 200, Foe::heavy, false);
+        check(r.resisted && r.thrown && near(length(r.velocity), 1.75f, .01f), "a heavy resists: 0.25x");
+        r = releaseOf({0, 0, -20}, 200, Foe::heavy, false);
+        check(near(length(r.velocity), 4, .01f), "a heavy's throw 4 m/s at most");
+        r = releaseOf({0, -6, 0}, 200, Foe::super, false);
+        check(!r.slam, "no slam on a resisting boss");
+        r = releaseOf({0, 0, -7}, 200, Foe::heavy, true);
+        check(!r.resisted && near(length(r.velocity), 7 * 1.6f, .05f), "open: the full 1.6x");
+        r = releaseOf({0, -6, 0}, 80, Foe::armored, false);
+        check(r.slam && !r.resisted, "an armored enemy is slammed as before");
+        Config off;
+        off.classRules = false;
+        r = releaseOf({0, 0, -7}, 200, Foe::heavy, false, off);
+        const auto plain = release({0, 0, -7}, 200, off);
+        check(!r.resisted && same(r.velocity, plain.velocity) && costScale(Foe::super, true, off) == 1 &&
+                  near(handledMass(250, true, off), 250),
+              "class rules off: G2 exactly as before");
+        check(kindBits(false, Foe::super, true, true) == 2u, "a prop's kind bits: 2");
+        check(kindBits(true, Foe::heavy, true, true) == (1u | 1u << 8 | 1u << 12 | 1u << 13), "an enemy's bits");
+        Config bad;
+        bad.resistGain = 2;
+        check(!valid(bad), "a resist gain past the throw's: invalid");
+    }
+    // G2b in WebGrab: a heavy enemy resists the throw, opened he flies, the report carries the class.
+    {
+        auto throwOf = [](std::uint8_t foe, bool open) {
+            Hands rig;
+            rig.bodies.add(9, {-.3f, 1.2f, -.7f}, 80, TargetKind::Character, .45f);
+            rig.bodies.items[0].foe = foe;
+            rig.bodies.items[0].open = open;
+            rig.palm(0, {-.3f, 1.2f, 0});
+            rig.squeeze(0, 1);
+            rig.run(.5f);
+            rig.run(.15f, {0, 0, -6.f});
+            rig.squeeze(0, 0);
+            rig.run(1.f / 90, {0, 0, -6.f});
+            return rig.grab.handReport();
+        };
+        const auto heavy = throwOf(static_cast<std::uint8_t>(Foe::heavy), false);
+        check(heavy.lastAction == 2 && heavy.lastSpeed <= 4.01f && (heavy.lastKind & 0xffu) == 1u &&
+                  ((heavy.lastKind >> 8) & 0xfu) == static_cast<unsigned>(Foe::heavy) &&
+                  (heavy.lastKind & (1u << 13)),
+              "a heavy resists the throw (4 m/s at most), reported resisted");
+        const auto open = throwOf(static_cast<std::uint8_t>(Foe::heavy), true);
+        check(open.lastSpeed > 8 && (open.lastKind & (1u << 12)) && !(open.lastKind & (1u << 13)),
+              "open for a finisher: thrown in full, reported open");
+        const auto standard = throwOf(0, false);
+        check(standard.lastSpeed > 8 && standard.lastKind == 1u, "a standard enemy: as before (kind 1)");
+        // An armored enemy tires the hand 3x; an open one not at all; a heavy open one is lifted by one hand.
+        auto tiredAfter = [](std::uint8_t foe, bool open, float mass, float& accel) {
+            Hands rig;
+            rig.bodies.add(9, {-.3f, 1.2f, -.7f}, mass, TargetKind::Character, .45f);
+            rig.bodies.items[0].foe = foe;
+            rig.bodies.items[0].open = open;
+            rig.palm(0, {-.3f, 1.2f, 0});
+            rig.squeeze(0, 1);
+            rig.run(10);
+            accel = rig.last.empty() ? 0 : rig.last[0].maxAcceleration;
+            return rig.grab.grabs()[0].tired;
+        };
+        float a{};
+        const float std10 = tiredAfter(0, false, 80, a), arm10 = tiredAfter(2, false, 80, a);
+        check(arm10 < std10 && std10 < 1, "armored tires the hand faster than standard");
+        check(near(tiredAfter(3, true, 200, a), 1) && a > 9.81f, "an open boss: free, and one hand lifts him");
+        float heavyA{};
+        tiredAfter(1, false, 200, heavyA);
+        check(heavyA < 9.81f, "a heavy not open: one hand cannot lift him (as G2)");
+    }
+
     std::printf("hand grab tests: %d checks passed\n", passed);
     return 0;
 }

@@ -34,6 +34,7 @@
 #include <algorithm>
 #include <array>
 #include <cmath>
+#include <cstdint>
 #include <limits>
 
 namespace spidy::hand_grab {
@@ -57,6 +58,14 @@ struct Config {
     float throwGain = 1.6f, maxThrow = 18.f, minThrow = 1.5f, slamJerk = 4.f, slamStrike = 8.f;
     // The fastest the servo asks the held body to go (m/s).
     float maxSpeed = 25.f;
+    // ENEMY CLASS RULES (hand_grab_class_rules, on; G2b, the user Nov 13 t17u). A heavy (a brute, or his
+    // capsule's mass `heavyMass` kg and up) or a superpowered enemy (a boss) resists throws unless open for a
+    // finisher: resistGain of the hand's speed, resistMax m/s at most, no slam. An armored (a shield guard)
+    // or superpowered one tires the hand classCost times as fast (a heavy already does, by his mass). OPEN
+    // for a finisher (the proxy: the game has him stunned, game_targets::isStunned, or webbed up): no cost, and
+    // full manipulation - he weighs at most what one hand lifts and throws with the full gain.
+    bool classRules = true;
+    float heavyMass = 120.f, classCost = 3.f, resistGain = .25f, resistMax = 4.f;
 };
 inline bool valid(const Config& c) {
     const float positive[] = {c.reach,        c.ahead,       c.force,      c.liftPerNewton,
@@ -68,7 +77,9 @@ inline bool valid(const Config& c) {
             return false;
     return std::isfinite(c.propAhead) && c.propAhead >= 0 && std::isfinite(c.holdCost) && c.holdCost >= 0 &&
            std::isfinite(c.tiredFloor) && c.tiredFloor > 0 && c.tiredFloor <= 1 &&
-           std::isfinite(c.minThrow) && c.minThrow >= 0;
+           std::isfinite(c.minThrow) && c.minThrow >= 0 && std::isfinite(c.heavyMass) && c.heavyMass > 0 &&
+           std::isfinite(c.classCost) && c.classCost >= 1 && std::isfinite(c.resistGain) && c.resistGain > 0 &&
+           c.resistGain <= c.throwGain && std::isfinite(c.resistMax) && c.resistMax > 0;
 }
 // The mass one hand lifts, kg, at the config's force.
 inline float liftMass(const Config& c) {
@@ -213,5 +224,78 @@ inline Throw release(Vec3 hand, float mass, const Config& c = {}) {
             out.velocity = normalized(hand) * std::min(c.slamStrike, c.maxThrow);
     }
     return out;
+}
+
+// ENEMY CLASS RULES (G2b; Config::classRules). What an enemy is, for the hold's cost and the throw only:
+// never his own attributes (those are the game's and other modders'), never his damage.
+enum class Foe : std::uint8_t { standard, heavy, armored, super };
+inline const char* foeName(Foe f) {
+    switch (f) {
+    case Foe::standard: return "standard";
+    case Foe::heavy: return "heavy";
+    case Foe::armored: return "armored";
+    case Foe::super: return "superpowered";
+    }
+    return "?";
+}
+// From what game_targets already reads (no new class name, no address): boss, a BossHealth (trait boss);
+// brute, the guard's Brawler kind (a brute's guard); armored, the guard's Shield kind (a shield or armour
+// that blocks); heavy, a brute or his capsule's mass (enemyMass) at heavyMass or more.
+inline Foe classify(float mass, bool armored, bool boss, bool brute = false, const Config& c = {}) {
+    if (boss)
+        return Foe::super;
+    if (brute || (std::isfinite(mass) && mass >= c.heavyMass))
+        return Foe::heavy;
+    if (armored)
+        return Foe::armored;
+    return Foe::standard;
+}
+// A heavy or a superpowered enemy not open for a finisher resists the throw.
+inline bool resists(Foe f, bool open, const Config& c = {}) {
+    return c.classRules && !open && (f == Foe::heavy || f == Foe::super);
+}
+// How much faster than a standard enemy he tires the hand (0: open, no cost).
+inline float costScale(Foe f, bool open, const Config& c = {}) {
+    if (!c.classRules)
+        return 1.f;
+    if (open)
+        return 0.f;
+    return f == Foe::armored || f == Foe::super ? c.classCost : 1.f;
+}
+// The mass the hold and the throw work with: open for a finisher, at most what one hand lifts.
+inline float handledMass(float mass, bool open, const Config& c = {}) {
+    return c.classRules && open ? std::min(mass, liftMass(c)) : mass;
+}
+inline float tirednessOf(float seconds, float mass, Foe f, bool open, const Config& c = {}) {
+    Config k = c;
+    k.holdCost = c.holdCost * costScale(f, open, c);
+    return tiredness(seconds, handledMass(mass, open, c), k);
+}
+struct ClassThrow : Throw {
+    bool resisted{};
+};
+inline ClassThrow releaseOf(Vec3 hand, float mass, Foe f, bool open, const Config& c = {}) {
+    ClassThrow out;
+    if (!resists(f, open, c)) {
+        static_cast<Throw&>(out) = release(hand, handledMass(mass, open, c), c);
+        return out;
+    }
+    out.resisted = true;
+    if (!finite(hand))
+        return out;
+    const float speed = length(hand);
+    if (speed < c.minThrow) {
+        out.velocity = hand;
+        return out;
+    }
+    out.thrown = true;
+    out.velocity = limited(hand * c.resistGain, std::min(c.resistMax, c.maxThrow));
+    return out;
+}
+// HandGrabLive::lastKind: bits 0-7 what (1 enemy, 2 prop), 8-11 his Foe, bit 12 open, bit 13 resisted.
+inline std::uint32_t kindBits(bool character, Foe f, bool open, bool resisted) {
+    if (!character)
+        return 2u;
+    return 1u | static_cast<std::uint32_t>(f) << 8 | (open ? 1u << 12 : 0u) | (resisted ? 1u << 13 : 0u);
 }
 } // namespace spidy::hand_grab

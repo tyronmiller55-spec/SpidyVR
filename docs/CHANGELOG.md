@@ -3,6 +3,13 @@
 Every build, newest first, with what changed, why, and what was measured.
 Per-check results are in [VALIDATION.md](VALIDATION.md).
 
+**Hand grab G2b (local, unpushed; from 3826e91): enemy class rules.** Heavies
+(a brute's guard or a 120 kg capsule) and bosses resist throws (0.25x, 4 m/s,
+no slam) unless open for a finisher (stunned or webbed up, the proxy); shield
+guards and bosses tire the hand 3x; an open enemy costs nothing and is handled
+as one hand's load. `hand_grab_class_rules` (ini, on; only with `hand_grab=1`).
+No new game address or class name. [GRIP.md](GRIP.md)
+
 **Latest build (November 16): fixes from the players' reports on 0.8.6 and
 GitHub issues #81 and #84.**
 

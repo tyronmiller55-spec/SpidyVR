@@ -818,7 +818,8 @@ struct GripLive {
 };
 static_assert(sizeof(GripLive) == 80);
 // Side channel from XR (HAND GRAB, hand_grab.hpp, G2): the settings, sent whenever they change and again
-// every second. `flags` bit 0: hand_grab. force: hand_grab_force (N per hand, 1200); holdCost:
+// every second. `flags` bit 0: hand_grab; bit 1: hand_grab_class_rules OFF (G2b; the default, on, sends the
+// same flags as before). force: hand_grab_force (N per hand, 1200); holdCost:
 // enemy_hold_cost (1). Not a Command or Settings field and not versioned with them (an older swing module has
 // no SpidySwingHandGrab export; XR then sends none and no hand takes anything).
 struct HandGrabAsk {
@@ -829,7 +830,7 @@ struct HandGrabAsk {
 };
 static_assert(sizeof(HandGrabAsk) == 32);
 inline bool validHandGrab(const HandGrabAsk& a) {
-    return a.magic == 0x53574847 && a.version == 1 && a.bytes == sizeof(HandGrabAsk) && !(a.flags & ~1u) &&
+    return a.magic == 0x53574847 && a.version == 1 && a.bytes == sizeof(HandGrabAsk) && !(a.flags & ~3u) &&
            std::isfinite(a.force) && a.force >= 400.f && a.force <= 4000.f && std::isfinite(a.holdCost) &&
            a.holdCost >= 0.f && a.holdCost <= 5.f;
 }

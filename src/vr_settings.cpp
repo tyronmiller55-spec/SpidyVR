@@ -3013,6 +3013,7 @@ constexpr TabOnly tabOnly[] = {
     {"hand_grab", &Values::handGrab, nullptr},
     {"hand_grab_force", nullptr, &Values::handGrabForce},
     {"enemy_hold_cost", nullptr, &Values::enemyHoldCost},
+    {"hand_grab_class_rules", &Values::handGrabClassRules, nullptr},
     {"kicks", &Values::kicks, nullptr},
     {"kick_gaze_cone_deg", nullptr, &Values::kickGazeConeDeg},
     {"kick_spin_pct", nullptr, &Values::kickSpinPct},

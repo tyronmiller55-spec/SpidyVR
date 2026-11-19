@@ -104,7 +104,22 @@ Log lines (diag): `hand grab: settings sent`, `hand grab: <enemy|prop> mass=<kg>
 
 ## Not in G2 (gaps)
 
-- **Finishers and class rules.** The plan's "heavy and brute enemies are hard to throw unless open for a finisher; a finisher opens every enemy" and "superpowered or armored cost more" need the game's finisher-open state and enemy class (Brute, Heavy, armored, superpowered). No verified flag or address for them exists (docs/REFERENCE.md names the ACTIVE_FINISHER action only), so none is invented. Weight is the capsule's mass: a bigger capsule is heavier, harder to lift, throws with less of the gain, and tires the hand faster. Weapons, heads and limbs follow the game's existing rules because nothing here touches them.
+- **The game's own finisher-open state.** G2b (below) uses proxies; the game's finisher-available flag is still unverified (docs/REFERENCE.md names the ACTIVE_FINISHER action only), so none is invented. Weapons, heads and limbs follow the game's existing rules because nothing here touches them.
+
+## Enemy class rules (G2b, `hand_grab_class_rules`, on)
+
+The user's Nov 13 rules, with no new game address and no new class name: only what `game_targets` already reads.
+
+| Class | From | Hold cost | Throw |
+| --- | --- | --- | --- |
+| standard | everyone else | as G2 | as G2 |
+| heavy | a brute's guard (`guards::Kind::Brawler`) or a capsule of 120 kg and up (`enemyMass`) | as G2 (his mass already tires the hand) | **resists**: 0.25x the hand's speed, 4 m/s at most, no slam |
+| armored | a shield's guard (`guards::Kind::Shield`) | **3x** | as G2 |
+| superpowered | a boss (`BossHealth`, trait `boss`) | **3x** | **resists** |
+
+**Open for a finisher** (proxy: the game has him stunned, `game_targets::isStunned` - BotStateStunned, BotStateElectricStun - or webbed up, `cocooned`): no hold cost, he counts as at most one hand's load (90 kg at 1200 N: one hand lifts a brute), and he throws and slams with the full 1.6x. It is read every hold step, so stunning him mid-hold opens him at once.
+
+`hand_grab_class_rules=0` (spidy_vr.ini only, no menu row) is G2 exactly as before. XR sends it as `HandGrabAsk` flags bit 1 (set = off), so the default sends the same flags as before. The log line names the class: `hand grab: enemy heavy[ open][ resisted] mass=... throw v=...`, and `hand grab: settings sent (..., class rules on|off)`. Unknowns: whether Shield is the right proxy for "armored" (an armored brute is heavy first), whether a stun is the right finisher proxy (the finisher prompt may appear without one), and heavy's 120 kg line. Tune in the headset.
 - **Real prop mass.** The adapter gives every prop 30 kg (the web grab's flat figure); a 300 kg dumpster is not told apart. The hold law handles any mass (tested to 360 kg), so real prop masses need only a verified mass source.
 - **A held enemy's pose.** The game's flight carries him; no grabbed animation is played (no verified animation id).
 - **The look.** No web is drawn for a hand-held body (a held prop or enemy rides at the palm); no glove effects.

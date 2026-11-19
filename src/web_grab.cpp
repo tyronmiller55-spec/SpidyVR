@@ -374,6 +374,8 @@ bool WebGrab::startHand(int i, const TargetQueries& targets) {
     g.length = hand_grab::holdAhead(character, best->radius, cfg);
     g.hand = true;
     g.mass = std::max(best->mass, 1.f);
+    g.foe = character ? best->foe : 0;
+    g.open = character && best->open;
     const auto& other = grabs_[1 - i];
     if (other.phase == GrabPhase::Held && other.hand && other.target == best->id)
         g.age = other.age; // two hands on one body share its hold
@@ -384,7 +386,7 @@ bool WebGrab::startHand(int i, const TargetQueries& targets) {
     ++report_.grabs;
     ++(character ? report_.enemies : report_.props);
     report_.lastAction = 1;
-    report_.lastKind = character ? 1 : 2;
+    report_.lastKind = hand_grab::kindBits(character, static_cast<hand_grab::Foe>(g.foe), g.open, false);
     report_.lastMass = g.mass;
     report_.lastSpeed = 0;
     ++report_.serial;
@@ -415,10 +417,15 @@ void WebGrab::letGoHand(int i, const TargetQueries& targets, bool otherReleasing
     Vec3 hand = hands_[i].samples.velocity();
     if (same)
         hand = (hand + hands_[1 - i].samples.velocity()) * .5f; // both let go together
-    const auto thrown = hand_grab::release(hand, g.mass, cfg);
     const bool character = g.kind == TargetKind::Character;
+    // G2b: a heavy or a superpowered enemy not open for a finisher resists the throw; open, he is fully
+    // manipulated (hand_grab::releaseOf). Props and the class rules off: the plain release.
+    const bool open = character && target->open;
+    const auto foe = static_cast<hand_grab::Foe>(character ? target->foe : 0);
+    const auto thrown = character ? hand_grab::releaseOf(hand, g.mass, foe, open, cfg)
+                                  : hand_grab::ClassThrow{hand_grab::release(hand, g.mass, cfg), false};
     report_.lastAction = thrown.slam ? 3 : thrown.thrown ? 2 : 4;
-    report_.lastKind = character ? 1 : 2;
+    report_.lastKind = hand_grab::kindBits(character, foe, open, thrown.resisted);
     report_.lastMass = g.mass;
     report_.lastSpeed = length(thrown.velocity);
     ++report_.serial;
@@ -470,11 +477,21 @@ void WebGrab::stepHand(int i, float dt, const GrabTarget& target, std::vector<Ta
         end(i, GrabEventKind::Lost);
         return;
     }
-    g.tired = character ? hand_grab::tiredness(g.age, g.mass, cfg) : 1.f;
+    // G2b: open for a finisher (now: it changes in the hold) costs nothing and handles him as one hand's
+    // load at most; armored and superpowered tire the hand faster (hand_grab::tirednessOf).
+    if (character) {
+        g.foe = target.foe;
+        g.open = target.open;
+        if (both)
+            grabs_[j].foe = g.foe, grabs_[j].open = g.open;
+    }
+    const auto foe = static_cast<hand_grab::Foe>(g.foe);
+    const float mass = character ? hand_grab::handledMass(g.mass, g.open, cfg) : g.mass;
+    g.tired = character ? hand_grab::tirednessOf(g.age, g.mass, foe, g.open, cfg) : 1.f;
     TargetCommand c{g.target, g.kind};
     c.mode = TargetCommand::Mode::Follow;
     c.carried = character;
-    c.maxAcceleration = hand_grab::holdAcceleration(g.mass, hands, g.tired, cfg);
+    c.maxAcceleration = hand_grab::holdAcceleration(mass, hands, g.tired, cfg);
     c.velocity = hand_grab::holdVelocity(target.position, place, placeVelocity, dt, c.maxAcceleration, cfg);
     if (!character) {
         c.spins = true; // a held prop steadies in the hand
@@ -483,8 +500,8 @@ void WebGrab::stepHand(int i, float dt, const GrabTarget& target, std::vector<Ta
     }
     const float cap = static_cast<float>(hands) * cfg.force * g.tired;
     const Vec3 needed =
-        hand_grab::springForce(target.position, target.velocity, place, placeVelocity, g.mass, 1e9f, cfg) +
-        Vec3{0, g.mass * cfg.gravity, 0};
+        hand_grab::springForce(target.position, target.velocity, place, placeVelocity, mass, 1e9f, cfg) +
+        Vec3{0, mass * cfg.gravity, 0};
     g.tension = std::clamp(length(needed) / std::max(cap, 1.f), 0.f, 1.f);
     if (both)
         grabs_[j].tension = g.tension, grabs_[j].tired = g.tired;

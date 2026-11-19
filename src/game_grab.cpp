@@ -280,6 +280,20 @@ const Candidate* nearest(Vec3 origin, Vec3 direction, float distance, float cone
     }
     return best && game_targets::live(base, *best) ? best : nullptr;
 }
+// HAND GRAB's enemy class rules (G2b, hand_grab::classify): what game_targets already reads of him - a boss
+// (BossHealth), a brute's or a shield's guard, his capsule's mass - and whether he is open for a finisher:
+// stunned (isStunned) or webbed up (cocooned). No new class name and no address: the proxies are flagged in
+// docs/GRIP.md until the game's own finisher state is verified.
+void foeOf(const Candidate& c, GrabTarget& t) {
+    if (c.kind != Kind::bot)
+        return;
+    const auto guard = game_targets::guardKind(c.traits);
+    const float mass = hand_grab::enemyMass(c.size.low, c.size.high, c.size.radius);
+    t.foe = static_cast<std::uint8_t>(hand_grab::classify(mass, guard == guards::Kind::Shield,
+                                                          (c.traits & game_targets::boss) != 0,
+                                                          guard == guards::Kind::Brawler));
+    t.open = game_targets::isStunned(base, c) || game_targets::cocooned(base, c);
+}
 GrabTarget described(const Candidate& c, Vec3 centre, Vec3 velocity) {
     const auto s = shape(c);
     return GrabTarget{c.record, s.core, centre, velocity, s.mass, s.radius};
@@ -319,7 +333,10 @@ class Targets final : public TargetQueries {
         if (!t || t->gone || !t->seen)
             return {};
         const auto s = shape(t->who);
-        return GrabTarget{id, s.core, t->position, t->velocity, s.mass, s.radius};
+        GrabTarget out{id, s.core, t->position, t->velocity, s.mass, s.radius};
+        if (s.core == TargetKind::Character)
+            foeOf(t->who, out);
+        return out;
     }
     // Body userData (+0x98) carries its actor's handle in the low 32 bits.
     std::optional<std::uint64_t> owner(std::uint64_t surface) const override {
@@ -366,6 +383,7 @@ class Targets final : public TargetQueries {
                 t.away = std::max(0.f, length(point - (a + axis * along)) - radius);
                 t.mass = hand_grab::enemyMass(c.size.low, c.size.high, c.size.radius);
                 t.radius = radius;
+                foeOf(c, t);
             } else {
                 t.away = hand_grab::surfaceReach(point, t.position, t.radius);
             }
@@ -1344,9 +1362,10 @@ void game_grab::allow(bool on) {
 void game_grab::softLock(float metres) {
     core.softLock(metres);
 }
-void game_grab::handGrab(bool on, float force, float holdCost) {
+void game_grab::handGrab(bool on, float force, float holdCost, bool classRules) {
     hand_grab::Config c = handConfig;
     c.enabled = on;
+    c.classRules = classRules;
     if (std::isfinite(force))
         c.force = std::clamp(force, 400.f, 4000.f);
     if (std::isfinite(holdCost))

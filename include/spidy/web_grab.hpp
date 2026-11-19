@@ -17,6 +17,10 @@ struct GrabTarget {
     float mass = 20, radius = .4f;
     // within() only: how far the query's point is from its surface, metres.
     float away{};
+    // HAND GRAB's enemy class rules (G2b, hand_grab::Foe), characters only: what he is, and whether he
+    // is open for a finisher (stunned or webbed up). within() and find() fill them; 0/false otherwise.
+    std::uint8_t foe{};
+    bool open{};
 };
 class TargetQueries {
   public:
@@ -148,6 +152,9 @@ struct Grab {
     // force left (`tired`).
     bool hand{};
     float mass{}, age{}, tired = 1;
+    // G2b: what the held enemy is (hand_grab::Foe) and whether he is open for a finisher now.
+    std::uint8_t foe{};
+    bool open{};
 };
 enum class GrabEventKind { Grab, Yank, Catch, Throw, Release, Lost };
 struct GrabEvent {

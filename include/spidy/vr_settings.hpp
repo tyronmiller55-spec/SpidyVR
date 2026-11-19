@@ -592,6 +592,10 @@ struct Values {
     // newtons (1200; 90 kg lifted). enemy_hold_cost: how fast holding an enemy tires the hand (1; 0 never).
     bool handGrab = false;
     int handGrabForce = 1200, enemyHoldCost = 1;
+    // hand_grab_class_rules (G2b, hand_grab::Foe; on, spidy_vr.ini only, no menu row): heavies (brutes, big
+    // capsules) and bosses resist throws unless open for a finisher (stunned or webbed up), shield guards and
+    // bosses tire the hand 3x, and an open enemy costs nothing and is fully manipulated. 0: G2 as before.
+    bool handGrabClassRules = true;
     // AIR KICKS (K2, air_kick.hpp; November 14), EXPERIMENTAL: off until set. kicks: off the ground with the
     // legs engaged (Y + X), a quick flick of the right stick kicks: up a two-leg dive, up-left or up-right a
     // one-leg dive, a quarter circle from a side to up a roundhouse, any other flick a freeform blow.

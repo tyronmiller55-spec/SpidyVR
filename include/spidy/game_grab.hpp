@@ -190,7 +190,7 @@ void softLock(float metres);
 // HAND GRAB (G2, hand_grab.hpp; hand_grab, hand_grab_force, enemy_hold_cost), EXPERIMENTAL: a grip squeezed
 // with the palm on a prop or an enemy takes it by hand. `on`; `force` N per hand (400 to 4000); `holdCost` (0
 // to 5). Off (as at a start): the hands let go of what they hold and every squeeze is as it was.
-void handGrab(bool on, float force, float holdCost);
+void handGrab(bool on, float force, float holdCost, bool classRules = true);
 // Its account (WebGrab::handReport) and the hands holding by palm now (bits), for the swing's HandGrabLive.
 struct HandData {
     uint32_t grabs{}, enemies{}, props{}, throws{}, slams{}, drops{}, lost{}, knocks{}, holding{};
