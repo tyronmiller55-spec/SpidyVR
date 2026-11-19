@@ -2,6 +2,7 @@
 #include "spidy/text_read.hpp"
 #include "spidy/frame_steps.hpp"
 #include "spidy/showtime.hpp"
+#include "spidy/showtime_body.hpp"
 #include "spidy/showtime_rig.hpp"
 #include "spidy/web_fire.hpp"
 #include "spidy/ground_flip.hpp"
@@ -1422,6 +1423,7 @@ DWORD WINAPI run(void*) {
         showtime::Chord showtimeChord;
         showtime::Machine showtimeMachine;
         showtime::Machine::Output showtimeOut{};
+        showtime::BodyOut showtimeBodyOut{};
         showtime::Chord::Output showtimeChordOut{};
         bool showtimeInit{}, showtimeRefSet{}, showtimeFeetKnown{};
         Vec3 showtimeFeetLast{};
@@ -10898,7 +10900,7 @@ DWORD WINAPI run(void*) {
                         pose.flags =
                             (flatScreen || !values.body || yieldAnim || sceneBody ? 0u : native_body::bodyOn) |
                             // SHOWTIME: outside, his head is shown (BODY: GAME POSE); the solver's hide policy stands down.
-                            (showtimeMachine.out() && values.showtimeBody == 0 ? 0u : native_body::hideHead) |
+                            (showtimeMachine.out() && values.showtimeBody != showtime::bodyAsInPlay ? 0u : native_body::hideHead) |
                             native_body::handTurn |
                             ((swingState.owned || hybridLeapAir) && !motion.standing ? native_body::airborne
                                                                                      : 0u) |
@@ -11345,6 +11347,29 @@ DWORD WINAPI run(void*) {
                                       : calibratedEye > 0 ? calibratedEye
                                                           : standingEye;
                         pose.armLength = calibratedArm;
+                        // SHOWTIME BODY (showtime_body.hpp, from EngineBot's S0): while the camera is out,
+                        // NATURAL ARMS draws SpidyVR's body at his own arm length (not stretched to the
+                        // player's reach) and, under the game's animation, pauses the arm overlay so the
+                        // game's own arms are seen. Camera only: the owner never changes.
+                        {
+                            showtime::BodyIn bin;
+                            bin.out = showtimeMachine.out();
+                            bin.body = values.showtimeBody;
+                            bin.owner = sceneBody || !gameplay ? showtime::Owner::frozen
+                                        : hybridOn ? (hybridOwner.domain == hybrid_owner::Domain::vr ? showtime::Owner::vr
+                                                                                                    : showtime::Owner::anim)
+                                        : (pose.flags & native_body::bodyOn) ? showtime::Owner::vr
+                                                                             : showtime::Owner::anim;
+                            const auto bodyWas = showtimeBodyOut.body;
+                            showtimeBodyOut = showtime::bodyFor(bin);
+                            if (showtimeBodyOut.pauseArmOverlay)
+                                pose.flags &= ~static_cast<uint32_t>(native_body::armsOverlay);
+                            if (showtimeBodyOut.naturalArms)
+                                pose.armLength = 0; // 0: the hero's own arm length (body_calibration::armScale 1)
+                            if (bodyWas != showtimeBodyOut.body && bin.out)
+                                diag_log::writef("showtime: body %s owner=%s", showtime::bodyName(showtimeBodyOut.body),
+                                                 showtime::ownerName(bin.owner));
+                        }
                         pose.trackingYaw = motion.swing.trackingYaw;
                         // A flip's tilt in world axes: the body turns with the player.
                         // Standing on a surface, the body already stands along it:
@@ -12487,7 +12512,7 @@ DWORD WINAPI run(void*) {
                         showtimeCam = showtimeRig.update(ri, rp);
                         const Mat4 stFrame = showtime::levelFrame(showtimeCam.position, showtimeCam.yaw);
                         game_fp::showtimeFrame(&stFrame);
-                        game_fp::showtimeHead(values.showtimeBody == 0);
+                        game_fp::showtimeHead(values.showtimeBody != showtime::bodyAsInPlay);
                         saved.showtimeVignette = showtimeCam.vignette;
                         saved.showtimeFade = std::max({showtimeOut.fade, showtimeCam.blink, showtimeCam.closeFade});
                         if (const uint64_t nowMs = GetTickCount64(); nowMs - showtimeLogMs >= 1000) {

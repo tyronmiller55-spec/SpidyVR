@@ -1,5 +1,6 @@
 // SHOWTIME (showtime.hpp): the chord, the fade, the machine, the frame and the stick.
 #include "spidy/showtime.hpp"
+#include "spidy/showtime_body.hpp"
 #include <cstdio>
 #include <cstdlib>
 using namespace spidy;
@@ -190,6 +191,30 @@ void frameAndStick() {
     rotateStick(x, y, .5f);
     check(std::abs(std::hypot(x, y) - .5f) < 1e-5f, "a turn keeps the stick's length");
 }
+void bodyModes() {
+    BodyIn in;
+    check(bodyFor(in).body == Body::firstPerson && !bodyFor(in).showHead, "in first person nothing changes");
+    in.out = true;
+    for (Owner o : {Owner::anim, Owner::vr, Owner::frozen}) {
+        in.owner = o;
+        in.body = bodyGamePose;
+        const BodyOut g = bodyFor(in);
+        check(g.showHead && !g.naturalArms && !g.pauseArmOverlay, "GAME POSE: the head only, as before");
+        in.body = bodyAsInPlay;
+        const BodyOut p = bodyFor(in);
+        check(!p.showHead && !p.naturalArms && !p.pauseArmOverlay && p.body == Body::asInPlay, "AS IN PLAY: untouched");
+    }
+    in.body = bodyNatural;
+    in.owner = Owner::vr;
+    BodyOut n = bodyFor(in);
+    check(n.showHead && n.naturalArms && !n.pauseArmOverlay && n.body == Body::natural, "NATURAL ARMS, VR: his own arm length");
+    in.owner = Owner::anim;
+    n = bodyFor(in);
+    check(n.showHead && !n.naturalArms && n.pauseArmOverlay && n.body == Body::game, "NATURAL ARMS, animation: the game's arms");
+    in.owner = Owner::frozen;
+    n = bodyFor(in);
+    check(n.showHead && !n.naturalArms && !n.pauseArmOverlay && n.body == Body::game, "a scene: the game's, camera only");
+}
 } // namespace
 int main() {
     xLead();
@@ -203,5 +228,6 @@ int main() {
     forcedExit();
     abortWhileFading();
     frameAndStick();
+    bodyModes();
     std::puts("showtime tests passed");
 }
