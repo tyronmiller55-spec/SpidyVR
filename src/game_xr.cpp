@@ -3154,7 +3154,7 @@ DWORD WINAPI run(void*) {
                         game_swing::SwingKickAsk ask;
                         ask.serial = kickFlickSerial;
                         ask.flags = (values.swingKickManual ? 1u : 0u) | (values.swingKickAuto ? 0u : 2u) |
-                                    (legHoldOut.engaged ? 4u : 0u);
+                                    (legHoldOut.engaged ? 4u : 0u) | (values.swingKickGrunt ? 8u : 0u);
                         // The flags go again every second: a swing module started anew starts from none.
                         kickSentAge += std::isfinite(frame.seconds) ? std::max(frame.seconds, 0.f) : 0.f;
                         if (swingKick && (flicked || ask.flags != kickFlagsSent || kickSentAge > 1.f)) {

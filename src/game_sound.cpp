@@ -142,8 +142,10 @@ SRWLOCK lock = SRWLOCK_INIT;
 struct Pending {
     uint64_t damager{}, victim{};
     Blow blow{};
+    uint32_t cue{}; // game_sound::cue: this id played on `victim`, no blow
 };
 constexpr unsigned queueSize = 32;
+std::atomic<uint64_t> heroRecord{}; // game_sound::hero: SpidySoundCue's emitter
 Pending queue[queueSize];
 unsigned queued{};
 
@@ -380,7 +382,13 @@ void game_sound::frame() {
     uint64_t played{}, refused{}, dropped{};
     uint32_t onPlayer{}, sources{}, switches{};
     int latest{};
+    unsigned blows{};
     for (unsigned i = 0; i < count; ++i) {
+        if (batch[i].cue) {
+            play(batch[i].cue, handleOf(batch[i].victim), false);
+            continue;
+        }
+        ++blows;
         bool mine{};
         latest = sound(batch[i].damager, batch[i].victim, batch[i].blow, sources, switches, mine);
         played += latest == 1;
@@ -388,6 +396,8 @@ void game_sound::frame() {
         dropped += latest == -2;
         onPlayer += mine;
     }
+    if (!blows)
+        return; // cues alone: the blows' account stands
     AcquireSRWLockExclusive(&lock);
     publish([&](Data& d) {
         d.played += played;
@@ -403,12 +413,28 @@ void game_sound::frame() {
     });
     ReleaseSRWLockExclusive(&lock);
 }
+bool game_sound::cue(uint64_t emitter, uint32_t hash) {
+    if (!emitter || !hash)
+        return false;
+    AcquireSRWLockExclusive(&lock);
+    const bool room = enabled.load(std::memory_order_relaxed) && queued < queueSize;
+    if (room) {
+        Pending p;
+        p.victim = emitter;
+        p.cue = hash;
+        queue[queued++] = p;
+    }
+    ReleaseSRWLockExclusive(&lock);
+    return room;
+}
 void game_sound::tracing(bool on) {
     traceWanted = on;
     applyTrace();
 }
 void game_sound::hero(uint64_t record) {
     static std::atomic<uint64_t> last{};
+    if (record)
+        heroRecord.store(record, std::memory_order_relaxed);
     if (!record || record == last.load(std::memory_order_relaxed))
         return;
     if (const uint32_t handle = handleOf(record)) {
@@ -428,6 +454,15 @@ Data game_sound::data() {
 extern "C" __declspec(dllexport) DWORD WINAPI SpidySoundMode(void* mode) {
     game_sound::sounding(reinterpret_cast<uintptr_t>(mode) == 0);
     return 0;
+}
+// One of the game's own sounds on the player, from the headset's module: the
+// low 32 bits of `hash` (game_sound::cue). 0 queued; 2001 no hash; 1004 the
+// player is not known yet or the module is not live / the queue is full.
+extern "C" __declspec(dllexport) DWORD WINAPI SpidySoundCue(void* hash) {
+    const auto id = static_cast<uint32_t>(reinterpret_cast<uintptr_t>(hash));
+    if (!id)
+        return 2001;
+    return game_sound::cue(heroRecord.load(std::memory_order_relaxed), id) ? 0 : 1004;
 }
 // SOUND TRACE from the headset's module: non-null on, null off
 // (game_sound::tracing). Diagnostics only; no sound changes.

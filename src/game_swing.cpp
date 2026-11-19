@@ -1573,6 +1573,9 @@ void visit(const native_rays::QueryContext& world) {
             live.speed = ko.speed;
             live.distance = ko.distance;
             live.assist = live.steer = 0;
+            // SWING KICK GRUNT (swing_kick_grunt, off by default): Spidey's own jump grunt as the kick arms.
+            if ((ask.flags & 8u) && game_sound::cue(config.record, swing_kick::gruntId))
+                live.grunts = live.grunts + 1;
             live.lastEvent = 1;
             MemoryBarrier();
             live.events = live.events + 1;

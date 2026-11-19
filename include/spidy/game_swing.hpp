@@ -653,7 +653,8 @@ struct SidestepLive {
 static_assert(sizeof(SidestepLive) == 40);
 // Side channel from XR (MANUAL SWING KICK, swing_kick.hpp): the settings and, on a flick, the ask. `flags`
 // bit 0: swing_kick_manual is on; bit 1: swing_kick_auto is OFF (the auto dive holds back); bit 2: the
-// legs are engaged (Y + X) now. `serial` rises with each flick; the same serial again is not a new
+// legs are engaged (Y + X) now; bit 3: swing_kick_grunt is on (Spidey's own jump grunt, 0xdab33491, as
+// the kick arms; off by default). `serial` rises with each flick; the same serial again is not a new
 // flick (the flags may be sent again with it). coneDegrees and ropeMetres are the kick's own (30 and
 // 1.2 by default). Not a Command or Settings field and not versioned with them (an older swing module has
 // no SpidySwingKick export; XR then never kicks, and the auto dive is as it was).
@@ -665,7 +666,7 @@ struct SwingKickAsk {
 };
 static_assert(sizeof(SwingKickAsk) == 32);
 inline bool validSwingKick(const SwingKickAsk& a) {
-    return a.magic == 0x5357504b && a.version == 1 && a.bytes == sizeof(SwingKickAsk) && !(a.flags & ~7u) &&
+    return a.magic == 0x5357504b && a.version == 1 && a.bytes == sizeof(SwingKickAsk) && !(a.flags & ~15u) &&
            std::isfinite(a.coneDegrees) && a.coneDegrees >= 5.f && a.coneDegrees <= 60.f &&
            std::isfinite(a.ropeMetres) && a.ropeMetres >= 0.f && a.ropeMetres <= 3.f;
 }
@@ -680,7 +681,7 @@ struct SwingKickLive {
     uint64_t target{};
     Vec3 point{};
     float cone{}, speed{}, distance{}, assist{}, steer{};
-    uint32_t autoOff{}, reserved{};
+    uint32_t autoOff{}, grunts{}; // grunts: the grunts asked for as kicks armed (swing_kick_grunt)
 };
 static_assert(sizeof(SwingKickLive) == 104);
 // SpidySwingCostLive: what the swing module cost the game thread, one account per 10 s window (hitch_guard.hpp

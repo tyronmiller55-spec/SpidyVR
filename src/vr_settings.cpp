@@ -2995,6 +2995,7 @@ constexpr TabOnly tabOnly[] = {
     {"swing_kick_manual", &Values::swingKickManual, nullptr},
     {"swing_kick_auto", &Values::swingKickAuto, nullptr},
     {"leg_hold_everywhere", &Values::legHoldEverywhere, nullptr},
+    {"swing_kick_grunt", &Values::swingKickGrunt, nullptr},
     {"wall_brake", &Values::wallBrake, nullptr},
     {"grip_fling", &Values::gripFling, nullptr},
     {"grip_stop_pct", nullptr, &Values::wallBrakeMuPct}, // was wall_brake_mu_pct (90): a renamed key takes the new default

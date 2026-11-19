@@ -572,6 +572,9 @@ struct Values {
     // default (the owner, Nov 19 t127u): on, a lone X or Y on the ground waits up to 80 ms for its partner,
     // which would hold back the X throw.
     bool legHoldEverywhere = false;
+    // SWING KICK GRUNT (ini swing_kick_grunt; off by default): Spidey's own jump grunt plays as a manual swing
+    // kick arms (from EngineBot's swing kick series).
+    bool swingKickGrunt = false;
     // GRIP ACROSS THE GAME (G1, grip.hpp; November 14), EXPERIMENTAL: both off until set. wall_brake: on
     // Spidy's wall a grip closed on a slide slows it as friction does (mu grip_stop_pct, 200: the Nov 14 pass; it was wall_brake_mu_pct, 90, and files that saved that key keep their old default behind it), then holds.
     // grip_fling: a pull let go of while gripping a surface launches the body the other way (gain

@@ -104,6 +104,12 @@ void blow(uint64_t damager, uint64_t victim, Blow blow);
 void tracing(bool on);
 // The player's actor record, for the trace's hero flag (his handle).
 void hero(uint64_t record);
+// One of the game's own sounds (`hash`) played on `emitter` (an actor record)
+// in the next frame(), not a blow and not counted with them. Any thread;
+// false when the module is not live or the queue is full. Whatever BLOW
+// SOUNDS is set to. For the swing kick's grunt (swing_kick_grunt) and, from
+// the headset's module, SpidySoundCue (on the player).
+bool cue(uint64_t emitter, uint32_t hash);
 // The game's main thread: the blows since the last frame, sounded.
 void frame();
 Data data();

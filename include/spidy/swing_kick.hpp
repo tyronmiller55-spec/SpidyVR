@@ -27,6 +27,10 @@
 #include <cstdint>
 
 namespace spidy::swing_kick {
+// SWING KICK GRUNT (swing_kick_grunt, off by default): the sound the kick plays on Spidey as it arms, the
+// game's own jump grunt (0xdab33491: 91% of the game's jumps in our sound traces, about 9 ms before the jump;
+// beta-polish-log-table). Not confirmed as a kick sound of the game's own; the capture session's list has it.
+constexpr uint32_t gruntId = 0xdab33491;
 struct Config {
     float coneDegrees = 30.f;
     float minDistance = 3.f, maxDistance = 14.f;
