@@ -11200,6 +11200,11 @@ DWORD WINAPI run(void*) {
                             layerSet.reach = values.legReachSpread;
                             layerSet.poses = values.airPoses; // MIDAIR POSES (their own switch since Nov 18 1:09 PM)
                             const auto layered = legMixer.update(layerIn, layerSet);
+                            const auto poseExitWhy = [&] {
+                                return leg_layers::poseExitWhy(
+                                    motion.handstand.holdVr, swingFresh && swingState.grounded != 0,
+                                    hybridOn && hybridOwner.domain == hybrid_owner::Domain::anim, layerIn.crouch.webbed);
+                            };
                             const bool legMode = layered.run;
                             const Vec3 vel = swingState.velocity;
                             if (legMode && finite(vel) && legPrevVelocitySet && legDt > 1e-4f) {
@@ -11241,7 +11246,8 @@ DWORD WINAPI run(void*) {
                             native_body::setLegControl(legMode, angles, layered.amount);
                             // TORSO CHANNEL (J1; the owner, Nov 18 1:09 PM): the midair poses' upper body.
                             {
-                                const bool torsoNow = legMode && layered.torsoOn;
+                                // F3: off at a handstand catch too (the hands hold the body).
+                                const bool torsoNow = legMode && layered.torsoOn && !motion.handstand.holdVr;
                                 native_body::setTorsoControl(torsoNow, {layered.torso.pitch, layered.torso.roll,
                                                                         layered.torso.yaw});
                                 if (torsoNow != torsoChannelLogged) {
@@ -11253,6 +11259,8 @@ DWORD WINAPI run(void*) {
                                                                                  : layered.airPoseWas),
                                                      layered.torso.pitch, layered.torso.roll, layered.torso.yaw,
                                                      native_body::torsoWeight() * 100.f);
+                                    if (!torsoNow)
+                                        diag_log::writef("pose: torso channel off (%s)", poseExitWhy());
                                 }
                             }
                             // The legs' turn on the body: the flips' momentum models take it
@@ -11284,6 +11292,10 @@ DWORD WINAPI run(void*) {
                                                  length(pi.hand[0] - pi.hand[1]), pi.hand[0].z, pi.hand[0].x,
                                                  pi.hand[1].z, pi.hand[1].x, legMixer.airSeconds(),
                                                  pi.webbed ? ", webbed" : "");
+                                if (layered.airPose == leg_layers::AirPose::none &&
+                                    layered.airPoseWas != leg_layers::AirPose::none)
+                                    diag_log::writef("pose: %s off (%s)", leg_layers::airPoseName(layered.airPoseWas),
+                                                     poseExitWhy());
                                 if (layered.airPose != leg_layers::AirPose::none &&
                                     layered.airPoseWas != leg_layers::AirPose::none)
                                     diag_log::writef("legs: air pose %s off (to %s)",

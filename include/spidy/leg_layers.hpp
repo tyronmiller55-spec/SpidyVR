@@ -71,6 +71,16 @@ inline const char* airPoseName(AirPose p) {
     default: return "none";
     }
 }
+// F3 (beta polish): why a midair pose or the torso channel went off - the first that holds: a handstand catch, a
+// touchdown, the animation taking him, a web attaching, else the pose's own end. Logged as
+// "pose: <name> off (<reason>)".
+inline const char* poseExitWhy(bool handstand, bool grounded, bool animTook, bool webbed) {
+    return handstand  ? "handstand catch"
+           : grounded ? "touchdown"
+           : animTook ? "the animation took him"
+           : webbed   ? "web attach"
+                      : "the pose ended";
+}
 inline constexpr Legs tuckPose{{{1.6f, .08f, 1.2f}, {1.6f, -.08f, 1.2f}}};
 inline constexpr Legs divePose{{{-.25f, .04f, .05f}, {-.25f, -.04f, .05f}}};
 inline constexpr Legs superheroPose{{{-.2f, .05f, .05f}, {.45f, -.1f, 1.1f}}};

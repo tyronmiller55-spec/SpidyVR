@@ -38,6 +38,14 @@ float legsDelta(const Legs& a, const Legs& b) {
 } // namespace
 
 int main() {
+    {
+        // F3: a pose's exit reason, the first that holds.
+        check(std::string(poseExitWhy(true, true, true, true)) == "handstand catch", "F3: a handstand catch exit");
+        check(std::string(poseExitWhy(false, true, true, true)) == "touchdown", "F3: a touchdown exit");
+        check(std::string(poseExitWhy(false, false, true, true)) == "the animation took him", "F3: a vr->anim exit");
+        check(std::string(poseExitWhy(false, false, false, true)) == "web attach", "F3: a web attach exit");
+        check(std::string(poseExitWhy(false, false, false, false)) == "the pose ended", "F3: a pose's own end");
+    }
     Settings set;
     // PASSIVE: shown 60%, 15% coupling, the centre pose (no stick).
     {
