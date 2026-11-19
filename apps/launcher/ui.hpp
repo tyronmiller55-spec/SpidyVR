@@ -201,6 +201,9 @@ private:
     bool wantSaveProfile_{}, wantImport_{};
     // The option rows of a card draw a rule between them, not above the first.
     bool firstOption_ = true;
+    // NA HIGHLIGHT (beta polish M2, the owner's D1): the row option() draws next is a Native Animation setting (a cyan
+    // stripe and an NA mark).
+    bool naOption_ = false;
 };
 
 } // namespace launcher

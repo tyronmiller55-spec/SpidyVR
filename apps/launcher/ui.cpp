@@ -1727,6 +1727,16 @@ void App::option(const char* title, const char* help, float controlWidth, const 
     const ImVec2 titleSize = measure(fonts_.semibold, S(15.5f), title, textWidth);
     const ImVec2 helpSize = measure(fonts_.body, S(13.5f), help, textWidth);
     draw->AddText(fonts_.semibold, S(15.5f), at, col(kPaper), title, nullptr, textWidth);
+    if (naOption_) {
+        // A Native Animation setting: a cyan stripe in the card's margin and an NA mark after the title.
+        const float rowHeight = std::max(titleSize.y + S(2) + helpSize.y, ImGui::GetFrameHeight());
+        draw->AddRectFilled(ImVec2(at.x - S(9), at.y), ImVec2(at.x - S(6), at.y + rowHeight), col(kCyan), S(1.5f));
+        const float lineWidth = std::min(titleSize.x, textWidth);
+        const ImVec2 badge(at.x + lineWidth + S(8), at.y + S(2));
+        const ImVec2 badgeText = measure(fonts_.semibold, S(11.f), "NA");
+        draw->AddRect(badge, ImVec2(badge.x + badgeText.x + S(8), badge.y + badgeText.y + S(2)), col(kCyan), S(3));
+        draw->AddText(fonts_.semibold, S(11.f), ImVec2(badge.x + S(4), badge.y + S(1)), col(kCyan), "NA");
+    }
     draw->AddText(fonts_.body, S(13.5f), ImVec2(at.x, at.y + titleSize.y + S(2)), col(warning ? kYellow : kPaperDim),
                   help, nullptr, textWidth);
     const float height = std::max(titleSize.y + S(2) + helpSize.y, ImGui::GetFrameHeight());
@@ -1757,6 +1767,7 @@ void App::nativeAnimation(ImVec2 origin, ImVec2 size) {
         S(4) + gap;
     ImGui::BeginDisabled(session_.running());
     using spidy::vr_settings::Item;
+    naOption_ = true; // every row on this tab is Native Animation's (M2)
     bool tabChanged = false;
     const auto tabCombo = [&](const char* id, Item item) {
         std::vector<std::string> labels;
@@ -1858,18 +1869,19 @@ void App::nativeAnimation(ImVec2 origin, ImVec2 size) {
                    ImGui::PopFont();
                });
     });
-    group(0, "Camera & stabilization", [&] {
-        option("Camera motion",
-               "How much of the animation's own camera motion reaches your view: Full (as before), Light, "
-               "Heavy or Comfort. Pitch, roll and bob are set one by one in Options > Camera & Stabilization.",
-               S(150), [&] { tabCombo("##nativecameramotion", Item::cameraMotion); });
-        option("Head angle",
-               "Tilts the animated view below (Down) or above (Up) the horizon. Level is as before.",
-               S(150), [&] { tabCombo("##nativeheadangle", Item::cameraHeadAngle); });
-        option("Stabilization",
-               "Smooths what the animation adds (Off, Light, Heavy); the response times are in Options > "
-               "Camera & Stabilization. Your head stays 1:1.",
-               S(150), [&] { tabCombo("##nativestabilization", Item::cameraStabilization); });
+    // M2: the camera rows live on Options > Camera & Stabilization only (they were here twice).
+    group(0, "More Native Animation settings", [&] {
+        option("Camera, handoff, body & legs, kicks, Showtime, help",
+               "Every other Native Animation setting is in Options, on the cyan pages after Display (the NA tabs in "
+               "the headset's Settings). Rows with a cyan stripe and an NA mark are Native Animation's.",
+               S(150), [&] {
+                   ImGui::PushFont(fonts_.semibold, 14);
+                   if (ImGui::Button("Open Camera", ImVec2(S(150), 0))) {
+                       tab_ = Tab::options;
+                       optionPage_ = static_cast<int>(spidy::vr_settings::Category::camera);
+                   }
+                   ImGui::PopFont();
+               });
     });
     group(1, "Run controls", [&] {
         option("Native run",
@@ -1928,18 +1940,26 @@ void App::nativeAnimation(ImVec2 origin, ImVec2 size) {
                });
     });
     group(1, "Advanced", [&] {
-        option("Air", "Legacy animation in the air. Hybrid ignores this setting.", S(42),
-               [&] { tabToggle("##nativeair", Item::animatedAir); });
-        option("Only", "Legacy animation-only ownership. Hybrid ignores this setting.", S(42),
-               [&] { tabToggle("##nativeonly", Item::animatedOnly); });
-        option("Steering", "Legacy actor-relative steering. Hybrid ignores this setting.", S(42),
-               [&] { tabToggle("##nativesteering", Item::animatedSteering); });
-        option("Air spin", "Legacy animated flips and momentum lean. Hybrid ignores this setting.", S(150),
-               [&] { tabCombo("##nativeairspin", Item::animatedAirSpin); });
         option("Sound trace",
                "Diagnostics only: logs the game's sound ids around jumps and landings. Changes no sound.",
                S(42), [&] { tabToggle("##soundtrace", Item::soundTrace); });
+        // D3 (beta polish M3): the retired legacy rows, hidden in the headset, folded away here; kept for old files.
+        ImGui::PushFont(fonts_.semibold, 14);
+        const bool retired = ImGui::CollapsingHeader("Retired (no effect in Hybrid)");
+        ImGui::PopFont();
+        if (retired) {
+            firstOption_ = true;
+            option("Air", "Legacy animation in the air. Hybrid ignores this setting.", S(42),
+                   [&] { tabToggle("##nativeair", Item::animatedAir); });
+            option("Only", "Legacy animation-only ownership. Hybrid ignores this setting.", S(42),
+                   [&] { tabToggle("##nativeonly", Item::animatedOnly); });
+            option("Steering", "Legacy actor-relative steering. Hybrid ignores this setting.", S(42),
+                   [&] { tabToggle("##nativesteering", Item::animatedSteering); });
+            option("Air spin", "Legacy animated flips and momentum lean. Hybrid ignores this setting.", S(150),
+                   [&] { tabCombo("##nativeairspin", Item::animatedAirSpin); });
+        }
     });
+    naOption_ = false;
     ImGui::EndDisabled();
     ImGui::SetCursorScreenPos(ImVec2(base.x, std::max(columnY[0], columnY[1]) - gap));
     ImGui::Dummy(ImVec2(width, S(6)));
@@ -1968,7 +1988,13 @@ void App::options(ImVec2 origin, ImVec2 size) {
         const bool selected = optionPage_ == static_cast<int>(i);
         ImGui::PushStyleColor(ImGuiCol_Button,
                               selected ? ImGui::GetStyleColorVec4(ImGuiCol_Header) : ImVec4(0, 0, 0, 0));
-        if (ImGui::Button(title, ImVec2(ImGui::GetContentRegionAvail().x, S(40)))) {
+        // NA HIGHLIGHT (M2): Native Animation's pages in cyan, after the upstream ones.
+        const bool naPage = i >= static_cast<size_t>(spidy::vr_settings::Category::nativeAnimation) &&
+                            i < spidy::vr_settings::categoryCount;
+        ImGui::PushStyleColor(ImGuiCol_Text, naPage ? vec(kCyan) : ImGui::GetStyleColorVec4(ImGuiCol_Text));
+        const bool clicked = ImGui::Button(title, ImVec2(ImGui::GetContentRegionAvail().x, S(40)));
+        ImGui::PopStyleColor();
+        if (clicked) {
             if (i == static_cast<size_t>(spidy::vr_settings::Category::nativeAnimation))
                 tab_ = Tab::nativeAnimation;
             else
@@ -2001,6 +2027,15 @@ void App::options(ImVec2 origin, ImVec2 size) {
         optionPage_ != static_cast<int>(spidy::vr_settings::categoryCount)) {
         top += captionBox(ImGui::GetWindowDrawList(), ImVec2(base.x, top), width - S(8),
                           profileStatus_, Caption::narrator) + gap;
+    }
+    // NA HIGHLIGHT legend (M2), on every settings page.
+    if (optionPage_ < static_cast<int>(spidy::vr_settings::categoryCount)) {
+        auto* draw = ImGui::GetWindowDrawList();
+        const ImVec2 at(base.x, top);
+        draw->AddRectFilled(ImVec2(at.x, at.y + S(2)), ImVec2(at.x + S(3), at.y + S(18)), col(kCyan), S(1.5f));
+        draw->AddText(fonts_.body, S(13.5f), ImVec2(at.x + S(10), at.y + S(2)), col(kPaperDim),
+                      "Cyan stripe and NA mark: a Native Animation setting (the NA tabs in the headset's Settings).");
+        top += S(26);
     }
     ImGui::BeginDisabled(running);
     if (optionPage_ == static_cast<int>(spidy::vr_settings::categoryCount)) {
@@ -2063,11 +2098,15 @@ void App::options(ImVec2 origin, ImVec2 size) {
         const std::string explanation = reason ? std::string(reason) + " " + help : help;
         // A row shownWhenInactive (LEGS) stays usable; the note says what it needs.
         const bool disabled = reason != nullptr && !spidy::vr_settings::shownWhenInactive(item);
+        naOption_ = item != Item::none ? spidy::vr_settings::isNativeAnimation(item)
+                                       : optionPage_ >= static_cast<int>(spidy::vr_settings::Category::nativeAnimation) &&
+                                             optionPage_ < static_cast<int>(spidy::vr_settings::categoryCount);
         option(title, explanation.c_str(), controlWidth, [&] {
             ImGui::BeginDisabled(disabled);
             control();
             ImGui::EndDisabled();
         }, reason != nullptr);
+        naOption_ = false;
     };
     const bool twoColumns = width >= S(950);
     const float columnWidth = twoColumns ? (width - gap) * 0.5f : width;
