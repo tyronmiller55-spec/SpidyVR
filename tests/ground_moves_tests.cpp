@@ -391,6 +391,8 @@ int main() {
             r.frame(1, 0, true, 4.5f);
             check(r.fired == Kind::none && r.last.a && r.last.denied == Deny::moving,
                   "running or strafing sideways (4.5 m/s): a plain jump at once, never a flip");
+            check(std::abs(r.last.speed - 4.5f) < 1e-3f && std::abs(r.last.limit - TapParams{}.maxSpeed) < 1e-4f,
+                  "F4: a tap refused for speed reports the speed and the side's limit");
         }
         {
             Tap r;
@@ -407,6 +409,8 @@ int main() {
             f.hold(0, 1, 20, 4.f); // ahead, running: a running jump
             f.frame(0, 1, true, 4.f);
             check(f.last.a && f.fired == Kind::none && f.last.denied == Deny::moving, "the stick ahead, running: a jump");
+            check(std::abs(f.last.limit - TapParams{}.straightMaxSpeed) < 1e-4f,
+                  "F4: a straight tap refused for speed reports the straight limit");
             Tap f2;
             f2.hold(0, 1, 20, 2.5f); // ahead at 2.5 m/s: past the straight taps' 2 m/s (the sides' 3 does not apply)
             f2.frame(0, 1, true, 2.5f);

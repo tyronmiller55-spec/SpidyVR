@@ -175,6 +175,7 @@ class TapTrigger {
         bool waiting{}; // an A is held back to see whether it is a tap
         Deny denied = Deny::none;
         float speed{};
+        float limit{}; // F4: the speed limit this tap's side had (m/s)
     };
     Out update(const Input& in, const TapParams& p) {
         Out out;
@@ -221,13 +222,14 @@ class TapTrigger {
         if (!rising || !in.ground || side == Kind::none || steady_ < p.steadySeconds - 1e-5f)
             return out;
         out.speed = in.speed;
+        out.limit = side == Kind::front || side == Kind::back ? p.straightMaxSpeed : p.maxSpeed;
         if (in.blocked)
             out.denied = Deny::blocked;
         else if (in.legs)
             out.denied = Deny::legs;
         else if (in.b)
             out.denied = Deny::b;
-        else if (!(in.speed <= (side == Kind::front || side == Kind::back ? p.straightMaxSpeed : p.maxSpeed)))
+        else if (!(in.speed <= out.limit))
             out.denied = Deny::moving;
         else if (lastFire_ >= 0 && clock_ - lastFire_ < p.cooldownSeconds)
             out.denied = Deny::cooldown;

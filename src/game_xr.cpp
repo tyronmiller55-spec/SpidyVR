@@ -3752,11 +3752,12 @@ DWORD WINAPI run(void*) {
                             frame.jump = tap.a;
                             if (tap.denied != ground_flip::Deny::none) {
                                 ++groundFlipDenied;
-                                diag_log::writef("tap flip: denied %s (stick %.2f, %.2f, %.1f m/s; A went on to the game), #%u",
+                                diag_log::writef("tap flip: denied %s (stick %.2f, %.2f, %.1f m/s, limit %.1f m/s; A went on "
+                                                 "to the game), #%u",
                                                  tap.denied == ground_flip::Deny::blocked && blockedBy
                                                      ? blockedBy
                                                      : ground_flip::denyName(tap.denied),
-                                                 tin.stickX, tin.stickY, tap.speed, groundFlipDenied);
+                                                 tin.stickX, tin.stickY, tap.speed, tap.limit, groundFlipDenied);
                             }
                             if (tap.late)
                                 diag_log::writef("tap flip: A held past %.0f ms, the game's jump (late by that)",
