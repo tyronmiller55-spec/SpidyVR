@@ -2,6 +2,7 @@
 // target watch, blows as the game's own damage; and fighting across the
 // room, the web strike and the flow (game_punch.hpp).
 #include "spidy/game_punch.hpp"
+#include "spidy/hit_sound.hpp"
 #include "spidy/game_dodge.hpp"
 #include "spidy/game_focus.hpp"
 #include "spidy/game_grab.hpp"
@@ -686,10 +687,9 @@ void land(PunchEvent e, bool byStrike) {
         game_focus::earn(fighter.record,
                          fighter.grounded ? game_focus::Kind::meleeDefault : game_focus::Kind::meleeAir);
         game_sound::Blow sound;
-        sound.intensity = d.kind == BlowKind::Finisher        ? 4
-                          : d.kind != BlowKind::Hit || called ? 3
-                          : e.strength >= .35f                ? 2
-                                                              : 1;
+        // LOUDER HITS (hit_sound.hpp): a jab Medium, a full swing or a kick Heavy, a flying kick or a finisher Extreme.
+        sound.intensity = hit_sound::intensity({d.kind == BlowKind::Finisher, d.kind != BlowKind::Hit || called,
+                                                e.hand == WebStrike::diveHand, kickFlight.has_value(), e.strength});
         for (const auto& enemy : enemies)
             if (enemy.id == e.target)
                 sound.location = game_sound::locationOf(e.point.y - enemy.feet.y, enemy.height);

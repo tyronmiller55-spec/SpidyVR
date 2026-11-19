@@ -2,6 +2,7 @@
 // read back in a window, torn and overwritten entries skipped), the event
 // lines (hero ids first with ms offsets, nearby others, caps), the wait for a
 // window to close, and the setting. Portable.
+#include "spidy/hit_sound.hpp"
 #include "spidy/sound_guard.hpp"
 #include "spidy/sound_trace.hpp"
 #include "spidy/vr_settings.hpp"
@@ -170,6 +171,23 @@ int main() {
         const Values back = withTabOnly(Values{}, text);
         check(!back.pointJumpSound && !back.wallJumpSound, "read back");
         check(!inactiveReason(Item::wallJumpSound, Values{}), "wall jump sound needs no point jump");
+    }
+    // LOUDER HITS (hit_sound.hpp, A1/A3, D5): a jab Medium, a full swing Heavy, a kick Heavy, a flying kick and a
+    // finisher Extreme; never Light. HERO ATTACK SOUND: one a hand every 250 ms, off by default.
+    {
+        using namespace hit_sound;
+        check(intensity({false, false, false, false, .1f}) == 2, "a soft jab: Medium (was Light)");
+        check(intensity({false, false, false, false, .59f}) == 2, "a firm jab: Medium");
+        check(intensity({false, false, false, false, .6f}) == 3, "a full swing (0.6): Heavy");
+        check(intensity({false, true, false, false, .1f}) == 3, "a special blow: Heavy");
+        check(intensity({false, false, true, false, .1f}) == 3, "a kick: at least Heavy");
+        check(intensity({false, false, true, true, .1f}) == 4, "a kick that flies him: Extreme");
+        check(intensity({true, false, false, false, 0.f}) == 4, "a finisher: Extreme");
+        const int64_t hz = 1000;
+        check(attackDue(0, 5, hz) && !attackDue(100, 349, hz) && attackDue(100, 350, hz), "one a hand every 250 ms");
+        check(vr_settings::Values{}.attackSound == 0, "HERO ATTACK SOUND: none by default (no id guessed)");
+        check(vr_settings::withTabOnly({}, "attack_sound=-625265519\n").attackSound == -625265519,
+              "an id past 0x7fffffff reads as its signed 32 bits");
     }
     std::printf("sound trace: %d checks passed\n", passed);
     return 0;
