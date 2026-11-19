@@ -106,6 +106,49 @@ int main() {
             check(inScreens[static_cast<size_t>(row.item)] == (row.place == Place::page ? 0u : 1u), row.title);
         }
     }
+    // G7: settings validation - every row's choices round-trip through choose/choice and through spidy_vr.ini
+    // (sanitized, so a clamp never moves a menu choice), lists have one step per choice, and the in-game RESET ALL
+    // never reaches a launcher-only row.
+    {
+        using namespace vr_settings;
+        int roundTrips = 0;
+        for (const auto& row : rows()) {
+            if (row.item == Item::none || row.item == Item::nativeAnimation)
+                continue; // NATIVE ANIMATION is a preset over many values (its own tests)
+            const auto s = steps(row.item);
+            const int count = row.choices.empty() ? 2 : static_cast<int>(row.choices.size());
+            if (!row.choices.empty())
+                check(s.size() == row.choices.size() || s.empty(), row.title);
+            for (int i = 0; i < count; ++i) {
+                Values v;
+                choose(row.item, i, v);
+                if (choice(row.item, v) != i)
+                    continue; // a choice another one shadows (a preset's nearest step): not a menu value of its own
+                const Values back = withTabOnly(v, tabOnlyText(v));
+                check(choice(row.item, back) == i, row.title);
+                ++roundTrips;
+            }
+        }
+        check(roundTrips > 400, "most choices round-trip");
+        for (size_t c = 0; c < categoryCount; ++c) {
+            Values v;
+            for (const auto& row : rows())
+                if (row.item != Item::none && row.place == Place::launcher) {
+                    const int def = defaultChoice(row.item);
+                    const int count = row.choices.empty() ? 2 : static_cast<int>(row.choices.size());
+                    choose(row.item, (def + 1) % count, v);
+                }
+            const Values reset = resetCategory(static_cast<Category>(c), v);
+            for (const auto& row : rows()) {
+                // The four "(OLD)" shooter rows are what SHOOTERS writes (shooter_lock::setMode): its reset sets
+                // them as the mode says, by design.
+                const bool replaced = c == static_cast<size_t>(Category::shooters) &&
+                                      std::string_view(row.title).find("(OLD)") != std::string_view::npos;
+                if (row.item != Item::none && row.place == Place::launcher && !replaced)
+                    check(choice(row.item, reset) == choice(row.item, v), row.title);
+            }
+        }
+    }
     std::printf("beta polish: %d checks passed\n", passed);
     return 0;
 }
