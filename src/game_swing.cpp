@@ -1681,6 +1681,8 @@ void visit(const native_rays::QueryContext& world) {
         af.targets = {targets.data(), count};
         if (flicked) {
             live.asked = live.asked + 1;
+            // KICK LOCK TARGET: the punches' lock, the swing kick's own target.
+            af.locked = game_punch::kickTarget().id;
             // The swing kick armed (this step or before) keeps the flick.
             if (!kickState.busy())
                 ao = airKickState.ask(af, {static_cast<air_kick::Gesture>(flickAsk.gesture), flickAsk.side, flickAsk.angle, 1.f});
@@ -1702,6 +1704,9 @@ void visit(const native_rays::QueryContext& world) {
         if (ao.event == Event::started) {
             live.started = live.started + 1;
             account();
+            // How the target was found: bit 2 the nearest in front (KICK TARGET FALLBACK), bit 3 the punches' lock.
+            live.reserved = (live.reserved & ~12u) | (airKickState.fallback() && !airKickState.lockAimed() ? 4u : 0u) |
+                            (airKickState.lockAimed() ? 8u : 0u);
             live.lastEvent = 1;
             MemoryBarrier();
             live.events = live.events + 1;

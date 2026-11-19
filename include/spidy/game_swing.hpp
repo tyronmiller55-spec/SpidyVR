@@ -777,6 +777,8 @@ struct AirKickLive {
     uint64_t target{};
     Vec3 point{};
     float foot{}, strength{}, progress{}, angle{};
+    // bit 0: the kick runs on the ground; bit 1: the event's zone from the joints; bit 2: the start's target is the
+    // nearest in front (KICK TARGET FALLBACK); bit 3: it is the punches' lock (KICK LOCK TARGET, beta polish).
     uint32_t reserved{};
     // K3: the kick's foot from the player's feet while it runs (world axes, metres; XR poses a standing kick's
     // leg to it) and the player's speed (m/s) the swing judged it by.

@@ -573,6 +573,29 @@ int main() {
         Kick g;
         check(g.ask(frame(ahead), {Gesture::dive, 1, 30, .9f}).target == 5 && !g.fallback(), "in the gaze: no fallback");
     }
+    // KICK LOCK TARGET (the Nov 19 log: an enemy 1.9 m behind, the punches locked on him, the air kick target=0): the
+    // punches' lock is the target when nothing is in the gaze or in front and the leg reaches him; out of reach, not.
+    {
+        const Kick::Target behind[] = {enemy(9, Vec3{0, 10, 1.2f})};
+        auto f = frame(behind);
+        f.locked = 9;
+        Kick k;
+        const auto o = k.ask(f, {Gesture::dive, 1, 30, .9f});
+        check(o.target == 9 && k.fallback() && k.lockAimed(), "behind but the punches' lock, in reach: the target");
+        f.locked = 4;
+        Kick other;
+        check(other.ask(f, {Gesture::dive, 1, 30, .9f}).target == 0 && !other.lockAimed(), "a lock on someone else: none");
+        const Kick::Target far[] = {enemy(9, Vec3{0, 10, 4.f})};
+        auto ff = frame(far);
+        ff.locked = 9;
+        Kick out;
+        check(out.ask(ff, {Gesture::dive, 1, 30, .9f}).target == 0, "the lock out of the leg's reach: none");
+        const Kick::Target ahead[] = {enemy(5, Vec3{0, 10, -1.2f}), enemy(9, Vec3{0, 10, 1.2f})};
+        auto fa = frame(ahead);
+        fa.locked = 9;
+        Kick g;
+        check(g.ask(fa, {Gesture::dive, 1, 30, .9f}).target == 5 && !g.lockAimed(), "the gaze's enemy comes first");
+    }
     // KICK FLICK MISSES: a slow push and a short one are logged with why; a flick and a resting thumb are not.
     {
         FlickWatch w;

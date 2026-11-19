@@ -523,6 +523,9 @@ class Kick {
         Vec3 eyeOffset{0, 1.6f, 0}; // eyes from the feet, world axes
         Vec3 gaze{0, 0, -1};
         std::span<const Target> targets{};
+        // KICK LOCK TARGET (Nov 19 log: an enemy at 1.9 m, the punches locked on him, the air kick target=0): the enemy
+        // the punches are locked on (game_punch::kickTarget, as the swing kick's), 0 none.
+        std::uint64_t locked{};
     };
     struct Output {
         Event event{};
@@ -580,6 +583,10 @@ class Kick {
     // KICK TARGET FALLBACK: the target is the nearest in front, none being in the gaze cone.
     bool fallback() const {
         return fallback_;
+    }
+    // KICK LOCK TARGET: the fallback's target is the punches' lock.
+    bool lockAimed() const {
+        return lockAimed_;
     }
     Vec3 foot() const {
         return lastFoot_;
@@ -691,6 +698,30 @@ class Kick {
             if (fallback_)
                 gaze_ = aim;
         }
+        // KICK LOCK TARGET: none in the gaze or in front - the enemy the punches are locked on, any side, if the leg
+        // reaches him (the lunge and the slack on top). The kick goes his way.
+        lockAimed_ = false;
+        if (target_ == 0 && f.locked != 0 && gesture_ != Gesture::sweep) {
+            for (const auto& t : f.targets) {
+                if (t.id != f.locked)
+                    continue;
+                const Zone z = zonesFor(gesture_) & (1u << static_cast<int>(Zone::chest)) ? Zone::chest
+                               : zonesFor(gesture_) & (1u << static_cast<int>(Zone::head)) ? Zone::head
+                                                                                          : Zone::legs;
+                bool byJoints = false;
+                const Vec3 p = zonePoint(t.feet, t.height, z, t.joints, c.limbZones, gazeRef(t), &byJoints);
+                if (!(length(p - pelvis) <= c.reach + c.lunge + t.radius + c.frontSlack))
+                    break;
+                target_ = t.id;
+                zone_ = z;
+                askedByJoints = byJoints;
+                fallback_ = lockAimed_ = true;
+                const Vec3 line = p - eye_;
+                if (finite(line) && length(line) > 1e-3f)
+                    gaze_ = normalized(line);
+                break;
+            }
+        }
         out.event = Event::started;
         out.target = target_;
         out.zone = zone_;
@@ -798,6 +829,6 @@ class Kick {
     Zone zone_ = Zone::chest;
     std::uint64_t target_{};
     Vec3 gaze_{0, 0, -1}, eye_{}, lastFoot_{};
-    bool footSet_{}, hit_{}, startedGrounded_{}, fallback_{};
+    bool footSet_{}, hit_{}, startedGrounded_{}, fallback_{}, lockAimed_{};
 };
 } // namespace spidy::air_kick

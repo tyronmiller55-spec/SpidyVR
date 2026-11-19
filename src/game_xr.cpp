@@ -1809,6 +1809,8 @@ DWORD WINAPI run(void*) {
         air_kick::Flick airFlickHeld;
         float airFlickHeldAge{}, swingFlickHeld = -1;
         uint32_t airSerial{}, airFlagsSent = ~0u, airEventsSeen{}, airState{};
+        uint32_t kickBusyRefused{}; // AIR KICKS: stacked gestures refused while a kick ran, since the first logged
+        bool kickBusyLogged{};
         float airSentAge{}, airAngle{}, airSeconds{};
         // GROUND KICKS: the player stands slow with the setting on (this frame); the kick under way began
         // standing, and its foot from the feet (the swing's account).
@@ -6769,9 +6771,21 @@ DWORD WINAPI run(void*) {
                                 const unsigned long long who = al->target;
                                 const auto zone = static_cast<air_kick::Zone>(std::min<uint32_t>(zoneRaw, 3));
                                 const auto gesture = airGesture;
-                                if (what == 1)
-                                    diag_log::writef("kick: %s start zone=%s target=%llu",
-                                                     air_kick::gestureName(gesture), air_kick::zoneName(zone), who);
+                                if (what == 1 && kickBusyRefused) {
+                                    diag_log::writef("kick: %u more gestures refused while the last kick ran",
+                                                     kickBusyRefused);
+                                    kickBusyRefused = 0;
+                                }
+                                if (what == 4 && al->refusal == static_cast<uint32_t>(air_kick::Refusal::busy) &&
+                                    kickBusyLogged) {
+                                    ++kickBusyRefused; // stacked gestures: the first is logged, the rest counted
+                                } else if (what == 1)
+                                    diag_log::writef("kick: %s start zone=%s target=%llu aim=%s",
+                                                     air_kick::gestureName(gesture), air_kick::zoneName(zone), who,
+                                                     !who                     ? "none (no enemy in reach)"
+                                                     : (al->reserved & 8u)    ? "punch lock"
+                                                     : (al->reserved & 4u)    ? "nearest in front"
+                                                                              : "gaze");
                                 else if (what == 2)
                                     diag_log::writef("kick: %s hit foot=%.1f zone=%s (%s) strength=%.2f target=%llu "
                                                      "(started %u, hits %u, flies %u, misses %u; zones by joints %u)",
@@ -6787,6 +6801,11 @@ DWORD WINAPI run(void*) {
                                     diag_log::writef("kick: refused (%s)",
                                                      air_kick::refusalName(
                                                          static_cast<air_kick::Refusal>(al->refusal)));
+                                if (what == 1)
+                                    kickBusyLogged = false;
+                                else if (what == 4)
+                                    kickBusyLogged =
+                                        al->refusal == static_cast<uint32_t>(air_kick::Refusal::busy);
                             }
                         }
                         // GROUND KICKS: a standing kick's leg, shown while the animation owns the body (the
