@@ -1092,6 +1092,8 @@ template <class V> auto switchOf(Item item, V& v) -> decltype(&v.aimMarkers) {
         return &v.pointJumpBullet;
     case Item::pointJumpSound:
         return &v.pointJumpSound;
+    case Item::airDodge:
+        return &v.airDodge;
     case Item::airLandingBlend:
         return &v.airLandingBlend;
     case Item::airLandingRelease:
@@ -1271,6 +1273,9 @@ Values sanitized(Values v) {
     v.showtimeFadeMs = std::clamp(v.showtimeFadeMs, 0, 400);
     v.showtimeBody = std::clamp(v.showtimeBody, 0, 3);
     v.wallJumpSound = std::clamp(v.wallJumpSound, 0, 2);
+    v.airDodgeSpeed = std::clamp(v.airDodgeSpeed, 3, 20);
+    v.airDodgeChordMs = std::clamp(v.airDodgeChordMs, 0, 200);
+    v.airDodgeCooldownMs = std::clamp(v.airDodgeCooldownMs, 100, 3000);
     v.showtimeChord = std::clamp(v.showtimeChord, 0, 1);
     v.showtimeAutoDodge = std::clamp(v.showtimeAutoDodge, 0, 2);
     v.showtimeDistanceCm = std::clamp(v.showtimeDistanceCm, 150, 400);
@@ -2045,6 +2050,10 @@ const std::array<Row, rowTotal>& rows() {
          "The game's jump grunt and launch sounds on point jumps, flips and leaps.", {}},
         {Item::wallJumpSound, "WALL JUMP SOUND",
          "Two of the game's sounds to try on a wall jump. Tell us which fits. OFF: none.", wallJumpSoundChoices},
+        {Item::airDodge,
+         "AIR DODGE",
+         "In SpidyVR's air, B dodges the way the left stick points. Stick at rest: back.",
+         {}},
     }};
     static const std::array<Row, rowTotal> all = [] {
         std::array<Row, rowTotal> a{};
@@ -2205,7 +2214,7 @@ const std::array<Screen, categoryCount>& screens() {
         Item::enemyJoints, Item::enemyLimbZones,
         Item::punchTrackCone, Item::punchTrackRange, Item::jumpPull, Item::punchAutotarget, Item::punchViewSnap,
         Item::jumpPullGaze, Item::jumpPullStick, Item::jumpPullRange, Item::jumpPullCap,
-        Item::handGrab, Item::handGrabForce, Item::enemyHoldCost, Item::handGrabClassRules,
+        Item::handGrab, Item::handGrabForce, Item::enemyHoldCost, Item::handGrabClassRules, Item::airDodge,
     };
     // POINT JUMP (November 11): its switch, trigger and feel.
     static constexpr Item pointJump[] = {
@@ -3214,6 +3223,10 @@ constexpr TabOnly tabOnly[] = {
     {"marker_twist_steady", &Values::markerTwistSteady, nullptr},
     {"marker_turn_rate_dps", nullptr, &Values::markerTurnRateDps},
     {"marker_switch_hold_ms", nullptr, &Values::markerSwitchHoldMs},
+    {"air_dodge", &Values::airDodge, nullptr},
+    {"air_dodge_speed", nullptr, &Values::airDodgeSpeed},
+    {"air_dodge_chord_ms", nullptr, &Values::airDodgeChordMs},
+    {"air_dodge_cooldown_ms", nullptr, &Values::airDodgeCooldownMs},
     {"log_level", nullptr, &Values::logLevel},
     {"movement_defaults", nullptr, &Values::movementDefaults},
 };
@@ -3392,6 +3405,12 @@ Values withMovementDefaults(Values v, std::string_view text) {
         v.gripFling = true;
         v.airLandingRelease = true;
         v.pointJump = true;
+    }
+    if (seen < 15) {
+        // Revision 15 (0.8.7-na-beta2; the owner, Nov 19 t79u: "Let's go for it", all features left on for
+        // testing): the beta2 features come on once. They are new keys, so an older file has none of them;
+        // this only makes the rule the same as revision 14's (a 0 chosen after this revision stays).
+        v.airDodge = true;
     }
     v.movementDefaults = movementDefaultsRevision;
     return sanitized(v);

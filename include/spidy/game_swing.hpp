@@ -641,6 +641,32 @@ inline bool validSidestep(const SidestepAsk& a) {
            std::isfinite(a.moveSeconds) && a.moveSeconds > .02f && a.moveSeconds <= .5f &&
            std::isfinite(a.stopSeconds) && a.stopSeconds >= 0 && a.stopSeconds <= .2f;
 }
+// Side channel from XR (AIR DODGE, air_dodge.hpp): his velocity becomes `velocity` (real m/s) on the swing's
+// next step, in the air only; `carrySeconds` the game's dodge answers the blows it warns of (game_dodge, as a
+// web's carry). `serial` rises with each dodge; the same serial again is ignored. Not a Command or Settings
+// field and not versioned with them (an older swing module has no SpidySwingAirDodge export; XR then never
+// takes B for a dodge).
+struct AirDodgeAsk {
+    uint32_t magic = 0x53574144, version = 1, bytes = sizeof(AirDodgeAsk), serial{};
+    Vec3 velocity{};
+    float carrySeconds{};
+    uint32_t reserved[2]{};
+};
+static_assert(sizeof(AirDodgeAsk) == 40);
+inline bool validAirDodge(const AirDodgeAsk& a) {
+    return a.magic == 0x53574144 && a.version == 1 && a.bytes == sizeof(AirDodgeAsk) && finite(a.velocity) &&
+           length(a.velocity) > 1.f && length(a.velocity) <= 30.f && std::isfinite(a.carrySeconds) &&
+           a.carrySeconds >= 0 && a.carrySeconds <= 1.f;
+}
+// SpidyAirDodgeLive: what the swing did with XR's dodges, for its log. `taken` / `refused` count up (after
+// `serial` and `speed` are written); refused: he was on the ground or a wall, or the ask was too old, when
+// the step came.
+struct AirDodgeLive {
+    uint32_t magic = 0x5341444c, version = 1, bytes = sizeof(AirDodgeLive), serial{};
+    uint32_t taken{}, refused{};
+    float speed{}, reserved{};
+};
+static_assert(sizeof(AirDodgeLive) == 32);
 // SpidySidestepLive: the swing's bursts, for XR's log (the swing has none).
 // `started` / `ended` count up (ended after the rest is written); for the
 // last one: its serial, why it ended (sidestep::Stop), how far it went

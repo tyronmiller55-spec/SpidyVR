@@ -906,6 +906,8 @@ void Swing::reset(Body b) {
     pulled_ = pullAir_ = 0;
     pointJumpQueued_ = false;
     pointJumpVelocity_ = {};
+    airDodgeQueued_ = false;
+    airDodgeVelocity_ = {};
     flingQueued_ = false;
     gripHands_ = {};
     gripHave_ = {};
@@ -1679,6 +1681,14 @@ void Swing::step(float dt, const Input& in, const WorldQueries& world, const Wor
             events_.push_back({EventKind::PointJump, -1, length(body_.velocity)});
         }
         pointJumpQueued_ = false;
+    }
+    if (airDodgeQueued_) {
+        // AIR DODGE (air_dodge.hpp): in the air only; game_xr aimed it from the view's heading and the stick.
+        if (!body_.grounded && !wall_.on) {
+            body_.velocity = limited(airDodgeVelocity_, config_.maxSpeed);
+            ++airDodges_;
+        }
+        airDodgeQueued_ = false;
     }
     if (flingQueued_) {
         // GRIP FLING (grip.hpp): the pull let go of launches him the other way, from the ground, a wall or

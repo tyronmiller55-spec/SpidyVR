@@ -2991,6 +2991,16 @@ void App::options(ImVec2 origin, ImVec2 size) {
                 "default; needs Hand grab on.",
                 S(42), [&] { tabToggle("##handgrabclassrules", Item::handGrabClassRules); });
         });
+        group(kicksPage, 1, "Air dodge", [&] {
+            settingOption(
+                Item::airDodge, "Air dodge",
+                "In SpidyVR's own air (no web held), B is a quick dodge the way your left stick points, from "
+                "where you look; with the stick at rest it dodges backward. A, X or Y pressed with B inside "
+                "50 ms keeps the point jump, Showtime and finishers as they were. The ground's B (dodge, "
+                "sidestep) is unchanged. Two dodges an air, half a second apart. On by default. spidy_vr.ini: "
+                "air_dodge_speed (9 m/s), air_dodge_chord_ms (50), air_dodge_cooldown_ms (500).",
+                S(42), [&] { tabToggle("##airdodge", Item::airDodge); });
+        });
         group(pointJumpPage, 0, "Point jump (experimental)", [&] {
             settingOption(Item::pointJump, "Point jump",
                    "Whenever you touch a surface (the ground, a perch, a wall you run on), press A and B "

@@ -302,7 +302,7 @@ struct Values {
     // from before it gets RUN CURVE on and EARLY JUMP QUICK TAP once (the
     // user: "movement fixes will be defaults"); after that the player's own
     // choice stands. Not a row. movement_defaults.
-    int movementDefaults = 14; // movementDefaultsRevision: a new file has seen them
+    int movementDefaults = 15; // movementDefaultsRevision: a new file has seen them
     // SOFT LANDING (the tab's SOFT LANDING; Swing::allowSoftLanding,
     // run_update::softLandVertical): a fall the swing flies, with no web
     // holding, eases to 9 m/s down over its last 3 m (or 0.35 s), its speed
@@ -734,6 +734,15 @@ struct Values {
     // WALL JUMP SOUND (beta polish A5; wall_jump_sound): 0 off (silent as before), 1 d321a6f9 (default), 2 110d202b,
     // the Nov 19 trace's two candidates (sound_guard.hpp) for a headset A/B.
     int wallJumpSound = 1;
+    // AIR DODGE (beta2, air_dodge.hpp; the owner, Nov 19 t79u: "Air dodge is fine on B"): in SpidyVR's own
+    // air, B is a burst of air_dodge_speed (9 m/s) the way the left stick points from the view's heading (at
+    // rest: backward), after waiting air_dodge_chord_ms (50, the point jump's window) for A, X or Y;
+    // air_dodge_cooldown_ms (500) between, two an air. The ground's B (dodge, sidestep, point jump) is
+    // untouched. On by default (movement_defaults revision 15).
+    bool airDodge = true;
+    int airDodgeSpeed = 9;
+    int airDodgeChordMs = 50;
+    int airDodgeCooldownMs = 500;
     // HERO ATTACK SOUND (beta polish A2; attack_sound, spidy_vr.ini only, no menu row): one of the game's sounds played
     // on Spidey as a punch is thrown or a kick starts (at most one a hand every 250 ms, hit_sound.hpp): the id's 32
     // bits as a signed decimal. 0 (the default): none - the game's own whoosh and effort ids are not captured yet
@@ -1171,6 +1180,8 @@ enum class Item : uint8_t {
     // JUMP SOUNDS and WALL JUMP SOUND (beta polish A4/A5, POINT JUMP's tab).
     pointJumpSound,
     wallJumpSound,
+    // AIR DODGE (beta2).
+    airDodge,
     // NA HELP (beta polish M5, na_help.hpp): the NA · HELP tab's pages, one item for all of them (a page has no
     // value: one choice, READ). Its rows are the catalog's last.
     helpPage,
@@ -1205,8 +1216,8 @@ struct Row {
     Place place{};
 };
 // Stable row/setting numbers; categories below determine presentation order.
-// The catalog: the settings' rows (235), then NA HELP's pages.
-inline constexpr size_t settingRowCount = 235;
+// The catalog: the settings' rows (236), then NA HELP's pages.
+inline constexpr size_t settingRowCount = 236;
 inline constexpr size_t rowTotal = settingRowCount + na_help::pageCount;
 const std::array<Row, rowTotal>& rows();
 const Row* rowFor(Item);
@@ -1273,7 +1284,7 @@ std::string tabOnlyText(const Values&);
 // key, or whose value is no whole number, is passed over.
 Values withTabOnly(Values, std::string_view text);
 // The movement defaults' revision (Values::movementDefaults) this build has.
-inline constexpr int movementDefaultsRevision = 14;
+inline constexpr int movementDefaultsRevision = 15;
 // November 12 movement cleanup: a settings file (that text) older than
 // movementDefaultsRevision gets the new movement defaults once - RUN CURVE
 // on, EARLY JUMP at least QUICK TAP - and is marked as having seen them; a

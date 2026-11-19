@@ -39,6 +39,8 @@ __declspec(dllexport) Ropes SpidyRopeData;
 __declspec(dllexport) ClimbData SpidyClimbData;
 // QUICK SIDESTEP's bursts (SidestepLive), for XR's log.
 __declspec(dllexport) SidestepLive SpidySidestepLive;
+// AIR DODGE's account (AirDodgeLive), for XR's log.
+__declspec(dllexport) AirDodgeLive SpidyAirDodgeLive;
 // MANUAL SWING KICK's account (SwingKickLive), for XR's log and its legs.
 __declspec(dllexport) SwingKickLive SpidySwingKickLive;
 // AIR KICKS' account (AirKickLive), for XR's log, legs and feel.
@@ -399,6 +401,16 @@ struct SidestepRun {
     uint32_t serial{};
 } sidestepRun;
 std::atomic<bool> sidestepCarry{};
+// AIR DODGE (SpidySwingAirDodge, air_dodge.hpp): a dodge waiting for the next step, as the point jump's; and
+// until when (QPC) the game's dodge answers warned blows for it (airDodgeCarryUntil, read by the dodge's
+// carry).
+SRWLOCK airDodgeLock = SRWLOCK_INIT;
+AirDodgeAsk airDodgeAsk{};
+uint64_t airDodgeAt{};
+uint32_t airDodgeSerial{};
+bool airDodgeWaiting{};
+constexpr uint64_t airDodgeMaxAgeMs = 150;
+std::atomic<int64_t> airDodgeCarryUntil{};
 // A burst's end, for XR's log (SpidySidestepLive).
 void endSidestep(sidestep::Stop why, Vec3 at, double seconds) {
     if (!sidestepRun.on)
@@ -1211,6 +1223,8 @@ void visit(const native_rays::QueryContext& world) {
             // carry, so the game's own dodge answers the blows it warns of
             // during it (no address of its own: game_dodge's hook as is).
             webbed |= sidestepCarry.load(std::memory_order_relaxed);
+            // AIR DODGE: its burst too, for carrySeconds.
+            webbed |= now.QuadPart < airDodgeCarryUntil.load(std::memory_order_relaxed);
             game_dodge::carry(config.record, webbed, motion.grounded == 0,
                               player.velocity * game_punch::worldScale());
         }
@@ -1464,6 +1478,30 @@ void visit(const native_rays::QueryContext& world) {
         ReleaseSRWLockExclusive(&pointJumpLock);
         if (waiting && focused && GetTickCount64() - at <= pointJumpMaxAgeMs)
             solver.pointJump(ask.velocity);
+    }
+    // AIR DODGE: a dodge XR sent since the last step (SpidySwingAirDodge). Taken in the air only.
+    {
+        AcquireSRWLockExclusive(&airDodgeLock);
+        const bool waiting = airDodgeWaiting;
+        const AirDodgeAsk ask = airDodgeAsk;
+        const uint64_t askedAt = airDodgeAt;
+        airDodgeWaiting = false;
+        ReleaseSRWLockExclusive(&airDodgeLock);
+        if (waiting) {
+            volatile AirDodgeLive& live = SpidyAirDodgeLive;
+            live.serial = ask.serial;
+            live.speed = length(ask.velocity);
+            MemoryBarrier();
+            if (focused && GetTickCount64() - askedAt <= airDodgeMaxAgeMs && !motion.grounded &&
+                !solver.wall().on) {
+                solver.airDodge(ask.velocity);
+                airDodgeCarryUntil =
+                    now.QuadPart + static_cast<int64_t>(ask.carrySeconds * frequency.QuadPart);
+                live.taken = live.taken + 1;
+            } else {
+                live.refused = live.refused + 1;
+            }
+        }
     }
     // QUICK SIDESTEP: a burst XR sent since the last step (SpidySwingSidestep).
     // Taken on the ground only, the swing not driving him already.
@@ -2431,6 +2469,12 @@ extern "C" __declspec(dllexport) DWORD WINAPI SpidySwingStart(void* input) {
         ReleaseSRWLockExclusive(&sidestepLock);
         sidestepRun = {};
         sidestepCarry = false;
+        AcquireSRWLockExclusive(&airDodgeLock);
+        airDodgeAsk = {};
+        airDodgeAt = 0;
+        airDodgeWaiting = false;
+        ReleaseSRWLockExclusive(&airDodgeLock);
+        airDodgeCarryUntil = 0;
         webLinesOn = false;
         started = true;
         solver = Swing(physicsConfig(config));
@@ -2695,6 +2739,28 @@ extern "C" __declspec(dllexport) DWORD WINAPI SpidySwingSidestep(void* input) {
         sidestepWaiting = true;
     }
     ReleaseSRWLockExclusive(&sidestepLock);
+    return 0;
+}
+// AIR DODGE (air_dodge.hpp): a dodge for the swing's next step when `serial` is new. 2001: not an
+// AirDodgeAsk; 1004: the swing has not started; 0 taken (or the same serial again, ignored). What it did:
+// SpidyAirDodgeLive.
+extern "C" __declspec(dllexport) DWORD WINAPI SpidySwingAirDodge(void* input) {
+    AirDodgeAsk a;
+    if (!input || !copy(&a, input, sizeof(a)) || !validAirDodge(a))
+        return 2001;
+    AcquireSRWLockShared(&lifecycle);
+    const bool running = started;
+    ReleaseSRWLockShared(&lifecycle);
+    if (!running)
+        return 1004;
+    AcquireSRWLockExclusive(&airDodgeLock);
+    if (a.serial != airDodgeSerial) {
+        airDodgeSerial = a.serial;
+        airDodgeAsk = a;
+        airDodgeAt = GetTickCount64();
+        airDodgeWaiting = true;
+    }
+    ReleaseSRWLockExclusive(&airDodgeLock);
     return 0;
 }
 extern "C" __declspec(dllexport) DWORD WINAPI SpidySwingPoseCoupling(void* input) {

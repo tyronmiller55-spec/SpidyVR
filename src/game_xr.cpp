@@ -104,6 +104,7 @@
 #include "spidy/hit_sound.hpp"
 #include "spidy/sound_guard.hpp"
 #include "spidy/finisher_handoff.hpp"
+#include "spidy/air_dodge.hpp"
 #include "spidy/sound_trace.hpp"
 #include "spidy/stable_yaw.hpp"
 #include "spidy/view_yaw_lock.hpp"
@@ -739,6 +740,10 @@ BridgeCall swingTether{};
 const game_swing::TetherLive* tetherLive{};
 const game_swing::HandGrabLive* handGrabLive{};
 const game_swing::SidestepLive* sidestepLive{};
+// AIR DODGE's dodge for the swing's next step (SpidySwingAirDodge) and the swing's account of them
+// (SpidyAirDodgeLive); none in an older module (B is then the game's in the air, as before).
+BridgeCall swingAirDodge{};
+const game_swing::AirDodgeLive* airDodgeLive{};
 // Optional: the web tie's telemetry (game_grab::TieData; an older ray module has none).
 BridgeCall sampleTie{};
 // Optional: web lines (game_lines::LineData; an older ray module has none).
@@ -1329,6 +1334,9 @@ DWORD WINAPI run(void*) {
         // FINISHERS ON Y+B (finisher_handoff.hpp): the game's own finisher, told apart from other scenes for
         // the log; nothing of SpidyVR's takes the body back while one plays.
         finisher_handoff::Watch finisherWatch;
+        // AIR DODGE (air_dodge.hpp): B in SpidyVR's air, its serial, and the swing's account as last logged.
+        air_dodge::Trigger airDodgeTrigger;
+        uint32_t airDodgeSerial{}, airDodgeTakenSeen{}, airDodgeRefusedSeen{}, airDodges{};
         bool namedFists{}, fistsBlows{};
         uint32_t namedPressesBefore{}, slamsBefore{};
         // The gadget wheel (X held; gadget_wheel.hpp): the player's gadgets
@@ -3201,6 +3209,82 @@ DWORD WINAPI run(void*) {
                                     diag_log::write("point jump: still on the surface 400 ms after the launch "
                                                     "(the game kept him there)");
                                 pointJumpHold = false;
+                            }
+                        }
+                    }
+                    // AIR DODGE (air_dodge.hpp; the owner, Nov 19 t79u): in SpidyVR's own air, B is a dodge
+                    // the way the left stick points from the view's heading (at rest: backward). Read here,
+                    // after the point jump's and Showtime's chords have had B and before the dodge, the tuck
+                    // or FLAIL read it: B waits the chord window for A, X or Y (the point jump, Showtime, a
+                    // finisher), and with one of them goes on to the game as it always did. Anywhere else B
+                    // is the game's at once.
+                    {
+                        const auto ap = air_dodge::paramsOf(values);
+                        const bool adFresh =
+                            swingState.status && swingState.qpc &&
+                            static_cast<int64_t>(swingState.qpc) > now.QuadPart - frequency.QuadPart / 10;
+                        const bool adHybrid = values.animatedHybrid && values.animatedMoves;
+                        air_dodge::Trigger::Input adIn;
+                        adIn.seconds = frame.seconds;
+                        adIn.b = (frame.buttons & buttonB) != 0;
+                        adIn.others = frame.jump || (frame.buttons & (buttonX | buttonY)) != 0;
+                        adIn.freeAir = adFresh && !swingState.grounded &&
+                                       swingState.wall == static_cast<uint32_t>(game_swing::Surface::none);
+                        adIn.vrOwns = adFresh && swingState.owned &&
+                                      (!adHybrid || hybridOwner.domain == hybrid_owner::Domain::vr);
+                        adIn.webbed = adFresh && (swingState.webs[0].attached || swingState.webs[1].attached);
+                        adIn.blocked = !swingAirDodge ||
+                                       !(viewing && gameplay && motion.active && !flatScreen && spiderMan) ||
+                                       phone.open() || gadgetWheel.open() || padLayer.latched() ||
+                                       calibrationInput ||
+                                       (namedPress.claimed() & game_pad::NamedPress::controlB) ||
+                                       (values.webLines && lineState.phase == 2 && lineState.onLine);
+                        adIn.warning = std::any_of(senseMarks.begin(), senseMarks.end(),
+                                                   [](const SenseMark& m) { return m.live && !m.brokenAt; });
+                        adIn.contact =
+                            adFresh && (swingState.grounded ||
+                                        swingState.wall != static_cast<uint32_t>(game_swing::Surface::none));
+                        const auto ad = airDodgeTrigger.update(adIn, ap);
+                        frame.buttons =
+                            ad.b ? (frame.buttons | buttonB) : (frame.buttons & ~uint32_t(buttonB));
+                        if (ad.passed != air_dodge::Why::none && adIn.freeAir && adIn.vrOwns && ap.enabled)
+                            diag_log::writef("air dodge: B went on to the game (%s)",
+                                             air_dodge::whyName(ad.passed));
+                        if (ad.fire) {
+                            bool fromStick = false;
+                            const Vec3 look = motion.headPose.orientation.rotate({0, 0, -1});
+                            const Vec3 way = air_dodge::way(look, frame.hands[0].stickX,
+                                                            frame.hands[0].stickY, ap, &fromStick);
+                            const Vec3 before = finite(swingState.velocity) ? swingState.velocity : Vec3{};
+                            const Vec3 velocity = air_dodge::velocity(way, before, ap);
+                            game_swing::AirDodgeAsk ask;
+                            ask.serial = ++airDodgeSerial;
+                            ask.velocity = velocity;
+                            ask.carrySeconds = ap.carrySeconds;
+                            const DWORD result = swingAirDodge(&ask);
+                            if (result == 0) {
+                                ++airDodges;
+                                runtime.haptic(0, .45f);
+                                runtime.haptic(1, .45f);
+                            }
+                            diag_log::writef(
+                                "air dodge: %s #%u (%d of %d this air), way (%.2f, %.2f) %s, %.1f m/s -> "
+                                "(%.1f, %.1f, %.1f) %.1f m/s%s",
+                                result == 0 ? "sent" : "the swing refused it", ask.serial,
+                                airDodgeTrigger.used(), ap.perAir, way.x, way.z,
+                                fromStick ? "from the left stick" : "backward (stick at rest)",
+                                length(before), velocity.x, velocity.y, velocity.z, length(velocity),
+                                result == 0 ? "" : " (no export or not started)");
+                        }
+                        if (const volatile game_swing::AirDodgeLive* live = airDodgeLive) {
+                            const uint32_t taken = live->taken, refused = live->refused;
+                            if (taken != airDodgeTakenSeen || refused != airDodgeRefusedSeen) {
+                                diag_log::writef(
+                                    "air dodge: the swing %s #%u at %.1f m/s",
+                                    taken != airDodgeTakenSeen ? "took" : "dropped (on the ground or a wall)",
+                                    static_cast<unsigned>(live->serial), static_cast<float>(live->speed));
+                                airDodgeTakenSeen = taken;
+                                airDodgeRefusedSeen = refused;
                             }
                         }
                     }
@@ -13455,7 +13539,8 @@ DWORD WINAPI run(void*) {
                         {
                             const std::vector<Vertex> none;
                             overlay.renderViews(overlayViews, none, true, false, none, &grade, nullptr);
-                        } else if (feedback && (!vertices.empty() || !translucent.empty() || !phoneScreen.empty()))
+                        } else if (feedback &&
+                                   (!vertices.empty() || !translucent.empty() || !phoneScreen.empty()))
                             overlay.renderViews(overlayViews, vertices, true, false, translucent, nullptr,
                                                 &phonePicture);
                         overlayMs = std::chrono::duration<double, std::milli>(
@@ -13775,6 +13860,13 @@ extern "C" __declspec(dllexport) DWORD WINAPI SpidyXrStart(void* input) {
     setSwingPoseCoupling = reinterpret_cast<BridgeCall>(GetProcAddress(rays, "SpidySwingPoseCoupling"));
     swingPointJump = reinterpret_cast<BridgeCall>(GetProcAddress(rays, "SpidySwingPointJump"));
     swingSidestep = reinterpret_cast<BridgeCall>(GetProcAddress(rays, "SpidySwingSidestep"));
+    swingAirDodge = reinterpret_cast<BridgeCall>(GetProcAddress(rays, "SpidySwingAirDodge"));
+    airDodgeLive =
+        reinterpret_cast<const game_swing::AirDodgeLive*>(GetProcAddress(rays, "SpidyAirDodgeLive"));
+    if (const game_swing::AirDodgeLive expected;
+        airDodgeLive && (airDodgeLive->magic != expected.magic || airDodgeLive->version != expected.version ||
+                         airDodgeLive->bytes != expected.bytes))
+        airDodgeLive = nullptr;
     swingKick = reinterpret_cast<BridgeCall>(GetProcAddress(rays, "SpidySwingKick"));
     swingKickLive =
         reinterpret_cast<const game_swing::SwingKickLive*>(GetProcAddress(rays, "SpidySwingKickLive"));

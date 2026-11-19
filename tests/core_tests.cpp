@@ -1,5 +1,7 @@
 #include "spidy/aim_steady.hpp"
 #include "spidy/finisher_handoff.hpp"
+#include "spidy/air_dodge.hpp"
+#include "spidy/swing.hpp"
 #include "spidy/lab_world.hpp"
 #include "spidy/native_view.hpp"
 #include "spidy/game_tracking.hpp"
@@ -11299,7 +11301,7 @@ int main() {
                            "the row is not the launcher's switch");
                  }
              check(found == 1, "the row is not there once");
-             check(static_cast<unsigned>(Item::enemyTypes) + 4 == static_cast<unsigned>(Item::helpPage) &&
+             check(static_cast<unsigned>(Item::enemyTypes) + 5 == static_cast<unsigned>(Item::helpPage) &&
                        vr_settings::lastItem == Item::helpPage,
                    "enemy types is not the last setting (NA HELP's pages follow it)");
              vr_settings::Values on;
@@ -24947,7 +24949,7 @@ int main() {
         // then (still November 14) HAND GRAB STRENGTH and HOLD COST, then AIR KICKS, AIM and SPIN.
         // then (still November 14) WEB TETHERS, TETHER POINTS and TETHER STEPS, then GROUND KICKS, ENEMY JOINTS and ENEMY LIMB ZONES.
         // Polish pass: HEADSET FIRST, ANIM HEAD RIDE and SHOULDER LIMIT (launcher rows) after those.
-        constexpr size_t rowsAfter = 79 + na_help::pageCount; // + HAND GRAB CLASS RULES, JUMP SOUNDS, WALL JUMP SOUND and NA HELP's pages (beta polish) // + the handoff tune's seven (Nov 18), + DIRECTIONAL FLIPS and MIDAIR POSES (Nov 18 1:09 PM)
+        constexpr size_t rowsAfter = 80 + na_help::pageCount; // + HAND GRAB CLASS RULES, JUMP SOUNDS, WALL JUMP SOUND and NA HELP's pages (beta polish) // + the handoff tune's seven (Nov 18), + DIRECTIONAL FLIPS and MIDAIR POSES (Nov 18 1:09 PM) (Nov 19: + AIR DODGE)
         // // (Nov 14: + AIR UPRIGHT TIME, POINT JUMP BULLET, FALL TO SPIDYVR, AIR LANDING BLEND, AIR LANDING RELEASE) + PUNCH AUTO-TARGET (4 rows), JUMP PULL (5 rows) and the handstand balance (4 rows), SHOWTIME (3 rows, then 8, Nov 14)
         check(all.size() == firstRealistic + std::size(realistic) + rowsAfter,
               "the realistic flips' rows are not the last but the appended ones");
@@ -25124,7 +25126,7 @@ int main() {
                   "the movement defaults overrode a choice made after them");
             check(withMovementDefaults(withTabOnly({}, ""), "").runCurve,
                   "no file: not the movement defaults");
-            check(tabOnlyText(migrated).find("movement_defaults=14\n") != std::string::npos,
+            check(tabOnlyText(migrated).find("movement_defaults=15\n") != std::string::npos,
                   "the migration is not remembered");
         }
         {
@@ -25220,8 +25222,8 @@ int main() {
                 (row.item >= Item::animatedTorsoTwist && row.item < Item::showtime) ||
                 // November 14 (air takeover): launcher rows; HANDOFF TIMING's seven (Nov 18), the game's own tab.
                 (row.item >= Item::airCorrect && !(row.item >= Item::landingBlend && row.item <= Item::airPoses) &&
-                 // Beta polish A4/A5: JUMP SOUNDS and WALL JUMP SOUND, NA · POINT JUMP's in-game rows.
-                 row.item != Item::pointJumpSound && row.item != Item::wallJumpSound);
+                 // Beta polish A4/A5: JUMP SOUNDS and WALL JUMP SOUND, NA · POINT JUMP's in-game rows; AIR DODGE (beta 2).
+                 row.item != Item::pointJumpSound && row.item != Item::wallJumpSound && row.item != Item::airDodge);
             check(row.place == (row.item == Item::view ? Place::page
                                 : row.item == Item::helpPage ? Place::tab
                                 : naRetired(row.item)    ? Place::launcher
@@ -25231,7 +25233,7 @@ int main() {
                   "a row in the wrong place");
         }
         check(std::count_if(all.begin(), all.end(), [](const Row& r) { return r.place == Place::tab; }) ==
-                  174 + na_help::pageCount, // (beta polish A4/A5: +2 JUMP SOUNDS, WALL JUMP SOUND) (beta polish M5: + NA HELP's pages) (beta polish M4: +9 NA rows players tune in the headset, -4 retired legacy rows hidden) (Nov 18 1:09 PM: +2 DIRECTIONAL FLIPS, MIDAIR POSES) (Nov 18: +7 HANDOFF TIMING) (Nov 14: +15 SHOWTIME) November 11: +8 (SHOOTERS, LOCK STRENGTH, CAMERA MOTION, PITCH, ROLL, BOB x2, HEAD ANGLE), -5 old wrist rows; +6 POINT JUMP; November 12: +1 PUNCH VIEW EASE, +3 MOVE HAPTICS, VIEW YAW SOURCE, SOUND TRACE, +2 JUMP TO SPIDYVR, AIR VIEW EASE, +2 ANIM YAW SWAY, TURN-IN-PLACE ANGLE, +4 PASSIVE LEGS, PASSIVE COUPLING, AIR CROUCH, REACH SPREAD
+                  175 + na_help::pageCount, // (beta 2: +1 AIR DODGE) (beta polish A4/A5: +2 JUMP SOUNDS, WALL JUMP SOUND) (beta polish M5: + NA HELP's pages) (beta polish M4: +9 NA rows players tune in the headset, -4 retired legacy rows hidden) (Nov 18 1:09 PM: +2 DIRECTIONAL FLIPS, MIDAIR POSES) (Nov 18: +7 HANDOFF TIMING) (Nov 14: +15 SHOWTIME) November 11: +8 (SHOOTERS, LOCK STRENGTH, CAMERA MOTION, PITCH, ROLL, BOB x2, HEAD ANGLE), -5 old wrist rows; +6 POINT JUMP; November 12: +1 PUNCH VIEW EASE, +3 MOVE HAPTICS, VIEW YAW SOURCE, SOUND TRACE, +2 JUMP TO SPIDYVR, AIR VIEW EASE, +2 ANIM YAW SWAY, TURN-IN-PLACE ANGLE, +4 PASSIVE LEGS, PASSIVE COUPLING, AIR CROUCH, REACH SPREAD
               "the tab's own rows");
         check(all[1].item == Item::webStyle && std::strcmp(all[1].title, "WEB STYLE") == 0 &&
                   all[1].choices.size() == 2 && std::strcmp(all[1].choices[0], "REALISTIC") == 0 &&
@@ -25581,8 +25583,9 @@ int main() {
                   "marker_twist_steady=1\n"
                   "marker_turn_rate_dps=360\n"
                   "marker_switch_hold_ms=150\n"
+                  "air_dodge=1\nair_dodge_speed=9\nair_dodge_chord_ms=50\nair_dodge_cooldown_ms=500\n"
                   "log_level=1\n"
-                  "movement_defaults=14\n",
+                  "movement_defaults=15\n",
               "the defaults' text");
         Values changed = defaults;
         changed.recordingFov = 140;
@@ -33071,7 +33074,7 @@ int main() {
     test("Native Animation: combined menu inventory and upstream-compatible v39 settings packet", [] {
         using namespace vr_settings;
         const auto& all = rows();
-        check(all.size() == 235 + na_help::pageCount && static_cast<unsigned>(lastItem) < 256, "row/Item bounds");
+        check(all.size() == 236 + na_help::pageCount && static_cast<unsigned>(lastItem) < 256, "row/Item bounds");
         std::array<unsigned, 256> seen{};
         size_t start = all.size();
         for (size_t i = 0; i < all.size(); ++i) {
@@ -33365,6 +33368,122 @@ int main() {
         Watch none;
         check(!none.started(true).finisher && none.ended() == 0.f, "a scene with no ask was a finisher");
     });
+    test("air dodge: B in SpidyVR's air waits the chord window, then dodges; A, X or Y keep their chords",
+         [&] {
+             using namespace air_dodge;
+             const float dt = 1.f / 72.f;
+             const Params p;
+             Trigger::Input air;
+             air.seconds = dt;
+             air.freeAir = air.vrOwns = true;
+             const auto step = [&](Trigger& t, bool b, bool others = false) {
+                 Trigger::Input in = air;
+                 in.b = b;
+                 in.others = others;
+                 return t.update(in, p);
+             };
+             // B alone: held back for the 50 ms window (3 frames at 72 Hz), then the dodge; the game gets
+             // none of it.
+             Trigger t;
+             auto o = step(t, true);
+             check(!o.b && !o.fire && o.waiting, "B was not held back for the chord window");
+             o = step(t, true);
+             check(!o.b && !o.fire, "the dodge fired inside the window");
+             bool fired = false, leaked = false;
+             for (int i = 0; i < 4; ++i) {
+                 o = step(t, true);
+                 fired = fired || o.fire;
+                 leaked = leaked || o.b;
+             }
+             check(fired && !leaked && t.used() == 1,
+                   "B held past the window was not a dodge, or reached the game");
+             o = step(t, false);
+             check(!o.b && !o.fire, "letting go after a dodge did something");
+             // A tap inside the window is a dodge too, after the cooldown.
+             Trigger tap;
+             step(tap, true);
+             o = step(tap, false);
+             check(o.fire && !o.b, "a tap of B was not a dodge");
+             // A inside the window (the point jump's A+B): no dodge, B goes on to the game with it.
+             Trigger chord;
+             step(chord, true);
+             o = step(chord, true, true);
+             check(!o.fire && o.b && o.passed == Why::chord, "A+B in the window became a dodge");
+             o = step(chord, true, true);
+             check(o.b && !o.fire, "B stopped reaching the game during the chord");
+             // Y or X held first (a finisher's Y+B, Showtime's X+B): B passes at once.
+             Trigger first;
+             o = step(first, true, true);
+             check(o.b && !o.fire && o.passed == Why::chord, "Y+B or X+B held back B");
+             // The ground, the animation's air, a web, a warning, a prompt: B is the game's at once, as
+             // before.
+             const auto passes = [&](auto set, Why why) {
+                 Trigger g;
+                 Trigger::Input in = air;
+                 set(in);
+                 in.b = true;
+                 const auto r = g.update(in, p);
+                 return r.b && !r.fire && !r.waiting && r.passed == why;
+             };
+             check(passes([](Trigger::Input& i) { i.freeAir = false; }, Why::ground),
+                   "the ground's B was held back");
+             check(passes([](Trigger::Input& i) { i.vrOwns = false; }, Why::owner),
+                   "the animation's B was held back");
+             check(passes([](Trigger::Input& i) { i.webbed = true; }, Why::web), "a web's B was held back");
+             check(passes([](Trigger::Input& i) { i.warning = true; }, Why::warning),
+                   "a warned B lost its perfect dodge");
+             check(passes([](Trigger::Input& i) { i.blocked = true; }, Why::blocked),
+                   "a prompt's B was held back");
+             Params off;
+             off.enabled = false;
+             Trigger d;
+             Trigger::Input in = air;
+             in.b = true;
+             check(d.update(in, off).b, "AIR DODGE off held B back");
+             // Cooldown, and two an air: the third waits for a touch.
+             Trigger c;
+             step(c, true);
+             step(c, false);
+             o = step(c, true);
+             check(o.b && o.passed == Why::cooldown, "a second dodge inside the cooldown");
+             step(c, false);
+             for (int i = 0; i < 40; ++i)
+                 step(c, false);
+             step(c, true);
+             o = step(c, false);
+             check(o.fire && c.used() == 2, "the second dodge of the air did not fire");
+             for (int i = 0; i < 40; ++i)
+                 step(c, false);
+             o = step(c, true);
+             check(o.b && o.passed == Why::spent, "a third dodge in one air");
+             step(c, false);
+             Trigger::Input touch = air;
+             touch.contact = true;
+             touch.freeAir = false;
+             c.update(touch, p);
+             step(c, true);
+             o = step(c, false);
+             check(o.fire, "touching a surface did not give the dodges back");
+             // The way: from the view's heading with the stick, backward at rest; the velocity keeps some,
+             // stalls a fall.
+             bool stick = true;
+             const Vec3 look{0, -.3f, -1};
+             Vec3 w = way(look, 0, 0, p, &stick);
+             check(!stick && std::abs(w.z - 1.f) < 1e-3f && std::abs(w.y) < 1e-6f,
+                   "the stick at rest was not backward");
+             w = way(look, 1, 0, p, &stick);
+             check(stick && std::abs(w.x - 1.f) < 1e-3f, "the stick's right was not the view's right");
+             w = way({1, 0, 0}, 0, 1, p);
+             check(std::abs(w.x - 1.f) < 1e-3f, "the stick's forward did not follow the view's heading");
+             const Vec3 v = velocity({1, 0, 0}, {0, -12, -10}, p);
+             check(std::abs(v.x - p.speed) < 1e-3f && std::abs(v.z + 10 * p.keep) < 1e-3f &&
+                       std::abs(v.y - p.lift) < 1e-3f,
+                   "the dodge's velocity: speed along, keep across, a fall stalled with the lift");
+             // The swing takes it in the air only.
+             spidy::Swing swing;
+             swing.airDodge({5, 0, 0});
+             check(swing.airDodges() == 0, "queued is not taken");
+         });
     std::cout << total - failed << '/' << total << " tests passed\n";
     return failed ? 1 : 0;
 }
