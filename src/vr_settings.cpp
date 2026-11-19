@@ -1059,6 +1059,8 @@ template <class V> auto switchOf(Item item, V& v) -> decltype(&v.aimMarkers) {
         return &v.gripFling;
     case Item::handGrab:
         return &v.handGrab;
+    case Item::handGrabClassRules:
+        return &v.handGrabClassRules;
     case Item::kicks:
         return &v.kicks;
     case Item::shoulderLimit:
@@ -2027,6 +2029,8 @@ const std::array<Row, rowTotal>& rows() {
          "Standing, hold the left stick a way and tap A: flip that way. Hold A to jump.", {}},
         {Item::airPoses, "MIDAIR POSES",
          "Tuck in a flip, dive looking down, superhero fist up, starfish arms wide.", {}},
+        {Item::handGrabClassRules, "HAND GRAB CLASS RULES",
+         "Heavies and bosses resist throws unless stunned or webbed up. Off: all alike.", {}, Place::launcher},
     }};
     static const std::array<Row, rowTotal> all = [] {
         std::array<Row, rowTotal> a{};
@@ -2187,7 +2191,7 @@ const std::array<Screen, categoryCount>& screens() {
         Item::enemyJoints, Item::enemyLimbZones,
         Item::punchTrackCone, Item::punchTrackRange, Item::jumpPull, Item::punchAutotarget, Item::punchViewSnap,
         Item::jumpPullGaze, Item::jumpPullStick, Item::jumpPullRange, Item::jumpPullCap,
-        Item::handGrab, Item::handGrabForce, Item::enemyHoldCost,
+        Item::handGrab, Item::handGrabForce, Item::enemyHoldCost, Item::handGrabClassRules,
     };
     // POINT JUMP (November 11): its switch, trigger and feel.
     static constexpr Item pointJump[] = {
@@ -2298,6 +2302,7 @@ const char* inactiveReason(Item item, const Values& v) {
                                  : nullptr;
     case Item::handGrabForce:
     case Item::enemyHoldCost:
+    case Item::handGrabClassRules:
         return !v.handGrab ? "Turn HAND GRAB on first." : nullptr;
     case Item::kickGazeCone:
         return !v.kicks && !v.groundKicks ? "Turn AIR KICKS or GROUND KICKS on first." : nullptr;
@@ -2402,6 +2407,7 @@ bool shownWhenInactive(Item item) {
     case Item::handstandLeap:
     case Item::handGrabForce:
     case Item::enemyHoldCost:
+    case Item::handGrabClassRules:
     case Item::kickGazeCone:
     case Item::kickSpin:
     case Item::punchTrackCone:

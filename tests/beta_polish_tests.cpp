@@ -91,7 +91,7 @@ int main(int argc, char** argv) {
         for (unsigned i = 1; i <= static_cast<unsigned>(lastItem); ++i)
             (isNativeAnimation(static_cast<Item>(i)) ? na : upstream) += 1;
         check(upstream == 89, "upstream 0.8.7 has 89 settings (its Item has 90 with none)");
-        check(na == 136, "the fork's settings are Native Animation's (135, and NA HELP's page item)");
+        check(na == 137, "the fork's settings are Native Animation's (135, G2b's class rules and NA HELP's page item)");
         check(isNativeAnimation(Item::showtime) && isNativeAnimation(Item::headProbe) &&
                   isNativeAnimation(Item::swingKickManual) && !isNativeAnimation(Item::webLines) &&
                   !isNativeAnimation(Item::airFists) && !isNativeAnimation(Item::enemyTypes) &&

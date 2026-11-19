@@ -2944,6 +2944,13 @@ void App::options(ImVec2 origin, ImVec2 size) {
                 "How fast holding an enemy tires your grip (none, 1, 2, 3 or 5): a normal enemy costs "
                 "almost nothing at 1, a heavy one much more. None: it never tires. Needs Hand grab on.",
                 S(150), [&] { tabCombo("##holdcost", Item::enemyHoldCost); });
+            settingOption(
+                Item::handGrabClassRules, "Hand grab class rules",
+                "Heavies and bosses resist throws (a quarter of your hand speed, at most 4 m/s, no slam) unless "
+                "stunned or webbed up; shield guards and bosses tire your hand 3 times as fast; a stunned or "
+                "webbed-up enemy costs nothing to hold and throws fully. Off: every enemy as before. On by "
+                "default; needs Hand grab on.",
+                S(42), [&] { tabToggle("##handgrabclassrules", Item::handGrabClassRules); });
         });
         group(pointJumpPage, 0, "Point jump (experimental)", [&] {
             settingOption(Item::pointJump, "Point jump",

@@ -593,7 +593,7 @@ struct Values {
     // newtons (1200; 90 kg lifted). enemy_hold_cost: how fast holding an enemy tires the hand (1; 0 never).
     bool handGrab = false;
     int handGrabForce = 1200, enemyHoldCost = 1;
-    // hand_grab_class_rules (G2b, hand_grab::Foe; on, spidy_vr.ini only, no menu row): heavies (brutes, big
+    // hand_grab_class_rules (G2b, hand_grab::Foe; on; the launcher's HAND GRAB CLASS RULES row, KICKS & COMBAT): heavies (brutes, big
     // capsules) and bosses resist throws unless open for a finisher (stunned or webbed up), shield guards and
     // bosses tire the hand 3x, and an open enemy costs nothing and is fully manipulated. 0: G2 as before.
     bool handGrabClassRules = true;
@@ -1145,6 +1145,8 @@ enum class Item : uint8_t {
     airPoses,
     // 0.8.7 (Ilya): ENEMY TYPES, after the fork's items (the launcher's order is the enum's).
     enemyTypes,
+    // HAND GRAB CLASS RULES (G2b, the owner's Nov 13 rules; beta polish: a launcher row in KICKS & COMBAT).
+    handGrabClassRules,
     // NA HELP (beta polish M5, na_help.hpp): the NA · HELP tab's pages, one item for all of them (a page has no
     // value: one choice, READ). Its rows are the catalog's last.
     helpPage,
@@ -1179,8 +1181,8 @@ struct Row {
     Place place{};
 };
 // Stable row/setting numbers; categories below determine presentation order.
-// The catalog: the settings' rows (232), then NA HELP's pages.
-inline constexpr size_t settingRowCount = 232;
+// The catalog: the settings' rows (233), then NA HELP's pages.
+inline constexpr size_t settingRowCount = 233;
 inline constexpr size_t rowTotal = settingRowCount + na_help::pageCount;
 const std::array<Row, rowTotal>& rows();
 const Row* rowFor(Item);

@@ -214,6 +214,7 @@ A crash code 0xC0000409 as the game closes is known and harmless. Logs are in th
 | HAND GRAB (EXPERIMENTAL) | OFF | launcher |
 | HAND GRAB STRENGTH | 1200 N | launcher |
 | HAND GRAB HOLD COST | 1 (DEFAULT) | launcher |
+| HAND GRAB CLASS RULES | ON | launcher |
 
 ### NA · WEB SHOOTERS
 
