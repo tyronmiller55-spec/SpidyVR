@@ -7302,6 +7302,18 @@ now have user confirmation. Detailed stereo quality, tracked web targeting,
 full-speed/two-hand swinging, point launches, skeletal animation, and lifecycle
 tests remain open. The bounded native single-web sequence above has passed.
 
+## Game jump sound set (sound trace, Nov 12-19)
+
+- SOUND TRACE (`sound_trace=1`, the hook on 16d5e80) over 434 game jumps, 669 landings, 871 wall jumps and
+  823 point jumps; share of events with each hash within -150 to +200 ms (beta polish plan, section 4.2):
+  - **dab33491**: 91% of jumps at -9 ms, 3% of landings, 0% of wall jumps. The jump **grunt** (confirmed by ear Nov 12).
+  - **cba7688f / 2903bc21 / eedb2021**: 84 / 73 / 58% of jumps at about -30 ms; at most 5% of landings and 2% of
+    wall jumps. Jump-only; what each one is (launch, whoosh, cloth) is not known.
+  - Point jumps: the set in only 20-27% of them, late (+155 to +173 ms), most likely a game jump that follows.
+  - SpidyVR's own wall jumps: no hash above 28%; the game's wall-jump sounds are **not captured yet**.
+- Used by `sound_guard.hpp` (0.8.7-na-beta1): the set is played on the hero at a point jump (and, without the
+  grunt, at SpidyVR's wall jump) and skipped while the game's grunt played on him within 300 ms.
+
 ## Seamless launch build — local checks
 
 - `Launch Spidy VR.cmd` selects automatic runtime resolution and an untimed

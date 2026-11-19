@@ -100,7 +100,7 @@ A crash code 0xC0000409 as the game closes is known and harmless. Logs are in th
 | ANIMATION MOVES (ADVANCED) | ON | game and launcher |
 | HYBRID OWNER (ADVANCED) | ON | game and launcher |
 | HEAD PROBE | OFF | game and launcher |
-| SOUND TRACE | ON | game and launcher |
+| SOUND TRACE | OFF | game and launcher |
 | TORSO TWIST | 80 DEG | launcher |
 | FALL TO SPIDYVR | 150 MS (DEFAULT) | launcher |
 | AIR LANDING BLEND | ON | launcher |

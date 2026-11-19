@@ -424,7 +424,7 @@ int main() {
         // after revision 12 stays, and leg hold everywhere is never turned on.
         const std::string rev11 = "swing_kick_manual=0\nleg_hold_everywhere=0\nmovement_defaults=11\n";
         const Values moved = withMovementDefaults(withTabOnly({}, rev11), rev11);
-        check(moved.swingKickManual && !moved.legHoldEverywhere && moved.movementDefaults == 12,
+        check(moved.swingKickManual && !moved.legHoldEverywhere && moved.movementDefaults == movementDefaultsRevision,
               "revision 12 turns the manual kick on, leg hold stays off");
         const std::string rev12 = "swing_kick_manual=0\nmovement_defaults=12\n";
         check(!withMovementDefaults(withTabOnly({}, rev12), rev12).swingKickManual, "a 0 chosen after revision 12 stays");

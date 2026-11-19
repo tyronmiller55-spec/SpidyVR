@@ -3351,6 +3351,11 @@ Values withMovementDefaults(Values v, std::string_view text) {
         // off ("No, keep X and Y instant on the ground").
         v.swingKickManual = true;
     }
+    if (seen < 13) {
+        // Revision 13 (beta polish, the owner's D7): SOUND TRACE off for the beta. An ini from before wrote
+        // sound_trace=1 as the old default, so it is untuned and moves; sound_trace=1 after this brings the logging back.
+        v.soundTrace = false;
+    }
     v.movementDefaults = movementDefaultsRevision;
     return sanitized(v);
 }

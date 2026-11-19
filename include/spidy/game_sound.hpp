@@ -114,7 +114,8 @@ void hero(uint64_t record);
 // false when the module is not live or the queue is full. Whatever BLOW
 // SOUNDS is set to. For the swing kick's grunt (swing_kick_grunt) and, from
 // the headset's module, SpidySoundCue (on the player).
-bool cue(uint64_t emitter, uint32_t hash);
+// `guarded` (sound_guard.hpp): skipped (counted in Data::cuesGuarded) while the game's own jump set sounds.
+bool cue(uint64_t emitter, uint32_t hash, bool guarded = false);
 // The game's main thread: the blows since the last frame, sounded.
 void frame();
 Data data();

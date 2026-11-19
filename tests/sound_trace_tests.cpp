@@ -110,11 +110,16 @@ int main() {
         w.update(ring.get(), ms(9000), 0, [&](const std::string& l) { lines.push_back(l); });
         check(lines.size() == 1, "no frequency: nothing");
     }
-    // The setting: on by default (diagnostics), off with sound_trace=0.
+    // The setting: off by default since the beta (D7, movement_defaults 13: an older file's sound_trace=1 turns off once).
     {
         using namespace vr_settings;
         Values v;
-        check(v.soundTrace, "default on");
+        check(!v.soundTrace, "default off (beta)");
+        const std::string old = "sound_trace=1\nmovement_defaults=12\n";
+        check(!withMovementDefaults(withTabOnly({}, old), old).soundTrace, "revision 13: an old file's trace turns off");
+        const std::string chosen = "sound_trace=1\nmovement_defaults=13\n";
+        check(withMovementDefaults(withTabOnly({}, chosen), chosen).soundTrace, "on chosen after revision 13 stays on");
+        v.soundTrace = true;
         const Row* row = rowFor(Item::soundTrace);
         check(row && std::strstr(row->help, "Changes nothing") != nullptr, "help: diagnostics only");
         check(choose(Item::soundTrace, 0, v) && !v.soundTrace, "OFF");
@@ -123,7 +128,7 @@ int main() {
         bool listed = false;
         for (Item item : screens()[static_cast<size_t>(Category::nativeAnimation)].items)
             listed = listed || item == Item::soundTrace;
-        check(listed, "on NATIVE ANIMATION");
+        check(listed, "on NA CORE");
     }
     std::printf("sound trace: %d checks passed\n", passed);
     return 0;

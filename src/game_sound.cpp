@@ -1,6 +1,7 @@
 // The game's own sounds for Spidy's blows (game_sound.hpp). Addresses are
 // image offsets in the supported Spider-Man.exe.
 #include "spidy/game_sound.hpp"
+#include "spidy/sound_guard.hpp"
 #include "spidy/sound_trace.hpp"
 #include <MinHook.h>
 #include <algorithm>
@@ -85,12 +86,23 @@ using PlayAny = uintptr_t (*)(void*, uint64_t, uint64_t, uint64_t, uint64_t, uin
 PlayAny originalPlay{};
 void* traceTarget{};
 bool traceHooked{};
-std::atomic<bool> traceOn{}, traceWanted{true};
+// traceWanted: SOUND TRACE logs (off by default since the beta, D7). The hook itself is on whenever the module
+// is live: it notes the game's jump grunt on the hero (heroGruntQpc) for the hero cues' guard (sound_guard.hpp).
+std::atomic<bool> traceOn{}, traceWanted{false};
+std::atomic<int64_t> heroGruntQpc{};
 SRWLOCK traceLock = SRWLOCK_INIT;
 thread_local bool ourPlay = false;
 uintptr_t playTraced(void* system, uint64_t hash, uint64_t handle, uint64_t a3, uint64_t a4, uint64_t a5,
                      uint64_t a6, uint64_t a7, uint64_t a8, uint64_t a9, uint64_t a10, uint64_t a11, uint64_t a12,
                      uint64_t a13, uint64_t a14, uint64_t a15) {
+    if (!ourPlay && static_cast<uint32_t>(hash) == sound_guard::jumpGrunt) {
+        const uint32_t hero = SpidySoundTrace.heroHandle.load(std::memory_order_relaxed);
+        if (hero && static_cast<uint32_t>(handle) == hero) {
+            LARGE_INTEGER now{};
+            QueryPerformanceCounter(&now);
+            heroGruntQpc.store(now.QuadPart, std::memory_order_relaxed);
+        }
+    }
     if (traceOn.load(std::memory_order_relaxed)) {
         LARGE_INTEGER now{};
         QueryPerformanceCounter(&now);
@@ -102,11 +114,12 @@ uintptr_t playTraced(void* system, uint64_t hash, uint64_t handle, uint64_t a3, 
     }
     return originalPlay(system, hash, handle, a3, a4, a5, a6, a7, a8, a9, a10, a11, a12, a13, a14, a15);
 }
-// The hook on or off as SOUND TRACE asks, once the build is known (base set).
+// The hook on while the module is live (the cue guard), once the build is known (base set); SOUND TRACE's logging
+// on or off as it asks.
 void applyTrace() {
     AcquireSRWLockExclusive(&traceLock);
     uint32_t error = 0;
-    const bool want = traceWanted.load() && enabled.load() && base;
+    const bool want = enabled.load() && base;
     if (want && !traceHooked) {
         const auto s = MH_Initialize();
         if (s != MH_OK && s != MH_ERROR_ALREADY_INITIALIZED)
@@ -123,7 +136,7 @@ void applyTrace() {
     }
     if (traceHooked) {
         if (want) {
-            traceOn = true;
+            traceOn = traceWanted.load();
             if (const auto e = MH_EnableHook(traceTarget); e != MH_OK && e != MH_ERROR_ENABLED) {
                 traceOn = false;
                 error = 9850 + static_cast<uint32_t>(e);
@@ -143,6 +156,7 @@ struct Pending {
     uint64_t damager{}, victim{};
     Blow blow{};
     uint32_t cue{}; // game_sound::cue: this id played on `victim`, no blow
+    bool guarded{}; // skipped while the game's own jump set sounds (sound_guard.hpp)
 };
 constexpr unsigned queueSize = 32;
 std::atomic<uint64_t> heroRecord{}; // game_sound::hero: SpidySoundCue's emitter
@@ -384,10 +398,17 @@ void game_sound::frame() {
     uint32_t onPlayer{}, sources{}, switches{};
     int latest{};
     unsigned blows{};
-    uint32_t cuesPlayed{}, cuesLost{};
+    uint32_t cuesPlayed{}, cuesLost{}, cuesSkipped{};
+    LARGE_INTEGER now{}, frequency{};
+    QueryPerformanceCounter(&now);
+    QueryPerformanceFrequency(&frequency);
+    const bool nativeJump =
+        sound_guard::nativeSounding(heroGruntQpc.load(std::memory_order_relaxed), now.QuadPart, frequency.QuadPart);
     for (unsigned i = 0; i < count; ++i) {
         if (batch[i].cue) {
-            if (play(batch[i].cue, handleOf(batch[i].victim), false))
+            if (batch[i].guarded && nativeJump)
+                ++cuesSkipped;
+            else if (play(batch[i].cue, handleOf(batch[i].victim), false))
                 ++cuesPlayed;
             else
                 ++cuesLost;
@@ -403,10 +424,11 @@ void game_sound::frame() {
     }
     if (!blows) {
         // cues alone: the blows' account stands
-        if (cuesPlayed || cuesLost) {
+        if (cuesPlayed || cuesLost || cuesSkipped) {
             AcquireSRWLockExclusive(&lock);
             publish([&](Data& d) {
                 d.cues += cuesPlayed;
+                d.cuesGuarded += cuesSkipped;
                 d.cuesDropped += cuesLost;
             });
             ReleaseSRWLockExclusive(&lock);
@@ -420,6 +442,7 @@ void game_sound::frame() {
         d.dropped += dropped;
         d.onPlayer += onPlayer;
         d.cues += cuesPlayed;
+        d.cuesGuarded += cuesSkipped;
         d.cuesDropped += cuesLost;
         d.sources = sources;
         d.switches = switches;
@@ -430,7 +453,7 @@ void game_sound::frame() {
     });
     ReleaseSRWLockExclusive(&lock);
 }
-bool game_sound::cue(uint64_t emitter, uint32_t hash) {
+bool game_sound::cue(uint64_t emitter, uint32_t hash, bool guarded) {
     if (!emitter || !hash)
         return false;
     AcquireSRWLockExclusive(&lock);
@@ -439,6 +462,7 @@ bool game_sound::cue(uint64_t emitter, uint32_t hash) {
         Pending p;
         p.victim = emitter;
         p.cue = hash;
+        p.guarded = guarded;
         queue[queued++] = p;
     }
     ReleaseSRWLockExclusive(&lock);
@@ -475,11 +499,14 @@ extern "C" __declspec(dllexport) DWORD WINAPI SpidySoundMode(void* mode) {
 // One of the game's own sounds on the player, from the headset's module: the
 // low 32 bits of `hash` (game_sound::cue). 0 queued; 2001 no hash; 1004 the
 // player is not known yet or the module is not live / the queue is full.
+// Bit 32 (sound_guard::guardBit) asks for the guard: skipped while the game's own jump set sounds.
 extern "C" __declspec(dllexport) DWORD WINAPI SpidySoundCue(void* hash) {
-    const auto id = static_cast<uint32_t>(reinterpret_cast<uintptr_t>(hash));
+    const auto raw = static_cast<uint64_t>(reinterpret_cast<uintptr_t>(hash));
+    const auto id = static_cast<uint32_t>(raw);
     if (!id)
         return 2001;
-    return game_sound::cue(heroRecord.load(std::memory_order_relaxed), id) ? 0 : 1004;
+    return game_sound::cue(heroRecord.load(std::memory_order_relaxed), id, (raw & sound_guard::guardBit) != 0) ? 0
+                                                                                                                : 1004;
 }
 // SOUND TRACE from the headset's module: non-null on, null off
 // (game_sound::tracing). Diagnostics only; no sound changes.

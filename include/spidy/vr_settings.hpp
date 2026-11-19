@@ -302,7 +302,7 @@ struct Values {
     // from before it gets RUN CURVE on and EARLY JUMP QUICK TAP once (the
     // user: "movement fixes will be defaults"); after that the player's own
     // choice stands. Not a row. movement_defaults.
-    int movementDefaults = 12; // movementDefaultsRevision: a new file has seen them
+    int movementDefaults = 13; // movementDefaultsRevision: a new file has seen them
     // SOFT LANDING (the tab's SOFT LANDING; Swing::allowSoftLanding,
     // run_update::softLandVertical): a fall the swing flies, with no web
     // holding, eases to 9 m/s down over its last 3 m (or 0.35 s), its speed
@@ -515,8 +515,9 @@ struct Values {
     // SOUND TRACE (game_sound.hpp, sound_trace.hpp; the user, November 12: yes
     // to the trace): diagnostics only. Logs the ids of the game's sounds
     // played around takeoffs, landings and point jumps. Plays nothing,
-    // changes nothing. On by default. sound_trace.
-    bool soundTrace = true;
+    // changes nothing. Off by default since the beta (decision D7, movement_defaults 13); the hook it uses stays
+    // installed either way (it guards the hero cues against double plays). sound_trace.
+    bool soundTrace = false;
     // LOG LEVEL (beta polish G4; ini log_level, no menu row): how often the diagnostics repeat their noisiest
     // unchanged lines (diag_log::Throttle::level): 0 QUIET (30 s), 1 (default, 5 s, the head probe and aim family
     // included), 2 VERBOSE (2 s, as before the beta). A changed state is always written at once.
@@ -1249,7 +1250,7 @@ std::string tabOnlyText(const Values&);
 // key, or whose value is no whole number, is passed over.
 Values withTabOnly(Values, std::string_view text);
 // The movement defaults' revision (Values::movementDefaults) this build has.
-inline constexpr int movementDefaultsRevision = 12;
+inline constexpr int movementDefaultsRevision = 13;
 // November 12 movement cleanup: a settings file (that text) older than
 // movementDefaultsRevision gets the new movement defaults once - RUN CURVE
 // on, EARLY JUMP at least QUICK TAP - and is marked as having seen them; a
