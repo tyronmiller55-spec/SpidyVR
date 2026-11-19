@@ -363,6 +363,7 @@ void game_sound::blow(uint64_t damager, uint64_t victim, Blow b) {
     publish([&](Data& d) {
         ++d.asked;
         d.dropped += !room;
+        ++d.byIntensity[std::clamp<uint8_t>(b.intensity, 1, 4) - 1];
     });
     ReleaseSRWLockExclusive(&lock);
 }
@@ -383,9 +384,13 @@ void game_sound::frame() {
     uint32_t onPlayer{}, sources{}, switches{};
     int latest{};
     unsigned blows{};
+    uint32_t cuesPlayed{}, cuesLost{};
     for (unsigned i = 0; i < count; ++i) {
         if (batch[i].cue) {
-            play(batch[i].cue, handleOf(batch[i].victim), false);
+            if (play(batch[i].cue, handleOf(batch[i].victim), false))
+                ++cuesPlayed;
+            else
+                ++cuesLost;
             continue;
         }
         ++blows;
@@ -396,14 +401,26 @@ void game_sound::frame() {
         dropped += latest == -2;
         onPlayer += mine;
     }
-    if (!blows)
-        return; // cues alone: the blows' account stands
+    if (!blows) {
+        // cues alone: the blows' account stands
+        if (cuesPlayed || cuesLost) {
+            AcquireSRWLockExclusive(&lock);
+            publish([&](Data& d) {
+                d.cues += cuesPlayed;
+                d.cuesDropped += cuesLost;
+            });
+            ReleaseSRWLockExclusive(&lock);
+        }
+        return;
+    }
     AcquireSRWLockExclusive(&lock);
     publish([&](Data& d) {
         d.played += played;
         d.refused += refused;
         d.dropped += dropped;
         d.onPlayer += onPlayer;
+        d.cues += cuesPlayed;
+        d.cuesDropped += cuesLost;
         d.sources = sources;
         d.switches = switches;
         // Live while the game sounds them: a refusal, or nobody to sound one

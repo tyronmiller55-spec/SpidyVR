@@ -61,6 +61,25 @@ class SessionSummaryTests(unittest.TestCase):
         self.assertEqual(d['switch_eye_jump_m']['grip-cancel']['over_half_metre'], 1)
         self.assertEqual(d['switch_reasons']['anim->vr'], {'grip-cancel': 1})
 
+    def test_beta_polish_counts(self):
+        d = ss.diag_counts([
+            'diag [ 305.690] punch view ease: cancelled (landed) after 0 ms (held 300 ms first)\n',
+            'diag [ 306.000] jump handoff view ease: done after 200 ms (held 0 ms first)\n',
+            'diag [ 310.000] landing upright: 0% at touchdown (lost)\n',
+            'diag [ 311.000] landing upright: 100% at touchdown (predicted)\n',
+            'diag [ 312.000] landing: inverted 140 deg -> roll\n',
+            'diag [ 313.000] kick flick: missed (not armed: the stick was out when the legs engaged) peak 1.00\n',
+            'diag [ 314.000] hybrid: minimum stint held the landing 40 ms (jump-timer)\n',
+            'diag [ 315.000] eye stall ignored during module start (3682 ms, no pair for 3700 ms)\n',
+        ])
+        self.assertEqual(d['view_ease_ms']['count'], 2)
+        self.assertEqual(d['view_ease_held_ms']['max'], 300)
+        self.assertEqual(d['landing_upright_reasons'], {'lost': 1, 'predicted': 1})
+        self.assertEqual(d['landing_upright_zero'], 1)
+        self.assertEqual(d['landing_inverted'], {'roll': 1})
+        self.assertEqual(d['kick_misses'], {'not armed': 1})
+        self.assertEqual((d['minimum_stint_holds'], d['eye_stalls_forgiven']), (1, 1))
+
     def test_written_beside_the_report(self):
         with tempfile.TemporaryDirectory() as folder:
             output = pathlib.Path(folder) / 'game-vr-20261108-221500.json'

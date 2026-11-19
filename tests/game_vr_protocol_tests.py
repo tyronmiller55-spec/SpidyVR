@@ -836,6 +836,15 @@ class ProtocolTests(unittest.TestCase):
         struct.pack_into('<q', torn, 16, 7)
         self.assertIsNone(sound_snapshot(Reader(*([torn, struct.pack('<q', 7)]*8)), 0))
 
+    def test_sound_version_2_adds_blows_by_intensity_and_the_hero_cues(self):
+        raw = bytearray(104)
+        struct.pack_into('<4Iq', raw, 0, 0x53534e44, 2, 104, 2, 6)
+        struct.pack_into('<4Q4I', raw, 24, 4, 4, 0, 0, 0, 1, 1, 5)
+        struct.pack_into('<7I', raw, 72, 0, 2, 1, 1, 9, 2, 0)
+        result = sound_snapshot(Reader(raw, struct.pack('<q', 6)), 0)
+        self.assertEqual(result['by_intensity'], dict(light=0, medium=2, heavy=1, extreme=1))
+        self.assertEqual((result['cues'], result['cues_guarded'], result['cues_dropped']), (9, 2, 0))
+
     def test_dodge_decodes_the_dodges_on_a_web_the_game_took_and_what_they_answered(self):
         raw = bytearray(128)
         struct.pack_into('<4Iq', raw, 0, 0x53444744, 1, 128, 1, 6)

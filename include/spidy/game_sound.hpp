@@ -52,7 +52,7 @@ struct Blow {
 };
 // SpidySoundData, for the headset and the session report.
 struct Data {
-    uint32_t magic = 0x53534e44, version = 1, bytes = sizeof(Data), status{}; // 0 off, 2 running, 3 another build
+    uint32_t magic = 0x53534e44, version = 2, bytes = sizeof(Data), status{}; // 0 off, 2 running, 3 another build
     int64_t sequence{};
     // Blows that asked for a sound; those the game played; those it gave no
     // sound back for; those dropped before it (a full queue, a victim gone,
@@ -68,8 +68,13 @@ struct Data {
     // The switches the latest blow set (five on each sound source, when each
     // took).
     uint32_t switches{};
+    // Version 2 (beta polish R4): the blows asked for by intensity (Light, Medium, Heavy, Extreme); the hero's cues
+    // played (game_sound::cue: grunts, jump sounds, whooshes), those skipped because the game's own was already
+    // sounding (the double-play guard) and those dropped (a full queue, the module not live).
+    uint32_t byIntensity[4]{};
+    uint32_t cues{}, cuesGuarded{}, cuesDropped{}, reserved{};
 };
-static_assert(sizeof(Data) == 72);
+static_assert(sizeof(Data) == 104);
 // The game's id for a name of its sound engine's: FNV-1 of the lowercased
 // name (1bb8a10).
 inline uint32_t audioId(const char* name) {

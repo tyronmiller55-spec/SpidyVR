@@ -27,6 +27,14 @@ _RESIDUAL = re.compile(r'position lock: residual (-?[0-9.]+) m (1 s into VR|at V
 _EYES = re.compile(r'G->T \(([^)]+)\) eyes dPos (-?[0-9.]+) m')
 # Each switch by its reason (the ownership update's anim-end, run-release, land, ...).
 _SWITCH = re.compile(r'hybrid: (anim->vr|vr->anim) \(([a-z-]+)')
+# BETA POLISH R4: view eases with their punch-camera hold (R5), the landings' upright reasons (F1) and inverted
+# touchdowns' branches (F2), the kick misses by reason (R2), minimum-stint holds (H1) and forgiven eye stalls (R1).
+_EASE = re.compile(r'view ease: \S.* after (\d+) ms \(held (\d+) ms first\)')
+_UPRIGHT = re.compile(r'landing upright: (\d+)% at touchdown \(([a-zA-Z -]+)\)')
+_INVERTED = re.compile(r'landing: inverted \d+ deg -> ([a-z]+)')
+_KICK_MISS = re.compile(r'kick flick: missed \(([a-z ]+)')
+_STINT = re.compile(r'hybrid: minimum stint held the landing')
+_EYE_STALL = re.compile(r'eye stall ignored during module start')
 
 
 def _stats(values):
@@ -42,7 +50,24 @@ def diag_counts(lines):
     counts = {k: 0 for k in _COUNTS}
     discarded, residual, eyes = [], {'1 s into VR': [], 'at VR->anim': []}, {}
     reasons = {'anim->vr': {}, 'vr->anim': {}}
+    eases, held = [], []
+    upright, inverted, kick_misses = {}, {}, {}
+    upright_zero = stints = eye_stalls = 0
     for line in lines:
+        if m := _EASE.search(line):
+            eases.append(float(m.group(1)))
+            if int(m.group(2)):
+                held.append(float(m.group(2)))
+        if m := _UPRIGHT.search(line):
+            upright[m.group(2)] = upright.get(m.group(2), 0) + 1
+            upright_zero += int(m.group(1)) == 0
+        if m := _INVERTED.search(line):
+            inverted[m.group(1)] = inverted.get(m.group(1), 0) + 1
+        if m := _KICK_MISS.search(line):
+            reason = m.group(1).strip()
+            kick_misses[reason] = kick_misses.get(reason, 0) + 1
+        stints += bool(_STINT.search(line))
+        eye_stalls += bool(_EYE_STALL.search(line))
         for key, pattern in _COUNTS.items():
             if pattern.search(line):
                 counts[key] += 1
@@ -57,7 +82,11 @@ def diag_counts(lines):
     return dict(counts, position_lock_discarded_m=_stats(discarded),
                 position_lock_residual_m={k: _stats(v) for k, v in residual.items()},
                 switch_eye_jump_m={k: _stats(v) for k, v in sorted(eyes.items())},
-                switch_reasons={k: dict(sorted(v.items())) for k, v in reasons.items()})
+                switch_reasons={k: dict(sorted(v.items())) for k, v in reasons.items()},
+                view_ease_ms=_stats(eases), view_ease_held_ms=_stats(held),
+                landing_upright_reasons=dict(sorted(upright.items())), landing_upright_zero=upright_zero,
+                landing_inverted=dict(sorted(inverted.items())), kick_misses=dict(sorted(kick_misses.items())),
+                minimum_stint_holds=stints, eye_stalls_forgiven=eye_stalls)
 
 
 def summarize(report, diag_lines=(), limit=LIMIT):

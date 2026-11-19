@@ -1324,18 +1324,30 @@ def sound_snapshot(game, address):
     struck having none; the sound sources the latest blow's switches were set on and the switches that took; `live`
     while the headset leaves the blows' sound to the game."""
     for _ in range(8):
-        raw = game.read(address, 72)
-        if len(raw) != 72:
+        # Version 1 is 72 bytes, version 2 104: read the larger and keep what the header names.
+        raw = game.read(address, 104)
+        if len(raw) < 72:
             return None
-        if struct.unpack_from('<3I', raw) != (0x53534e44, 1, 72):
+        version_size = struct.unpack_from('<3I', raw)
+        if version_size not in ((0x53534e44, 1, 72), (0x53534e44, 2, 104)):
             raise RuntimeError('Sound protocol mismatch')
+        size = version_size[2]
+        if len(raw) < size:
+            return None
+        raw = raw[:size]
         if struct.unpack_from('<Q', raw, 16)[0] & 1 or raw[16:24] != game.read(address+16, 8):
             continue
         status, = struct.unpack_from('<I', raw, 12)
         asked, played, refused, dropped = struct.unpack_from('<4Q', raw, 24)
         on_player, sources, live, switches = struct.unpack_from('<4I', raw, 56)
-        return dict(status=SOUND_STATUS.get(status, status), asked=asked, played=played, refused=refused,
-                    dropped=dropped, on_player=on_player, sources=sources, switches=switches, live=bool(live))
+        result = dict(status=SOUND_STATUS.get(status, status), asked=asked, played=played, refused=refused,
+                      dropped=dropped, on_player=on_player, sources=sources, switches=switches, live=bool(live))
+        if size >= 104:
+            # Version 2 (beta polish R4): blows by intensity, and the hero's cues played, guarded and dropped.
+            light, medium, heavy, extreme, cues, guarded, cue_dropped = struct.unpack_from('<7I', raw, 72)
+            result.update(by_intensity=dict(light=light, medium=medium, heavy=heavy, extreme=extreme),
+                          cues=cues, cues_guarded=guarded, cues_dropped=cue_dropped)
+        return result
     return None
 
 
