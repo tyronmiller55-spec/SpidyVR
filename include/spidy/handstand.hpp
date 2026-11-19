@@ -130,6 +130,11 @@ struct Params {
     // a glitch: the support keeps the last good palms, the balance holds, and only a loss lasting trackingGrace ends
     // the handstand.
     float glitchJump = 1.f, trackingGrace = .25f;
+    // ABSURD ARMS (the Nov 19 log: palms at -33.20 m and -22.52 m, the arms NaN, a window held 236 ms): a palm farther
+    // than sanePalmReach from the head (sanePalmFloor from the floor, no head), or a palm-from-head axis that is not a
+    // number or past sanePalmReach, is no reading: the frame counts as untracked (no window, no catch; a catch rides it
+    // out as a tracking glitch).
+    float sanePalmReach = 3.f, sanePalmFloor = 5.f;
 };
 
 template <class V> Params paramsOf(const V& v) {
@@ -497,11 +502,38 @@ class Handstand {
         // TRACKING LOST: this frame's palms were a glitch (untracked, not finite, or a jump past glitchJump): the last
         // good support held.
         bool glitch{};
+        // ABSURD ARMS: this frame's readings thrown out, bits 0/1 the palms, 2/3 the palms from the head (0 none).
+        unsigned absurd{};
         unsigned failedNow{}, closedFailed{};
         float closedAge{};
     };
-    Out update(const Input& in, const Params& p) {
+    // ABSURD ARMS: the readings that cannot be (bits as Out::absurd) marked unknown in `in`; a palm makes it untracked.
+    static unsigned sanitize(Input& in, const Params& p) {
+        unsigned bad = 0;
+        for (int i = 0; i < 2; ++i) {
+            const Vec3 palm = in.palms[i];
+            const bool sane = finite(palm) &&
+                              (in.headKnown && finite(in.head) ? length(palm - in.head) <= p.sanePalmReach
+                               : in.floorKnown && std::isfinite(in.floorY)
+                                   ? std::fabs(palm.y - in.floorY) <= p.sanePalmFloor
+                                   : true);
+            if (!sane && (in.tracked || finite(palm))) {
+                bad |= 1u << i;
+                in.palms[i] = Vec3{NAN, NAN, NAN};
+            }
+            if (in.palmRelKnown[i] && !(finite(in.palmRel[i]) && length(in.palmRel[i]) <= p.sanePalmReach)) {
+                bad |= 4u << i;
+                in.palmRelKnown[i] = false;
+            }
+        }
+        if (bad & 3u)
+            in.tracked = false;
+        return bad;
+    }
+    Out update(const Input& raw, const Params& p) {
         Out out;
+        Input in = raw;
+        out.absurd = sanitize(in, p);
         const float dt = std::isfinite(in.seconds) ? std::clamp(in.seconds, 0.f, .1f) : 0.f;
         exit_ = Exit::none;
         // TRACKING LOST: a glitching palm keeps the last good support.

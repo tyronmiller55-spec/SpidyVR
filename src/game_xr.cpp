@@ -1687,6 +1687,7 @@ DWORD WINAPI run(void*) {
         // ARM LINE-UP (aim_watch.hpp): where the hands were mapped from, and a source change's move.
         std::array<aim_watch::Lineup, 2> armLineup{};
         bool handstandGlitchWas{}; // TRACKING LOST: the last frame's palms glitched
+        bool handstandAbsurdWas{}; // ABSURD ARMS: the last frame's arm readings were thrown out
         // HAND SOURCE EASE: each hand's step at a source change, fading; the hand shown last frame.
         std::array<aim_watch::SourceEase, 2> handSourceEase{};
         Pose handShown[2]{};
@@ -4410,6 +4411,13 @@ DWORD WINAPI run(void*) {
                                              frame.hands[0].valid && frame.hands[1].valid ? 1 : 0, hs.palmGaps[0],
                                              hs.palmGaps[1]);
                         handstandGlitchWas = hs.glitch;
+                        // ABSURD ARMS (handstand.hpp): readings that cannot be, thrown out, once per run of them.
+                        if (hs.absurd && !handstandAbsurdWas)
+                            diag_log::writef("handstand: absurd arm readings ignored (palm left %d right %d, from the "
+                                             "head left %d right %d): the frame counts as untracked",
+                                             hs.absurd & 1u ? 1 : 0, hs.absurd & 2u ? 1 : 0, hs.absurd & 4u ? 1 : 0,
+                                             hs.absurd & 8u ? 1 : 0);
+                        handstandAbsurdWas = hs.absurd != 0;
                         if (hs.exitNow != handstand::Exit::none) {
                             // THE BALANCE PASS: one line with the reason in a word (fell, leap or other: the rest) and what
                             // the balance had been through: how long it held, the lean, how long the divergent component had

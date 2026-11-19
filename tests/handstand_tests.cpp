@@ -269,6 +269,28 @@ int main() {
             const auto back = g.update(gi, on());
             check(!back.glitch && back.supporting, "the palm back: on as before");
         }
+        {
+            // ABSURD ARMS (the Nov 19 log: palms at -33.20 m and -22.52 m, the arms NaN): no catch on them, and they
+            // are reported; the same frame with sane palms catches.
+            auto sane = inverted();
+            Handstand ok;
+            check(ok.update(sane, on()).caughtNow, "absurd arms: the sane frame catches");
+            auto bad = inverted();
+            bad.palms[0].y -= 33.2f;
+            bad.palms[1].y -= 22.5f;
+            bad.palmRel[0] = {NAN, NAN, NAN};
+            bad.palmRelKnown[0] = true;
+            bad.floorKnown = true;
+            bad.floorY = 0.f;
+            Handstand no;
+            const auto o = no.update(bad, on());
+            check(!o.caughtNow && (o.absurd & 3u) == 3u && (o.absurd & 4u), "palms 33 m off and a NaN arm: no catch, reported");
+            auto head = inverted();
+            head.head = head.palms[0] + Vec3{0, 30.f, 0};
+            head.headKnown = true;
+            Handstand far;
+            check(!far.update(head, on()).caughtNow, "palms 30 m from the head: no catch");
+        }
         Handstand miss;
         auto mi = inverted();
         miss.update(mi, on());
