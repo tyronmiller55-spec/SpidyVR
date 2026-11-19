@@ -3,6 +3,7 @@
 #include "spidy/diag_log.hpp"
 #include "spidy/eye_stall.hpp"
 #include "spidy/vr_settings.hpp"
+#include <algorithm>
 #include <cmath>
 #include <cstdio>
 #include <cstdlib>
@@ -191,7 +192,10 @@ int main(int argc, char** argv) {
         std::ifstream in(path, std::ios::binary);
         std::stringstream file;
         file << in.rdbuf();
-        check(file.str() == md, "docs/NA_HELP.md is the generated help (run spidy_beta_polish_tests --write-help)");
+        // A Windows checkout may carry CRLF line ends (core.autocrlf): compare without them.
+        std::string text = file.str();
+        text.erase(std::remove(text.begin(), text.end(), '\r'), text.end());
+        check(text == md, "docs/NA_HELP.md is the generated help (run spidy_beta_polish_tests --write-help)");
     }
     std::printf("beta polish: %d checks passed\n", passed);
     return 0;
