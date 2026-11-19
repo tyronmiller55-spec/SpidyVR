@@ -1,6 +1,6 @@
 # Grip across the game: wall brake, grip fling (G1) and hand grab (G2)
 
-Both are EXPERIMENTAL and off by default. Turn them on in `spidy_vr.ini` (`wall_brake=1`, `grip_fling=1`) or with **Wall brake (experimental)** and **Grip fling (experimental)** on the launcher's Walls page (VR MOVEMENT in the game's own menu). They use the controller's **physical grip** (not the web button mapping), the same squeeze the hand climb uses: closed past 0.65, held until it opens under 0.35.
+Both are EXPERIMENTAL and on by default since revision 14 (the owner, Nov 19: leave all features on for further testing). An old `wall_brake=0` / `grip_fling=0` is turned on once; a 0 chosen after this revision stays. Turn them off in `spidy_vr.ini` or with **Wall brake (experimental)** and **Grip fling (experimental)** on the launcher's Walls page (VR MOVEMENT in the game's own menu). They use the controller's **physical grip** (not the web button mapping), the same squeeze the hand climb uses: closed past 0.65, held until it opens under 0.35.
 
 ## Wall brake (`wall_brake`)
 
@@ -55,7 +55,7 @@ Log lines (diag): `grip: settings sent`, `grip: brake hands= v= a=`, `grip: flin
 
 # Hand grab (G2, `hand_grab`)
 
-**Experimental, off by default** (`hand_grab=0`; the launcher's Walls page, "Hand grab (experimental)"). The plan's Pillar 4: take an enemy or a prop by hand, hold it, punch it, throw it or slam it.
+**Experimental, on by default since revision 14** (`hand_grab=1`; the launcher's Walls page, "Hand grab (experimental)"). An old off is turned on once. The plan's Pillar 4: take an enemy or a prop by hand, hold it, punch it, throw it or slam it.
 
 ## Taking hold
 

@@ -527,6 +527,29 @@ int main() {
         e.begin({10, 0, 0}, Quat{}, {0, 0, 0}, Quat{});
         check(!e.active(), "a 10 m step is a teleport: it snaps");
     }
+    // Revision 14 (the owner, Nov 19: "leave all features on for further testing"): features that were on in
+    // the owner's session and off by default come on once. A 0 chosen after revision 14 stays. Diagnostics stay off.
+    {
+        using vr_settings::Values;
+        using vr_settings::withMovementDefaults;
+        using vr_settings::withTabOnly;
+        using vr_settings::movementDefaultsRevision;
+        const std::string rev13 =
+            "showtime=0\nshowtime_auto_finish=0\nshowtime_auto_dodge=0\nhand_grab=0\nkicks=0\n"
+            "physical_tethers=0\nwall_brake=0\ngrip_fling=0\nair_landing_release=0\npoint_jump=0\n"
+            "sound_trace=0\nhead_probe=0\nrun_logs=0\nmovement_defaults=13\n";
+        const Values moved = withMovementDefaults(withTabOnly({}, rev13), rev13);
+        check(moved.showtime && moved.showtimeAutoFinish && moved.showtimeAutoDodge == 1 && moved.handGrab &&
+                  moved.kicks && moved.physicalTethers && moved.wallBrake && moved.gripFling &&
+                  moved.airLandingRelease && moved.pointJump && !moved.soundTrace && !moved.headProbe &&
+                  !moved.runLogs && moved.movementDefaults == movementDefaultsRevision,
+              "revision 14 turns the session's features on, diagnostics stay off");
+        const std::string rev14 =
+            "showtime=0\nkicks=0\nhand_grab=0\npoint_jump=0\nshowtime_auto_dodge=0\nmovement_defaults=14\n";
+        const Values kept = withMovementDefaults(withTabOnly({}, rev14), rev14);
+        check(!kept.showtime && !kept.kicks && !kept.handGrab && !kept.pointJump && kept.showtimeAutoDodge == 0,
+              "a 0 chosen after revision 14 stays");
+    }
     std::printf("next pass: %d checks passed\n", passed);
     return 0;
 }

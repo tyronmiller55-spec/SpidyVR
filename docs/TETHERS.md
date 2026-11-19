@@ -1,6 +1,6 @@
 # Physical web tethers (W1)
 
-Off by default, EXPERIMENTAL. `physical_tethers=1` in `spidy_vr.ini` (or **Web tethers (experimental)** on the launcher's Walls page, with **Tether points** and **Tether steps** under it) turns it on. It is the plan's Pillar 3, milestone W1 (XPBD tether core, the game's rope drawing, a throw on a tether, whip and spin). It builds on the web grab (`web_grab.hpp`, G1/G2): a web on a prop or an enemy, per hand. It changes nothing while off.
+On by default since revision 14, EXPERIMENTAL. An old `physical_tethers=0` is turned on once; a 0 chosen after this revision stays. `physical_tethers=0` in `spidy_vr.ini` (or **Web tethers (experimental)** on the launcher's Walls page, with **Tether points** and **Tether steps** under it) turns it off. It is the plan's Pillar 3, milestone W1 (XPBD tether core, the game's rope drawing, a throw on a tether, whip and spin). It builds on the web grab (`web_grab.hpp`, G1/G2): a web on a prop or an enemy, per hand. It changes nothing while off.
 
 ## Controls
 

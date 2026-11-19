@@ -1,8 +1,8 @@
-# SHOWTIME (EXPERIMENTAL, off by default)
+# SHOWTIME (EXPERIMENTAL, on by default since revision 14)
 
 > The plan's Pillar 6 (the user, Nov 13 3:50 PM PT): hold X and B and the view steps outside Spidey. You still look and lean with the headset, one to one. Let go and you are back on his head.
 
-Built in stages, one commit each (S0 the chord and the cut; S1 the camera; S2 the automatic moments; S3 the body). See the CHANGELOG for each. Every row sits under **Showtime** in the SPIDY VR tab and the launcher, and none of it runs unless SHOWTIME is turned on.
+Built in stages, one commit each (S0 the chord and the cut; S1 the camera; S2 the automatic moments; S3 the body). See the CHANGELOG for each. Every row sits under **Showtime** in the SPIDY VR tab and the launcher, It is on by default (the owner, Nov 19: leave all features on for further testing; movement_defaults revision 14 turns an old off once). Turn it off with SHOWTIME in the NA · SHOWTIME tab or `showtime=0`.
 
 ## How it keeps "animation never turns the view yaw"
 

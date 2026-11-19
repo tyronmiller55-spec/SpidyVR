@@ -302,7 +302,7 @@ struct Values {
     // from before it gets RUN CURVE on and EARLY JUMP QUICK TAP once (the
     // user: "movement fixes will be defaults"); after that the player's own
     // choice stands. Not a row. movement_defaults.
-    int movementDefaults = 13; // movementDefaultsRevision: a new file has seen them
+    int movementDefaults = 14; // movementDefaultsRevision: a new file has seen them
     // SOFT LANDING (the tab's SOFT LANDING; Swing::allowSoftLanding,
     // run_update::softLandVertical): a fall the swing flies, with no web
     // holding, eases to 9 m/s down over its last 3 m (or 0.35 s), its speed
@@ -582,28 +582,31 @@ struct Values {
     // SWING KICK GRUNT (ini swing_kick_grunt; off by default): Spidey's own jump grunt plays as a manual swing
     // kick arms (from EngineBot's swing kick series).
     bool swingKickGrunt = false;
-    // GRIP ACROSS THE GAME (G1, grip.hpp; November 14), EXPERIMENTAL: both off until set. wall_brake: on
+    // GRIP ACROSS THE GAME (G1, grip.hpp; November 14), EXPERIMENTAL: on by default (the owner, Nov 19,
+    // "leave all features on for further testing"; movement_defaults revision 14 turns an old off once). wall_brake: on
     // Spidy's wall a grip closed on a slide slows it as friction does (mu grip_stop_pct, 200: the Nov 14 pass; it was wall_brake_mu_pct, 90, and files that saved that key keep their old default behind it), then holds.
     // grip_fling: a pull let go of while gripping a surface launches the body the other way (gain
     // grip_fling_gain_pct, 130; at most grip_fling_max m/s, 9), the ground included.
-    bool wallBrake = false, gripFling = false;
+    bool wallBrake = true, gripFling = true;
     int wallBrakeMuPct = 200, gripFlingGainPct = 130, gripFlingMax = 9;
-    // HAND GRAB (G2, hand_grab.hpp; November 14), EXPERIMENTAL: off until set. hand_grab: a grip squeezed
+    // HAND GRAB (G2, hand_grab.hpp; November 14), EXPERIMENTAL: on by default (the owner, Nov 19; revision 14).
+    // hand_grab: a grip squeezed
     // with the palm within 35 cm of an enemy or a prop takes it by hand: held 45 cm ahead of the palm,
     // punched with the free fist, thrown or slammed on letting go. hand_grab_force: one hand's force in
     // newtons (1200; 90 kg lifted). enemy_hold_cost: how fast holding an enemy tires the hand (1; 0 never).
-    bool handGrab = false;
+    bool handGrab = true;
     int handGrabForce = 1200, enemyHoldCost = 1;
     // hand_grab_class_rules (G2b, hand_grab::Foe; on; the launcher's HAND GRAB CLASS RULES row, KICKS & COMBAT): heavies (brutes, big
     // capsules) and bosses resist throws unless open for a finisher (stunned or webbed up), shield guards and
     // bosses tire the hand 3x, and an open enemy costs nothing and is fully manipulated. 0: G2 as before.
     bool handGrabClassRules = true;
-    // AIR KICKS (K2, air_kick.hpp; November 14), EXPERIMENTAL: off until set. kicks: off the ground with the
+    // AIR KICKS (K2, air_kick.hpp; November 14), EXPERIMENTAL: on by default (the owner, Nov 19; revision 14).
+    // kicks: off the ground with the
     // legs engaged (Y + X), a quick flick of the right stick kicks: up a two-leg dive, up-left or up-right a
     // one-leg dive, a quarter circle from a side to up a roundhouse, any other flick a freeform blow.
     // kick_gaze_cone_deg: how far from your gaze a zone point can be and still be aimed at (25).
     // kick_spin_pct: how much of the kick's spin reaction the legs' coupling keeps (30).
-    bool kicks = false;
+    bool kicks = true;
     int kickGazeConeDeg = 40, kickSpinPct = 30; // cone 25 until the 2 AM log (Nov 18): 25 of 25 kicks found no enemy
     // GROUND KICKS (K3, ground_kick.hpp; November 14): on by default since Nov 18 (the owner, t119u; revision 9
     // moves an untuned off). ground_kicks: standing
@@ -619,11 +622,12 @@ struct Values {
     // enemy_limb_zones: also the legs from the shins and the arms from the forearms; leave it off until
     // probe_c0_skeleton.py has said READABLE on your game (no enemy's limb joint has been read yet).
     bool enemyJoints = false, enemyLimbZones = false;
-    // PHYSICAL WEB TETHERS (W1, tether.hpp; November 14), EXPERIMENTAL: off until set. physical_tethers: a
+    // PHYSICAL WEB TETHERS (W1, tether.hpp; November 14), EXPERIMENTAL: on by default (the owner, Nov 19;
+    // revision 14). physical_tethers: a
     // simulated rope on each web (a held line sags and drapes), a whip of the hand jerks what is on it, circling
     // the hand turns it round you, and a throw with the trigger held keeps the line, paid out by the trigger.
     // tether_particles: points in the rope (24). tether_substeps: its steps a frame (8).
-    bool physicalTethers = false;
+    bool physicalTethers = true;
     int tetherParticles = 24, tetherSubsteps = 8;
     // PASSIVE LEGS (leg_layers.hpp; November 12 06:18): in SpidyVR's air with
     // LEG CONTROL not engaged, the legs' spring runs with no stick, so momentum
@@ -644,8 +648,8 @@ struct Values {
     // POINT JUMP (point_jump.hpp; the user, November 11; EngineBot's plan):
     // touching a surface, A+B (or hold B, then A) charges a jump the way you
     // look. A tap is a quick jump at the tap speed; held up to CHARGE TIME a
-    // leap rising to MAX SPEED. The tab's VR POINT JUMP rows: POINT JUMP (off
-    // by default, experimental), TRIGGER, TAP SPEED and MAX SPEED (m/s),
+    // leap rising to MAX SPEED. The tab's VR POINT JUMP rows: POINT JUMP (on
+    // by default since revision 14, experimental), TRIGGER, TAP SPEED and MAX SPEED (m/s),
     // CHARGE TIME (ms) and SURFACE PUSH (percent of the surface's normal mixed
     // into the look). The rest are spidy_vr.ini only (point_jump_* keys): the
     // chord window, the tap's length, the curve (0 ease-out, 1 linear), the
@@ -653,7 +657,7 @@ struct Values {
     // coyote time, the buffer, the cooldown, the guard after a game zip, B's
     // hold before it is the dodge (TRIGGER 1), and whether it works in a fight.
     // The player's own (comfort and controls), not in shared profiles.
-    bool pointJump = false, pointJumpInCombat = true;
+    bool pointJump = true, pointJumpInCombat = true;
     int pointJumpTrigger = 0, pointJumpChordMs = 50, pointJumpTapMs = 150, pointJumpFullMs = 1000;
     int pointJumpMinSpeed = 9, pointJumpMaxSpeed = 22, pointJumpCurve = 0, pointJumpNormalBias = 25;
     int pointJumpMinOutDegrees = 10, pointJumpKeep = 25, pointJumpCoyoteMs = 120, pointJumpBufferMs = 200; // buffer 150 until Nov 16 (movement defaults 4)
@@ -699,9 +703,10 @@ struct Values {
     // m/s (15 = 1.5 m/s). jump_pull, jump_pull_gaze_deg, jump_pull_stick_deg, jump_pull_range_m, jump_pull_cap_dmps.
     bool jumpPull = true;
     int jumpPullGazeDeg = 20, jumpPullStickDeg = 25, jumpPullRangeM = 12, jumpPullCapDmps = 15;
-    // SHOWTIME (showtime.hpp; the plan's Pillar 6, EXPERIMENTAL, everything off by default): hold X + B and the view steps outside
+    // SHOWTIME (showtime.hpp; the plan's Pillar 6, EXPERIMENTAL, on by default — the owner, Nov 19,
+    // "leave all features on for further testing"; revision 14 turns an old off once): hold X + B and the view steps outside
     // Spidey. showtimeWhile: 0 WATCH ONLY, 1 KEEP CONTROL; showtimeFadeMs: the whole cut. showtime, showtime_while, showtime_fade_ms.
-    bool showtime = false;
+    bool showtime = true;
     int showtimeWhile = 0, showtimeFadeMs = 150;
     // SHOWTIME's camera (S1): DISTANCE and HEIGHT in cm, ORBIT ANGLE in degrees off his back, ORBIT TURN 0 smooth / 1 snap, FOLLOW 0..2,
     // VIGNETTE 0..2, SLOW-MO IN SHOWTIME (L3), LATCH 0 off / 1 double press.
@@ -709,9 +714,9 @@ struct Values {
     bool showtimeSlowMo = true;
     int showtimeLatch = 0;
     // SHOWTIME's automatic moments (S2): CHORD 0 hold X+B / 1 auto only; AUTO: DODGES 0 off / 1 perfect only / 2 all; AUTO: FINISHERS
-    // (log only in this build, off by default).
-    int showtimeChord = 0, showtimeAutoDodge = 0;
-    bool showtimeAutoFinish = false;
+    // (log only in this build; on by default since revision 14, as in the owner's Nov 19 session).
+    int showtimeChord = 0, showtimeAutoDodge = 1;
+    bool showtimeAutoFinish = true;
     // SHOWTIME's body (S3): 0 game pose with the head shown, 1 as in play (no head).
     int showtimeBody = 0;
     // A IN THE AIR (the user, Nov 14 t71u; air_correct_ms): the upright turn takes this long, smoothly (realistic_flip.hpp
@@ -739,9 +744,10 @@ struct Values {
     // LANDING BLEND-IN (air_landing_blend, default on; landing_blend.hpp): the time to impact in SpidyVR's air from a downward ray,
     // the body coming upright over the last 0.3 s, and a per-landing account of the prediction. The touchdown handoff is as before.
     bool airLandingBlend = true;
-    // The animation takes the body 0.2 s BEFORE the touchdown (air_landing_release, default OFF, UNVERIFIED: it needs the game to keep
-    // his velocity and pick its normal landing clip when the body is let go in the air). Needs AIR LANDING BLEND.
-    bool airLandingRelease = false;
+    // The animation takes the body 0.2 s BEFORE the touchdown (air_landing_release, on by default since revision 14 for
+    // further testing; UNVERIFIED: it needs the game to keep his velocity and pick its normal landing clip when the body
+    // is let go in the air). Needs AIR LANDING BLEND.
+    bool airLandingRelease = true;
     // [air takeover pass settings]
     // HANDSTAND CATCH HOLD (handstand_catch_hold_cm, 35; 12 was the old floorReach): while a catch settles, palms
     // within this of the floor count as on it, so a catch is not dropped at the 0.6 s settle (the 9790d67 playtest: 3 of 3).
@@ -1266,7 +1272,7 @@ std::string tabOnlyText(const Values&);
 // key, or whose value is no whole number, is passed over.
 Values withTabOnly(Values, std::string_view text);
 // The movement defaults' revision (Values::movementDefaults) this build has.
-inline constexpr int movementDefaultsRevision = 13;
+inline constexpr int movementDefaultsRevision = 14;
 // November 12 movement cleanup: a settings file (that text) older than
 // movementDefaultsRevision gets the new movement defaults once - RUN CURVE
 // on, EARLY JUMP at least QUICK TAP - and is marked as having seen them; a

@@ -1,6 +1,6 @@
 # Air kicks (K2)
 
-Off by default, EXPERIMENTAL, like the handstand. `kicks=1` in `spidy_vr.ini` (or **AIR KICKS** and **AIR KICK AIM** on the in-game NA · KICKS & COMBAT tab, or the launcher's Kicks & Combat page with **Air kick spin** too) turns it on. It builds on the leg control (Y + X, `leg_hold.hpp`, which needs LEG CONTROL and a flip mode as today) and the swing kick (K1). It is the plan's Pillar 5 (milestone K2), air only: the ground is K3's ([GROUND_KICKS.md](GROUND_KICKS.md)).
+On by default since revision 14, EXPERIMENTAL. An old `kicks=0` is turned on once; a 0 chosen after this revision stays. `kicks=0` in `spidy_vr.ini` (or **AIR KICKS** on the in-game NA · KICKS & COMBAT tab, or the launcher's Kicks & Combat page) turns it off. **AIR KICK AIM** and **Air kick spin** tune it. It builds on the leg control (Y + X, `leg_hold.hpp`, which needs LEG CONTROL and a flip mode as today) and the swing kick (K1). It is the plan's Pillar 5 (milestone K2), air only: the ground is K3's ([GROUND_KICKS.md](GROUND_KICKS.md)).
 
 ## Controls
 

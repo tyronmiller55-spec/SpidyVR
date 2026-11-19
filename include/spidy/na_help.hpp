@@ -56,7 +56,7 @@ inline constexpr Page pages[] = {
     {"WEBS & WEB CANCEL", "  (2) NOT WHEN", "Not in fights, cutscenes, dodges or your own wall run. A zip cancels at once."},
     {"WEBS & WEB CANCEL", "  (3) SHOOTERS", "Y + X cuts a zip. SHOOTERS: LOCKED TO ARM fires from your wrist."},
 
-    {"HAND GRAB", "HAND GRAB", "HAND GRAB (launcher, off by default): a palm on an enemy or prop holds it."},
+    {"HAND GRAB", "HAND GRAB", "HAND GRAB: a palm on an enemy or prop holds it."},
     {"HAND GRAB", "  (2) HEAVIES", "Heavies and bosses resist throws unless stunned or webbed up (open)."},
     {"HAND GRAB", "  (3) TIRING", "Shield guards and bosses tire your hand 3x faster; an open enemy is free."},
 
@@ -64,7 +64,7 @@ inline constexpr Page pages[] = {
     {"HANDSTAND", "  (2) MOVING", "Lean to walk, push off to leap, let go or lean past FALL ANGLE to drop."},
     {"HANDSTAND", "  (3) TUNING", "BALANCE ASSIST steadies you; SWAY TIME is how long you may be off balance."},
 
-    {"SHOWTIME", "SHOWTIME", "SHOWTIME (off by default): hold X + B for 200 ms to step outside Spider-Man."},
+    {"SHOWTIME", "SHOWTIME", "SHOWTIME: hold X + B for 200 ms to step outside Spider-Man."},
     {"SHOWTIME", "  (2) ORBIT", "The right stick orbits; let go to return. WATCH ONLY keeps your hands still."},
 
     {"CAMERA & STABILIZATION", "CAMERA & STABILIZATION", "How much the animation moves your view: CAMERA MOTION, PITCH, ROLL, BOB."},

@@ -416,14 +416,14 @@ void bridge() {
 void settings() {
     using namespace vr_settings;
     Values v;
-    check(!v.pointJump && v.pointJumpTrigger == 0 && v.pointJumpMinSpeed == 9 && v.pointJumpMaxSpeed == 22 &&
+    check(v.pointJump && v.pointJumpTrigger == 0 && v.pointJumpMinSpeed == 9 && v.pointJumpMaxSpeed == 22 &&
               v.pointJumpFullMs == 1000 && v.pointJumpNormalBias == 25 && v.pointJumpTapMs == 150 &&
               v.pointJumpChordMs == 50 && v.pointJumpCoyoteMs == 120 && v.pointJumpBufferMs == 200 &&
               v.pointJumpCooldownMs == 250 && v.pointJumpKeep == 25 && v.pointJumpMinOutDegrees == 10 &&
               v.pointJumpInCombat,
-          "the plan's defaults, off by default");
+          "the plan's defaults, on by default");
     const auto p = paramsOf(v);
-    check(!p.enabled && near(p.minSpeed, 9) && near(p.maxSpeed, 22) && near(p.normalBias, .25f) &&
+    check(p.enabled && near(p.minSpeed, 9) && near(p.maxSpeed, 22) && near(p.normalBias, .25f) &&
               near(p.keep, .25f) && near(p.chordSeconds, .05f),
           "params from the values");
     const Item rowsWanted[] = {Item::pointJump, Item::pointJumpTrigger, Item::pointJumpMinSpeed,
@@ -439,15 +439,16 @@ void settings() {
                 on += i == item;
         check(on == 1, "on exactly one tab");
     }
-    check(choose(Item::pointJump, 1, v) && v.pointJump, "POINT JUMP ON");
-    check(inactiveReason(Item::pointJumpTrigger, Values{}) && !inactiveReason(Item::pointJumpTrigger, v),
+    check(v.pointJump && choose(Item::pointJump, 0, v) && !v.pointJump, "POINT JUMP OFF");
+    check(inactiveReason(Item::pointJumpTrigger, v) && !inactiveReason(Item::pointJumpTrigger, Values{}),
           "the rows say they need POINT JUMP");
+    check(choose(Item::pointJump, 1, v) && v.pointJump, "POINT JUMP ON");
     check(choose(Item::pointJumpTrigger, 1, v) && v.pointJumpTrigger == 1, "HOLD B, THEN A");
     check(choose(Item::pointJumpMaxSpeed, 0, v) && v.pointJumpMaxSpeed == 14, "MAX SPEED 14");
     check(choose(Item::pointJumpMinSpeed, 6, v) && v.pointJumpMinSpeed == 14 && v.pointJumpMaxSpeed >= 14,
           "TAP SPEED never above MAX SPEED");
     const std::string text = tabOnlyText(Values{});
-    for (const char* key : {"point_jump=0\n", "point_jump_trigger=0\n", "point_jump_chord_ms=50\n",
+    for (const char* key : {"point_jump=1\n", "point_jump_trigger=0\n", "point_jump_chord_ms=50\n",
                             "point_jump_tap_ms=150\n", "point_jump_full_ms=1000\n", "point_jump_min_speed=9\n",
                             "point_jump_max_speed=22\n", "point_jump_curve=0\n", "point_jump_normal_bias=25\n",
                             "point_jump_min_out_degrees=10\n", "point_jump_keep=25\n", "point_jump_coyote_ms=120\n",

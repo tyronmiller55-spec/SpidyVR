@@ -9,7 +9,7 @@
 //      a handstand wants him inverted (the caller's `keepTilt`).
 //   2. at the touchdown the owner hands the body to the game as it always did (hybrid_owner EnterAnim::land) with the 180 ms eye
 //      blend (hybrid_handoff.hpp): THIS IS THE FALLBACK and it is what ships on.
-//   3. only with `release` (air_landing_release, default OFF; UNVERIFIED): handBack() says so at 0.2 s to impact and the owner hands
+//   3. only with `release` (air_landing_release, on by default since revision 14 for further testing; UNVERIFIED): handBack() says so at 0.2 s to impact and the owner hands
 //      the animation the body before the touchdown (EnterAnim::predicted). That relies on the game keeping his velocity and
 //      choosing its normal landing clip when the body is let go in mid-air (docs/AIR_TAKEOVER.md, "the probe"); nothing here
 //      writes a velocity.

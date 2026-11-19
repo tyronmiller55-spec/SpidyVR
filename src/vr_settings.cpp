@@ -356,7 +356,7 @@ constexpr int showtimeChordSteps[] = {0, 1};
 constexpr const char* showtimeChordChoices[] = {"HOLD X+B (DEFAULT)", "AUTO ONLY"};
 static_assert(std::size(showtimeChordChoices) == std::size(showtimeChordSteps));
 constexpr int showtimeAutoDodgeSteps[] = {0, 1, 2};
-constexpr const char* showtimeAutoDodgeChoices[] = {"OFF (DEFAULT)", "PERFECT ONLY", "ALL"};
+constexpr const char* showtimeAutoDodgeChoices[] = {"OFF", "PERFECT ONLY (DEFAULT)", "ALL"};
 static_assert(std::size(showtimeAutoDodgeChoices) == std::size(showtimeAutoDodgeSteps));
 constexpr int showtimeDistanceSteps[] = {150, 200, 250, 300, 350, 400};
 constexpr const char* showtimeDistanceChoices[] = {"1.5 M", "2 M", "2.5 M (DEFAULT)", "3 M", "3.5 M", "4 M"};
@@ -1906,7 +1906,7 @@ const std::array<Row, rowTotal>& rows() {
          jumpPullCapChoices, Place::launcher},
         {Item::showtime,
          "SHOWTIME (EXPERIMENTAL)",
-         "Hold X+B and your view steps outside Spidey. Let go to return. Off.",
+         "Hold X+B and your view steps outside Spidey. Let go to return.",
          {}},
         {Item::showtimeWhile,
          "WHILE OUT",
@@ -2213,7 +2213,7 @@ const std::array<Screen, categoryCount>& screens() {
         Item::pointJumpMaxSpeed, Item::pointJumpFull, Item::pointJumpPush,
         Item::pointJumpBullet, Item::pointJumpSound, Item::wallJumpSound,
     };
-    // SHOWTIME (showtime.hpp; experimental, off by default): its switch and its feel.
+    // SHOWTIME (showtime.hpp; experimental, on by default since revision 14): its switch and its feel.
     static constexpr Item showtime[] = {
         Item::showtime, Item::showtimeWhile, Item::showtimeFade,
         Item::showtimeBody,
@@ -3375,6 +3375,23 @@ Values withMovementDefaults(Values v, std::string_view text) {
         // Revision 13 (beta polish, the owner's D7): SOUND TRACE off for the beta. An ini from before wrote
         // sound_trace=1 as the old default, so it is untuned and moves; sound_trace=1 after this brings the logging back.
         v.soundTrace = false;
+    }
+    if (seen < 14) {
+        // Revision 14 (the owner, Nov 19: "leave all features on for further testing"): features that were on
+        // in the owner's 0.8.7-na-beta1 session and off by default come on once. An ini from before wrote them
+        // as 0 (the old default), so that is untuned and moves; a 0 chosen after this revision stays.
+        // Diagnostic logging (sound_trace, head_probe, run_logs) stays off. Wall jump sound is unchanged.
+        v.showtime = true;
+        v.showtimeAutoFinish = true;
+        if (v.showtimeAutoDodge == 0)
+            v.showtimeAutoDodge = 1; // PERFECT ONLY, as in the session
+        v.handGrab = true;
+        v.kicks = true;
+        v.physicalTethers = true;
+        v.wallBrake = true;
+        v.gripFling = true;
+        v.airLandingRelease = true;
+        v.pointJump = true;
     }
     v.movementDefaults = movementDefaultsRevision;
     return sanitized(v);

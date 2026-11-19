@@ -1,6 +1,6 @@
-# POINT JUMP (milestone 1, experimental, off by default)
+# POINT JUMP (milestone 1, experimental, on by default since revision 14)
 
-The user, Nov 11: whenever the player touches a surface (ground, a perch, a wall), he can charge a jump that launches him **the way he is looking**. A tap is a quick jump; holding up to a second gives a bigger leap. It reuses the charged leap's timing and rumble and the swing's takeoff path (the game's own jump to unstick, then the launch velocity, as a charged leap or a gesture zip take off). It never triggers the game's point launch, so there is no smoke. Plan: EngineBot's "SpidyVR - Handstand & Point Jump Plan". Code: `include/spidy/point_jump.hpp`, `src/game_xr.cpp` (`point jump:` diag lines), `Swing::pointJump` and `EventKind::PointJump`, `SpidySwingPointJump`, `hybrid_owner` (`EnterVr::pointJump`). Not headset-tested.
+The user, Nov 11: whenever the player touches a surface (ground, a perch, a wall), he can charge a jump that launches him **the way he is looking**. A tap is a quick jump; holding up to a second gives a bigger leap. It reuses the charged leap's timing and rumble and the swing's takeoff path (the game's own jump to unstick, then the launch velocity, as a charged leap or a gesture zip take off). It never triggers the game's point launch, so there is no smoke. Plan: EngineBot's "SpidyVR - Handstand & Point Jump Plan". Code: `include/spidy/point_jump.hpp`, `src/game_xr.cpp` (`point jump:` diag lines), `Swing::pointJump` and `EventKind::PointJump`, `SpidySwingPointJump`, `hybrid_owner` (`EnterVr::pointJump`). On by default since revision 14 (the owner, Nov 19: leave all features on for further testing). An old `point_jump=0` is turned on once. Headset-tested in the Nov 19 CURRENT session.
 
 ## Trigger
 

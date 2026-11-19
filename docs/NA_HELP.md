@@ -48,7 +48,7 @@ Shoot a web on the ground or a perch to cancel the animation into SpidyVR. Not i
 
 ## HAND GRAB
 
-HAND GRAB (launcher, off by default): a palm on an enemy or prop holds it. Heavies and bosses resist throws unless stunned or webbed up (open). Shield guards and bosses tire your hand 3x faster; an open enemy is free.
+HAND GRAB: a palm on an enemy or prop holds it. Heavies and bosses resist throws unless stunned or webbed up (open). Shield guards and bosses tire your hand 3x faster; an open enemy is free.
 
 ## HANDSTAND
 
@@ -56,7 +56,7 @@ Fall inverted onto both palms (REALISTIC FLIPS on): you balance on your hands. L
 
 ## SHOWTIME
 
-SHOWTIME (off by default): hold X + B for 200 ms to step outside Spider-Man. The right stick orbits; let go to return. WATCH ONLY keeps your hands still.
+SHOWTIME: hold X + B for 200 ms to step outside Spider-Man. The right stick orbits; let go to return. WATCH ONLY keeps your hands still.
 
 ## CAMERA & STABILIZATION
 
@@ -104,7 +104,7 @@ A crash code 0xC0000409 as the game closes is known and harmless. Logs are in th
 | TORSO TWIST | 80 DEG | launcher |
 | FALL TO SPIDYVR | 150 MS (DEFAULT) | launcher |
 | AIR LANDING BLEND | ON | launcher |
-| AIR LANDING RELEASE (EXPERIMENTAL) | OFF | launcher |
+| AIR LANDING RELEASE (EXPERIMENTAL) | ON | launcher |
 | VIEW YAW SOURCE | STABLE | launcher |
 | AIR (ADVANCED) | OFF | launcher |
 | ONLY (ADVANCED) | OFF | launcher |
@@ -184,9 +184,9 @@ A crash code 0xC0000409 as the game closes is known and harmless. Logs are in th
 | HANDSTAND BALANCE HEIGHT | 95 CM | launcher |
 | HANDSTAND BALANCE GAIN | 500% | launcher |
 | HANDSTAND VIEW DROP | 90 CM | launcher |
-| WALL BRAKE (EXPERIMENTAL) | OFF | launcher |
-| GRIP FLING (EXPERIMENTAL) | OFF | launcher |
-| WEB TETHERS (EXPERIMENTAL) | OFF | launcher |
+| WALL BRAKE (EXPERIMENTAL) | ON | launcher |
+| GRIP FLING (EXPERIMENTAL) | ON | launcher |
+| WEB TETHERS (EXPERIMENTAL) | ON | launcher |
 | TETHER POINTS | 24 (DEFAULT) | launcher |
 | TETHER STEPS | 8 (DEFAULT) | launcher |
 
@@ -194,7 +194,7 @@ A crash code 0xC0000409 as the game closes is known and harmless. Logs are in th
 
 | Setting | Default | Where |
 |---|---|---|
-| AIR KICKS (EXPERIMENTAL) | OFF | game and launcher |
+| AIR KICKS (EXPERIMENTAL) | ON | game and launcher |
 | GROUND KICKS | ON | game and launcher |
 | AIR KICK AIM | 40 DEG (DEFAULT) | game and launcher |
 | SWING KICK (EXPERIMENTAL) | ON | launcher |
@@ -211,7 +211,7 @@ A crash code 0xC0000409 as the game closes is known and harmless. Logs are in th
 | JUMP PULL STICK | 25 DEG (DEFAULT) | launcher |
 | JUMP PULL RANGE | 12 M (DEFAULT) | launcher |
 | JUMP PULL LIMIT | 1.5 M/S (DEFAULT) | launcher |
-| HAND GRAB (EXPERIMENTAL) | OFF | launcher |
+| HAND GRAB (EXPERIMENTAL) | ON | launcher |
 | HAND GRAB STRENGTH | 1200 N | launcher |
 | HAND GRAB HOLD COST | 1 (DEFAULT) | launcher |
 | HAND GRAB CLASS RULES | ON | launcher |
@@ -234,7 +234,7 @@ A crash code 0xC0000409 as the game closes is known and harmless. Logs are in th
 
 | Setting | Default | Where |
 |---|---|---|
-| POINT JUMP (EXPERIMENTAL) | OFF | game and launcher |
+| POINT JUMP (EXPERIMENTAL) | ON | game and launcher |
 | POINT JUMP TRIGGER | A+B TOGETHER | game and launcher |
 | TAP SPEED | 9 M/S | game and launcher |
 | MAX SPEED | 22 M/S | game and launcher |
@@ -248,13 +248,13 @@ A crash code 0xC0000409 as the game closes is known and harmless. Logs are in th
 
 | Setting | Default | Where |
 |---|---|---|
-| SHOWTIME (EXPERIMENTAL) | OFF | game and launcher |
+| SHOWTIME (EXPERIMENTAL) | ON | game and launcher |
 | WHILE OUT | WATCH ONLY (DEFAULT) | game and launcher |
 | FADE TIME | 150 MS (DEFAULT) | game and launcher |
 | BODY (ADVANCED) | GAME POSE, HEAD SHOWN (DEFAULT) | game and launcher |
 | CHORD | HOLD X+B (DEFAULT) | game and launcher |
-| AUTO: DODGES | OFF (DEFAULT) | game and launcher |
-| AUTO: FINISHERS (LOG ONLY) | OFF | game and launcher |
+| AUTO: DODGES | PERFECT ONLY (DEFAULT) | game and launcher |
+| AUTO: FINISHERS (LOG ONLY) | ON | game and launcher |
 | DISTANCE | 2.5 M (DEFAULT) | game and launcher |
 | HEIGHT | +0.3 M (DEFAULT) | game and launcher |
 | ORBIT ANGLE | 35 DEGREES (DEFAULT) | game and launcher |

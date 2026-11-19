@@ -25123,7 +25123,7 @@ int main() {
                   "the movement defaults overrode a choice made after them");
             check(withMovementDefaults(withTabOnly({}, ""), "").runCurve,
                   "no file: not the movement defaults");
-            check(tabOnlyText(migrated).find("movement_defaults=13\n") != std::string::npos,
+            check(tabOnlyText(migrated).find("movement_defaults=14\n") != std::string::npos,
                   "the migration is not remembered");
         }
         {
@@ -25522,13 +25522,13 @@ int main() {
                   "camera_stabilization=0\ncamera_vertical_ms=0\ncamera_horizontal_ms=0\ncamera_angle_ms=0\n"
                   "camera_light_vertical_ms=75\ncamera_light_horizontal_ms=50\ncamera_light_angle_ms=75\n"
                   "camera_heavy_vertical_ms=200\ncamera_heavy_horizontal_ms=150\ncamera_heavy_angle_ms=200\n"
-                  "spherical_aim=1\nleg_control=0\nleg_stiffness_pct=100\nleg_damping_pct=100\nleg_coupling_pct=50\nleg_double_tap_ms=300\npunch_view_ease_ms=250\nmove_haptics_pct=100\nview_yaw_source=1\nsound_trace=0\njump_handoff_ms=250\nair_view_ease_ms=200\nanim_yaw_sway_pct=20\nturn_in_place_deg=35\npassive_legs_pct=60\npassive_coupling_pct=15\nmovement_mode=0\nrear_snap_turn_ms=200\nanimated_torso_twist=80\nanim_forearm_fallback_deg=60\ncamera_steady_vertical_ms=200\ncamera_steady_horizontal_ms=200\ncamera_steady_angle_ms=200\ncamera_horizon_level_pct=0\ncamera_vr_stabilization=1\nswing_kick_manual=1\nswing_kick_auto=1\nleg_hold_everywhere=0\nswing_kick_grunt=0\nwall_brake=0\ngrip_fling=0\ngrip_stop_pct=200\ngrip_fling_gain_pct=130\ngrip_fling_max=9\nhand_grab=0\nhand_grab_force=1200\nenemy_hold_cost=1\nhand_grab_class_rules=1\nkicks=0\nkick_gaze_cone_deg=40\nkick_spin_pct=30\nground_kicks=1\nenemy_joints=0\nenemy_limb_zones=0\nphysical_tethers=0\ntether_particles=24\ntether_substeps=8\nleg_air_crouch=1\nleg_reach_spread=1\nair_poses=1\ndirectional_flips=1\nair_fists=1\n"
+                  "spherical_aim=1\nleg_control=0\nleg_stiffness_pct=100\nleg_damping_pct=100\nleg_coupling_pct=50\nleg_double_tap_ms=300\npunch_view_ease_ms=250\nmove_haptics_pct=100\nview_yaw_source=1\nsound_trace=0\njump_handoff_ms=250\nair_view_ease_ms=200\nanim_yaw_sway_pct=20\nturn_in_place_deg=35\npassive_legs_pct=60\npassive_coupling_pct=15\nmovement_mode=0\nrear_snap_turn_ms=200\nanimated_torso_twist=80\nanim_forearm_fallback_deg=60\ncamera_steady_vertical_ms=200\ncamera_steady_horizontal_ms=200\ncamera_steady_angle_ms=200\ncamera_horizon_level_pct=0\ncamera_vr_stabilization=1\nswing_kick_manual=1\nswing_kick_auto=1\nleg_hold_everywhere=0\nswing_kick_grunt=0\nwall_brake=1\ngrip_fling=1\ngrip_stop_pct=200\ngrip_fling_gain_pct=130\ngrip_fling_max=9\nhand_grab=1\nhand_grab_force=1200\nenemy_hold_cost=1\nhand_grab_class_rules=1\nkicks=1\nkick_gaze_cone_deg=40\nkick_spin_pct=30\nground_kicks=1\nenemy_joints=0\nenemy_limb_zones=0\nphysical_tethers=1\ntether_particles=24\ntether_substeps=8\nleg_air_crouch=1\nleg_reach_spread=1\nair_poses=1\ndirectional_flips=1\nair_fists=1\n"
                   "camera_pitch_pct=100\ncamera_roll_pct=100\ncamera_bob_vertical_pct=100\ncamera_bob_side_pct=100\n"
                   "camera_head_angle_deg=0\n"
                   "sidestep=1\nsidestep_distance_cm=200\nsidestep_ms=180\nsidestep_cooldown_ms=300\n"
                   "sidestep_chain=3\nsidestep_lockout_ms=800\nsidestep_iframes=1\nsidestep_flick_from=30\n"
                   "sidestep_flick_to=80\nsidestep_flick_ms=80\nsidestep_a_ms=120\nsidestep_forward=0\n"
-                  "point_jump=0\npoint_jump_trigger=0\npoint_jump_chord_ms=50\npoint_jump_tap_ms=150\n"
+                  "point_jump=1\npoint_jump_trigger=0\npoint_jump_chord_ms=50\npoint_jump_tap_ms=150\n"
                   "point_jump_full_ms=1000\npoint_jump_min_speed=9\npoint_jump_max_speed=22\npoint_jump_curve=0\n"
                   "point_jump_normal_bias=25\npoint_jump_min_out_degrees=10\npoint_jump_keep=25\n"
                   "point_jump_coyote_ms=120\npoint_jump_buffer_ms=200\npoint_jump_cooldown_ms=250\n"
@@ -25536,14 +25536,14 @@ int main() {
                   "headset_first=1\npunch_autotarget=1\npunch_track_cone_deg=120\npunch_track_range_m=10\npunch_view_snap=0\n"
                   "jump_pull=1\njump_pull_gaze_deg=20\njump_pull_stick_deg=25\njump_pull_range_m=12\njump_pull_cap_dmps=15\n"
                   "anim_head_ride=0\nshoulder_limit=0\nsnap_realign=1\n"
-                  "showtime=0\nshowtime_while=0\nshowtime_fade_ms=150\nshowtime_body=0\nshowtime_chord=0\nshowtime_auto_dodge=0\n"
-                  "showtime_auto_finish=0\nshowtime_distance_cm=250\nshowtime_height_cm=30\nshowtime_angle_deg=35\n"
+                  "showtime=1\nshowtime_while=0\nshowtime_fade_ms=150\nshowtime_body=0\nshowtime_chord=0\nshowtime_auto_dodge=1\n"
+                  "showtime_auto_finish=1\nshowtime_distance_cm=250\nshowtime_height_cm=30\nshowtime_angle_deg=35\n"
                   "showtime_turn=0\nshowtime_follow=1\nshowtime_vignette=1\nshowtime_slow_mo=1\nshowtime_latch=0\n"
                   "air_correct_ms=1000\n"
                   "point_jump_bullet=1\npoint_jump_sound=1\nwall_jump_sound=1\nattack_sound=0\n"
                   "fall_handoff_ms=150\n"
                   "air_landing_blend=1\n"
-                  "air_landing_release=0\n"
+                  "air_landing_release=1\n"
                   "handstand_catch_hold_cm=35\n"
                   "handstand_reach_cm=160\n"
                   "takeover_view_ease=1\n"
@@ -25581,7 +25581,7 @@ int main() {
                   "marker_turn_rate_dps=360\n"
                   "marker_switch_hold_ms=150\n"
                   "log_level=1\n"
-                  "movement_defaults=13\n",
+                  "movement_defaults=14\n",
               "the defaults' text");
         Values changed = defaults;
         changed.recordingFov = 140;
@@ -32572,11 +32572,12 @@ int main() {
                   std::strstr(row->title, "EXPERIMENTAL"),
               "the hand grab row, labelled experimental");
         Values defaults;
-        check(!defaults.handGrab && defaults.handGrabForce == 1200 && defaults.enemyHoldCost == 1 &&
-                  choice(Item::handGrab, defaults) == 0 && defaultChoice(Item::handGrab) == 0,
-              "hand grab is off by default, 1200 N, hold cost 1");
+        check(defaults.handGrab && defaults.handGrabForce == 1200 && defaults.enemyHoldCost == 1 &&
+                  choice(Item::handGrab, defaults) == 1 && defaultChoice(Item::handGrab) == 1,
+              "hand grab is on by default, 1200 N, hold cost 1");
         Values v;
-        check(choose(Item::handGrab, 1, v) && v.handGrab && choose(Item::handGrab, 0, v) && !v.handGrab,
+        check(v.handGrab && choose(Item::handGrab, 0, v) && !v.handGrab && choose(Item::handGrab, 1, v) &&
+                  v.handGrab,
               "the switch sets the value");
         const auto read = withTabOnly({}, "hand_grab=1\nhand_grab_force=2400\nenemy_hold_cost=3\n");
         check(read.handGrab && read.handGrabForce == 2400 && read.enemyHoldCost == 3, "the ini keys read");
@@ -32641,11 +32642,11 @@ int main() {
                   std::strstr(row->title, "EXPERIMENTAL"),
               "the air kicks row, labelled experimental");
         Values defaults;
-        check(!defaults.kicks && defaults.kickGazeConeDeg == 40 && defaults.kickSpinPct == 30 &&
-                  choice(Item::kicks, defaults) == 0 && defaultChoice(Item::kicks) == 0,
-              "air kicks are off by default, aim 40 degrees (25 until the 2 AM log), spin 30%");
+        check(defaults.kicks && defaults.kickGazeConeDeg == 40 && defaults.kickSpinPct == 30 &&
+                  choice(Item::kicks, defaults) == 1 && defaultChoice(Item::kicks) == 1,
+              "air kicks are on by default, aim 40 degrees (25 until the 2 AM log), spin 30%");
         Values v;
-        check(choose(Item::kicks, 1, v) && v.kicks && choose(Item::kicks, 0, v) && !v.kicks,
+        check(v.kicks && choose(Item::kicks, 0, v) && !v.kicks && choose(Item::kicks, 1, v) && v.kicks,
               "the switch sets the value");
         const auto read = withTabOnly({}, "kicks=1\nkick_gaze_cone_deg=40\nkick_spin_pct=60\n");
         check(read.kicks && read.kickGazeConeDeg == 40 && read.kickSpinPct == 60, "the ini keys read");
@@ -32701,6 +32702,7 @@ int main() {
             check(!choose(e.item, static_cast<int>(list.size()), past), "a choice past the end");
             Values off;
             off.groundKicks = false; // on by default since Nov 18; the aim is either switch's
+            off.kicks = false;      // on by default since Nov 19 (revision 14)
             check(inactiveReason(e.item, off) && std::strstr(inactiveReason(e.item, off), "AIR KICKS") &&
                       shownWhenInactive(e.item),
                   "the tuning waits for the switch");
@@ -32726,7 +32728,7 @@ int main() {
         v.groundKicks = false;
         check(choose(Item::groundKicks, 1, v) && v.groundKicks && choose(Item::groundKicks, 0, v) && !v.groundKicks,
               "the switch turns on and off");
-        const auto read = withTabOnly({}, "ground_kicks=1\n");
+        const auto read = withTabOnly({}, "ground_kicks=1\nkicks=0\n");
         check(read.groundKicks && !read.kicks, "the ini key reads, and is not the air kicks'");
         Values on;
         on.groundKicks = true;
@@ -32752,6 +32754,7 @@ int main() {
               "a tuned cone stays");
         Values aim;
         aim.groundKicks = false;
+        aim.kicks = false; // on by default since Nov 19 (revision 14); the aim is either switch's
         check(inactiveReason(Item::kickGazeCone, aim) && std::strstr(inactiveReason(Item::kickGazeCone, aim), "GROUND KICKS"),
               "the aim waits for a kick switch");
         aim.groundKicks = true;
@@ -32780,7 +32783,7 @@ int main() {
         Values v;
         check(choose(Item::enemyJoints, 1, v) && v.enemyJoints && !v.enemyLimbZones, "the joints switch");
         check(choose(Item::enemyLimbZones, 1, v) && v.enemyLimbZones && v.enemyJoints, "the limb switch");
-        const auto read = withTabOnly({}, "enemy_joints=1\nenemy_limb_zones=1\n");
+        const auto read = withTabOnly({}, "enemy_joints=1\nenemy_limb_zones=1\nkicks=0\n");
         check(read.enemyJoints && read.enemyLimbZones && !read.kicks && read.groundKicks == Values{}.groundKicks, "the ini keys read");
         Values on;
         on.enemyJoints = on.enemyLimbZones = true;
@@ -32808,12 +32811,12 @@ int main() {
                   std::strstr(row->title, "EXPERIMENTAL"),
               "the web tethers row, labelled experimental");
         Values defaults;
-        check(!defaults.physicalTethers && defaults.tetherParticles == 24 && defaults.tetherSubsteps == 8 &&
-                  choice(Item::physicalTethers, defaults) == 0 && defaultChoice(Item::physicalTethers) == 0,
-              "tethers are off by default, 24 points, 8 steps");
+        check(defaults.physicalTethers && defaults.tetherParticles == 24 && defaults.tetherSubsteps == 8 &&
+                  choice(Item::physicalTethers, defaults) == 1 && defaultChoice(Item::physicalTethers) == 1,
+              "tethers are on by default, 24 points, 8 steps");
         Values v;
-        check(choose(Item::physicalTethers, 1, v) && v.physicalTethers &&
-                  choose(Item::physicalTethers, 0, v) && !v.physicalTethers,
+        check(v.physicalTethers && choose(Item::physicalTethers, 0, v) && !v.physicalTethers &&
+                  choose(Item::physicalTethers, 1, v) && v.physicalTethers,
               "the switch sets the value");
         const auto read = withTabOnly({}, "physical_tethers=1\ntether_particles=16\ntether_substeps=12\n");
         check(read.physicalTethers && read.tetherParticles == 16 && read.tetherSubsteps == 12, "the ini keys read");
@@ -32868,6 +32871,7 @@ int main() {
             Values past;
             check(!choose(e.item, static_cast<int>(list.size()), past), "a choice past the end");
             Values off;
+            off.physicalTethers = false; // on by default since Nov 19 (revision 14)
             check(inactiveReason(e.item, off) && std::strstr(inactiveReason(e.item, off), "WEB TETHERS") &&
                       shownWhenInactive(e.item),
                   "the tuning waits for the switch");
@@ -32951,6 +32955,7 @@ int main() {
             check(!choose(e.item, static_cast<int>(list.size()), past), "a choice past the end");
             // They wait for the switch, and the row stays shown.
             Values v;
+            v.handGrab = false; // on by default since Nov 19 (revision 14)
             check(inactiveReason(e.item, v) && std::strstr(inactiveReason(e.item, v), "HAND GRAB") &&
                       shownWhenInactive(e.item),
                   "the tuning waits for the switch");
