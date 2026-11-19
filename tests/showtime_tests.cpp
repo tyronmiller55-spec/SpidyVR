@@ -214,6 +214,20 @@ void bodyModes() {
     in.owner = Owner::frozen;
     n = bodyFor(in);
     check(n.showHead && !n.naturalArms && !n.pauseArmOverlay && n.body == Body::game, "a scene: the game's, camera only");
+    in.body = bodyGameSwing;
+    in.owner = Owner::vr;
+    in.gamePoseAvailable = true;
+    n = bodyFor(in);
+    check(n.yieldPose && n.pauseArmOverlay && n.showHead && n.body == Body::game, "GAME SWING POSE: the game's swing pose");
+    in.gamePoseAvailable = false;
+    n = bodyFor(in);
+    check(!n.yieldPose && n.naturalArms && n.body == Body::natural, "no game pose: natural arms");
+    in.body = bodyNatural;
+    in.gamePoseAvailable = true;
+    check(!bodyFor(in).yieldPose, "only GAME SWING POSE ever yields");
+    in.out = false;
+    in.body = bodyGameSwing;
+    check(!bodyFor(in).yieldPose, "never in first person");
 }
 } // namespace
 int main() {

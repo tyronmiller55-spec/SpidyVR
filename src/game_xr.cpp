@@ -1424,6 +1424,7 @@ DWORD WINAPI run(void*) {
         showtime::Machine showtimeMachine;
         showtime::Machine::Output showtimeOut{};
         showtime::BodyOut showtimeBodyOut{};
+        bool showtimeBodyYielded{};
         showtime::Chord::Output showtimeChordOut{};
         bool showtimeInit{}, showtimeRefSet{}, showtimeFeetKnown{};
         Vec3 showtimeFeetLast{};
@@ -11360,8 +11361,18 @@ DWORD WINAPI run(void*) {
                                                                                                     : showtime::Owner::anim)
                                         : (pose.flags & native_body::bodyOn) ? showtime::Owner::vr
                                                                              : showtime::Owner::anim;
+                            bin.gamePoseAvailable = values.animatedMoves && swingState.owned != 0;
                             const auto bodyWas = showtimeBodyOut.body;
                             showtimeBodyOut = showtime::bodyFor(bin);
+                            // GAME SWING POSE: the VR body steps aside for the game's pose, and is
+                            // picked up again from the live pose once it is wanted back.
+                            if (showtimeBodyOut.yieldPose) {
+                                pose.flags &= ~static_cast<uint32_t>(native_body::bodyOn);
+                                showtimeBodyYielded = true;
+                            } else if (showtimeBodyYielded && (pose.flags & native_body::bodyOn)) {
+                                showtimeBodyYielded = false;
+                                native_body::beginReclaim();
+                            }
                             if (showtimeBodyOut.pauseArmOverlay)
                                 pose.flags &= ~static_cast<uint32_t>(native_body::armsOverlay);
                             if (showtimeBodyOut.naturalArms)

@@ -345,9 +345,9 @@ static_assert(std::size(showtimeWhileChoices) == std::size(showtimeWhileSteps));
 constexpr int showtimeFadeSteps[] = {0, 100, 150, 250, 400};
 constexpr const char* showtimeFadeChoices[] = {"CUT (NO FADE)", "100 MS", "150 MS (DEFAULT)", "250 MS", "400 MS"};
 static_assert(std::size(showtimeFadeChoices) == std::size(showtimeFadeSteps));
-constexpr int showtimeBodySteps[] = {0, 1, 2};
+constexpr int showtimeBodySteps[] = {0, 1, 2, 3};
 constexpr const char* showtimeBodyChoices[] = {"GAME POSE, HEAD SHOWN (DEFAULT)", "AS IN PLAY (NO HEAD)",
-                                             "NATURAL ARMS"};
+                                             "NATURAL ARMS", "GAME SWING POSE (EXPERIMENTAL)"};
 static_assert(std::size(showtimeBodyChoices) == std::size(showtimeBodySteps));
 constexpr int showtimeChordSteps[] = {0, 1};
 constexpr const char* showtimeChordChoices[] = {"HOLD X+B (DEFAULT)", "AUTO ONLY"};
@@ -1257,7 +1257,7 @@ Values sanitized(Values v) {
     v.jumpPullCapDmps = std::clamp(v.jumpPullCapDmps, 5, 30);
     v.showtimeWhile = std::clamp(v.showtimeWhile, 0, 1);
     v.showtimeFadeMs = std::clamp(v.showtimeFadeMs, 0, 400);
-    v.showtimeBody = std::clamp(v.showtimeBody, 0, 2);
+    v.showtimeBody = std::clamp(v.showtimeBody, 0, 3);
     v.showtimeChord = std::clamp(v.showtimeChord, 0, 1);
     v.showtimeAutoDodge = std::clamp(v.showtimeAutoDodge, 0, 2);
     v.showtimeDistanceCm = std::clamp(v.showtimeDistanceCm, 150, 400);

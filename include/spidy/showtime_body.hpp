@@ -8,6 +8,9 @@
 //     player's measured reach: body_calibration's arm scale back to 1, the size players saw as
 //     "too big" from outside), and under the game's animation the arm overlay paused, so the
 //     game's own arms are seen.
+//   3 GAME SWING POSE (EXPERIMENTAL): as NATURAL ARMS, but while SpidyVR swings him and the game
+//     has its own swing animation running (ANIMATION MOVES on, the swing owned), the VR body steps
+//     aside for the game's pose (physics stays SpidyVR's) and is reclaimed when it is back.
 // Pure; no Windows.
 #pragma once
 #include <cstdint>
@@ -34,18 +37,20 @@ inline const char* bodyName(Body b) {
     }
 }
 // BODY (Values::showtimeBody).
-inline constexpr int bodyGamePose = 0, bodyAsInPlay = 1, bodyNatural = 2;
-inline constexpr int bodyLast = bodyNatural;
+inline constexpr int bodyGamePose = 0, bodyAsInPlay = 1, bodyNatural = 2, bodyGameSwing = 3;
+inline constexpr int bodyLast = bodyGameSwing;
 struct BodyIn {
     bool out{};      // the camera is out (fade to fade)
     int body = bodyGamePose;
     Owner owner = Owner::anim;
+    bool gamePoseAvailable{}; // the game animates what SpidyVR does now (its swing)
 };
 struct BodyOut {
     Body body = Body::firstPerson;
     bool showHead{};        // native_body hideHead off, game_fp's head shrink off
     bool pauseArmOverlay{}; // ANIMATED ARMS off the game's animation while out
     bool naturalArms{};     // body_calibration's arm scale back to 1 (pose.armLength 0)
+    bool yieldPose{};       // native_body bodyOn off: the game's pose is drawn (physics stays VR)
 };
 inline BodyOut bodyFor(const BodyIn& in) {
     BodyOut o;
@@ -56,8 +61,13 @@ inline BodyOut bodyFor(const BodyIn& in) {
         return o;
     }
     o.showHead = true;
-    if (in.body != bodyNatural || in.owner == Owner::frozen) {
+    if ((in.body != bodyNatural && in.body != bodyGameSwing) || in.owner == Owner::frozen) {
         o.body = in.owner == Owner::frozen ? Body::game : Body::asDriven;
+        return o;
+    }
+    if (in.body == bodyGameSwing && in.owner == Owner::vr && in.gamePoseAvailable) {
+        o.body = Body::game;
+        o.yieldPose = o.pauseArmOverlay = true;
         return o;
     }
     o.body = in.owner == Owner::vr ? Body::natural : Body::game;

@@ -3028,7 +3028,9 @@ void App::options(ImVec2 origin, ImVec2 size) {
                    "What you see of him from outside. Game pose: his head is shown (in play it is hidden because "
                    "your eyes are inside it) and the body is whatever drives him now, the game's animation or "
                    "your own body. As in play: the head stays hidden, to compare. Natural arms: his own arm "
-                   "length (not stretched to your reach) and, under the game's animation, the game's own arms.",
+                   "length (not stretched to your reach) and, under the game's animation, the game's own arms. "
+                   "Game swing pose (experimental): as natural arms, and in your swings the game's own swing "
+                   "pose is shown while SpidyVR keeps the physics.",
                    S(150), [&] { tabCombo("##showtimebody", Item::showtimeBody); });
         });
         const int handoffPage = static_cast<int>(Category::handoff);
