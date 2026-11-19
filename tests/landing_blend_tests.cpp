@@ -29,6 +29,16 @@ struct Fall {
 } // namespace
 
 int main() {
+    {
+        // F2: the inverted touchdown table.
+        check(invertedLanding(true, 9.f) == Inverted::handstand, "F2: a caught inverted landing is not the handstand");
+        check(invertedLanding(false, 4.5f) == Inverted::roll, "F2: a fast inverted landing is not the roll");
+        check(invertedLanding(false, 3.9f) == Inverted::upright, "F2: a slow inverted landing is not the upright ease");
+        check(invertedLanding(false, NAN) == Inverted::upright, "F2: an unknown speed is not the upright ease");
+        check(std::string(invertedName(Inverted::roll)) == "roll", "F2: the roll's log name");
+        check(keepInverted(true, true) && !keepInverted(true, false) && !keepInverted(false, true),
+              "F2: the tilt is kept for the catch only inverted with both arms up");
+    }
     Params p;
     {
         check(std::abs(timeToImpact(0, -9) - 0) < 1e-4f, "on the ground: no time");

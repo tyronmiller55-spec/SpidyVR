@@ -71,6 +71,21 @@ inline const char* whyName(Report::Why w) {
            : w == Report::Why::kept  ? "kept tilted (a handstand or a hold)"
                                      : "touched down too soon";
 }
+// F2 (beta polish D9): an inverted touchdown (invertedDegrees or more). Two palms in reach: the handstand catch;
+// else he comes upright - at rollSpeed or more of level speed logged as a roll (the body takes the upright ease;
+// a tumble roll pose is not made yet). Before the touchdown the tilt is kept for the catch only while both arms
+// are up (keepInverted), else the upright ease (F1) runs on an inverted fall too.
+constexpr float invertedDegrees = 100.f, rollSpeed = 4.f;
+enum class Inverted : unsigned char { handstand, roll, upright };
+inline Inverted invertedLanding(bool caught, float levelSpeed) {
+    if (caught)
+        return Inverted::handstand;
+    return std::isfinite(levelSpeed) && levelSpeed >= rollSpeed ? Inverted::roll : Inverted::upright;
+}
+inline const char* invertedName(Inverted i) {
+    return i == Inverted::handstand ? "handstand" : i == Inverted::roll ? "roll" : "upright";
+}
+inline bool keepInverted(bool inverted, bool armsUp) { return inverted && armsUp; }
 struct Out {
     float tti = NAN;
     float upright = 0;      // 0..1: how far the body has come upright

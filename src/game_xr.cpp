@@ -4340,6 +4340,14 @@ DWORD WINAPI run(void*) {
                     // sound IDs yet (the SOUND TRACE session, 1008510).
                     {
                         const auto& hs = motion.handstand;
+                        // F2: every inverted touchdown, and which way it went.
+                        if (hs.touchdownNow && hs.inverted >= landing_blend::invertedDegrees) {
+                            const float level = swingFresh ? std::hypot(swingState.velocity.x, swingState.velocity.z) : NAN;
+                            const auto way = landing_blend::invertedLanding(hs.touchdownCatch || hs.caughtNow, level);
+                            diag_log::writef("landing: inverted %.0f deg -> %s (%.1f m/s level, palms %.2f m, arms %s)",
+                                             hs.inverted, landing_blend::invertedName(way), level, hs.palmGap,
+                                             hs.armsUp ? "up" : "not up");
+                        }
                         if (hs.caughtNow)
                             diag_log::writef("handstand: catch%s (inverted %.0f deg, eyes down %.2f m%s%s%s%s; hold %.2f m, "
                                              "reach %.2f m)",
@@ -9957,9 +9965,11 @@ DWORD WINAPI run(void*) {
                             lbp.release = values.airLandingRelease && values.airLandingBlend;
                             const bool held = motion.handstand.supporting || motion.handstand.holdVr ||
                                               (swingFresh && (swingState.webs[0].attached || swingState.webs[1].attached));
-                            const bool inverted =
-                                values.handstand &&
-                                handstand::invertedDegrees(motion.flipTilt.rotate({0, 1, 0})) > 100.f;
+                            // F2: inverted, the tilt is kept for the handstand catch only while both arms are up.
+                            const bool inverted = landing_blend::keepInverted(
+                                values.handstand && handstand::invertedDegrees(motion.flipTilt.rotate({0, 1, 0})) >
+                                                        landing_blend::invertedDegrees,
+                                motion.handstand.armsUp);
                             landing_blend::Input lbi;
                             lbi.seconds = frame.seconds;
                             // Any air (the animation's too: the owner keeps the body to the landing when it is near).
