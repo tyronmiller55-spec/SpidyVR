@@ -1,6 +1,8 @@
 // BETA POLISH PASS (Nov 19, plans/beta-polish-pass.md): the portable pieces of the batch 1 safety and log items and
 // the batch 4 feel items that have no suite of their own. Portable.
+#include "spidy/diag_log.hpp"
 #include "spidy/eye_stall.hpp"
+#include "spidy/vr_settings.hpp"
 #include <cmath>
 #include <cstdio>
 #include <cstdlib>
@@ -47,6 +49,35 @@ int main() {
         old.begin(1000);
         old.end(1500);
         check(judge(13000, 10000, old) == Verdict::stalled, "an older start forgives nothing");
+    }
+    // G4: LOG LEVEL - the default repeats the noisy kinds once per 5 s and takes in the head probe, forearm aim and
+    // player torso; VERBOSE is the old 2 s and leaves those three alone; QUIET is 30 s.
+    {
+        using diag_log::Throttle;
+        check(Throttle::kindOf("head probe: anim live: x") >= 0 && Throttle::kindOf("player torso: active 1") >= 0 &&
+                  Throttle::kindOf("forearm aim: left") >= 0,
+              "the beta's kinds at the default level");
+        check(Throttle::kindOf("head probe: anim live: x", 2) < 0 && Throttle::kindOf("forearm sign: x", 2) == 1,
+              "verbose leaves the beta's kinds out");
+        auto keptOver60 = [](int level) {
+            Throttle t;
+            t.level(level);
+            int kept = 0;
+            for (int i = 0; i < 600; ++i)
+                kept += t.allow(("head probe: anim live " + std::to_string(i)).c_str(), i * .1) ? 1 : 0;
+            return kept;
+        };
+        check(keptOver60(1) >= 12 && keptOver60(1) <= 13, "default: once per 5 s");
+        check(keptOver60(0) >= 2 && keptOver60(0) <= 3, "quiet: once per 30 s");
+        check(keptOver60(2) == 600, "verbose: the head probe is not throttled");
+        Throttle t;
+        check(t.allow("head probe: state anim -> vr", 0) && t.allow("head probe: owner in vr: body x", .1),
+              "a changed shape is kept at once");
+        vr_settings::Values v;
+        check(v.logLevel == 1, "log_level defaults to 1");
+        check(vr_settings::withTabOnly({}, "log_level=7\n").logLevel == 2 &&
+                  vr_settings::withTabOnly({}, "log_level=0\n").logLevel == 0,
+              "log_level is clamped and read");
     }
     std::printf("beta polish: %d checks passed\n", passed);
     return 0;

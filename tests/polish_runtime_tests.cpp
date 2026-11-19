@@ -105,6 +105,7 @@ int main() {
     // QUIET LOG: the playtest's repeats are throttled, a new reason is not.
     {
         diag_log::Throttle t;
+        t.level(2); // VERBOSE: the 2 s heartbeat these were written for
         check(diag_log::Throttle::kindOf("point jump: denied no contact (A and B)") >= 0 &&
                   diag_log::Throttle::kindOf("sidestep: denied not sideways") >= 0 &&
                   diag_log::Throttle::kindOf("handstand: no catch at the touchdown: x") >= 0 &&

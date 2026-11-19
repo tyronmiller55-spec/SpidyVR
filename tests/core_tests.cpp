@@ -25559,6 +25559,7 @@ int main() {
                   "marker_twist_steady=1\n"
                   "marker_turn_rate_dps=360\n"
                   "marker_switch_hold_ms=150\n"
+                  "log_level=1\n"
                   "movement_defaults=12\n",
               "the defaults' text");
         Values changed = defaults;

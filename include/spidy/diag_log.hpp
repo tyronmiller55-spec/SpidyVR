@@ -104,17 +104,26 @@ class ChangeOnly {
 class Throttle {
   public:
     static constexpr double heartbeat = 2.0, slowHeartbeat = 10.0;
-    static constexpr unsigned kinds = 12, shapeChars = 48;
+    // LOG LEVEL (log_level, beta polish G4; diag was 13.2 MB for 27 min, the head probe and the aim family over
+    // 60% of it): 2 VERBOSE keeps the 12 kinds below at the 2 s heartbeat, as before; 1 (the default) adds the head
+    // probe's samples, the forearm aim and the player torso and repeats each kind's unchanged shape once per 5 s;
+    // 0 QUIET once per 30 s. A changed shape (a new state or reason) is always kept at once.
+    static constexpr unsigned kinds = 15, baseKinds = 12, shapeChars = 48;
+    static constexpr double levelHeartbeat[3] = {30.0, 5.0, heartbeat};
     // Polish pass: and the repeats of the 4d58169 playtest (point jump: denied 296, handstand: no catch 673,
     // sidestep: denied 54, hybrid: adopt never seeded 27): a new REASON is a new shape and is kept at once.
     static constexpr const char* noisy[kinds] = {"head probe: cutscene", "forearm sign:",  "shooter lock:",
                                                  "spherical aim:",       "animated hand:", "animated hand points:",
                                                  "tracking lock:",       "vr stabilization: tilt",
                                                  "point jump: denied",   "sidestep: denied",
-                                                 "handstand: no catch",  "hybrid: adopt never seeded"};
-    // Is `text` (without the time stamp) one of the noisy kinds? Its index, or -1.
-    static int kindOf(std::string_view text) {
-        for (unsigned i = 0; i < kinds; ++i) {
+                                                 "handstand: no catch",  "hybrid: adopt never seeded",
+                                                 "head probe:",          "forearm aim:",
+                                                 "player torso:"};
+    // Is `text` (without the time stamp) one of the noisy kinds? Its index, or -1. VERBOSE (level 2) leaves the
+    // three added at the beta out.
+    static int kindOf(std::string_view text, int level = 1) {
+        const unsigned count = level >= 2 ? baseKinds : kinds;
+        for (unsigned i = 0; i < count; ++i) {
             const std::string_view k = noisy[i];
             if (text.substr(0, k.size()) == k)
                 return static_cast<int>(i);
@@ -141,14 +150,20 @@ class Throttle {
     bool isSlow() const {
         return slow_;
     }
+    void level(int l) {
+        level_ = l < 0 ? 0 : l > 2 ? 2 : l;
+    }
+    int level() const {
+        return level_;
+    }
     bool allow(std::string_view text, double seconds) {
-        const int kind = kindOf(text);
+        const int kind = kindOf(text, level_);
         char shape[shapeChars];
         shapeOf(text, shape);
         if (kind >= 0) {
             auto& e = entry_[kind];
             const bool same = e.set && std::strncmp(e.shape, shape, shapeChars) == 0;
-            const bool due = !e.set || seconds - e.at >= heartbeat || seconds < e.at;
+            const bool due = !e.set || seconds - e.at >= levelHeartbeat[level_] || seconds < e.at;
             if (same && (slow_ || !due)) {
                 ++dropped;
                 return false;
@@ -194,6 +209,7 @@ class Throttle {
     Entry entry_[kinds]{};
     Entry other_[32]{};
     bool slow_ = false;
+    int level_ = 1;
 };
 // STARTUP STAGES and the VR worker's WATCHDOG. The November 3 sessions froze
 // the headset at start, and the diagnostics said nothing of how far VR had got:
@@ -287,6 +303,8 @@ void enable(bool on);
 bool enabled();
 // The game is not stepping (stuck under about 15 fps): the diagnostics write only what changed (Throttle).
 void setSlow(bool on);
+// LOG LEVEL (log_level: 0 quiet, 1 default, 2 verbose; Throttle::level).
+void setLevel(int level);
 // Lines the Throttle kept and dropped since the session began.
 uint64_t droppedLines();
 // A line for the diagnostics (and only there: the report's timeline is

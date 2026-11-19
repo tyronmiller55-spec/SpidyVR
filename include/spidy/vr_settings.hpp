@@ -516,6 +516,10 @@ struct Values {
     // played around takeoffs, landings and point jumps. Plays nothing,
     // changes nothing. On by default. sound_trace.
     bool soundTrace = true;
+    // LOG LEVEL (beta polish G4; ini log_level, no menu row): how often the diagnostics repeat their noisiest
+    // unchanged lines (diag_log::Throttle::level): 0 QUIET (30 s), 1 (default, 5 s, the head probe and aim family
+    // included), 2 VERBOSE (2 s, as before the beta). A changed state is always written at once.
+    int logLevel = 1;
     // JUMP TO SPIDYVR (hybrid_owner.hpp; the user, November 12 05:07/05:41:
     // plain jumps, zip launches, vaults and wall launches hand off to SpidyVR
     // after a timer): ms into a midair animation's air; 0 STAY TO LANDING (the

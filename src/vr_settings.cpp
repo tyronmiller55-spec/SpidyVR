@@ -1224,6 +1224,7 @@ Values sanitized(Values v) {
     v.animatedHybridSpeedMs = v.animatedHybridSpeedMs <= 0 ? 0 : std::clamp(v.animatedHybridSpeedMs, 5, 500);
     v.earlyJump = std::clamp(v.earlyJump, 0, 2);
     v.movementDefaults = std::clamp(v.movementDefaults, 0, movementDefaultsRevision);
+    v.logLevel = std::clamp(v.logLevel, 0, 2);
     v.webAimSource = std::clamp(v.webAimSource, 0, 1);
     v.forearmBlend = std::clamp(v.forearmBlend, 0, 100);
     v.forearmAimLimit = std::clamp(v.forearmAimLimit, 35, 180);
@@ -3125,6 +3126,7 @@ constexpr TabOnly tabOnly[] = {
     {"marker_twist_steady", &Values::markerTwistSteady, nullptr},
     {"marker_turn_rate_dps", nullptr, &Values::markerTurnRateDps},
     {"marker_switch_hold_ms", nullptr, &Values::markerSwitchHoldMs},
+    {"log_level", nullptr, &Values::logLevel},
     {"movement_defaults", nullptr, &Values::movementDefaults},
 };
 } // namespace

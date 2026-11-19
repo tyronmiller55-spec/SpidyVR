@@ -766,6 +766,8 @@ int main() {
                 key == "punch_view_ease_ms" ||
                 // MOVE HAPTICS, VIEW YAW SOURCE, SOUND TRACE (November 12): the player's own.
                 key == "move_haptics_pct" || key == "view_yaw_source" || key == "sound_trace" ||
+                // LOG LEVEL (beta polish G4): diagnostics, the player's own.
+                key == "log_level" ||
                 // JUMP TO SPIDYVR, AIR VIEW EASE (November 12): the player's own.
                 key == "jump_handoff_ms" || key == "air_view_ease_ms" || key == "anim_yaw_sway_pct" ||
                 key == "turn_in_place_deg" || key.rfind("passive_", 0) == 0 || key == "movement_mode" ||

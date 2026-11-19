@@ -2387,6 +2387,7 @@ DWORD WINAPI run(void*) {
             // SESSION DIAGNOSTICS only with RUN LOGS on: off, no line is kept or
             // published and no watchdog runs (the review of pull request #77).
             diag_log::enable(values.runLogs);
+            diag_log::setLevel(values.logLevel); // LOG LEVEL (beta polish G4)
             if (values.runLogs && !watchdogStarted) {
                 // The watchdog holds its own handle to this worker and ends with it.
                 HANDLE watched{};

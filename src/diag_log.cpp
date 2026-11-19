@@ -37,6 +37,12 @@ void diag_log::setSlow(bool slow) {
     ReleaseSRWLockExclusive(&lock);
 }
 
+void diag_log::setLevel(int level) {
+    AcquireSRWLockExclusive(&lock);
+    throttle.level(level);
+    ReleaseSRWLockExclusive(&lock);
+}
+
 uint64_t diag_log::droppedLines() {
     AcquireSRWLockShared(&lock);
     const uint64_t n = throttle.dropped;

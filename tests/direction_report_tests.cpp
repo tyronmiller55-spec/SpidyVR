@@ -271,6 +271,7 @@ int main() {
     {
         using diag_log::Throttle;
         Throttle t;
+        t.level(2); // VERBOSE: the 2 s heartbeat these were written for (log_level 1, the default, is 5 s)
         check(Throttle::kindOf("forearm sign: left +1.2 deg") == 1 && Throttle::kindOf("view yaw: lock 1") == -1, "kinds");
         int kept = 0;
         for (int i = 0; i < 600; ++i) // 60 s at 10 Hz
