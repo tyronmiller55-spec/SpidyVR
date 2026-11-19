@@ -338,12 +338,26 @@ uint32_t buildItems() {
         return 9501;
     }
 }
+// G2 (beta polish): a build that failed on anything but a config not loaded yet (9501; looked for again at every
+// opening) is tried again at a later opening (buildRetryMs after the failure, so once per menu open) up to
+// buildTries times in all, then not this session (was: never again after the first).
+constexpr int buildTries = 3;
+constexpr ULONGLONG buildRetryMs = 1000;
+std::atomic<int> buildFailures{};
+std::atomic<ULONGLONG> buildFailedAt{};
 bool ready() {
     if (!built) {
+        if (buildFailures > 0 && GetTickCount64() - buildFailedAt < buildRetryMs)
+            return false;
         const auto code = buildItems();
         failure = code;
-        // A config not loaded yet is looked for again at the next opening.
-        built = !code ? 1 : code == 9501 ? 0 : 2;
+        if (!code) {
+            built = 1;
+        } else if (code != 9501) {
+            buildFailedAt = GetTickCount64();
+            if (++buildFailures >= buildTries)
+                built = 2;
+        }
     }
     return built == 1;
 }
