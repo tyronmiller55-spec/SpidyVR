@@ -728,6 +728,11 @@ struct Values {
     // WALL JUMP SOUND (beta polish A5; wall_jump_sound): 0 off (silent as before), 1 d321a6f9 (default), 2 110d202b,
     // the Nov 19 trace's two candidates (sound_guard.hpp) for a headset A/B.
     int wallJumpSound = 1;
+    // HERO ATTACK SOUND (beta polish A2; attack_sound, spidy_vr.ini only, no menu row): one of the game's sounds played
+    // on Spidey as a punch is thrown or a kick starts (at most one a hand every 250 ms, hit_sound.hpp): the id's 32
+    // bits as a signed decimal. 0 (the default): none - the game's own whoosh and effort ids are not captured yet
+    // (the capture session); nothing is guessed.
+    int attackSound = 0;
     // AIR TAKEOVER (fall_handoff_ms, 150): a plain fall (a ledge, a stumble; no jump press, never rose) hands to SpidyVR this long
     // into the air; 0 waits for JUMP TO SPIDYVR's timer (hybrid_owner.hpp Frame::fallHandoffNs).
     int fallHandoffMs = 150;

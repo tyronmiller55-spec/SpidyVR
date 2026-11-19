@@ -25540,7 +25540,7 @@ int main() {
                   "showtime_auto_finish=0\nshowtime_distance_cm=250\nshowtime_height_cm=30\nshowtime_angle_deg=35\n"
                   "showtime_turn=0\nshowtime_follow=1\nshowtime_vignette=1\nshowtime_slow_mo=1\nshowtime_latch=0\n"
                   "air_correct_ms=1000\n"
-                  "point_jump_bullet=1\npoint_jump_sound=1\nwall_jump_sound=1\n"
+                  "point_jump_bullet=1\npoint_jump_sound=1\nwall_jump_sound=1\nattack_sound=0\n"
                   "fall_handoff_ms=150\n"
                   "air_landing_blend=1\n"
                   "air_landing_release=0\n"

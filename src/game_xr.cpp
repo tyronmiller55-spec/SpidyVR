@@ -101,6 +101,7 @@
 #include "spidy/hybrid_handoff.hpp"
 #include "spidy/hybrid_steer.hpp"
 #include "spidy/move_haptics.hpp"
+#include "spidy/hit_sound.hpp"
 #include "spidy/sound_guard.hpp"
 #include "spidy/sound_trace.hpp"
 #include "spidy/stable_yaw.hpp"
@@ -613,6 +614,20 @@ const sound_trace::Ring* soundTrace{};
 DWORD(WINAPI* soundTraceMode)(void*){};
 // One of the game's own sounds on the player (SpidySoundCue; bit 32 asks for the guard); null from an older ray module.
 DWORD(WINAPI* soundCue)(void*){};
+// HERO ATTACK SOUND (attack_sound, hit_sound.hpp): the ini's id on the player as `hand` (0 L, 1 R, 2 the legs) throws
+// a blow, at most one a hand every 250 ms; nothing with 0 (the default).
+void attackSound(int id, int hand) {
+    static int64_t last[3]{};
+    if (!id || !soundCue || hand < 0 || hand > 2)
+        return;
+    LARGE_INTEGER now{}, frequency{};
+    QueryPerformanceCounter(&now);
+    QueryPerformanceFrequency(&frequency);
+    if (!hit_sound::attackDue(last[hand], now.QuadPart, frequency.QuadPart))
+        return;
+    last[hand] = now.QuadPart;
+    soundCue(reinterpret_cast<void*>(static_cast<uintptr_t>(static_cast<uint32_t>(id))));
+}
 // JUMP SOUNDS / WALL JUMP SOUND (sound_guard.hpp): the game's sounds on the player. `set`: the grunt and the rest of
 // the jump set, else the grunt alone (a point jump, which the game already accompanies); `wall`: one wall-jump
 // candidate instead (no grunt). Each skipped (in the ray module) while the game's own grunt sounds; logged.
@@ -5352,6 +5367,8 @@ DWORD WINAPI run(void*) {
                                 const auto why = static_cast<punch_track::Why>(t.lastWhy);
                                 const char* hand = t.lastHand ? "R" : "L";
                                 const float flat = std::hypot(t.towardX, t.towardZ);
+                                if (why != punch_track::Why::off)
+                                    attackSound(values.attackSound, t.lastHand ? 1 : 0); // a punch thrown
                                 if (why == punch_track::Why::tracked && values.punchAutotarget && flat > .1f) {
                                     constexpr float toDeg = 180.f / 3.14159265f;
                                     punchTrackYaw = hybrid_handoff::lookYaw({t.towardX, 0.f, t.towardZ});
@@ -6787,6 +6804,8 @@ DWORD WINAPI run(void*) {
                                 const unsigned long long who = al->target;
                                 const auto zone = static_cast<air_kick::Zone>(std::min<uint32_t>(zoneRaw, 3));
                                 const auto gesture = airGesture;
+                                if (what == 1)
+                                    attackSound(values.attackSound, 2); // HERO ATTACK SOUND: a kick starts
                                 if (what == 1 && kickBusyRefused) {
                                     diag_log::writef("kick: %u more gestures refused while the last kick ran",
                                                      kickBusyRefused);

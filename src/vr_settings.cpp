@@ -3174,6 +3174,7 @@ constexpr TabOnly tabOnly[] = {
     {"point_jump_bullet", &Values::pointJumpBullet, nullptr},
     {"point_jump_sound", &Values::pointJumpSound, nullptr},
     {"wall_jump_sound", nullptr, &Values::wallJumpSound},
+    {"attack_sound", nullptr, &Values::attackSound},
     {"fall_handoff_ms", nullptr, &Values::fallHandoffMs},
     {"air_landing_blend", &Values::airLandingBlend, nullptr},
     {"air_landing_release", &Values::airLandingRelease, nullptr},

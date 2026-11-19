@@ -792,7 +792,7 @@ int main() {
             if (key == "air_poses" || key == "directional_flips")
                 continue;
             // WALL JUMP SOUND (beta polish A5): the player's own, as JUMP SOUNDS (point_jump_sound).
-            if (key == "wall_jump_sound")
+            if (key == "wall_jump_sound" || key == "attack_sound")
                 continue;
             if (key == "punch_track_by_look")
                 continue;
