@@ -3098,7 +3098,9 @@ DWORD WINAPI run(void*) {
                         in.master = master;
                         // A chord may start where the legs could move (last frame's finding),
                         // with no prompt naming X or Y and the wheel shut.
-                        in.allowed = master && (legBaseLast || legChordAirAnimLast || groundStand) && !gadgetWheel.open() &&
+                        // LEG HOLD EVERYWHERE (leg_hold_everywhere, off by default): anywhere LEG CONTROL is usable.
+                        in.allowed = master && (legBaseLast || legChordAirAnimLast || groundStand || values.legHoldEverywhere) &&
+                                     !gadgetWheel.open() &&
                                      !(namedPress.claimed() &
                                        (game_pad::NamedPress::controlX | game_pad::NamedPress::controlY));
                         legHoldOut = legHold.update(in);

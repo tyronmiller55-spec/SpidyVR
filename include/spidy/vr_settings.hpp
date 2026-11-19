@@ -567,6 +567,11 @@ struct Values {
     // the swing's velocity. swing_kick_manual. And the auto dive (WebStrike::dive, today's) as its own
     // setting, on as before: swing_kick_auto. Both can be on; the dive holds back during a manual kick.
     bool swingKickManual = false, swingKickAuto = true;
+    // LEG HOLD EVERYWHERE (EngineBot's K1 series, Nov 19 port; ini leg_hold_everywhere, no menu row):
+    // the Y+X chord may start wherever LEG CONTROL is usable, not only where the legs can move. OFF by
+    // default (the owner, Nov 19 t127u): on, a lone X or Y on the ground waits up to 80 ms for its partner,
+    // which would hold back the X throw.
+    bool legHoldEverywhere = false;
     // GRIP ACROSS THE GAME (G1, grip.hpp; November 14), EXPERIMENTAL: both off until set. wall_brake: on
     // Spidy's wall a grip closed on a slide slows it as friction does (mu grip_stop_pct, 200: the Nov 14 pass; it was wall_brake_mu_pct, 90, and files that saved that key keep their old default behind it), then holds.
     // grip_fling: a pull let go of while gripping a surface launches the body the other way (gain
