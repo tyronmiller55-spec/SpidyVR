@@ -301,7 +301,7 @@ struct Values {
     // from before it gets RUN CURVE on and EARLY JUMP QUICK TAP once (the
     // user: "movement fixes will be defaults"); after that the player's own
     // choice stands. Not a row. movement_defaults.
-    int movementDefaults = 11; // movementDefaultsRevision: a new file has seen them
+    int movementDefaults = 12; // movementDefaultsRevision: a new file has seen them
     // SOFT LANDING (the tab's SOFT LANDING; Swing::allowSoftLanding,
     // run_update::softLandVertical): a fall the swing flies, with no web
     // holding, eases to 9 m/s down over its last 3 m (or 0.35 s), its speed
@@ -562,11 +562,12 @@ struct Values {
     // VR STABILIZATION (November 14): 1 applies the CAMERA rows, HORIZON LEVEL and the bank's ANGLE to
     // SpidyVR's own view tilt (swing, air, combat, wall); 0 leaves it as before. camera_vr_stabilization.
     int cameraVrStabilization = 1;
-    // MANUAL SWING KICK (K1, swing_kick.hpp; November 14), EXPERIMENTAL: off until set. Swinging with the
+    // MANUAL SWING KICK (K1, swing_kick.hpp; November 14), EXPERIMENTAL: ON by default (the owner, Nov 19 6:06 AM:
+    // "Yes, manual swing kicks on by default"; movement_defaults revision 12 turns it on once). Swinging with the
     // legs engaged (Y + X), a flick of the right stick up kicks at the ringed enemy within 30 degrees of
     // the swing's velocity. swing_kick_manual. And the auto dive (WebStrike::dive, today's) as its own
     // setting, on as before: swing_kick_auto. Both can be on; the dive holds back during a manual kick.
-    bool swingKickManual = false, swingKickAuto = true;
+    bool swingKickManual = true, swingKickAuto = true;
     // LEG HOLD EVERYWHERE (EngineBot's K1 series, Nov 19 port; ini leg_hold_everywhere, no menu row):
     // the Y+X chord may start wherever LEG CONTROL is usable, not only where the legs can move. OFF by
     // default (the owner, Nov 19 t127u): on, a lone X or Y on the ground waits up to 80 ms for its partner,
@@ -1216,7 +1217,7 @@ std::string tabOnlyText(const Values&);
 // key, or whose value is no whole number, is passed over.
 Values withTabOnly(Values, std::string_view text);
 // The movement defaults' revision (Values::movementDefaults) this build has.
-inline constexpr int movementDefaultsRevision = 11;
+inline constexpr int movementDefaultsRevision = 12;
 // November 12 movement cleanup: a settings file (that text) older than
 // movementDefaultsRevision gets the new movement defaults once - RUN CURVE
 // on, EARLY JUMP at least QUICK TAP - and is marked as having seen them; a

@@ -405,20 +405,29 @@ int main() {
         std::printf("  assist run: rope %+.2f m, steer %.2f m/s^2, end speed %.2f (no assist: %.2f)\n", rope1,
                     steer1, length(v1), length(v0));
     }
-    // The settings: manual off, auto on, in spidy_vr.ini, as switches.
+    // The settings: manual on (the owner, Nov 19), auto on, in spidy_vr.ini, as switches.
     {
         using namespace vr_settings;
         Values v;
-        check(!v.swingKickManual && v.swingKickAuto, "manual off and the auto dive on by default");
-        check(defaultChoice(Item::swingKickManual) == 0 && defaultChoice(Item::swingKickAuto) == 1,
+        check(v.swingKickManual && v.swingKickAuto, "manual and the auto dive on by default");
+        check(!v.legHoldEverywhere, "leg hold everywhere stays off: X and Y are instant on the ground");
+        check(defaultChoice(Item::swingKickManual) == 1 && defaultChoice(Item::swingKickAuto) == 1,
               "default choices");
-        check(choose(Item::swingKickManual, 1, v) && v.swingKickManual && choose(Item::swingKickAuto, 0, v) &&
+        check(choose(Item::swingKickManual, 0, v) && !v.swingKickManual && choose(Item::swingKickAuto, 0, v) &&
                   !v.swingKickAuto,
               "choices set them");
         const Values back = withTabOnly({}, tabOnlyText(v));
-        check(back.swingKickManual && !back.swingKickAuto, "spidy_vr.ini round-trips them");
+        check(!back.swingKickManual && !back.swingKickAuto, "spidy_vr.ini round-trips them");
         const Values old = withTabOnly({}, "camera_stabilization=1\n");
-        check(!old.swingKickManual && old.swingKickAuto, "an older file keeps the dive and the kick off");
+        check(old.swingKickManual && old.swingKickAuto, "a file without the keys gets both on");
+        // Revision 12: a file from before wrote swing_kick_manual=0 as the old default; it moves once. A 0 chosen
+        // after revision 12 stays, and leg hold everywhere is never turned on.
+        const std::string rev11 = "swing_kick_manual=0\nleg_hold_everywhere=0\nmovement_defaults=11\n";
+        const Values moved = withMovementDefaults(withTabOnly({}, rev11), rev11);
+        check(moved.swingKickManual && !moved.legHoldEverywhere && moved.movementDefaults == 12,
+              "revision 12 turns the manual kick on, leg hold stays off");
+        const std::string rev12 = "swing_kick_manual=0\nmovement_defaults=12\n";
+        check(!withMovementDefaults(withTabOnly({}, rev12), rev12).swingKickManual, "a 0 chosen after revision 12 stays");
         const auto* row = rowFor(Item::swingKickManual);
         check(row && std::string(row->title).find("EXPERIMENTAL") != std::string::npos,
               "its row says EXPERIMENTAL");

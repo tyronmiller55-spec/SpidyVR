@@ -1,5 +1,5 @@
 #pragma once
-// MANUAL SWING KICK (K1; the plan's Pillar 4; swing_kick_manual, off until set, EXPERIMENTAL).
+// MANUAL SWING KICK (K1; the plan's Pillar 4; swing_kick_manual, on by default since Nov 19, EXPERIMENTAL).
 //
 // While swinging on a web with the legs engaged (Y + X, leg_hold.hpp), a flick of the right stick up
 // (under 0.3 to over 0.8 within 80 ms) sends the legs out at the enemy the ring marks, if he is 3 to 14 m

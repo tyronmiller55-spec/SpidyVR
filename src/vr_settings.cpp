@@ -3275,6 +3275,12 @@ Values withMovementDefaults(Values v, std::string_view text) {
         if (v.punchTrackConeDeg == 90)
             v.punchTrackConeDeg = fresh.punchTrackConeDeg;
     }
+    if (seen < 12) {
+        // Revision 12 (the owner, Nov 19 6:06 AM: "Yes, manual swing kicks on by default"): MANUAL SWING KICK on. An ini
+        // from before wrote swing_kick_manual=0 as the old default, so it is untuned and moves. LEG HOLD EVERYWHERE stays
+        // off ("No, keep X and Y instant on the ground").
+        v.swingKickManual = true;
+    }
     v.movementDefaults = movementDefaultsRevision;
     return sanitized(v);
 }

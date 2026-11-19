@@ -3116,7 +3116,7 @@ DWORD WINAPI run(void*) {
                         if (legHoldOut.disengagedNow)
                             diag_log::writef("legs: disengaged (%s)", leg_hold::whyName(legHoldOut.why));
                     }
-                    // MANUAL SWING KICK (swing_kick.hpp; swing_kick_manual, off until set): swinging with the
+                    // MANUAL SWING KICK (swing_kick.hpp; swing_kick_manual, on by default): swinging with the
                     // legs engaged, a flick of the right stick up (under 0.35 to over 0.75 within 150 ms; a slow
                     // push is still the jackknife pose) asks the swing to kick at the ringed enemy. The swing
                     // arms it only within 30 degrees of the swing's velocity, 3 to 14 m, 9 m/s or faster;
