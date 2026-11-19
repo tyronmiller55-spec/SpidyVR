@@ -219,7 +219,9 @@ class Gestures {
 // why). Watches the same stick as Gestures while the legs are engaged: each push out of the low mark that no
 // gesture came of, once the stick is back under it (or the legs let go), is a miss - its peak size, the time from
 // the low mark to the peak and to the high mark (if it got there), and why: too small (never past flickHigh) or
-// too slow (past it after flickSeconds). Pushes that never pass `watchSize` are resting thumbs, not tries.
+// too slow (past it after flickSeconds), not armed (past it in time, but the stick was already out when the legs
+// engaged) or not taken (in time and armed: a cooldown or a kick under way). Pushes that never pass `watchSize` are
+// resting thumbs, not tries.
 struct FlickMiss {
     const char* why{}; // nullptr: none
     float peak{}, peakSeconds{}, highSeconds = -1.f, angle{};
@@ -234,9 +236,19 @@ class FlickWatch {
         const float dt = std::isfinite(seconds) ? std::clamp(seconds, 0.f, .1f) : 0.f;
         if (fired)
             out_ = false, done_ = true;
+        if (!engaged) {
+            sawLow_ = false;
+        } else if (size < c.flickLow) {
+            sawLow_ = true;
+        }
         if (!engaged || size < c.flickLow) {
             if (out_ && !done_ && peak_ >= watchSize) {
-                miss.why = peak_ <= c.flickHigh ? "too small" : "too slow";
+                // Past the high mark in time is no slow flick (the 2:23 AM log: "too slow ... past 0.75 at 14 ms"):
+                // the stick was already out when the legs engaged (no low mark to start from), or a kick was busy.
+                miss.why = peak_ <= c.flickHigh                         ? "too small"
+                           : highAt_ < 0 || highAt_ > c.flickSeconds + 1e-6f ? "too slow"
+                           : !armedStart_                               ? "not armed: the stick was out when the legs engaged"
+                                                                        : "not taken: cooldown or a kick under way";
                 miss.peak = peak_;
                 miss.peakSeconds = peakAt_;
                 miss.highSeconds = highAt_;
@@ -249,6 +261,7 @@ class FlickWatch {
         }
         if (!out_ && !done_) {
             out_ = true;
+            armedStart_ = sawLow_;
             age_ = peak_ = peakAt_ = 0;
             highAt_ = -1.f;
         }
@@ -266,7 +279,7 @@ class FlickWatch {
     }
 
   private:
-    bool out_{}, done_{};
+    bool out_{}, done_{}, sawLow_{}, armedStart_{};
     float age_{}, peak_{}, peakAt_{}, highAt_ = -1.f, angle_{};
 };
 

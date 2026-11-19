@@ -593,6 +593,23 @@ int main() {
         w.update(dt, 0, .45f, true, false);
         m = w.update(dt, 0, .1f, true, false);
         check(!m.why, "a resting thumb: no try");
+        // R2 (the 2:23 AM log): past 0.75 at 14 ms is no slow flick.
+        FlickWatch fast;
+        m = fast.update(dt, 0, 1.f, true, false); // the legs engage with the stick already out
+        m = fast.update(dt, 0, 1.f, true, false);
+        m = fast.update(dt, 0, 0, true, false);
+        check(m.why && std::string(m.why).rfind("not armed", 0) == 0, "out when the legs engaged: not armed");
+        FlickWatch armed;
+        armed.update(dt, 0, .1f, true, false);
+        armed.update(dt, 0, 1.f, true, false);
+        m = armed.update(dt, 0, .1f, true, false);
+        check(m.why && std::string(m.why).rfind("not taken", 0) == 0, "armed and in time but no kick: not taken");
+        FlickWatch slow;
+        slow.update(dt, 0, .1f, true, false);
+        for (int i = 0; i <= 30; ++i)
+            slow.update(dt, 0, std::min(1.f, .36f + i * .03f), true, false);
+        m = slow.update(dt, 0, 0, true, false);
+        check(m.why && std::string(m.why) == "too slow", "still too slow when it is");
     }
     std::printf("air_kick: %d checks passed\n", passed);
     return 0;
