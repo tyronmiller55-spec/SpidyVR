@@ -4412,9 +4412,10 @@ DWORD WINAPI run(void*) {
                     // PUNCH / AIR VIEW EASE: how each ease ended, once.
                     if (rig.viewEase().ends() != punchEaseEndsLogged) {
                         punchEaseEndsLogged = rig.viewEase().ends();
-                        diag_log::writef("%s view ease: %s after %d ms", easeWhy,
+                        diag_log::writef("%s view ease: %s after %d ms (held %d ms first)", easeWhy,
                                          view_ease::endName(rig.viewEase().lastEnd()),
-                                         static_cast<int>(rig.viewEase().elapsed() * 1000 + .5f));
+                                         static_cast<int>(rig.viewEase().elapsed() * 1000 + .5f),
+                                         static_cast<int>(rig.viewEase().held() * 1000 + .5f));
                     }
                     {
                         // FLIP BREAK, the left stick: the axes CONTROLLED FLIPS (toggled
@@ -10135,9 +10136,10 @@ DWORD WINAPI run(void*) {
                                         if (rig.viewEase().active()) {
                                             rig.cancelViewEase(view_ease::End::handoff);
                                             punchEaseEndsLogged = rig.viewEase().ends();
-                                            diag_log::writef("%s view ease: %s after %d ms", easeWhy,
+                                            diag_log::writef("%s view ease: %s after %d ms (held %d ms first)", easeWhy,
                                                              view_ease::endName(rig.viewEase().lastEnd()),
-                                                             static_cast<int>(rig.viewEase().elapsed() * 1000 + .5f));
+                                                             static_cast<int>(rig.viewEase().elapsed() * 1000 + .5f),
+                                                             static_cast<int>(rig.viewEase().held() * 1000 + .5f));
                                         }
                                         // HEAD HEIGHT FADE (head_height_fade_ms): the height fades on its own, longer.
                                         const float heightFade = static_cast<float>(values.headHeightFadeMs) * .001f;
