@@ -15,7 +15,7 @@ from run_game_vr import (snapshot as xr_snapshot, accepted as accepted_xr, timin
                          appearance_snapshot, stream_snapshot, pace_snapshot, blur_snapshot, reproject_snapshot,
                          eye_snapshot, save_eye_snapshot, hud_capture_snapshot, save_hud_capture,
                          rgb_rows, crop_origin,
-                         game_memory, keep_game_log, body_snapshot,
+                         game_memory, keep_game_log, body_snapshot, commit_trend, commit_line,
                          punch_snapshot, strike_snapshot, focus_snapshot, sound_snapshot, dodge_snapshot,
                          shooter_snapshot,
                          rope_snapshot,
@@ -1181,6 +1181,25 @@ class ProtocolTests(unittest.TestCase):
             shot['pixels'] = 0
             self.assertIsNone(save_eye_snapshot(Reader(), 0, shot, folder, '0003'))
             write.assert_not_called()
+
+    def test_commit_trend_tells_a_flat_game_from_a_growing_one(self):
+        # The Nov 19 session's shape: up in the first minutes, flat after.
+        flat = [dict(time='06:52:18', commit_mb=11760), dict(time='07:00:18', commit_mb=12039),
+                dict(time='07:12:18', commit_mb=12204), dict(time='07:24:18', commit_mb=12156),
+                dict(time='07:36:18', commit_mb=12176)]
+        trend = commit_trend(flat, dict(start=1683, lowest=247, end=2355))
+        self.assertEqual(trend['verdict'], 'flat')
+        self.assertEqual((trend['first_mb'], trend['last_mb'], trend['peak_mb']), (11760, 12176, 12204))
+        self.assertLess(trend['second_half_mb_per_min'], 5)
+        self.assertIn('lowest 247 MB', commit_line(trend))
+        self.assertIn('(flat)', commit_line(trend))
+        growing = [dict(time='23:%02d:00' % m, commit_mb=10000 + 20*m) for m in range(50, 60)] + \
+                  [dict(time='00:%02d:00' % m, commit_mb=11200 + 20*m) for m in range(0, 10)]
+        trend = commit_trend(growing)
+        self.assertEqual(trend['verdict'], 'growing')
+        self.assertAlmostEqual(trend['second_half_mb_per_min'], 20, delta=1)
+        self.assertIsNone(commit_trend(flat[:3]))
+        self.assertIn('not enough', commit_line(None))
 
     def test_game_log_is_kept_beside_the_report_with_its_memory_lines(self):
         line = ('13:33:01:870 (00009916) > [Render] Working set: 3170MB Page file: 10144MB Video Budget: 31418MB '

@@ -96,6 +96,48 @@ def game_memory(log):
     return rows
 
 
+def commit_trend(memory, free=None):
+    """G5 (beta polish): the game's commit memory over the session, to tell our growth from the system's pressure.
+
+    From the minute lines (game_memory): the first, last and peak commit (MB), the growth over the session's second
+    half in MB per minute (a leak keeps climbing there; the game's own streaming levels off in the first minutes),
+    a verdict ('flat' under 5 MB/min, else 'growing'), and the system's free commit (start, lowest, end) beside it.
+    None with fewer than four lines.
+    """
+    rows = [r for r in memory or [] if isinstance(r.get('commit_mb'), (int, float))]
+    if len(rows) < 4:
+        return None
+    def minutes(t):
+        try:
+            h, m, sec = (int(x) for x in t.split(':'))
+        except (ValueError, AttributeError):
+            return None
+        return h*60 + m + sec/60
+    half = rows[len(rows)//2:]
+    t0, t1 = minutes(half[0]['time']), minutes(half[-1]['time'])
+    span = (t1 - t0) % (24*60) if t0 is not None and t1 is not None else 0
+    rate = (half[-1]['commit_mb'] - half[0]['commit_mb'])/span if span > 0 else 0.0
+    trend = dict(first_mb=rows[0]['commit_mb'], last_mb=rows[-1]['commit_mb'],
+                 peak_mb=max(r['commit_mb'] for r in rows), second_half_mb_per_min=round(rate, 1),
+                 verdict='flat' if rate < 5 else 'growing', lines=len(rows))
+    if free:
+        trend['free_commit_mb'] = free
+    return trend
+
+
+def commit_line(trend):
+    """The summary's one line for commit memory."""
+    if not trend:
+        return 'commit memory: not enough game memory lines'
+    free = trend.get('free_commit_mb') or {}
+    text = ('commit memory: game %.0f -> %.0f MB (peak %.0f), second half %+.1f MB/min (%s)'
+            % (trend['first_mb'], trend['last_mb'], trend['peak_mb'], trend['second_half_mb_per_min'],
+               trend['verdict']))
+    if free.get('lowest') is not None:
+        text += '; system free commit lowest %s MB' % free['lowest']
+    return text
+
+
 def keep_game_log(report, source=None):
     """Copy the game's log beside the report; the game overwrites it the next time it starts.
 
@@ -2892,7 +2934,7 @@ def session(a, startup):
                         flip_reprojection=reprojection, eye_jobs=eye_jobs,
                         render_memory=render_memory, scene_pool=scene_pool(), timing=timing, network=links,
                         stream_stalls=stream_stalls(list(samples)),
-                        free_commit_mb=dict(start=start_commit, lowest=lowest_commit),
+                        free_commit_mb=dict(start=start_commit, lowest=lowest_commit, end=free_commit_mb()),
                         eye_snapshots=list(eye_shots), eye_snapshot_folder=str(eye_folder) if eye_shots else None,
                         hud_capture=hud_capture, hud_captures=list(hud_shots), hud_coverage=list(hud_coverage),
                         hud_capture_folder=str(hud_folder) if hud_shots else None,
@@ -2907,6 +2949,9 @@ def session(a, startup):
             # Texture and video memory pressure and the game's own frame rate, minute by minute.
             copy, memory = keep_game_log(a.output)
             result.update(game_log=str(copy) if copy else None, game_memory=memory)
+            # G5: the commit trend, and one line for it on the console.
+            result['commit_memory'] = commit_trend(memory, result.get('free_commit_mb'))
+            print(commit_line(result['commit_memory']), flush=True)
             try:
                 log = copy.read_text(encoding='utf-8', errors='replace') if copy else ''
             except OSError:
