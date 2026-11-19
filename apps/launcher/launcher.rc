@@ -18,6 +18,11 @@ PICTURE_MOVES RCDATA "../../docs/images/readme/controls-moves.jpg"
 PICTURE_PHONE RCDATA "../../docs/images/readme/controls-phone.jpg"
 PICTURE_OTHERS RCDATA "../../docs/images/readme/controls-others.jpg"
 
+// The version resource keeps the plain numbers (the release check compares them); SPIDY_VERSION may carry a
+// label such as -na-beta1 for the launcher and the log.
+#ifndef SPIDY_FILE_VERSION
+#define SPIDY_FILE_VERSION "0.0.0"
+#endif
 VS_VERSION_INFO VERSIONINFO
 FILEVERSION SPIDY_VERSION_NUMBERS
 PRODUCTVERSION SPIDY_VERSION_NUMBERS
@@ -30,12 +35,12 @@ BEGIN
         BEGIN
             VALUE "CompanyName", "Ilya Mezerowsky"
             VALUE "FileDescription", "Spidy VR launcher"
-            VALUE "FileVersion", SPIDY_VERSION
+            VALUE "FileVersion", SPIDY_FILE_VERSION
             VALUE "InternalName", "spidy_launcher"
             VALUE "LegalCopyright", "Copyright 2026 Ilya Mezerowsky"
             VALUE "OriginalFilename", "Spidy Launcher.exe"
             VALUE "ProductName", "Spidy - VR for Marvel's Spider-Man Remastered"
-            VALUE "ProductVersion", SPIDY_VERSION
+            VALUE "ProductVersion", SPIDY_FILE_VERSION
         END
     END
     BLOCK "VarFileInfo"

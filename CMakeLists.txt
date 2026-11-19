@@ -30,6 +30,7 @@ function(spidy_stamp_version target description)
   target_sources(${target} PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/apps/spidy_module.rc")
   target_compile_definitions(${target} PRIVATE
                              SPIDY_VERSION="${SPIDY_VERSION_LABEL}"
+                             SPIDY_FILE_VERSION="${PROJECT_VERSION}"
                              SPIDY_VERSION_NUMBERS=${PROJECT_VERSION_MAJOR},${PROJECT_VERSION_MINOR},${PROJECT_VERSION_PATCH},0
                              SPIDY_MODULE_DESC="${description}"
                              SPIDY_MODULE_FILE="$<TARGET_FILE_NAME:${target}>"
@@ -447,6 +448,7 @@ if(SPIDY_BUILD_LAUNCHER)
   target_include_directories(spidy_launcher PRIVATE include ${SPIDY_IMGUI} ${SPIDY_IMGUI}/backends)
   target_compile_definitions(spidy_launcher PRIVATE WIN32_LEAN_AND_MEAN NOMINMAX UNICODE _UNICODE
                              SPIDY_VERSION="${SPIDY_VERSION_LABEL}"
+                             SPIDY_FILE_VERSION="${PROJECT_VERSION}"
                              SPIDY_VERSION_NUMBERS=${PROJECT_VERSION_MAJOR},${PROJECT_VERSION_MINOR},${PROJECT_VERSION_PATCH},0)
   set_source_files_properties(apps/launcher/main.cpp apps/launcher/ui.cpp apps/launcher/system.cpp
                               apps/launcher/update.cpp PROPERTIES COMPILE_OPTIONS "/W4;/permissive-")
