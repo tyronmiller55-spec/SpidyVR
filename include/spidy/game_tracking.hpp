@@ -348,6 +348,12 @@ class GameTrackingRig {
         groundFlipSpin_ = finite(worldSpin) ? worldSpin : Vec3{};
         groundFlipWait_ = length(groundFlipSpin_) > 0 ? groundFlipWaitSeconds : 0.f;
     }
+    // GROUND FLIP OFF (F2, the Nov 19 log: 3 of 3 front flips dropped at 500 ms, "owned 0": the game's own air carried
+    // him, which the flips' airborne test - the swing's own flight - never counted): the swing reports him off the
+    // ground and off any wall this frame. Counts as the flips' air while a ground flip waits or spins.
+    void groundFlipOff(bool off) {
+        groundFlipOff_ = off;
+    }
     // How many ground flips' spins were let go into the air, and how many ran out on the ground.
     unsigned groundFlipsReleased() const {
         return groundFlipsReleased_;
@@ -658,6 +664,7 @@ class GameTrackingRig {
     Quat handstandCatchTilt_{};
     Vec3 groundFlipSpin_{};
     bool groundFlipLive_{}; // released, until he lands: a fight does not calm the realistic flip
+    bool groundFlipOff_{};  // GROUND FLIP OFF: the swing reports him off the ground (and any wall)
     float groundFlipWait_{};
     unsigned groundFlipsReleased_{}, groundFlipsLapsed_{};
     float handstandDrop_{};

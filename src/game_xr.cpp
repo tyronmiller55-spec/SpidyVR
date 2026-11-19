@@ -3750,8 +3750,12 @@ DWORD WINAPI run(void*) {
                         }
                         if (rig.groundFlipsLapsed() != groundFlipLapsedSeen) {
                             groundFlipLapsedSeen = rig.groundFlipsLapsed();
-                            diag_log::writef("ground flip: still on the ground after %.0f ms, the spin dropped",
-                                             GameTrackingRig::groundFlipWaitSeconds * 1000.f);
+                            diag_log::writef("ground flip: still on the ground after %.0f ms, the spin dropped (swing "
+                                             "grounded %d, owned %d, wall %u, %.1f m/s up)",
+                                             GameTrackingRig::groundFlipWaitSeconds * 1000.f,
+                                             swingState.grounded ? 1 : 0, swingState.owned ? 1 : 0,
+                                             static_cast<unsigned>(swingState.wall),
+                                             std::isfinite(swingState.velocity.y) ? swingState.velocity.y : 0.f);
                         }
                     }
                     if (!frame.jump)
@@ -4288,6 +4292,9 @@ DWORD WINAPI run(void*) {
                     rig.handstandTouchdown(handstandVrOwns && !flipAir && swingState.grounded != 0 && !onLine,
                                            handstandVrOwns && swingState.grounded == 0 && !onLine,
                                            std::isfinite(feet.y) ? feet.y : NAN);
+                    // GROUND FLIP OFF (F2): off the ground by the swing's report, the game's own air or not.
+                    rig.groundFlipOff(swingFresh && !swingState.grounded && !onLine &&
+                                      swingState.wall == static_cast<uint32_t>(game_swing::Surface::none));
                     motion = rig.update(seated::raised(controller, seatRaise), feet,
                                         {camera[8], camera[9], camera[10]}, gameplay,
                                         swingState.owned ? Vec3{0, 1, 0} : heroUp, flipAir, hold,

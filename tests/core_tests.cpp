@@ -25908,6 +25908,28 @@ int main() {
         f.predictedDisplayTime += 10 * ms;
         check(rig.update(f, {}, {0, 0, 1}, true).head[10] < -.95f, "a menu turned the view");
     });
+    test("ground flips: the swing's own report of the air releases the spin when the flips' airborne test misses it (F2)",
+         [] {
+        // The Nov 19 log: 3 of 3 front flips dropped at 500 ms with "owned 0" - the game's air carried him.
+        for (const bool off : {false, true}) {
+            GameTrackingRig rig;
+            RealisticFlipSettings settings;
+            settings.enabled = true;
+            rig.automaticFlips(settings);
+            rig.flips(true);
+            auto f = trackedFrame();
+            flipFrame(rig, f, false, false);
+            rig.groundFlip({6.f, 0, 0});
+            rig.groundFlipOff(off);
+            for (int i = 0; i < 10; ++i)
+                flipFrame(rig, f, false, false);
+            check(rig.groundFlipsReleased() == (off ? 1u : 0u),
+                  off ? "off by the swing's report: released" : "on the ground: not released yet");
+            for (int i = 0; i < 60; ++i)
+                flipFrame(rig, f, false, false);
+            check(rig.groundFlipsLapsed() == (off ? 0u : 1u), off ? "released: no lapse" : "never off: lapsed");
+        }
+    });
     test("momentum mode supports manual left-stick rotation and an airborne A brake", [] {
         GameTrackingRig rig;
         RealisticFlipSettings settings;

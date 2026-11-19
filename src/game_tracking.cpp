@@ -572,7 +572,7 @@ GameMotionFrame GameTrackingRig::update(const XrFrame& f, Vec3 feet, Vec3 gameFo
     // A flip tilts the tracking space about the head where it began.
     FlipMotion::Sample flip;
     flip.jump = f.jump;
-    flip.airborne = airborne && !holds;
+    flip.airborne = (airborne || (groundFlipOff_ && (groundFlipWait_ > 0 || groundFlipLive_))) && !holds;
     flip.surface = onSurface || holds;
     flip.controlled = controlledFlips_ && !autoSettings_.enabled;
     const auto& flipHand = f.hands[autoSettings_.enabled || controlledFlips_ ? 0 : 1];
