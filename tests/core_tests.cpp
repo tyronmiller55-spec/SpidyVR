@@ -1,4 +1,5 @@
 #include "spidy/aim_steady.hpp"
+#include "spidy/finisher_handoff.hpp"
 #include "spidy/lab_world.hpp"
 #include "spidy/native_view.hpp"
 #include "spidy/game_tracking.hpp"
@@ -33323,6 +33324,46 @@ int main() {
         check(!hold.update(0, true, 1, hz) && !hold.update(stamp, true, stamp, 0), "no stamp or no clock is not live");
         // The raw rule it replaces: a 231 ms stall (the G1 playtest's worst) is carried whole.
         check(at(.01) && at(.231) && at(.01) && hold.take().held == 1, "the 231 ms stall was not carried");
+    });
+    test("finishers: Y+B before a fight scene is the game's own finisher, held until it ends", [&] {
+        using namespace finisher_handoff;
+        const float dt = 1.f / 72.f;
+        // The beta1 log's pattern: B, then Y 0.25 s later, the scene 0.19 s after the Y.
+        Watch w;
+        for (int i = 0; i < 20; ++i)
+            w.update(dt, false, false, false);
+        for (int i = 0; i < 18; ++i)
+            w.update(dt, false, true, false); // B held 0.25 s
+        w.update(dt, true, true, false);      // then Y
+        for (int i = 0; i < 13; ++i)
+            w.update(dt, true, false, false);
+        auto s = w.started(true);
+        check(s.finisher && w.active() && !s.named, "B then Y 0.25 s apart was not a finisher");
+        check(std::abs(s.gap - .25f) < .03f && s.since < .25f, "the ask's gap and lead were not measured");
+        for (int i = 0; i < 144; ++i)
+            w.tick(dt);
+        check(std::abs(w.ended() - 2.f) < .05f && !w.active(), "the finisher's 2 s were not told at its end");
+        // The prompt's Y+B (a B press the game names as Y+B) counts on its own.
+        Watch n;
+        n.update(dt, false, true, true);
+        check(n.started(true).named && n.active(), "the prompt's Y+B was not a finisher's ask");
+        // Not a finisher: no fight, too late, or Y and B too far apart.
+        Watch calm;
+        calm.update(dt, true, true, false);
+        check(!calm.started(false).finisher && !calm.active(), "a scene out of a fight was a finisher");
+        Watch late;
+        late.update(dt, true, true, false);
+        for (int i = 0; i < 120; ++i)
+            late.update(dt, false, false, false); // 1.67 s
+        check(!late.started(true).finisher, "a scene 1.7 s after Y+B was a finisher");
+        Watch apart;
+        apart.update(dt, false, true, false);
+        for (int i = 0; i < 60; ++i)
+            apart.update(dt, false, false, false); // 0.83 s
+        apart.update(dt, true, false, false);
+        check(!apart.started(true).finisher, "Y 0.8 s after B was a finisher's ask");
+        Watch none;
+        check(!none.started(true).finisher && none.ended() == 0.f, "a scene with no ask was a finisher");
     });
     std::cout << total - failed << '/' << total << " tests passed\n";
     return failed ? 1 : 0;

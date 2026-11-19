@@ -103,6 +103,7 @@
 #include "spidy/move_haptics.hpp"
 #include "spidy/hit_sound.hpp"
 #include "spidy/sound_guard.hpp"
+#include "spidy/finisher_handoff.hpp"
 #include "spidy/sound_trace.hpp"
 #include "spidy/stable_yaw.hpp"
 #include "spidy/view_yaw_lock.hpp"
@@ -1325,6 +1326,9 @@ DWORD WINAPI run(void*) {
         game_pad::PadLayer padLayer;
         game_pad::NamedPress namedPress;
         game_pad::State namedPad{};
+        // FINISHERS ON Y+B (finisher_handoff.hpp): the game's own finisher, told apart from other scenes for
+        // the log; nothing of SpidyVR's takes the body back while one plays.
+        finisher_handoff::Watch finisherWatch;
         bool namedFists{}, fistsBlows{};
         uint32_t namedPressesBefore{}, slamsBefore{};
         // The gadget wheel (X held; gadget_wheel.hpp): the player's gadgets
@@ -2961,6 +2965,12 @@ DWORD WINAPI run(void*) {
                     }
                     pointJumpFired = false;
                     jumpSoundReport(); // what the ray module did with the last jump's cues
+                    // FINISHERS ON Y+B: the controllers' Y and B, and the prompt's Y+B the game was sent last
+                    // frame.
+                    finisherWatch.update(
+                        frame.seconds, (frame.buttons & buttonY) != 0, (frame.buttons & buttonB) != 0,
+                        (namedPad.buttons & (game_pad::y | game_pad::b)) == (game_pad::y | game_pad::b));
+                    finisherWatch.tick(frame.seconds);
                     sidestepRawB = (frame.buttons & buttonB) != 0; // QUICK SIDESTEP: B before the chord
                     {
                         const auto pj = point_jump::paramsOf(values);
@@ -4969,10 +4979,32 @@ DWORD WINAPI run(void*) {
                                       fpScene ? "started" : "ended",
                                       static_cast<unsigned long long>(fpNow % 100000000ull));
                         message(3, 0, text);
-                        // AUTO: FINISHERS is log only in this build: what a finisher scene looks like to the classifier, for the next one.
-                        if (fpScene && values.showtime && values.showtimeAutoFinish)
-                            diag_log::writef("showtime: finisher candidate (scene started; scene camera %s, level view %d): not entered, "
-                                             "AUTO: FINISHERS is log only", game_fp::onCamera() ? "on" : "off", levelView ? 1 : 0);
+                        // FINISHERS ON Y+B (finisher_handoff.hpp): a scene in a fight within 1.5 s of Y+B is
+                        // the game's own finisher. SpidyVR leaves it to the game: the animation keeps the
+                        // body, and the grip cancel waits until it ends. AUTO: FINISHERS (Showtime's camera
+                        // on one) is still log only.
+                        if (fpScene) {
+                            const auto fin = finisherWatch.started(fightLately);
+                            if (fin.finisher)
+                                diag_log::writef(
+                                    "finisher: the game's own finisher on Y+B (%s%.0f ms before the scene, Y "
+                                    "and B "
+                                    "%.0f ms apart; scene camera %s): the animation keeps the body, SpidyVR "
+                                    "takes nothing back until it ends%s",
+                                    fin.named ? "the prompt's Y+B " : "", fin.since * 1000.f,
+                                    fin.gap * 1000.f, game_fp::onCamera() ? "on" : "off",
+                                    values.showtime && values.showtimeAutoFinish
+                                        ? "; AUTO: FINISHERS is log only"
+                                        : "");
+                            else
+                                diag_log::writef(
+                                    "finisher: not a finisher (a scene %s; no Y+B in the 1.5 s before it)",
+                                    fightLately ? "in a fight" : "out of a fight");
+                        } else if (const float played = finisherWatch.ended(); played > 0) {
+                            diag_log::writef(
+                                "finisher: the game's finisher ended after %.1f s; the grip cancel is back",
+                                played);
+                        }
                         wasFpScene = fpScene;
                     }
                     if (!fpScene || frame.recentered)
@@ -5764,11 +5796,12 @@ DWORD WINAPI run(void*) {
                                 false, false, swingState.wall});
                         gripCancel = gripCancelGate.update(
                             animation_cancel::enabled(bodyStarted, values.animatedHybrid,
-                                                      values.animatedMoves, calibrationInput),
+                                                      values.animatedMoves, calibrationInput) &&
+                                !finisherWatch.active(), // FINISHERS ON Y+B: the game's finisher plays out
                             hybrid_owner::cancelArmed(hybridOwner.domain == hybrid_owner::Domain::anim,
                                                       cancelSupported),
-                            motion.active && !flatScreen && controlsVisible && spiderMan,
-                            webButtons, shotButtons, trackedHands);
+                            motion.active && !flatScreen && controlsVisible && spiderMan, webButtons,
+                            shotButtons, trackedHands);
                         // WEB FIRE: the squeezes of this frame are accounted for, and a squeeze the cancel (or the wait
                         // for both hands to let go after one) took is QUEUED through the handoff, never dropped: it
                         // is let through on the next frame, as a fresh press, in whichever owner has the body then.

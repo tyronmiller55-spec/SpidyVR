@@ -59,7 +59,7 @@ Log line each second out: `showtime: cam d=<m> lag=<m> v=<m/s> w=<rad/s> vignett
 |---|---|---|
 | CHORD | HOLD X+B | AUTO ONLY: the chord is not read at all (X and B are the game's, the gadget wheel and the dodge as always). |
 | AUTO: DODGES | OFF | PERFECT ONLY: the camera goes out when the game slows its time for a dodge (the `Moment::dodge` start). ALL: at the start of any dodge. It ends 0.3 s after the dodge input does, unless X+B is held; a dodge never seen live within 0.5 s is dropped; nothing keeps it out past 4 s (`showtime::Auto`). An auto dodge keeps its own A and B while out (WATCH ONLY would otherwise cut them). |
-| AUTO: FINISHERS (LOG ONLY) | OFF | **Gated.** The plan has finishers go out by themselves with ON as the default. Finishers read as a first-person scene to the mod (`fpScene`) and nothing yet tells one from a cutscene, or says which owner animates him. This row only logs `showtime: finisher candidate (scene started; scene camera on|off, level view n)` for each scene start, so a headset session gives the data. Nothing moves the camera. |
+| AUTO: FINISHERS (LOG ONLY) | OFF | **Gated.** The plan has finishers go out by themselves with ON as the default. Finishers read as a first-person scene to the mod (`fpScene`) and nothing yet tells one from a cutscene, or says which owner animates him. Since beta2 a scene that starts in a fight within 1.5 s of Y+B (the game's own finisher input, which the game runs) logs `finisher: the game's own finisher on Y+B (...)` with `; AUTO: FINISHERS is log only` while this row is on, and any other scene `finisher: not a finisher (...)` (`finisher_handoff.hpp`). Nothing moves the camera. |
 
 ## S3: the body from outside
 
