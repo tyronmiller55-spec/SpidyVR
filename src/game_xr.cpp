@@ -628,12 +628,52 @@ void attackSound(int id, int hand) {
     last[hand] = now.QuadPart;
     soundCue(reinterpret_cast<void*>(static_cast<uintptr_t>(static_cast<uint32_t>(id))));
 }
-// JUMP SOUNDS / WALL JUMP SOUND (sound_guard.hpp): the game's sounds on the player. `set`: the grunt and the rest of
-// the jump set, else the grunt alone (a point jump, which the game already accompanies); `wall`: one wall-jump
-// candidate instead (no grunt). Each skipped (in the ray module) while the game's own grunt sounds; logged.
+// What the ray module did with the last jump's cues (game_sound::Data's cue counters, version 2), told once
+// the game's next frames have had them: played (the game's sound call gave a sound back), skipped (the game's
+// own jump set was already sounding: the double-play guard) or lost (no sound back, a full queue, the module
+// not live). JUMP SOUNDS (beta2): the point jump's "1 of 1 queued" lines said only that the cue was queued.
+struct JumpSoundCheck {
+    bool pending{};
+    const char* why{};
+    unsigned asked{};
+    uint32_t cues{}, guarded{}, dropped{};
+    uint64_t at{};
+} jumpSoundCheck;
+uint32_t soundCounter(const uint32_t& field) {
+    return *static_cast<const volatile uint32_t*>(&field);
+}
+void jumpSoundReport() {
+    auto& c = jumpSoundCheck;
+    if (!c.pending || !soundResults || GetTickCount64() - c.at < 250)
+        return;
+    c.pending = false;
+    const uint32_t played = soundCounter(soundResults->cues) - c.cues;
+    const uint32_t skipped = soundCounter(soundResults->cuesGuarded) - c.guarded;
+    const uint32_t lost = soundCounter(soundResults->cuesDropped) - c.dropped;
+    diag_log::writef(
+        "jump sounds: %s result: %u of %u played (the game's sound call gave a sound back), %u skipped "
+        "(the game's own jump sounding), %u lost%s",
+        c.why, played, c.asked, skipped, lost,
+        played + skipped + lost < c.asked ? " (some not reached yet: the ray module's frame did not run)"
+                                          : "");
+}
+// JUMP SOUNDS / WALL JUMP SOUND (sound_guard.hpp): the game's sounds on the player. `set`: the grunt and the
+// rest of the jump set (the launch sounds), else the grunt alone; `wall`: one wall-jump candidate instead (no
+// grunt). Each skipped (in the ray module) while the game's own grunt sounds; logged, and the result told 250
+// ms later.
 void jumpSound(bool set, uint32_t wall, const char* why) {
     if (!soundCue)
         return;
+    if (soundResults) {
+        jumpSoundReport();
+        jumpSoundCheck = {true,
+                          why,
+                          0,
+                          soundCounter(soundResults->cues),
+                          soundCounter(soundResults->cuesGuarded),
+                          soundCounter(soundResults->cuesDropped),
+                          GetTickCount64()};
+    }
     unsigned queued = 0, asked = 0;
     const auto ask = [&](uint32_t id) {
         ++asked;
@@ -653,7 +693,10 @@ void jumpSound(bool set, uint32_t wall, const char* why) {
                          queued ? "queued" : "not queued", why);
     else
         diag_log::writef("jump sounds: %u of %u queued for the %s (%s)", queued, asked, why,
-                         set ? "grunt and the jump set" : "grunt; the game adds a442c255/050553e7 itself");
+                         set ? "grunt and the jump set" : "grunt alone");
+    jumpSoundCheck.asked = queued;
+    if (!queued)
+        jumpSoundCheck.pending = false;
 }
 BridgeCall startSwing{}, submitSwing{}, sampleSwing{}, stopSwing{}, retargetSwing{}, sampleGrab{}, sampleAim{};
 // Optional: pose coupling from the visual tuck (an older ray module has none).
@@ -2917,6 +2960,7 @@ DWORD WINAPI run(void*) {
                             diag_log::write("legs: flail B let go of");
                     }
                     pointJumpFired = false;
+                    jumpSoundReport(); // what the ray module did with the last jump's cues
                     sidestepRawB = (frame.buttons & buttonB) != 0; // QUICK SIDESTEP: B before the chord
                     {
                         const auto pj = point_jump::paramsOf(values);
@@ -3052,8 +3096,12 @@ DWORD WINAPI run(void*) {
                             const DWORD result = swingPointJump(&ask);
                             if (result == 0) {
                                 ++pointJumps;
+                                // POINT JUMP SOUND (beta2): the grunt AND the game's launch set, as a game
+                                // jump has them. The grunt alone was played (95 of 100 traced point jumps,
+                                // Nov 19) and the player heard nothing: the launch set came on only the 34%
+                                // where the game jumped as well, and a442c255/050553e7 on 22-37%.
                                 if (values.pointJumpSound)
-                                    jumpSound(false, 0, "point jump");
+                                    jumpSound(true, 0, "point jump");
                                 pointJumpFired = pointJumpHold = true;
                                 pointJumpHoldAge = 0;
                                 pointJumpOffLogged = false;

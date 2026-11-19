@@ -725,10 +725,11 @@ struct Values {
     // POINT JUMP BULLET (the user, Nov 14 t71u, t73s656; point_jump_bullet, default on): the body takes the RAW look on a point
     // jump, any angle, eased over about 120 ms (point_bullet.hpp). The launch velocity is unchanged (10 degree out-of-surface fix).
     bool pointJumpBullet = true;
-    // JUMP SOUNDS (beta polish A4, the owner's D6; point_jump_sound, on): the game's jump grunt (sound_guard.hpp) on
-    // Spidey at every point jump (the game already adds its own a442c255/050553e7 there), and the grunt with the rest
-    // of the game's jump set at a ground flip or handstand leap; skipped when the game's own grunt already sounds
-    // (300 ms guard).
+    // JUMP SOUNDS (beta polish A4, the owner's D6; point_jump_sound, on): the game's jump grunt with the rest
+    // of its jump set (sound_guard.hpp) on Spidey at every point jump, ground flip or handstand leap; skipped
+    // when the game's own grunt already sounds (300 ms guard). Until beta2 a point jump had the grunt alone,
+    // and the owner heard nothing on 0.8.7-na-beta1 (Nov 19): the game added its own a442c255/050553e7 on
+    // only 22-37% of them.
     bool pointJumpSound = true;
     // WALL JUMP SOUND (beta polish A5; wall_jump_sound): 0 off (silent as before), 1 d321a6f9 (default), 2 110d202b,
     // the Nov 19 trace's two candidates (sound_guard.hpp) for a headset A/B.

@@ -2042,7 +2042,7 @@ const std::array<Row, rowTotal>& rows() {
         {Item::handGrabClassRules, "HAND GRAB CLASS RULES",
          "Heavies and bosses resist throws unless stunned or webbed up. Off: all alike.", {}, Place::launcher},
         {Item::pointJumpSound, "JUMP SOUNDS",
-         "The game's jump grunt on every point jump, ground flip and handstand leap.", {}},
+         "The game's jump grunt and launch sounds on point jumps, flips and leaps.", {}},
         {Item::wallJumpSound, "WALL JUMP SOUND",
          "Two of the game's sounds to try on a wall jump. Tell us which fits. OFF: none.", wallJumpSoundChoices},
     }};
