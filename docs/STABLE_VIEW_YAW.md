@@ -8,7 +8,7 @@ With HEAD LOCK **FULL** and VIEW YAW SOURCE **STABLE**: eye position, pitch and 
     shown yaw = lock + ANIM YAW SWAY x wrap(head bone yaw - hero facing)
 
 - The lock is latched with the head lock (owner switch, recenter) so its first frame shows exactly the head bone; it is kept through the midair softlock. Only the right stick turns it (SMOOTH TURN deg/s scaled by the stick, or SNAP TURN flicks with the 0.7 / 0.4 hysteresis). The hero turning never turns it.
-- **ANIM YAW SWAY** (VR CAMERA & STABILIZATION, launcher "Anim yaw sway", `anim_yaw_sway_pct`): 0% (STEADY) / 10 / 20 (default) / 30 / 40 / 50 / 60 / 80 / 100% (OLD FEEL). The sway is the head's yaw relative to the hero's facing. **100%** turns the lock off: the eyes ride the head bone exactly as before, with Step A steering.
+- **ANIM YAW SWAY** (NA · CAMERA, launcher "Anim yaw sway", `anim_yaw_sway_pct`): 0% (STEADY) / 10 / 20 (default) / 30 / 40 / 50 / 60 / 80 / 100% (OLD FEEL). The sway is the head's yaw relative to the hero's facing. **100%** turns the lock off: the eyes ride the head bone exactly as before, with Step A steering.
 - One turn, everywhere the Full anchor is resolved: the render thread's eyes (`game_fp::frame`), the XR thread's hand map (webs, balls, markers, shooter lock, `kin.head`), and the pose job's arm IK anchor (`animated_view::Targets::yawLock`, turned in model space). The stable heading reads the unturned head (`game_fp::heroHead`), so there is no loop.
 - Steering: the heading is the lock + the headset's turn (no idle relatch to the head bone, no composeMove turn request).
 

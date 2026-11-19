@@ -1,6 +1,6 @@
 # Ground kicks (K3)
 
-**On by default since Nov 18** (the owner; movement_defaults revision 9 turns an old `ground_kicks=0` on). `ground_kicks=0` in `spidy_vr.ini` turns it off (or **Ground kicks (experimental)** on the launcher's Legs page, next to Air kicks; **Air kick aim** aims these too) turns it on. It is the plan's Pillar 5, milestone K3: the same foot, sphere and blow as the air kicks ([AIR_KICKS.md](AIR_KICKS.md)), standing. The air kicks are a separate switch (`kicks`); either, both or neither may be on.
+**On by default since Nov 18** (the owner; movement_defaults revision 9 turns an old `ground_kicks=0` on). `ground_kicks=0` in `spidy_vr.ini` turns it off (or **GROUND KICKS** on the in-game NA · KICKS & COMBAT tab and the launcher's Kicks & Combat page, next to Air kicks; **Air kick aim** aims these too) turns it on. It is the plan's Pillar 5, milestone K3: the same foot, sphere and blow as the air kicks ([AIR_KICKS.md](AIR_KICKS.md)), standing. The air kicks are a separate switch (`kicks`); either, both or neither may be on.
 
 ## Controls
 

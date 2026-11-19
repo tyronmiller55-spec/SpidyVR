@@ -1,10 +1,10 @@
 # Air kicks (K2)
 
-Off by default, EXPERIMENTAL, like the handstand. `kicks=1` in `spidy_vr.ini` (or **Air kicks (experimental)** on the launcher's Legs page, with **Air kick aim** and **Air kick spin** under it) turns it on. It builds on the leg control (Y + X, `leg_hold.hpp`, which needs LEG CONTROL and a flip mode as today) and the swing kick (K1). It is the plan's Pillar 5 (milestone K2), air only: the ground is K3's ([GROUND_KICKS.md](GROUND_KICKS.md)).
+Off by default, EXPERIMENTAL, like the handstand. `kicks=1` in `spidy_vr.ini` (or **AIR KICKS** and **AIR KICK AIM** on the in-game NA · KICKS & COMBAT tab, or the launcher's Kicks & Combat page with **Air kick spin** too) turns it on. It builds on the leg control (Y + X, `leg_hold.hpp`, which needs LEG CONTROL and a flip mode as today) and the swing kick (K1). It is the plan's Pillar 5 (milestone K2), air only: the ground is K3's ([GROUND_KICKS.md](GROUND_KICKS.md)).
 
 ## Controls
 
-Off the ground with the legs engaged (hold Y + X), flick the right stick: the stick from under 0.3 to over 0.8 within 80 ms. A slow push is still the legs' pose (jackknife, splay), as before.
+Off the ground with the legs engaged (hold Y + X), flick the right stick: the stick from under 0.35 to past 0.75 within 150 ms (0.3 / 0.8 / 80 ms until Nov 18). A missed flick logs why: too small, too slow, not armed (the stick was already out when the legs engaged) or not taken (a kick still under way). A slow push is still the legs' pose (jackknife, splay), as before.
 
 | Gesture | Kick | Zone it goes for |
 | --- | --- | --- |
@@ -13,7 +13,7 @@ Off the ground with the legs engaged (hold Y + X), flick the right stick: the st
 | Quarter circle from a side up to the top, along the rim, within 0.25 s | Spinning roundhouse: the foot sweeps in from that side (the leg of that side) over 100 degrees to your gaze | Head |
 | Flick sideways (70 to 110 degrees) or down | Freeform blow: a lighter, shorter kick (the side's leg out, or both back for down) | The zone you look at |
 
-A sideways flick waits up to 0.25 s, or until the stick comes back in, to see whether it is the start of a roundhouse's quarter circle; every other flick kicks at once, so a sideways freeform blow has that small delay. The stick has to come back under 0.3 before the next flick. The roundhouse's "far leg" in the plan is read here as the leg of the side the circle begins on (the foot comes in from that side); this is a guess to confirm on a headset.
+A sideways flick waits up to 0.25 s, or until the stick comes back in, to see whether it is the start of a roundhouse's quarter circle; every other flick kicks at once, so a sideways freeform blow has that small delay. The stick has to come back under 0.35 before the next flick. The roundhouse's "far leg" in the plan is read here as the leg of the side the circle begins on (the foot comes in from that side); this is a guess to confirm on a headset.
 
 No new buttons. The swing kick (K1) keeps the flick it arms on while swinging (up, with a ringed enemy in its cone); any flick it does not take (no one ringed, too slow, too close) is an air kick. The auto dive (`swing_kick_auto`) holds back while either is under way.
 

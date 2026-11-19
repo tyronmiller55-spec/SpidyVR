@@ -31,7 +31,7 @@ ANIM on the ground → VR on the frame the launch is sent (`point-jump`, the app
 
 ## Settings
 
-In game: **VR POINT JUMP** tab. Launcher: Options > **Point Jump**. The player's own (not in shared profiles).
+In game: **NA · POINT JUMP** tab (VR POINT JUMP before the beta). Launcher: Options > **Point Jump**. The player's own (not in shared profiles).
 
 | Row / key | Default | Choices |
 |---|---|---|

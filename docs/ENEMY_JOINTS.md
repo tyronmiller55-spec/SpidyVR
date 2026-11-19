@@ -1,6 +1,6 @@
 # Enemy joints (R1)
 
-Off by default, EXPERIMENTAL. `enemy_joints=1` in `spidy_vr.ini` (or **Enemy joints (experimental)** on the launcher's Legs page, with **Enemy limb zones (experimental)** under it) makes the kicks (air kicks K2, ground kicks K3) read an enemy's own joints for the zone they aim at and the zone they hit. This is the plan's R1: **the reader only**. It writes nothing to the game and moves nothing; the overlay of an enemy's pose (R2) is not built and waits on the probes.
+Off by default, EXPERIMENTAL. `enemy_joints=1` in `spidy_vr.ini` (or **Enemy joints (experimental)** on the launcher's Kicks & Combat page, with **Enemy limb zones (experimental)** under it) makes the kicks (air kicks K2, ground kicks K3) read an enemy's own joints for the zone they aim at and the zone they hit. This is the plan's R1: **the reader only**. It writes nothing to the game and moves nothing; the overlay of an enemy's pose (R2) is not built and waits on the probes.
 
 ## What it does
 

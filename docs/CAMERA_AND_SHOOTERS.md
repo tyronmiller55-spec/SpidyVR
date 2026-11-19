@@ -13,9 +13,9 @@ same names, and the Native Animation tab has a Camera & stabilization card.
 
 | In game tab | Launcher page | Rows |
 |---|---|---|
-| VR CAMERA & STABILIZATION | Camera & Stabilization | CAMERA MOTION, PITCH, ROLL, BOB UP/DOWN, BOB SIDE, HEAD ANGLE, STABILIZATION and its 9 response rows (moved from VR DISPLAY) |
-| VR WEB SHOOTERS | Web Shooters | SHOOTERS, LOCK STRENGTH, WEB ANGLE (moved from VR WEBS) |
-| VR LEGS (ADVANCED) | Legs (Advanced) | LEG CONTROL (ADVANCED), LEG STIFFNESS, LEG DAMPING, LEG COUPLING (moved from VR FLIPS) |
+| NA · CAMERA (was VR CAMERA & STABILIZATION) | Camera & Stabilization | CAMERA MOTION, PITCH, ROLL, BOB UP/DOWN, BOB SIDE, HEAD ANGLE, STABILIZATION and its 9 response rows (moved from VR DISPLAY) |
+| NA · WEB SHOOTERS | Web Shooters | SHOOTERS, LOCK STRENGTH, WEB ANGLE (moved from VR WEBS) |
+| NA · BODY & LEGS (was VR LEGS (ADVANCED)) | Legs (Advanced) | LEG CONTROL (ADVANCED), LEG STIFFNESS, LEG DAMPING, LEG COUPLING (moved from VR FLIPS) |
 
 LEGS rows are never hidden or greyed: they say what they need ("Needs CONTROLLED or REALISTIC FLIPS. ON here turns
 CONTROLLED FLIPS on."). Since 23:35 LEG CONTROL works with REALISTIC FLIPS too: the legs' spread multiplies the arms'

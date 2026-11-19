@@ -25,7 +25,7 @@ crossfaded toward a moving target, which still read as a jump.
   or anything not finite. Offsets under 1 cm or over 3 m are not eased.
 - Log: `punch view ease: start offset X m, dur Y ms`, then `punch view ease: finished|cancelled (...)
   after Z ms`.
-- Setting: PUNCH VIEW EASE on VR CAMERA & STABILIZATION and the launcher's Camera page (OFF (SNAP), 150,
+- Setting: PUNCH VIEW EASE on NA · CAMERA and the launcher's Camera page (OFF (SNAP), 150,
   200, 250, 300, 400 ms); key `punch_view_ease_ms`; personal (not in profiles). 0 = the old snap.
 
 ## Scope and risks

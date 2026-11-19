@@ -1,6 +1,6 @@
 # Manual swing kick (K1)
 
-On by default since Nov 19 (the owner: "Yes, manual swing kicks on by default"), EXPERIMENTAL. `swing_kick_manual=0` in `spidy_vr.ini` (or **Swing kick (experimental)** on the launcher's Legs page) turns it off. An older `spidy_vr.ini` (movement_defaults below 12) gets it turned on once; `leg_hold_everywhere` stays 0, so X and Y are instant on the ground. `swing_kick_auto` (on, as before) is the existing dive (`WebStrike::dive`) as its own setting; both can be on, and the dive holds back while a hand kick is under way.
+On by default since Nov 19 (the owner: "Yes, manual swing kicks on by default"), EXPERIMENTAL. `swing_kick_manual=0` in `spidy_vr.ini` (or **Swing kick (experimental)** on the launcher's Kicks & Combat page) turns it off. An older `spidy_vr.ini` (movement_defaults below 12) gets it turned on once; `leg_hold_everywhere` stays 0, so X and Y are instant on the ground. `swing_kick_auto` (on, as before) is the existing dive (`WebStrike::dive`) as its own setting; both can be on, and the dive holds back while a hand kick is under way.
 
 ## Controls
 
