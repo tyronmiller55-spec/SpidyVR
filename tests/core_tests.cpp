@@ -147,6 +147,19 @@ class EnemyTurret : public Component {};
 extern "C" char __ImageBase;
 #endif
 using namespace spidy;
+// NA TABS (beta polish M4, the owner's D1): the launcher-only NA rows players tune in the headset, now in the game's
+// NA tabs too; and D3: the retired legacy rows, hidden in the game (launcher only).
+static bool naInGame(vr_settings::Item i) {
+    using vr_settings::Item;
+    return i == Item::groundKicks || i == Item::kicks || i == Item::kickGazeCone || i == Item::handstand ||
+           i == Item::handstandAssist || i == Item::handstandGrace || i == Item::punchTrackCone ||
+           i == Item::punchTrackRange || i == Item::jumpPull;
+}
+static bool naRetired(vr_settings::Item i) {
+    using vr_settings::Item;
+    return i == Item::animatedAir || i == Item::animatedOnly || i == Item::animatedSteering ||
+           i == Item::animatedAirSpin;
+}
 void check(bool condition, const char* message) {
     if (!condition)
         throw std::runtime_error(message);
@@ -25204,12 +25217,14 @@ int main() {
                 // November 14 (air takeover): launcher rows; HANDOFF TIMING's seven (Nov 18), the game's own tab.
                 (row.item >= Item::airCorrect && !(row.item >= Item::landingBlend && row.item <= Item::airPoses));
             check(row.place == (row.item == Item::view ? Place::page
+                                : naRetired(row.item)    ? Place::launcher
+                                : naInGame(row.item)     ? Place::tab
                                 : launcherOnly           ? Place::launcher
                                                          : Place::tab),
                   "a row in the wrong place");
         }
         check(std::count_if(all.begin(), all.end(), [](const Row& r) { return r.place == Place::tab; }) ==
-                  167, // (Nov 18 1:09 PM: +2 DIRECTIONAL FLIPS, MIDAIR POSES) (Nov 18: +7 HANDOFF TIMING) (Nov 14: +15 SHOWTIME) November 11: +8 (SHOOTERS, LOCK STRENGTH, CAMERA MOTION, PITCH, ROLL, BOB x2, HEAD ANGLE), -5 old wrist rows; +6 POINT JUMP; November 12: +1 PUNCH VIEW EASE, +3 MOVE HAPTICS, VIEW YAW SOURCE, SOUND TRACE, +2 JUMP TO SPIDYVR, AIR VIEW EASE, +2 ANIM YAW SWAY, TURN-IN-PLACE ANGLE, +4 PASSIVE LEGS, PASSIVE COUPLING, AIR CROUCH, REACH SPREAD
+                  172, // (beta polish M4: +9 NA rows players tune in the headset, -4 retired legacy rows hidden) (Nov 18 1:09 PM: +2 DIRECTIONAL FLIPS, MIDAIR POSES) (Nov 18: +7 HANDOFF TIMING) (Nov 14: +15 SHOWTIME) November 11: +8 (SHOOTERS, LOCK STRENGTH, CAMERA MOTION, PITCH, ROLL, BOB x2, HEAD ANGLE), -5 old wrist rows; +6 POINT JUMP; November 12: +1 PUNCH VIEW EASE, +3 MOVE HAPTICS, VIEW YAW SOURCE, SOUND TRACE, +2 JUMP TO SPIDYVR, AIR VIEW EASE, +2 ANIM YAW SWAY, TURN-IN-PLACE ANGLE, +4 PASSIVE LEGS, PASSIVE COUPLING, AIR CROUCH, REACH SPREAD
               "the tab's own rows");
         check(all[1].item == Item::webStyle && std::strcmp(all[1].title, "WEB STYLE") == 0 &&
                   all[1].choices.size() == 2 && std::strcmp(all[1].choices[0], "REALISTIC") == 0 &&
@@ -29192,11 +29207,11 @@ int main() {
         check(sanitized(wild).animatedAirSpin == 2, "AIR SPIN not clamped");
         const auto& all = rows();
         check(all[95].item == Item::animatedOnly && std::strcmp(all[95].title, "ONLY (ADVANCED)") == 0 &&
-                  all[95].choices.empty() && all[95].place == Place::tab,
+                  all[95].choices.empty() && all[95].place == Place::launcher, // retired: hidden in the game (D3)
               "ANIMATED ONLY row");
         check(all[97].item == Item::animatedAirSpin &&
                   std::strcmp(all[97].title, "AIR SPIN (ADVANCED)") == 0 && all[97].choices.size() == 3 &&
-                  std::strcmp(all[97].choices[2], "FLIPS + MOMENTUM") == 0 && all[97].place == Place::tab,
+                  std::strcmp(all[97].choices[2], "FLIPS + MOMENTUM") == 0 && all[97].place == Place::launcher,
               "ANIMATED AIR SPIN row");
         check(all[93].item == Item::animatedHybrid &&
                   std::strcmp(all[93].title, "HYBRID OWNER (ADVANCED)") == 0 && all[93].choices.empty() &&
@@ -32587,12 +32602,12 @@ int main() {
     });
     test("air kicks settings: the switch, aim and spin rows on the legs page, steps, notes and ini keys", [] {
         using namespace vr_settings;
-        const auto legsItems = screens()[static_cast<size_t>(Category::legs)].items;
+        const auto legsItems = screens()[static_cast<size_t>(Category::kicks)].items; // KICKS & COMBAT (M4)
         const auto onLegs = [&](Item item) {
             return std::find(legsItems.begin(), legsItems.end(), item) != legsItems.end();
         };
         const Row* row = rowFor(Item::kicks);
-        check(row && row->choices.empty() && row->place == Place::launcher && row->help &&
+        check(row && row->choices.empty() && row->place == Place::tab && row->help &&
                   std::strlen(row->help) <= 80 && std::strstr(row->title, "AIR KICKS") &&
                   std::strstr(row->title, "EXPERIMENTAL"),
               "the air kicks row, labelled experimental");
@@ -32630,8 +32645,8 @@ int main() {
         for (const Entry& e : numbers) {
             check(onLegs(e.item), "an air kick row is on the legs page");
             const Row* r = rowFor(e.item);
-            check(r && r->place == Place::launcher && r->help && std::strlen(r->help) <= 80 &&
-                      std::strstr(r->title, "AIR KICK"),
+            check(r && r->place == (naInGame(e.item) ? Place::tab : Place::launcher) && r->help &&
+                      std::strlen(r->help) <= 80 && std::strstr(r->title, "AIR KICK"),
                   "an air kick row's text");
             const auto list = steps(e.item);
             check(!list.empty() && list.size() == r->choices.size() && list.size() <= maxChoices, "the choices");
@@ -32666,11 +32681,11 @@ int main() {
     });
     test("ground kicks settings: the switch on the legs page, on by default (Nov 18), the ini key, the aim row waits for either", [] {
         using namespace vr_settings;
-        const auto legsItems = screens()[static_cast<size_t>(Category::legs)].items;
+        const auto legsItems = screens()[static_cast<size_t>(Category::kicks)].items;
         check(std::find(legsItems.begin(), legsItems.end(), Item::groundKicks) != legsItems.end(),
               "the switch is on the legs page");
         const Row* row = rowFor(Item::groundKicks);
-        check(row && row->choices.empty() && row->place == Place::launcher && row->help &&
+        check(row && row->choices.empty() && row->place == Place::tab && row->help &&
                   std::strlen(row->help) <= 80 && std::strstr(row->title, "GROUND KICKS") &&
                   !std::strstr(row->title, "EXPERIMENTAL"),
               "the ground kicks row, no longer experimental (on by default)");
@@ -32716,7 +32731,7 @@ int main() {
     });
     test("enemy joints settings: two switches on the legs page, both off, the ini keys, the limb zones wait for the joints", [] {
         using namespace vr_settings;
-        const auto legsItems = screens()[static_cast<size_t>(Category::legs)].items;
+        const auto legsItems = screens()[static_cast<size_t>(Category::kicks)].items;
         for (const Item item : {Item::enemyJoints, Item::enemyLimbZones}) {
             check(std::find(legsItems.begin(), legsItems.end(), item) != legsItems.end(), "on the legs page");
             const Row* row = rowFor(item);
@@ -32754,7 +32769,7 @@ int main() {
     });
     test("web tether settings: the switch, points and steps rows on the movement page, steps, notes and ini keys", [] {
         using namespace vr_settings;
-        const auto movementItems = screens()[static_cast<size_t>(Category::movement)].items;
+        const auto movementItems = screens()[static_cast<size_t>(Category::legs)].items; // BODY & LEGS (M4)
         const auto onMovement = [&](Item item) {
             return std::find(movementItems.begin(), movementItems.end(), item) != movementItems.end();
         };
@@ -32861,7 +32876,7 @@ int main() {
     });
     test("hand grab settings: strength and hold cost rows, steps, notes and ini keys", [] {
         using namespace vr_settings;
-        const auto movementItems = screens()[static_cast<size_t>(Category::movement)].items;
+        const auto movementItems = screens()[static_cast<size_t>(Category::kicks)].items; // KICKS & COMBAT (M4)
         const auto onMovement = [&](Item item) {
             return std::find(movementItems.begin(), movementItems.end(), item) != movementItems.end();
         };
@@ -32941,8 +32956,8 @@ int main() {
               "the switches are not on the legs page");
         for (const Item item : {Item::handstand, Item::handstandAssist, Item::handstandLeap}) {
             const Row* row = rowFor(item);
-            check(row && row->choices.empty() && row->place == Place::launcher && row->help &&
-                      std::strlen(row->help) <= 80 && std::strstr(row->title, "HANDSTAND"),
+            check(row && row->choices.empty() && row->place == (naInGame(item) ? Place::tab : Place::launcher) &&
+                      row->help && std::strlen(row->help) <= 80 && std::strstr(row->title, "HANDSTAND"),
                   "a handstand switch's row");
         }
         check(std::strstr(rowFor(Item::handstand)->title, "EXPERIMENTAL"),
@@ -32954,8 +32969,8 @@ int main() {
         for (const Entry& e : numbers) {
             check(onLegs(e.item), "a handstand row is not on the legs page");
             const Row* row = rowFor(e.item);
-            check(row && row->place == Place::launcher && row->help && std::strlen(row->help) <= 80 &&
-                      std::strstr(row->title, "HANDSTAND"),
+            check(row && row->place == (naInGame(e.item) ? Place::tab : Place::launcher) && row->help &&
+                      std::strlen(row->help) <= 80 && std::strstr(row->title, "HANDSTAND"),
                   "a handstand row's text");
             const auto list = steps(e.item);
             check(!list.empty() && list.size() == row->choices.size() && list.size() <= maxChoices,

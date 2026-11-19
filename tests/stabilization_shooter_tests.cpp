@@ -363,9 +363,9 @@ void menus() {
             inGame += rowFor(i) && rowFor(i)->place == Place::tab;
         check(inGame > 0 && inGame <= 20, "every tab short enough to see");
     }
-    check(std::strcmp(screens()[static_cast<size_t>(Category::camera)].tabTitle, "VR CAMERA & STABILIZATION") == 0 &&
-              std::strcmp(screens()[static_cast<size_t>(Category::legs)].tabTitle, "VR LEGS (ADVANCED)") == 0 &&
-              std::strcmp(screens()[static_cast<size_t>(Category::shooters)].tabTitle, "VR WEB SHOOTERS") == 0,
+    check(std::strcmp(screens()[static_cast<size_t>(Category::camera)].tabTitle, SPIDY_NA_TAB_PREFIX "CAMERA") == 0 &&
+              std::strcmp(screens()[static_cast<size_t>(Category::legs)].tabTitle, SPIDY_NA_TAB_PREFIX "BODY & LEGS") == 0 &&
+              std::strcmp(screens()[static_cast<size_t>(Category::shooters)].tabTitle, SPIDY_NA_TAB_PREFIX "WEB SHOOTERS") == 0,
           "the sections are named for what they hold");
     for (Item old : {Item::webAimSource, Item::forearmBlend, Item::forearmAimLimit, Item::wristShooters,
                      Item::palmShooters})

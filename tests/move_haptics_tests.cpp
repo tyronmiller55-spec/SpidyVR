@@ -232,9 +232,9 @@ int main() {
         check(choose(Item::moveHaptics, 8, v) && v.moveHapticsPct == 200, "200%");
         check(choose(Item::moveHaptics, 0, v) && v.moveHapticsPct == 0, "OFF");
         bool listed = false;
-        for (Item item : screens()[static_cast<size_t>(Category::feedback)].items)
+        for (Item item : screens()[static_cast<size_t>(Category::nativeAnimation)].items)
             listed = listed || item == Item::moveHaptics;
-        check(listed, "on FEEDBACK");
+        check(listed, "on NA \xC2\xB7 CORE (beta polish M4: every NA setting in the NA tabs)");
         Values w;
         w.moveHapticsPct = 150;
         check(tabOnlyText(w).find("move_haptics_pct=150") != std::string::npos, "saved as move_haptics_pct");

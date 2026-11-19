@@ -2287,59 +2287,6 @@ void App::options(ImVec2 origin, ImVec2 size) {
                "On a wall with the left stick at rest, squeeze a grip near the wall to hold on and pull to "
                "climb; both grips held roll your view along it.",
                S(42), [&] { tabToggle("##handclimb", Item::handClimb); });
-        settingOption(
-            Item::wallBrake, "Wall brake (experimental)",
-            "On a wall (with hand climbing on), squeeze a grip with your palm on it while sliding or "
-            "falling along it: you slow down as friction would (about 1.2 s from 10 m/s with one hand, "
-            "half that with two; pressing the palm in harder grips harder), then you hold on as usual. "
-            "Your hands buzz with the slide. Off by default.",
-            S(42), [&] { tabToggle("##wallbrake", Item::wallBrake); });
-        settingOption(
-            Item::gripFling, "Grip fling (experimental)",
-            "Squeeze a grip with your palm on a surface (the ground, a wall, anything), pull your hand "
-            "and let go: you are flung the other way, about 1.3 times your hand speed, at most 9 m/s. "
-            "Slow pulls do nothing. Letting go with the other hand still holding does nothing. Works from "
-            "the ground too, and a palm on a surface will not shoot a web. Off by default.",
-            S(42), [&] { tabToggle("##gripfling", Item::gripFling); });
-        settingOption(
-            Item::handGrab, "Hand grab (experimental)",
-            "Squeeze a grip with your palm within 35 cm of an enemy (first) or a prop: you take hold of it "
-            "by hand instead of shooting a web. It rides 45 cm ahead of your palm; punch it with your "
-            "other fist; let go with your hand moving to throw it (up to 1.6 times your hand speed, at "
-            "most 18 m/s), or swing your hand down fast to slam it into the ground. One hand lifts a "
-            "normal enemy; bigger ones need two hands or only drag. Holding costs a normal enemy almost "
-            "nothing. Off by default.",
-            S(42), [&] { tabToggle("##handgrab", Item::handGrab); });
-        settingOption(
-            Item::handGrabForce, "Hand grab strength",
-            "One hand's force in newtons (400 to 4000). A hand lifts 7.5% of it in kilograms: 90 kg at "
-            "1200 N, the default, which holds a normal enemy; bigger ones need more, or two hands. "
-            "Needs Hand grab on.",
-            S(150), [&] { tabCombo("##handgrabforce", Item::handGrabForce); });
-        settingOption(
-            Item::enemyHoldCost, "Hand grab hold cost",
-            "How fast holding an enemy tires your grip (none, 1, 2, 3 or 5): a normal enemy costs "
-            "almost nothing at 1, a heavy one much more. None: it never tires. Needs Hand grab on.",
-            S(150), [&] { tabCombo("##holdcost", Item::enemyHoldCost); });
-        settingOption(
-            Item::physicalTethers, "Web tethers (experimental)",
-            "A simulated rope on each web you hold on a prop or an enemy, so the line sags and drapes, drawn "
-            "in the game's own web. Snap your hand and the wave runs down the line and jerks what is on it "
-            "toward you (up to 14 m/s, less for a heavy one). Circle your hand and what is on the web orbits "
-            "you; let go and it is slung. Let go of the grip with the trigger held and the line pays out "
-            "after the prop: the trigger's depth brakes it, fully squeezed it locks, and letting go of the "
-            "trigger cuts it. A sharp pull yanks it back. Off by default.",
-            S(42), [&] { tabToggle("##webtethers", Item::physicalTethers); });
-        settingOption(
-            Item::tetherParticles, "Tether points",
-            "How many points the rope is simulated with (12 to 32). Drawing is at most 6 bends either way. "
-            "Needs Web tethers on.",
-            S(150), [&] { tabCombo("##tetherpoints", Item::tetherParticles); });
-        settingOption(
-            Item::tetherSubsteps, "Tether steps",
-            "How many steps a frame the rope takes (4 to 16). Fewer is cheaper and a little stretchier. "
-            "Needs Web tethers on.",
-            S(150), [&] { tabCombo("##tethersteps", Item::tetherSubsteps); });
         settingOption(Item::joystickRunCamera, "Joystick wall run camera",
                "On: a joystick run turns your view onto the wall, as before. Off: the left stick drives the "
                "momentum wall run's view and gait.",
@@ -2371,39 +2318,6 @@ void App::options(ImVec2 origin, ImVec2 size) {
                       "Enemies that block in the base game block your punches and web strikes until they are "
                       "webbed or stunned. Off: nobody guards, as before.",
                       S(42), [&] { tabToggle("##enemytypes", Item::enemyTypes); });
-        settingOption(Item::punchAutotarget, "Punch auto-target",
-               "Punch toward an enemy you have targeted (the one the ring marks) and your body, your aim and the "
-               "icons turn onto him that moment. Punches always do the same damage; only a targeted enemy is "
-               "tracked. Needs the enemy within the cone and range below.",
-               S(42), [&] { tabToggle("##punchautotarget", Item::punchAutotarget); });
-        settingOption(Item::punchTrackCone, "Punch track cone",
-               "How far off the targeted enemy a punch can be thrown and still track him (60 degrees by default).",
-               S(150), [&] { tabCombo("##punchtrackcone", Item::punchTrackCone); });
-        settingOption(Item::punchTrackRange, "Punch track range",
-               "How far away the targeted enemy can be and still be tracked (8 m by default).",
-               S(150), [&] { tabCombo("##punchtrackrange", Item::punchTrackRange); });
-        settingOption(Item::punchViewSnap, "Punch view snap",
-               "A tracked punch turns your view onto the enemy too. Off by default: your view stays where you "
-               "look and only your body and aim turn.",
-               S(42), [&] { tabToggle("##punchviewsnap", Item::punchViewSnap); });
-        settingOption(Item::jumpPull, "Jump pull",
-               "Jump toward an enemy and, in your own air with no web out, he pulls you a little: the enemy "
-               "within the cone of where you look (or where the left stick points while you hold it) and the "
-               "range below, until the jump has added the limit. Never in the game's own jump animation.",
-               S(42), [&] { tabToggle("##jumppull", Item::jumpPull); });
-        settingOption(Item::jumpPullGaze, "Jump pull gaze",
-               "How far off an enemy you can look and still be pulled toward him (20 degrees by default).",
-               S(150), [&] { tabCombo("##jumppullgaze", Item::jumpPullGaze); });
-        settingOption(Item::jumpPullStick, "Jump pull stick",
-               "How far off an enemy the left stick can point and still pull you toward him (25 degrees by "
-               "default).",
-               S(150), [&] { tabCombo("##jumppullstick", Item::jumpPullStick); });
-        settingOption(Item::jumpPullRange, "Jump pull range",
-               "How far away an enemy can be and still pull you (12 m by default).",
-               S(150), [&] { tabCombo("##jumppullrange", Item::jumpPullRange); });
-        settingOption(Item::jumpPullCap, "Jump pull limit",
-               "The most speed a jump's pull adds in all (1.5 m/s by default).",
-               S(150), [&] { tabCombo("##jumppullcap", Item::jumpPullCap); });
     });
     group(4, 0, "Flip controls", [&] {
         settingOption(Item::realisticFlips, "Realistic flips (experimental)",
@@ -2436,18 +2350,10 @@ void App::options(ImVec2 origin, ImVec2 size) {
                    [&] { tabCombo("##handmomentum", Item::automaticHandStrength); });
         settingOption(Item::automaticAirBrake, "Air rotation brake", "A in the air stops the spin and brings you upright.", S(42),
                    [&] { tabToggle("##brake", Item::automaticAirBrake); });
-        settingOption(Item::airCorrect, "Air upright time",
-                   "How long A in the air takes to bring you upright, smoothly with no jerk at either end. "
-                   "Needs Realistic flips. 1 second by default.",
-                   S(150), [&] { tabCombo("##aircorrect", Item::airCorrect); });
         settingOption(Item::automaticCombat, "Flips in combat",
                    "Off: while enemies are near, and 3 s after, arms and webs stop turning you and you come "
                    "upright.",
                    S(42), [&] { tabToggle("##combat", Item::automaticCombat); });
-        settingOption(Item::directionalFlips, "Directional flips",
-                   "Standing, hold the left stick to a side, ahead or back and tap A (let go within 0.18 s): a side "
-                   "flip, front flip or backflip that way. Holding A is still the normal jump. On by default.",
-                   S(42), [&] { tabToggle("##directionalflips", Item::directionalFlips); });
     });
     group(4, 1, "Advanced rotation tuning", [&] {
         if (ImGui::CollapsingHeader("Show fine tuning")) {
@@ -2625,6 +2531,7 @@ void App::options(ImVec2 origin, ImVec2 size) {
         const int cameraPage = static_cast<int>(Category::camera);
         const int shootersPage = static_cast<int>(Category::shooters);
         const int legsPage = static_cast<int>(Category::legs);
+        const int kicksPage = static_cast<int>(Category::kicks);
         const int pointJumpPage = static_cast<int>(Category::pointJump);
         const int showtimePage = static_cast<int>(Category::showtime);
         group(cameraPage, 0, "Camera motion (how much)", [&] {
@@ -2819,7 +2726,7 @@ void App::options(ImVec2 origin, ImVec2 size) {
                    "other low while rising, starfish with your arms spread wide. On by default.",
                    S(42), [&] { tabToggle("##airposes", Item::airPoses); });
         });
-        group(legsPage, 1, "Swing kick (experimental)", [&] {
+        group(kicksPage, 1, "Swing kick (experimental)", [&] {
             settingOption(
                 Item::swingKickManual, "Swing kick",
                 "Swinging on a web with the legs engaged (Y+X), flick the right stick up (a quick, firm "
@@ -2836,7 +2743,7 @@ void App::options(ImVec2 origin, ImVec2 size) {
                 "can be on; the dive waits while a hand kick is under way. On by default.",
                 S(42), [&] { tabToggle("##swingkickauto", Item::swingKickAuto); });
         });
-        group(legsPage, 1, "Air kicks (experimental)", [&] {
+        group(kicksPage, 0, "Kicks", [&] {
             settingOption(
                 Item::kicks, "Air kicks",
                 "Off the ground with the legs engaged (Y+X), flick the right stick (a quick, firm push; a slow "
@@ -2846,6 +2753,19 @@ void App::options(ImVec2 origin, ImVec2 size) {
                 "blow, harder the faster it goes. The swing kick keeps its own flick while swinging. Off by "
                 "default.",
                 S(42), [&] { tabToggle("##airkicks", Item::kicks); });
+            settingOption(
+                Item::groundKicks, "Ground kicks",
+                "Standing or walking (under 3 m/s) with the legs engaged (Y+X), flick the right stick: up is a "
+                "front kick, sideways a side kick, a half circle across the bottom a leg sweep. On by default.",
+                S(42), [&] { tabToggle("##groundkicks", Item::groundKicks); });
+            settingOption(
+                Item::enemyJoints, "Enemy joints (experimental)",
+                "Kicks use an enemy's own head and chest joints for their zones, not just his height. Off by default.",
+                S(42), [&] { tabToggle("##enemyjoints", Item::enemyJoints); });
+            settingOption(
+                Item::enemyLimbZones, "Enemy limb zones (experimental)",
+                "Arms and legs from his joints too (untested: run probe_c0_skeleton.py first). Needs Enemy joints on.",
+                S(42), [&] { tabToggle("##enemylimbzones", Item::enemyLimbZones); });
             settingOption(
                 Item::kickGazeCone, "Air kick aim",
                 "How far from where you look a head, chest or legs can be and still be aimed at (10 to 50 "
@@ -2921,6 +2841,109 @@ void App::options(ImVec2 origin, ImVec2 size) {
                 "How far your view comes down toward the floor when you are upside down (0 to 120 cm). 90 "
                 "by default. Needs Realistic flips.",
                 S(150), [&] { tabCombo("##handstandeye", Item::handstandEyeDrop); });
+        });
+        // BODY & LEGS / KICKS & COMBAT (beta polish M4): the NA rows that lived on MOVEMENT and FLIPS.
+        group(legsPage, 0, "Flips (Native Animation)", [&] {
+            settingOption(Item::airCorrect, "Air upright time",
+                       "How long A in the air takes to bring you upright, smoothly with no jerk at either end. "
+                       "Needs Realistic flips. 1 second by default.",
+                       S(150), [&] { tabCombo("##aircorrect", Item::airCorrect); });
+            settingOption(Item::directionalFlips, "Directional flips",
+                       "Standing, hold the left stick to a side, ahead or back and tap A (let go within 0.18 s): a side "
+                       "flip, front flip or backflip that way. Holding A is still the normal jump. On by default.",
+                       S(42), [&] { tabToggle("##directionalflips", Item::directionalFlips); });
+        });
+        group(legsPage, 0, "Grip and tethers (experimental)", [&] {
+            settingOption(
+                Item::wallBrake, "Wall brake (experimental)",
+                "On a wall (with hand climbing on), squeeze a grip with your palm on it while sliding or "
+                "falling along it: you slow down as friction would (about 1.2 s from 10 m/s with one hand, "
+                "half that with two; pressing the palm in harder grips harder), then you hold on as usual. "
+                "Your hands buzz with the slide. Off by default.",
+                S(42), [&] { tabToggle("##wallbrake", Item::wallBrake); });
+            settingOption(
+                Item::gripFling, "Grip fling (experimental)",
+                "Squeeze a grip with your palm on a surface (the ground, a wall, anything), pull your hand "
+                "and let go: you are flung the other way, about 1.3 times your hand speed, at most 9 m/s. "
+                "Slow pulls do nothing. Letting go with the other hand still holding does nothing. Works from "
+                "the ground too, and a palm on a surface will not shoot a web. Off by default.",
+                S(42), [&] { tabToggle("##gripfling", Item::gripFling); });
+            settingOption(
+                Item::physicalTethers, "Web tethers (experimental)",
+                "A simulated rope on each web you hold on a prop or an enemy, so the line sags and drapes, drawn "
+                "in the game's own web. Snap your hand and the wave runs down the line and jerks what is on it "
+                "toward you (up to 14 m/s, less for a heavy one). Circle your hand and what is on the web orbits "
+                "you; let go and it is slung. Let go of the grip with the trigger held and the line pays out "
+                "after the prop: the trigger's depth brakes it, fully squeezed it locks, and letting go of the "
+                "trigger cuts it. A sharp pull yanks it back. Off by default.",
+                S(42), [&] { tabToggle("##webtethers", Item::physicalTethers); });
+            settingOption(
+                Item::tetherParticles, "Tether points",
+                "How many points the rope is simulated with (12 to 32). Drawing is at most 6 bends either way. "
+                "Needs Web tethers on.",
+                S(150), [&] { tabCombo("##tetherpoints", Item::tetherParticles); });
+            settingOption(
+                Item::tetherSubsteps, "Tether steps",
+                "How many steps a frame the rope takes (4 to 16). Fewer is cheaper and a little stretchier. "
+                "Needs Web tethers on.",
+                S(150), [&] { tabCombo("##tethersteps", Item::tetherSubsteps); });
+        });
+        group(kicksPage, 0, "Punch and jump assist", [&] {
+            settingOption(Item::punchAutotarget, "Punch auto-target",
+                   "Punch toward an enemy you have targeted (the one the ring marks) and your body, your aim and the "
+                   "icons turn onto him that moment. Punches always do the same damage; only a targeted enemy is "
+                   "tracked. Needs the enemy within the cone and range below.",
+                   S(42), [&] { tabToggle("##punchautotarget", Item::punchAutotarget); });
+            settingOption(Item::punchTrackCone, "Punch track cone",
+                   "How far off the targeted enemy a punch can be thrown and still track him (60 degrees by default).",
+                   S(150), [&] { tabCombo("##punchtrackcone", Item::punchTrackCone); });
+            settingOption(Item::punchTrackRange, "Punch track range",
+                   "How far away the targeted enemy can be and still be tracked (8 m by default).",
+                   S(150), [&] { tabCombo("##punchtrackrange", Item::punchTrackRange); });
+            settingOption(Item::punchViewSnap, "Punch view snap",
+                   "A tracked punch turns your view onto the enemy too. Off by default: your view stays where you "
+                   "look and only your body and aim turn.",
+                   S(42), [&] { tabToggle("##punchviewsnap", Item::punchViewSnap); });
+            settingOption(Item::jumpPull, "Jump pull",
+                   "Jump toward an enemy and, in your own air with no web out, he pulls you a little: the enemy "
+                   "within the cone of where you look (or where the left stick points while you hold it) and the "
+                   "range below, until the jump has added the limit. Never in the game's own jump animation.",
+                   S(42), [&] { tabToggle("##jumppull", Item::jumpPull); });
+            settingOption(Item::jumpPullGaze, "Jump pull gaze",
+                   "How far off an enemy you can look and still be pulled toward him (20 degrees by default).",
+                   S(150), [&] { tabCombo("##jumppullgaze", Item::jumpPullGaze); });
+            settingOption(Item::jumpPullStick, "Jump pull stick",
+                   "How far off an enemy the left stick can point and still pull you toward him (25 degrees by "
+                   "default).",
+                   S(150), [&] { tabCombo("##jumppullstick", Item::jumpPullStick); });
+            settingOption(Item::jumpPullRange, "Jump pull range",
+                   "How far away an enemy can be and still pull you (12 m by default).",
+                   S(150), [&] { tabCombo("##jumppullrange", Item::jumpPullRange); });
+            settingOption(Item::jumpPullCap, "Jump pull limit",
+                   "The most speed a jump's pull adds in all (1.5 m/s by default).",
+                   S(150), [&] { tabCombo("##jumppullcap", Item::jumpPullCap); });
+        });
+        group(kicksPage, 1, "Hand grab (experimental)", [&] {
+            settingOption(
+                Item::handGrab, "Hand grab (experimental)",
+                "Squeeze a grip with your palm within 35 cm of an enemy (first) or a prop: you take hold of it "
+                "by hand instead of shooting a web. It rides 45 cm ahead of your palm; punch it with your "
+                "other fist; let go with your hand moving to throw it (up to 1.6 times your hand speed, at "
+                "most 18 m/s), or swing your hand down fast to slam it into the ground. One hand lifts a "
+                "normal enemy; bigger ones need two hands or only drag. Holding costs a normal enemy almost "
+                "nothing. Off by default.",
+                S(42), [&] { tabToggle("##handgrab", Item::handGrab); });
+            settingOption(
+                Item::handGrabForce, "Hand grab strength",
+                "One hand's force in newtons (400 to 4000). A hand lifts 7.5% of it in kilograms: 90 kg at "
+                "1200 N, the default, which holds a normal enemy; bigger ones need more, or two hands. "
+                "Needs Hand grab on.",
+                S(150), [&] { tabCombo("##handgrabforce", Item::handGrabForce); });
+            settingOption(
+                Item::enemyHoldCost, "Hand grab hold cost",
+                "How fast holding an enemy tires your grip (none, 1, 2, 3 or 5): a normal enemy costs "
+                "almost nothing at 1, a heavy one much more. None: it never tires. Needs Hand grab on.",
+                S(150), [&] { tabCombo("##holdcost", Item::enemyHoldCost); });
         });
         group(pointJumpPage, 0, "Point jump (experimental)", [&] {
             settingOption(Item::pointJump, "Point jump",

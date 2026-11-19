@@ -427,7 +427,7 @@ void settings() {
     const Item rowsWanted[] = {Item::pointJump, Item::pointJumpTrigger, Item::pointJumpMinSpeed,
                                Item::pointJumpMaxSpeed, Item::pointJumpFull, Item::pointJumpPush};
     const auto& tab = screens()[static_cast<size_t>(Category::pointJump)];
-    check(std::strcmp(tab.tabTitle, "VR POINT JUMP") == 0, "its own, clearly named tab");
+    check(std::strcmp(tab.tabTitle, SPIDY_NA_TAB_PREFIX "POINT JUMP") == 0, "its own, clearly named tab");
     for (Item item : rowsWanted) {
         const Row* row = rowFor(item);
         check(row && row->place == Place::tab && row->help && std::strlen(row->help) <= 80, "an in-game row");

@@ -1185,8 +1185,16 @@ bool isNativeAnimation(Item);
 // camera settings in any of the menus. Make sure it's clearly labeled"): tabs
 // of their own, after the older ones so their numbers stay.
 // pointJump (November 11): POINT JUMP's own tab, last so the others keep theirs.
+// NA TABS (beta polish M4, the owner's D1/D2): the in-game tabs are the upstream ones, then every setting Native
+// Animation added, grouped in tabs whose names start with naTabPrefix (the tab order is this order; a tab is
+// numbered by its place only while the menu is open, so reordering needs no migration). KICKS & COMBAT took the
+// kicks out of LEGS and the punch / jump assists out of MOVEMENT.
 enum class Category : uint8_t { setup, webs, swinging, movement, flips, feedback, display, nativeAnimation,
-                                camera, shooters, legs, pointJump, showtime, handoff, count };
+                                camera, handoff, legs, kicks, shooters, pointJump, showtime, count };
+// The in-game NA tabs' prefix: "NA" and a middle dot (U+00B7, UTF-8). RE: the game's font is not verified to have
+// the dot (the capture-session list); swap this for "NA - " if a headset shows a box.
+#define SPIDY_NA_TAB_PREFIX "NA \xC2\xB7 "
+inline constexpr const char* naTabPrefix = SPIDY_NA_TAB_PREFIX;
 inline constexpr size_t categoryCount = static_cast<size_t>(Category::count);
 struct Screen {
     const char* title;
