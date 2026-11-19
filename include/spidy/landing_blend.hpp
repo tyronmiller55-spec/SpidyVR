@@ -24,8 +24,13 @@ namespace spidy::landing_blend {
 struct Params {
     bool enabled = true;
     bool release = false;       // air_landing_release: hand the body back in the air (unverified)
-    float uprightFrom = .30f;   // s to impact: the body starts coming upright
-    float uprightTo = .10f;     // s to impact: fully upright
+    // UPRIGHT EASE (beta polish F1, the owner's D9; the Nov 19 log: 51% of 264 landings 0% upright at the touchdown,
+    // 62% of first predictions over 100 ms off, mostly late): the body starts coming upright earlier (0.40 s to impact,
+    // fully at 0.12 s) and, whatever the prediction says, by the clock too: fully upright uprightClock s after the
+    // descent was first predicted.
+    float uprightFrom = .40f;   // s to impact: the body starts coming upright
+    float uprightTo = .12f;     // s to impact: fully upright
+    float uprightClock = .45f;  // s from the first prediction: fully upright by then (0: off)
     float handBackAt = .20f;    // s to impact: release (only with `release`)
     float maxHeight = 14.f;     // m: the ray's reach; beyond it there is no prediction
     float minFall = 2.f;        // m/s down: slower than this is not a landing approach
@@ -56,7 +61,16 @@ struct Report {
     float actual = NAN;                                     // s from the first prediction to the touchdown
     float errorMs = NAN;                                    // first prediction - actual, ms (+ late)
     float uprightAtTouch = 0;
+    // UPRIGHT EASE: what brought him upright (or kept him not): the time to impact, the clock, a handstand or a hold
+    // keeping the tilt, or neither in time.
+    enum class Why : unsigned char { tooSoon, impact, clock, kept } why{};
 };
+inline const char* whyName(Report::Why w) {
+    return w == Report::Why::impact  ? "the time to impact"
+           : w == Report::Why::clock ? "the clock (the prediction was late)"
+           : w == Report::Why::kept  ? "kept tilted (a handstand or a hold)"
+                                     : "touched down too soon";
+}
 struct Out {
     float tti = NAN;
     float upright = 0;      // 0..1: how far the body has come upright
@@ -98,7 +112,8 @@ class Tracker {
             out.predicting = true;
             if (!in.keepTilt) {
                 const float u = std::clamp((p.uprightFrom - tti) / std::max(p.uprightFrom - p.uprightTo, .01f), 0.f, 1.f);
-                upright_ = std::max(upright_, u * u * (3 - 2 * u));
+                const float byImpact = u * u * (3 - 2 * u);
+                easeByClock(p, byImpact);
             }
             out.handBack = p.release && tti <= p.handBackAt && !in.keepTilt;
         } else if (descending_) {
@@ -106,9 +121,13 @@ class Tracker {
             sinceFirst_ += dt;
             if (in.vy > 0)
                 reset(); // a web or a push took him up again
+            else if (!in.keepTilt)
+                easeByClock(p, 0.f);
         }
-        if (in.keepTilt)
+        if (in.keepTilt) {
             upright_ = 0;
+            kept_ = descending_;
+        }
         out.upright = upright_;
         return out;
     }
@@ -118,6 +137,7 @@ class Tracker {
     void reset() {
         descending_ = false;
         upright_ = 0;
+        kept_ = byClock_ = false;
         lastTti_ = NAN;
         sinceFirst_ = 0;
     }
@@ -132,9 +152,26 @@ class Tracker {
         report_.actual = sinceFirst_;
         report_.errorMs = (firstTti_ - sinceFirst_) * 1000.f;
         report_.uprightAtTouch = upright_;
+        report_.why = kept_ && upright_ <= 0.f ? Report::Why::kept
+                      : upright_ <= 0.f        ? Report::Why::tooSoon
+                      : byClock_               ? Report::Why::clock
+                                               : Report::Why::impact;
+    }
+    // The upright weight: the time to impact's, or the clock's since the first prediction when it is further along.
+    void easeByClock(const Params& p, float byImpact) {
+        float byClock = 0.f;
+        if (p.uprightClock > 0.f) {
+            const float c = std::clamp(sinceFirst_ / p.uprightClock, 0.f, 1.f);
+            byClock = c * c * (3 - 2 * c);
+        }
+        const float w = std::max(byImpact, byClock);
+        if (w > upright_) {
+            upright_ = w;
+            byClock_ = byClock > byImpact;
+        }
     }
     Report report_{};
-    bool descending_{};
+    bool descending_{}, kept_{}, byClock_{};
     float firstTti_ = NAN, firstHeight_ = NAN, firstVy_ = NAN, lastTti_ = NAN, sinceFirst_{}, upright_{};
 };
 } // namespace spidy::landing_blend

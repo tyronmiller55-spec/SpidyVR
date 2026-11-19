@@ -2,6 +2,7 @@
 #include "spidy/landing_blend.hpp"
 
 #include <cstdlib>
+#include <string>
 #include <iostream>
 
 using namespace spidy::landing_blend;
@@ -39,7 +40,10 @@ int main() {
               "no answer for bad numbers");
     }
     {
-        // A fall from 8 m: the upright ramp 0 above 0.3 s, 1 at 0.1 s, never backing off; the touchdown report is within a frame or two.
+        // A fall from 8 m: the upright ramp 0 above 0.4 s, 1 at 0.12 s, never backing off; the touchdown report is within a frame
+        // or two. (The clock's ease off here: below.)
+        Params q = p;
+        q.uprightClock = 0;
         Fall f{8, 0};
         Tracker t;
         Input in;
@@ -56,7 +60,7 @@ int main() {
             in.height = std::max(f.h, 0.f);
             in.vy = f.vy;
             in.air = f.air;
-            const Out o = t.update(in, p);
+            const Out o = t.update(in, q);
             if (t.report().valid)
                 rep = t.report();
             if (o.predicting) {
@@ -64,9 +68,9 @@ int main() {
                     w0 = o.upright;
                 mono = mono && o.upright + 1e-6f >= prevW;
                 prevW = o.upright;
-                if (o.tti > .3f)
-                    check(o.upright == 0, "no upright before 0.3 s to impact");
-                if (o.tti <= .1f)
+                if (o.tti > .4f)
+                    check(o.upright == 0, "no upright before 0.4 s to impact");
+                if (o.tti <= .12f)
                     rampedBy01 = rampedBy01 || o.upright > .98f;
                 if (tAt03 < 0 && o.tti <= .3f)
                     tAt03 = f.t;
@@ -74,10 +78,51 @@ int main() {
         }
         check(w0 == 0, "the descent begins upright-free");
         check(mono, "the upright weight never backs off");
-        check(rampedBy01, "fully upright by 0.1 s to impact");
+        check(rampedBy01, "fully upright by 0.12 s to impact");
         check(rep.valid && std::abs(rep.errorMs) < 40.f, "the first prediction matches the touchdown within 40 ms");
-        check(rep.uprightAtTouch > .98f, "upright at the touchdown");
+        check(rep.uprightAtTouch > .98f && rep.why == Report::Why::impact, "upright at the touchdown, by the time to impact");
         check(!t.update(in, p).predicting, "nothing after the touchdown");
+    }
+    {
+        // UPRIGHT EASE (F1, the Nov 19 log: 51% of landings 0% upright, predictions mostly late): the ray reads the ground
+        // 3 m lower than he lands (a ledge), so the time to impact never gets under 0.4 s; the clock still brings him
+        // upright, and the report says so.
+        Fall f{3.5f, -4};
+        Tracker t;
+        Input in;
+        in.seconds = 1.f / 90;
+        in.air = in.rayOk = true;
+        Report rep;
+        int guard = 0;
+        while (f.air && guard++ < 1000) {
+            f.step(1.f / 90);
+            in.height = std::max(f.h, 0.f) + 3.f;
+            in.vy = f.vy;
+            in.air = f.air;
+            t.update(in, p);
+            if (t.report().valid)
+                rep = t.report();
+        }
+        check(rep.valid && rep.uprightAtTouch > .5f && rep.why == Report::Why::clock,
+              "a late prediction: the clock brings him upright");
+        Params noClock = p;
+        noClock.uprightClock = 0;
+        Fall g{3.5f, -4};
+        Tracker u;
+        Report old;
+        guard = 0;
+        in.air = true;
+        while (g.air && guard++ < 1000) {
+            g.step(1.f / 90);
+            in.height = std::max(g.h, 0.f) + 3.f;
+            in.vy = g.vy;
+            in.air = g.air;
+            u.update(in, noClock);
+            if (u.report().valid)
+                old = u.report();
+        }
+        check(old.valid && old.uprightAtTouch < rep.uprightAtTouch, "without the clock (as before): less upright");
+        check(std::string(whyName(Report::Why::kept)).find("handstand") != std::string::npos, "the reasons read");
     }
     {
         // Ray lag: a reading 3 frames old, corrected by the fall since.

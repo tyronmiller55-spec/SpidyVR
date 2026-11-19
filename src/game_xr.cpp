@@ -9948,6 +9948,8 @@ DWORD WINAPI run(void*) {
                                     r.firstTti * 1000, r.firstHeight, -r.firstVy, r.actual * 1000, r.errorMs,
                                     std::isfinite(r.lastTti) ? r.lastTti * 1000 : -1.f, r.uprightAtTouch * 100,
                                     values.airLandingRelease ? " (release on)" : "");
+                                diag_log::writef("landing upright: %.0f%% at touchdown (%s)", r.uprightAtTouch * 100,
+                                                 landing_blend::whyName(r.why));
                             }
                         }
                         // AIR TAKEOVER: a slow-rising jump and a plain fall hand over inside that timer.
