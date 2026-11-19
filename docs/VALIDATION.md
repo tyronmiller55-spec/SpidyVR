@@ -1,5 +1,32 @@
 # Validation — 2026-10-27
 
+## November 19: 0.8.7-na-beta1 becomes CURRENT (feat/087-beta1, session game-vr-20261119-130907)
+
+The owner's session of about 26 minutes from 1:09 PM PT on build `81fc830` (Quest 3S, Meta Quest Link,
+Manhattan Skies also loaded). He reported the game had never felt better, Showtime working, and handoffs
+solid; this build is the testers' CURRENT. Log: `/workspace/playtest-na-beta1/`. Features on in the
+session that were off by default (now revision 14): Showtime, AUTO: FINISHERS, AUTO: DODGES PERFECT ONLY,
+air kicks, hand grab, web tethers, wall brake, grip fling, point jump, air landing release. Left off, and
+still off by default: enemy joints, enemy limb zones, sound trace / head probe / run logs as shipping
+defaults (the session had the last three on for capture). Wall jump sound unchanged (SOUND A).
+
+Headset checklist from this log:
+
+- Landings: 172 scored; every 0% upright (35, 20%) was "kept tilted (a handstand or a hold)". The other
+  137 were upright (time-to-impact 90, clock because the prediction was late 47). The Nov 19 51% zero
+  share is gone once holds are set aside.
+- Inverted touchdowns: 2 upright, 3 roll, 1 handstand (arms up). Matches the arms-up rule.
+- Direction audit: 483 windows, imposed view turn in only 2 (8 deg and 96 deg, one frame each).
+- Handoffs: 216 anim→VR (jump-timer 51, point-jump 47, punch 44, grip-cancel 19, flip-break 19, web 13,
+  swing 12, wallrun 10, handstand 1); the 120 ms minimum stint held 15 landings; 2 rising touchdowns ignored.
+- Showtime used; arms eased to 1.00x; camera `collide=stock`. 13 finisher candidates, all "not entered,
+  AUTO: FINISHERS is log only".
+- Hand grab: 4 enemy takes, 1 throw, 1 let go. Air kicks: 2 starts, both miss (no enemy in reach). One
+  swing kick refused (not swinging). Point jump heavily used (97 jump-sound lines, no doubles).
+- Jump sounds: 97 point jump (1 of 1), 11 wall jump SOUND A, 3 ground flips (4 of 4).
+- Memory (console): game 11,819 → 12,067 MB, second half −1.7 MB/min (flat); system free commit lowest
+  120 MB. Module starts: native swinging 486 ms, the others under 120 ms. Known 0xC0000409 at exit.
+
 ## November 14: air takeover (branch feat/air-takeover, on 331a70b; local, unreleased)
 
 Evidence for every claim is in [CHANGELOG.md](CHANGELOG.md) and [AIR_TAKEOVER.md](AIR_TAKEOVER.md); game facts in [REFERENCE.md](REFERENCE.md). Source session: `game-vr-20261114-164317` (b9b2196, 34 min).

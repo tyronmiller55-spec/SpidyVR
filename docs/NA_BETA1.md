@@ -1,12 +1,14 @@
 # 0.8.7-na-beta1: headset checklist and zip checklist
 
-The beta polish pass on branch `feat/087-beta1` (from 966a812). What changed: [CHANGELOG.md](CHANGELOG.md).
-Each line names the log line that scores it (`game-vr-*-diag.log`).
+The testers' **CURRENT** Native Animation build (branch `feat/087-beta1`, from 966a812), after the owner's
+Nov 19 session. What changed: [CHANGELOG.md](CHANGELOG.md). Each line names the log line that scores it
+(`game-vr-*-diag.log`). The **NA · HELP** tab's TRY THE BETA pages ask testers to try the current features
+and to post the newest reports-folder files on Discord.
 
 ## Headset checklist
 
 1. **Menus.** The SPIDY VR menu shows the **NA ·** tabs with the "·" drawn (not a box); every NA setting is in
-   one of them; **NA · HELP** scrolls through all its rows (about 47) and each READ row opens its page; Y (RESET
+   one of them; **NA · HELP** scrolls through all its rows (about 51, including TRY THE BETA) and each READ row opens its page; Y (RESET
    ALL) leaves launcher-only settings alone.
 2. **Jump sounds.** Point jump, ground flip and handstand leap: one grunt, never two (`jump sounds:`). Wall
    jump with WALL JUMP SOUND on SOUND A, then SOUND B, then OFF: say which fits.
@@ -40,11 +42,13 @@ an enemy; the finisher signal; a NATURAL ARMS Showtime log.
 ## Zip checklist
 
 - Built by Python (`shutil.make_archive`) from the CI artifact of the commit, never the zip CLI.
-- Name `Spidy-0.8.7-win64-na-beta1-<sha7>.zip`; top folder `Spidy-0.8.7-player-torso-<sha7>/`.
+- Name `Spidy-0.8.7-na-beta1-win64-<sha7>.zip`; top folder `Spidy-0.8.7-player-torso-<sha7>/`.
 - Contents as CI built them: the launcher, the modules, `LICENSE`, `THIRD_PARTY_NOTICES.md`, the docs
   (`MOD_COMPAT.md`, `NA_HELP.md`); no PDBs.
 - SHA-256 of the zip in the report.
 - The launcher header reads 0.8.7-na-beta1; the diag log's build line names the commit.
-- Defaults: sound trace logging off, LOG LEVEL 1, HEAD PROBE off, Showtime off, X and Y instant,
-  `swing_kick_manual=1`, `leg_hold_everywhere=0`; a clean profile starts at movement defaults rev 13 and shows
-  the calibration prompt.
+- Defaults: sound trace logging off, LOG LEVEL 1, HEAD PROBE off, X and Y instant, `leg_hold_everywhere=0`;
+  Showtime, air kicks, hand grab, web tethers, wall brake, grip fling, point jump and the mid-air landing
+  handoff on (revision 14; a saved off stays off); `swing_kick_manual=1`, `swing_kick_auto=1`, `ground_kicks=1`;
+  a clean profile starts at movement defaults rev 14 and shows the calibration prompt. Wall jump sound is
+  unchanged (SOUND A).

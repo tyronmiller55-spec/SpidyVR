@@ -1,33 +1,39 @@
 # SpidyVR Native Animation
 
-A modified community build on **Ilya Mezerowsky's SpidyVR 0.8.1 / main**.
+A modified community build on **Ilya Mezerowsky's SpidyVR 0.8.7**.
 Insomniac's original animation suite keeps playing while SpidyVR controls,
 your headset and controller-tracked arms are layered over it. Inspired by
 **vrfloofy's first-person mod**. GPL-3.0; not an official Marvel or Insomniac product.
 
+The testers' **CURRENT** build is **0.8.7-na-beta1**, from the Releases page of
+[SpidyVR-NativeAnimation](https://github.com/tyronmiller55-spec/SpidyVR-NativeAnimation/releases/latest).
 Open **Spidy Launcher.exe** and select **Native Animation**, between Options and
-Controls. The headset has the same contiguous **NATIVE ANIMATION** settings block
-under SPIDY VR. New installations start in the recommended mode; existing saved
-settings and profiles retain their stored choices. [Player guide](docs/PLAYERS.md).
+Controls. The headset has the same settings under the **NA ·** tabs. New
+installations start in the recommended mode, with the current features on so you
+can try them; existing saved settings are migrated once (revision 14). [Player
+guide](docs/PLAYERS.md). The **NA · HELP** tab (the same pages as the launcher's
+Help and [docs/NA_HELP.md](docs/NA_HELP.md)) says what to try and how to report
+it.
 
 Use this fork for community-build support:
 https://github.com/tyronmiller55-spec/SpidyVR . The original Spidy launcher name,
 author credits, Discord and Ko-fi links are retained; Native Animation bugs do
 not belong in upstream Spidy's bug tracker. Source is provided under GPL-3.0.
 
-Windows package: **Spidy-0.8.7-win64-na-beta1-<commit>.zip** (version **0.8.7-na-beta1**). Extract into a
+Windows package: **Spidy-0.8.7-na-beta1-win64-<commit>.zip** (version **0.8.7-na-beta1**). Extract into a
 writable folder outside the game install. Never copy the mod into the game's folder.
 
-**0.8.7-na-beta1** (beta polish): every Native Animation setting now sits in the headset menu's **NA ·** tabs
-(CORE, CAMERA, HANDOFF, BODY & LEGS, KICKS & COMBAT, WEB SHOOTERS, POINT JUMP, SHOWTIME) and a new **NA · HELP**
-tab explains each feature (the same pages are in the launcher's Help and [docs/NA_HELP.md](docs/NA_HELP.md));
-the launcher marks NA settings in cyan and hides retired rows. New in play: Spidey's own jump grunt on point
-jumps, ground flips and handstand leaps, a WALL JUMP SOUND choice, louder hits, air kicks that find the enemy
-your punches are locked on, earlier upright landings, ground flips that spin in the game's air, a 120 ms
-minimum takeover before a landing hands back, steadier handstands, webs that point where your controller does,
-Showtime arms at Spidey's own length, and hand grab class rules. X and Y stay instant; Showtime is off by
-default. What changed and why: [docs/CHANGELOG.md](docs/CHANGELOG.md); what to check in the headset and how the
-zip is built: [docs/NA_BETA1.md](docs/NA_BETA1.md).
+**0.8.7-na-beta1** (CURRENT, Nov 19): every Native Animation setting sits in the headset menu's **NA ·** tabs
+(CORE, CAMERA, HANDOFF, BODY & LEGS, KICKS & COMBAT, WEB SHOOTERS, POINT JUMP, SHOWTIME) and **NA · HELP**.
+New in play: Spidey's own jump grunt on point jumps, ground flips and handstand leaps, a WALL JUMP SOUND
+choice, louder hits, air kicks that find the enemy your punches are locked on, earlier upright landings,
+ground flips that spin in the game's air, a 120 ms minimum takeover before a landing hands back, steadier
+handstands, webs that point where your controller does, Showtime arms at Spidey's own length, and hand grab
+class rules. Showtime, air kicks, hand grab, web tethers, wall brake, grip fling, point jump and the mid-air
+landing handoff are on by default so testers can try them (a saved off stays off after this revision). X and Y
+stay instant; sound-trace, head-probe and run-log stay off; wall jump sound is unchanged. What changed and why:
+[docs/CHANGELOG.md](docs/CHANGELOG.md); what to check in the headset and how the zip is built:
+[docs/NA_BETA1.md](docs/NA_BETA1.md).
 Other mods: [docs/MOD_COMPAT.md](docs/MOD_COMPAT.md). Known issues: the game may report a harmless crash
 (0xC0000409) as it exits; DLSS can fail under video-memory pressure (lower the DLSS quality or the texture
 budget).

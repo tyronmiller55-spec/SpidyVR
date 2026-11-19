@@ -3,10 +3,15 @@
 Every build, newest first, with what changed, why, and what was measured.
 Per-check results are in [VALIDATION.md](VALIDATION.md).
 
-**0.8.7-na-beta1 (November 19, branch feat/087-beta1 from 966a812): the beta polish pass**
+**0.8.7-na-beta1 (November 19, branch feat/087-beta1 from 966a812): the beta polish pass,**
+now the testers' **CURRENT** after the owner's Nov 19 session on `81fc830`
 ([headset and zip checklist](NA_BETA1.md)). One change per commit; the owner's decisions
-D1-D11. Settings files from before get migration rev 13 (sound trace off once); X and Y stay instant, Showtime
-stays off, `swing_kick_manual=1` and `leg_hold_everywhere=0` stay.
+D1-D11. Settings files from before get migration rev 14: features that were on in that session
+and off by default come on once (Showtime, AUTO: FINISHERS, AUTO: DODGES at PERFECT ONLY, air kicks,
+hand grab, web tethers, wall brake, grip fling, point jump, and the mid-air landing handoff). A 0
+chosen after this revision stays. X and Y stay instant (`leg_hold_everywhere=0`); sound-trace,
+head-probe and run-log stay off; wall jump sound is unchanged. The **NA · HELP** tab asks testers
+to try the current features and to post the newest reports-folder files on Discord.
 
 - **Menus (D1-D3).** Every NA setting lives in the **NA ·** tabs, kicks, handstand, sway time, punch track and
   jump pull are in the headset menu, retired legacy rows are hidden in-game; a new **NA · HELP** tab (19 topics,
