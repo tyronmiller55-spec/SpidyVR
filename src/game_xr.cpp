@@ -1423,6 +1423,7 @@ DWORD WINAPI run(void*) {
         // for the session: owner switches keep it.
         std::array<spherical_aim::ForearmModel, 2> forearmModels;
         std::array<spherical_aim::Blend, 2> forearmBlends;
+        std::array<spherical_aim::ArmLine, 2> armLines; // W2/W3: the wrist's learned offset, the reach-around fallback
         std::array<Quat, 2> webTurnsNow{}, forearmTargets{};
         bool webTurnsOn{};
         uint64_t forearmJob{};
@@ -6139,6 +6140,12 @@ DWORD WINAPI run(void*) {
                                         solvedDir, forearmModels[i].world(aimNow), trustNow, dt);
                                 else
                                     forearmBlends[i].reset();
+                                // W2/W3 (D11): turned by the player's learned wrist angle (capped at 45 deg), and
+                                // the controller's direction past 60 deg (an arm behind the back or overhead).
+                                if (values.sphericalAim)
+                                    webLine = armLines[i].update(webLine, forearmModels[i], aimNow, dt);
+                                else
+                                    armLines[i].reset();
                                 const bool haveLine =
                                     spherical_aim::unitish(webLine) && why != Fallback::misaligned;
                                 if (haveLine) {
@@ -6219,7 +6226,8 @@ DWORD WINAPI run(void*) {
                                     if (logNow || diagNow)
                                         diag_log::writef(
                                             "spherical aim: %s %s, trust %.2f (target %.2f), model %s "
-                                            "(%.2f s), solve off model %.0f deg, line off controller %.0f deg",
+                                            "(%.2f s), solve off model %.0f deg, line off controller %.0f deg, "
+                                            "wrist offset %.0f deg%s",
                                             i ? "R" : "L", web_aim::fallbackName(why),
                                             static_cast<double>(forearmBlends[i].trust),
                                             static_cast<double>(trustNow),
@@ -6232,7 +6240,9 @@ DWORD WINAPI run(void*) {
                                                            spherical_aim::angleBetween(
                                                                webLine, aimNow.rotate({0, 0, -1})) *
                                                            57.29578f)
-                                                     : -1.0);
+                                                     : -1.0,
+                                            static_cast<double>(armLines[i].offsetDegrees),
+                                            armLines[i].reachAround ? ", reach-around: the controller's direction" : "");
                                     if (logNow || diagNow)
                                         diag_log::writef(
                                             "shooter lock: %s %s, %s, strength %d%%, line off controller %.0f deg",

@@ -4,6 +4,7 @@
 #include "spidy/camera_motion.hpp"
 #include "spidy/realistic_flip.hpp"
 #include "spidy/shooter_lock.hpp"
+#include "spidy/spherical_aim.hpp"
 #include "spidy/vr_settings.hpp"
 #include "spidy/web_aim.hpp"
 #include <cmath>
@@ -414,6 +415,66 @@ void menus() {
 }
 } // namespace
 
+void armLineOffset() {
+    namespace sa = spherical_aim;
+    // A player whose forearm runs 35 deg below the controller's pointing line (the logs' median).
+    const Quat aim = Quat::yaw(.4f);
+    const Vec3 controller = aim.rotate({0, 0, -1});
+    const Vec3 forearmLocal = Quat::around({1, 0, 0}, -35 * deg).rotate({0, 0, -1});
+    sa::ForearmModel model;
+    for (int i = 0; i < 60; ++i)
+        model.learn(aim.rotate(forearmLocal), aim, 1.f / 30);
+    check(model.ready(), "W2: the forearm model did not learn");
+    sa::ArmLine line;
+    const Vec3 forearm = aim.rotate(forearmLocal);
+    Vec3 out = line.update(forearm, model, aim, 1.f / 90);
+    check(line.offsetWeight > 0 && line.offsetWeight < .1f, "W2: the wrist offset did not ease in");
+    for (int i = 0; i < 60; ++i)
+        out = line.update(forearm, model, aim, 1.f / 90);
+    check(sa::angleBetween(out, controller) < 1 * deg, "W2: a steady arm's line is not on the controller");
+    check(std::abs(line.offsetDegrees - 35) < 1, "W2: the applied offset is not the learned 35 deg");
+    // The arm moved 20 deg off its usual line: the line follows the arm (with the offset), not the controller.
+    const Vec3 moved = Quat::around(aim.rotate({0, 1, 0}), 20 * deg).rotate(forearm);
+    out = line.update(moved, model, aim, 1.f / 90);
+    check(sa::angleBetween(out, controller) > 15 * deg && !line.reachAround, "W2: the line stopped following the arm");
+    // A 60 deg learned angle is capped at 45.
+    sa::ForearmModel wide;
+    const Vec3 wideLocal = Quat::around({1, 0, 0}, -60 * deg).rotate({0, 0, -1});
+    for (int i = 0; i < 60; ++i)
+        wide.learn(aim.rotate(wideLocal), aim, 1.f / 30);
+    sa::ArmLine capped;
+    for (int i = 0; i < 60; ++i)
+        out = capped.update(aim.rotate(wideLocal), wide, aim, 1.f / 90);
+    check(std::abs(capped.offsetDegrees - 45) < .5f, "W2: the wrist offset is not capped at 45 deg");
+    check(std::abs(sa::angleBetween(out, controller) / deg - 15) < 1, "W2: the capped line is not 15 deg off");
+    // Not learned: the line is the arm's, untouched.
+    sa::ForearmModel none;
+    sa::ArmLine plain;
+    out = plain.update(forearm, none, aim, 1.f / 90);
+    check(sa::angleBetween(out, forearm) < 1e-3f && plain.offsetDegrees == 0, "W2: an unlearned model turned the line");
+}
+
+void armLineReachAround() {
+    namespace sa = spherical_aim;
+    const Quat aim{};
+    const Vec3 controller{0, 0, -1};
+    sa::ForearmModel none;
+    sa::ArmLine line;
+    // An arm behind the back: 90 deg off the controller -> the controller's direction.
+    Vec3 out = line.update(Quat::around({0, 1, 0}, 90 * deg).rotate(controller), none, aim, 1.f / 90);
+    check(line.reachAround && sa::angleBetween(out, controller) < 1e-3f, "W3: a reach-around kept the arm's line");
+    // Back to 55 deg: still the controller (hysteresis, out under 50).
+    out = line.update(Quat::around({0, 1, 0}, 55 * deg).rotate(controller), none, aim, 1.f / 90);
+    check(line.reachAround, "W3: the fallback left above 50 deg");
+    out = line.update(Quat::around({0, 1, 0}, 45 * deg).rotate(controller), none, aim, 1.f / 90);
+    check(!line.reachAround && std::abs(sa::angleBetween(out, controller) / deg - 45) < .5f,
+          "W3: the arm's line did not come back under 50 deg");
+    // 55 deg from in range does not enter it.
+    sa::ArmLine fresh;
+    fresh.update(Quat::around({0, 1, 0}, 55 * deg).rotate(controller), none, aim, 1.f / 90);
+    check(!fresh.reachAround, "W3: the fallback entered under 60 deg");
+}
+
 int main() {
     cameraTilt();
     cameraFrame();
@@ -423,6 +484,8 @@ int main() {
     shooters();
     realisticLegs();
     menus();
+    armLineOffset();
+    armLineReachAround();
     std::printf("%d stabilization/shooter checks passed\n", passed);
     return 0;
 }

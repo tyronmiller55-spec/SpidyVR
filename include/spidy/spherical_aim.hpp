@@ -179,4 +179,46 @@ inline float inwardShare(float signedRadians) {
     return 1 - smoothstep(90 * degree, 120 * degree, off);
 }
 
+// W2/W3 (beta polish D11; the logs: the visible-arm line median 35 deg off the controller, p90 56, and 88-95 deg
+// with an arm behind the back or overhead). The web line keeps leaving along the arm, turned by the player's own
+// wrist angle as learned (ForearmModel::inAim, the forearm in the controller's frame) so it points where the
+// controller does when the arm and controller agree: up to offsetCapDegrees, eased in over offsetEaseSeconds once
+// the model is ready. Past fallbackDegrees between that line and the controller (a reach-around) the direction is
+// the controller's (the origin stays the wrist) until back under fallbackLeaveDegrees.
+constexpr float offsetCapDegrees = 45, offsetEaseSeconds = .5f, fallbackDegrees = 60, fallbackLeaveDegrees = 50;
+struct ArmLine {
+    float offsetWeight{};
+    bool reachAround{};
+    float offsetDegrees{}; // the turn applied last (degrees)
+    float offDegrees{};    // the corrected line against the controller (degrees, before W3)
+    // `line` the forearm line (unit, or zero: none), `model` the learned forearm, `aimNow` the controller.
+    Vec3 update(Vec3 line, const ForearmModel& model, Quat aimNow, float seconds) {
+        seconds = std::isfinite(seconds) ? std::clamp(seconds, 0.f, .25f) : 0.f;
+        if (!unitish(line)) {
+            reachAround = false;
+            return line;
+        }
+        line = normalized(line);
+        const Vec3 controller = normalized(aimNow.rotate({0, 0, -1}));
+        offsetWeight = model.ready() ? std::min(1.f, offsetWeight + seconds / offsetEaseSeconds) : 0.f;
+        offsetDegrees = 0;
+        if (offsetWeight > 0) {
+            const Vec3 forearm = model.world(aimNow);
+            const float learned = angleBetween(forearm, controller);
+            if (learned > 1e-4f && learned < pi - 1e-3f) {
+                const Vec3 axis = normalized(cross(forearm, controller));
+                const float turn = std::min(learned, offsetCapDegrees * degree) * offsetWeight;
+                line = normalized(Quat::around(axis, turn).rotate(line));
+                offsetDegrees = turn / degree;
+            }
+        }
+        offDegrees = angleBetween(line, controller) / degree;
+        reachAround = reachAround ? offDegrees > fallbackLeaveDegrees : offDegrees > fallbackDegrees;
+        return reachAround ? controller : line;
+    }
+    void reset() {
+        *this = {};
+    }
+};
+
 } // namespace spidy::spherical_aim
