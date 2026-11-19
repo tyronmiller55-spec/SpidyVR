@@ -15,8 +15,22 @@ https://github.com/tyronmiller55-spec/SpidyVR . The original Spidy launcher name
 author credits, Discord and Ko-fi links are retained; Native Animation bugs do
 not belong in upstream Spidy's bug tracker. Source is provided under GPL-3.0.
 
-Windows package: **Spidy-0.8.1-win64-native-animation.zip**. Extract into a writable
-folder outside the game install. Never copy the mod into the game's folder.
+Windows package: **Spidy-0.8.7-win64-na-beta1-<commit>.zip** (version **0.8.7-na-beta1**). Extract into a
+writable folder outside the game install. Never copy the mod into the game's folder.
+
+**0.8.7-na-beta1** (beta polish): every Native Animation setting now sits in the headset menu's **NA ·** tabs
+(CORE, CAMERA, HANDOFF, BODY & LEGS, KICKS & COMBAT, WEB SHOOTERS, POINT JUMP, SHOWTIME) and a new **NA · HELP**
+tab explains each feature (the same pages are in the launcher's Help and [docs/NA_HELP.md](docs/NA_HELP.md));
+the launcher marks NA settings in cyan and hides retired rows. New in play: Spidey's own jump grunt on point
+jumps, ground flips and handstand leaps, a WALL JUMP SOUND choice, louder hits, air kicks that find the enemy
+your punches are locked on, earlier upright landings, ground flips that spin in the game's air, a 120 ms
+minimum takeover before a landing hands back, steadier handstands, webs that point where your controller does,
+Showtime arms at Spidey's own length, and hand grab class rules. X and Y stay instant; Showtime is off by
+default. What changed and why: [docs/CHANGELOG.md](docs/CHANGELOG.md); what to check in the headset and how the
+zip is built: [docs/NA_BETA1.md](docs/NA_BETA1.md).
+Other mods: [docs/MOD_COMPAT.md](docs/MOD_COMPAT.md). Known issues: the game may report a harmless crash
+(0xC0000409) as it exits; DLSS can fail under video-memory pressure (lower the DLSS quality or the texture
+budget).
 
 ---
 

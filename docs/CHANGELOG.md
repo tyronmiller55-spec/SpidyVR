@@ -3,6 +3,49 @@
 Every build, newest first, with what changed, why, and what was measured.
 Per-check results are in [VALIDATION.md](VALIDATION.md).
 
+**0.8.7-na-beta1 (November 19, branch feat/087-beta1 from 966a812): the beta polish pass**
+([headset and zip checklist](NA_BETA1.md)). One change per commit; the owner's decisions
+D1-D11. Settings files from before get migration rev 13 (sound trace off once); X and Y stay instant, Showtime
+stays off, `swing_kick_manual=1` and `leg_hold_everywhere=0` stay.
+
+- **Menus (D1-D3).** Every NA setting lives in the **NA ·** tabs, kicks, handstand, sway time, punch track and
+  jump pull are in the headset menu, retired legacy rows are hidden in-game; a new **NA · HELP** tab (19 topics,
+  the same pages in the launcher's Help and [NA_HELP.md](NA_HELP.md)); the launcher marks NA rows in cyan with
+  an NA badge and folds retired rows away. Tests pin each row to exactly one tab and every choice through a save
+  and reload; RESET ALL never touches launcher-only settings.
+- **Sounds (D5-D7).** Spidey's own jump grunt (`dab33491`) on every point jump, ground flip and handstand leap,
+  never doubled with the game's (`a442c255`/`050553e7` plays no grunt; a 300 ms guard); **WALL JUMP SOUND**
+  (NA · POINT JUMP: OFF / SOUND A `d321a6f9`, default / SOUND B `110d202b`), both from the Nov 12-19 sound
+  traces ([VALIDATION.md](VALIDATION.md)); louder hits (a jab Medium, a full swing or kick Heavy, a flying kick
+  or finisher Extreme); sound trace logging off by default with its hook kept; an `attack_sound` ini hook (off,
+  0) for the capture session.
+- **Handoffs and landings (D9, D10).** Every takeover lasts at least 120 ms before a landing hands back (a hard
+  landing still at once), and ground while still rising fast is no landing (H1); ground flips spin in the
+  game's own air (F2, all three Nov 19 front flips had dropped); Spidey comes upright earlier and by the clock
+  when the ground prediction is late (F1: 51% of Nov 19 landings were 0% upright); an inverted fall without
+  both arms up comes upright instead of holding the tilt for a catch, and every inverted touchdown logs
+  `landing: inverted N deg -> handstand|roll|upright`; midair poses and the torso channel log why they ended
+  and the torso lets go at a handstand catch (F3); refused tap flips log the speed limit (F4).
+- **Kicks and handstands.** Air kicks aim at the punches' lock target when nothing is in the gaze or in front,
+  the log names the aim, stacked gestures log once; handstands ignore impossible arm readings.
+- **Webs (D11).** The web line keeps leaving along the arm but is turned by the player's learned wrist angle
+  (capped at 45 degrees) so a steady arm aims down the controller, and past 60 degrees (behind the back,
+  overhead) takes the controller's direction (W2/W3).
+- **Showtime arms (D4).** From outside Spidey's arms ease to his own length (1.0x) over 250 ms; arm length moves
+  the forearm and hand along the bones instead of scaling the arm (the hand keeps its size); elbows hold their
+  bend side against a flip for 80 ms, stay out of the torso and stop short of hyperextension; the forearm takes
+  0.3 of the hand's twist. Logs: `showtime: arms factor`, `showtime arms:` once a second. New body_ik_tests.
+- **Hand grab G2b** (below) and its launcher switch in Kicks & Combat.
+- **Robustness.** VR no longer stops when a slow module start holds back the headset image; the SPIDY VR tab
+  is tried again (up to 3 times) if its first build failed (G2); LOG LEVEL (default 1) cuts repeated lines;
+  session reports give a `commit memory:` trend (G5; Nov 19: the game flat at about 12.2 GB, the 247 MB floor
+  was the system's).
+- **Version** 0.8.7-na-beta1 (the numbers stay 0.8.7 for the update check).
+
+Not in this beta: H4, in-game section headings, a full launcher NA tab restructure, punch/kick hit and
+whoosh/effort sound ids (capture session), a tumble-roll pose for fast inverted landings, ground flips the game
+itself keeps on the surface.
+
 **Hand grab G2b (local, unpushed; from 3826e91): enemy class rules.** Heavies
 (a brute's guard or a 120 kg capsule) and bosses resist throws (0.25x, 4 m/s,
 no slam) unless open for a finisher (stunned or webbed up, the proxy); shield
