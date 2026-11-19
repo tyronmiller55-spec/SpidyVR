@@ -720,6 +720,14 @@ struct Values {
     // POINT JUMP BULLET (the user, Nov 14 t71u, t73s656; point_jump_bullet, default on): the body takes the RAW look on a point
     // jump, any angle, eased over about 120 ms (point_bullet.hpp). The launch velocity is unchanged (10 degree out-of-surface fix).
     bool pointJumpBullet = true;
+    // JUMP SOUNDS (beta polish A4, the owner's D6; point_jump_sound, on): the game's jump grunt (sound_guard.hpp) on
+    // Spidey at every point jump (the game already adds its own a442c255/050553e7 there), and the grunt with the rest
+    // of the game's jump set at a ground flip or handstand leap; skipped when the game's own grunt already sounds
+    // (300 ms guard).
+    bool pointJumpSound = true;
+    // WALL JUMP SOUND (beta polish A5; wall_jump_sound): 0 off (silent as before), 1 d321a6f9 (default), 2 110d202b,
+    // the Nov 19 trace's two candidates (sound_guard.hpp) for a headset A/B.
+    int wallJumpSound = 1;
     // AIR TAKEOVER (fall_handoff_ms, 150): a plain fall (a ledge, a stumble; no jump press, never rose) hands to SpidyVR this long
     // into the air; 0 waits for JUMP TO SPIDYVR's timer (hybrid_owner.hpp Frame::fallHandoffNs).
     int fallHandoffMs = 150;
@@ -1148,6 +1156,9 @@ enum class Item : uint8_t {
     enemyTypes,
     // HAND GRAB CLASS RULES (G2b, the owner's Nov 13 rules; beta polish: a launcher row in KICKS & COMBAT).
     handGrabClassRules,
+    // JUMP SOUNDS and WALL JUMP SOUND (beta polish A4/A5, POINT JUMP's tab).
+    pointJumpSound,
+    wallJumpSound,
     // NA HELP (beta polish M5, na_help.hpp): the NA · HELP tab's pages, one item for all of them (a page has no
     // value: one choice, READ). Its rows are the catalog's last.
     helpPage,
@@ -1182,8 +1193,8 @@ struct Row {
     Place place{};
 };
 // Stable row/setting numbers; categories below determine presentation order.
-// The catalog: the settings' rows (233), then NA HELP's pages.
-inline constexpr size_t settingRowCount = 233;
+// The catalog: the settings' rows (235), then NA HELP's pages.
+inline constexpr size_t settingRowCount = 235;
 inline constexpr size_t rowTotal = settingRowCount + na_help::pageCount;
 const std::array<Row, rowTotal>& rows();
 const Row* rowFor(Item);

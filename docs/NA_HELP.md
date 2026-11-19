@@ -241,6 +241,8 @@ A crash code 0xC0000409 as the game closes is known and harmless. Logs are in th
 | CHARGE TIME | 1 S | game and launcher |
 | SURFACE PUSH | 25% | game and launcher |
 | POINT JUMP BULLET | ON | launcher |
+| JUMP SOUNDS | ON | game and launcher |
+| WALL JUMP SOUND | SOUND A (DEFAULT) | game and launcher |
 
 ### NA · SHOWTIME
 

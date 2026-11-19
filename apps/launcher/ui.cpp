@@ -3021,6 +3021,17 @@ void App::options(ImVec2 origin, ImVec2 size) {
                    "a tenth of a second, and comes upright when you land, web, press A or slow down. Your view "
                    "never turns for it. On by default.",
                    S(42), [&] { tabToggle("##pointjumpbullet", Item::pointJumpBullet); });
+            settingOption(Item::pointJumpSound, "Jump sounds",
+                   "Every jump SpidyVR launches plays Spidey's own jump grunt from the game: a point jump (the "
+                   "game already adds its own point-jump sounds), and a ground flip or handstand leap with the "
+                   "rest of the game's jump sounds. Skipped when the game's own grunt is already playing, so "
+                   "you never hear it twice. On by default.",
+                   S(42), [&] { tabToggle("##pointjumpsound", Item::pointJumpSound); });
+            settingOption(Item::wallJumpSound, "Wall jump sound",
+                   "SpidyVR's wall jump plays one of two sounds the game makes around its own wall jumps "
+                   "(Sound A by default, Sound B to compare). Tell us which fits better. Off: wall jumps stay "
+                   "silent as before.",
+                   S(150), [&] { tabCombo("##walljumpsound", Item::wallJumpSound); });
         });
         group(pointJumpPage, 1, "Point jump: more in spidy_vr.ini", [&] {
             ImGui::PushTextWrapPos(0);

@@ -11298,7 +11298,7 @@ int main() {
                            "the row is not the launcher's switch");
                  }
              check(found == 1, "the row is not there once");
-             check(static_cast<unsigned>(Item::enemyTypes) + 2 == static_cast<unsigned>(Item::helpPage) &&
+             check(static_cast<unsigned>(Item::enemyTypes) + 4 == static_cast<unsigned>(Item::helpPage) &&
                        vr_settings::lastItem == Item::helpPage,
                    "enemy types is not the last setting (NA HELP's pages follow it)");
              vr_settings::Values on;
@@ -24946,7 +24946,7 @@ int main() {
         // then (still November 14) HAND GRAB STRENGTH and HOLD COST, then AIR KICKS, AIM and SPIN.
         // then (still November 14) WEB TETHERS, TETHER POINTS and TETHER STEPS, then GROUND KICKS, ENEMY JOINTS and ENEMY LIMB ZONES.
         // Polish pass: HEADSET FIRST, ANIM HEAD RIDE and SHOULDER LIMIT (launcher rows) after those.
-        constexpr size_t rowsAfter = 77 + na_help::pageCount; // + HAND GRAB CLASS RULES and NA HELP's pages (beta polish) // + the handoff tune's seven (Nov 18), + DIRECTIONAL FLIPS and MIDAIR POSES (Nov 18 1:09 PM)
+        constexpr size_t rowsAfter = 79 + na_help::pageCount; // + HAND GRAB CLASS RULES, JUMP SOUNDS, WALL JUMP SOUND and NA HELP's pages (beta polish) // + the handoff tune's seven (Nov 18), + DIRECTIONAL FLIPS and MIDAIR POSES (Nov 18 1:09 PM)
         // // (Nov 14: + AIR UPRIGHT TIME, POINT JUMP BULLET, FALL TO SPIDYVR, AIR LANDING BLEND, AIR LANDING RELEASE) + PUNCH AUTO-TARGET (4 rows), JUMP PULL (5 rows) and the handstand balance (4 rows), SHOWTIME (3 rows, then 8, Nov 14)
         check(all.size() == firstRealistic + std::size(realistic) + rowsAfter,
               "the realistic flips' rows are not the last but the appended ones");
@@ -25218,7 +25218,9 @@ int main() {
                 // November 13 (torso update on): launcher rows, no room in the in-game tabs.
                 (row.item >= Item::animatedTorsoTwist && row.item < Item::showtime) ||
                 // November 14 (air takeover): launcher rows; HANDOFF TIMING's seven (Nov 18), the game's own tab.
-                (row.item >= Item::airCorrect && !(row.item >= Item::landingBlend && row.item <= Item::airPoses));
+                (row.item >= Item::airCorrect && !(row.item >= Item::landingBlend && row.item <= Item::airPoses) &&
+                 // Beta polish A4/A5: JUMP SOUNDS and WALL JUMP SOUND, NA · POINT JUMP's in-game rows.
+                 row.item != Item::pointJumpSound && row.item != Item::wallJumpSound);
             check(row.place == (row.item == Item::view ? Place::page
                                 : row.item == Item::helpPage ? Place::tab
                                 : naRetired(row.item)    ? Place::launcher
@@ -25228,7 +25230,7 @@ int main() {
                   "a row in the wrong place");
         }
         check(std::count_if(all.begin(), all.end(), [](const Row& r) { return r.place == Place::tab; }) ==
-                  172 + na_help::pageCount, // (beta polish M5: + NA HELP's pages) (beta polish M4: +9 NA rows players tune in the headset, -4 retired legacy rows hidden) (Nov 18 1:09 PM: +2 DIRECTIONAL FLIPS, MIDAIR POSES) (Nov 18: +7 HANDOFF TIMING) (Nov 14: +15 SHOWTIME) November 11: +8 (SHOOTERS, LOCK STRENGTH, CAMERA MOTION, PITCH, ROLL, BOB x2, HEAD ANGLE), -5 old wrist rows; +6 POINT JUMP; November 12: +1 PUNCH VIEW EASE, +3 MOVE HAPTICS, VIEW YAW SOURCE, SOUND TRACE, +2 JUMP TO SPIDYVR, AIR VIEW EASE, +2 ANIM YAW SWAY, TURN-IN-PLACE ANGLE, +4 PASSIVE LEGS, PASSIVE COUPLING, AIR CROUCH, REACH SPREAD
+                  174 + na_help::pageCount, // (beta polish A4/A5: +2 JUMP SOUNDS, WALL JUMP SOUND) (beta polish M5: + NA HELP's pages) (beta polish M4: +9 NA rows players tune in the headset, -4 retired legacy rows hidden) (Nov 18 1:09 PM: +2 DIRECTIONAL FLIPS, MIDAIR POSES) (Nov 18: +7 HANDOFF TIMING) (Nov 14: +15 SHOWTIME) November 11: +8 (SHOOTERS, LOCK STRENGTH, CAMERA MOTION, PITCH, ROLL, BOB x2, HEAD ANGLE), -5 old wrist rows; +6 POINT JUMP; November 12: +1 PUNCH VIEW EASE, +3 MOVE HAPTICS, VIEW YAW SOURCE, SOUND TRACE, +2 JUMP TO SPIDYVR, AIR VIEW EASE, +2 ANIM YAW SWAY, TURN-IN-PLACE ANGLE, +4 PASSIVE LEGS, PASSIVE COUPLING, AIR CROUCH, REACH SPREAD
               "the tab's own rows");
         check(all[1].item == Item::webStyle && std::strcmp(all[1].title, "WEB STYLE") == 0 &&
                   all[1].choices.size() == 2 && std::strcmp(all[1].choices[0], "REALISTIC") == 0 &&
@@ -25538,7 +25540,7 @@ int main() {
                   "showtime_auto_finish=0\nshowtime_distance_cm=250\nshowtime_height_cm=30\nshowtime_angle_deg=35\n"
                   "showtime_turn=0\nshowtime_follow=1\nshowtime_vignette=1\nshowtime_slow_mo=1\nshowtime_latch=0\n"
                   "air_correct_ms=1000\n"
-                  "point_jump_bullet=1\n"
+                  "point_jump_bullet=1\npoint_jump_sound=1\nwall_jump_sound=1\n"
                   "fall_handoff_ms=150\n"
                   "air_landing_blend=1\n"
                   "air_landing_release=0\n"
@@ -33040,7 +33042,7 @@ int main() {
     test("Native Animation: combined menu inventory and upstream-compatible v39 settings packet", [] {
         using namespace vr_settings;
         const auto& all = rows();
-        check(all.size() == 233 + na_help::pageCount && static_cast<unsigned>(lastItem) < 256, "row/Item bounds");
+        check(all.size() == 235 + na_help::pageCount && static_cast<unsigned>(lastItem) < 256, "row/Item bounds");
         std::array<unsigned, 256> seen{};
         size_t start = all.size();
         for (size_t i = 0; i < all.size(); ++i) {

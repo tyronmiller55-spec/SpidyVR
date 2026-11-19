@@ -101,6 +101,7 @@
 #include "spidy/hybrid_handoff.hpp"
 #include "spidy/hybrid_steer.hpp"
 #include "spidy/move_haptics.hpp"
+#include "spidy/sound_guard.hpp"
 #include "spidy/sound_trace.hpp"
 #include "spidy/stable_yaw.hpp"
 #include "spidy/view_yaw_lock.hpp"
@@ -610,6 +611,35 @@ DWORD(WINAPI* soundMode)(void*){};
 // the setting to the ray module; null from an older ray module.
 const sound_trace::Ring* soundTrace{};
 DWORD(WINAPI* soundTraceMode)(void*){};
+// One of the game's own sounds on the player (SpidySoundCue; bit 32 asks for the guard); null from an older ray module.
+DWORD(WINAPI* soundCue)(void*){};
+// JUMP SOUNDS / WALL JUMP SOUND (sound_guard.hpp): the game's sounds on the player. `set`: the grunt and the rest of
+// the jump set, else the grunt alone (a point jump, which the game already accompanies); `wall`: one wall-jump
+// candidate instead (no grunt). Each skipped (in the ray module) while the game's own grunt sounds; logged.
+void jumpSound(bool set, uint32_t wall, const char* why) {
+    if (!soundCue)
+        return;
+    unsigned queued = 0, asked = 0;
+    const auto ask = [&](uint32_t id) {
+        ++asked;
+        if (soundCue(reinterpret_cast<void*>(static_cast<uintptr_t>(sound_guard::encode(id, true)))) == 0)
+            ++queued;
+    };
+    if (wall) {
+        ask(wall);
+    } else {
+        ask(sound_guard::jumpGrunt);
+        if (set)
+            for (const uint32_t id : sound_guard::jumpSet)
+                ask(id);
+    }
+    if (wall)
+        diag_log::writef("jump sounds: %08x %s for the %s (WALL JUMP SOUND's candidate)", wall,
+                         queued ? "queued" : "not queued", why);
+    else
+        diag_log::writef("jump sounds: %u of %u queued for the %s (%s)", queued, asked, why,
+                         set ? "grunt and the jump set" : "grunt; the game adds a442c255/050553e7 itself");
+}
 BridgeCall startSwing{}, submitSwing{}, sampleSwing{}, stopSwing{}, retargetSwing{}, sampleGrab{}, sampleAim{};
 // Optional: pose coupling from the visual tuck (an older ray module has none).
 BridgeCall setSwingPoseCoupling{};
@@ -2998,6 +3028,8 @@ DWORD WINAPI run(void*) {
                             const DWORD result = swingPointJump(&ask);
                             if (result == 0) {
                                 ++pointJumps;
+                                if (values.pointJumpSound)
+                                    jumpSound(false, 0, "point jump");
                                 pointJumpFired = pointJumpHold = true;
                                 pointJumpHoldAge = 0;
                                 pointJumpOffLogged = false;
@@ -3635,6 +3667,8 @@ DWORD WINAPI run(void*) {
                                                                                  : static_cast<DWORD>(2001);
                             if (result == 0) {
                                 ++groundFlips;
+                                if (values.pointJumpSound)
+                                    jumpSound(true, 0, "ground flip");
                                 // The flip mode's own rate: REALISTIC's ROTATION SPEED, else FLIP SPEED (CONTROLLED, basic).
                                 const int rate = values.realisticFlips ? values.automaticSpeed : values.flipSpeed;
                                 const Vec3 spin = ground_flip::spin(kind, look, static_cast<float>(rate));
@@ -4402,6 +4436,8 @@ DWORD WINAPI run(void*) {
                                     pointJumpHold = true;
                                     pointJumpHoldAge = 0;
                                     pointJumpOffLogged = false;
+                                    if (values.pointJumpSound)
+                                        jumpSound(true, 0, "handstand leap");
                                     diag_log::writef("handstand: %s (%.1f, %.1f, %.1f) m/s",
                                                      hs.exitNow == handstand::Exit::leap ? "leap-off" : "push-off",
                                                      hs.launch.x, hs.launch.y, hs.launch.z);
@@ -6649,6 +6685,8 @@ DWORD WINAPI run(void*) {
                             feelFrom(swingState.wallJumps > wallJumpsBefore ? body_haptics::Kind::wallJump
                                                                             : body_haptics::Kind::wallLand,
                                      -1, 1, -swingState.wallNormal);
+                            if (swingState.wallJumps > wallJumpsBefore && values.wallJumpSound)
+                                jumpSound(false, sound_guard::wallJumpId(values.wallJumpSound), "wall jump");
                         }
                         wallsBefore = swingState.walls;
                         wallJumpsBefore = swingState.wallJumps;
@@ -13490,6 +13528,7 @@ extern "C" __declspec(dllexport) DWORD WINAPI SpidyXrStart(void* input) {
     soundMode = reinterpret_cast<DWORD(WINAPI*)(void*)>(GetProcAddress(rays, "SpidySoundMode"));
     soundTrace = reinterpret_cast<const sound_trace::Ring*>(GetProcAddress(rays, "SpidySoundTrace"));
     soundTraceMode = reinterpret_cast<DWORD(WINAPI*)(void*)>(GetProcAddress(rays, "SpidySoundTraceMode"));
+    soundCue = reinterpret_cast<DWORD(WINAPI*)(void*)>(GetProcAddress(rays, "SpidySoundCue"));
     if (const sound_trace::Ring* expected = soundTrace;
         expected && (expected->magic != 0x53535443 || expected->version != 1 || expected->bytes != sizeof(sound_trace::Ring)))
         soundTrace = nullptr;

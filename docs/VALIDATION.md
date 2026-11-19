@@ -7311,8 +7311,16 @@ tests remain open. The bounded native single-web sequence above has passed.
     wall jumps. Jump-only; what each one is (launch, whoosh, cloth) is not known.
   - Point jumps: the set in only 20-27% of them, late (+155 to +173 ms), most likely a game jump that follows.
   - SpidyVR's own wall jumps: no hash above 28%; the game's wall-jump sounds are **not captured yet**.
-- Used by `sound_guard.hpp` (0.8.7-na-beta1): the set is played on the hero at a point jump (and, without the
-  grunt, at SpidyVR's wall jump) and skipped while the game's grunt played on him within 300 ms.
+- Nov 19 06:51 session (966a812, `sound_trace=1`, 878 tagged events; `/workspace/plans/log-1119b-findings.md` 2.4):
+  - Game jump: dab33491 on 75% within 80 ms at -7 ms; 2903bc21 75% at -29 ms; cba7688f 67% at -28 ms.
+  - Point jump (214): dab33491 within 80 ms on **2 (0%)**: the grunt is not played there. **a442c255** 23% and
+    **050553e7** 20% within 80 ms at **+39 ms**, almost absent from game and wall jumps: the game's own
+    point-jump accompaniment.
+  - Wall jump (197): no exclusive hash. **d321a6f9** 14% at -7 ms (nearest to the jump 23 times), **110d202b** 12%
+    at 0 ms (19 times); 700c7633 14% but on 51% of landings (a landing sound). dab33491 never.
+- Used by `sound_guard.hpp` (0.8.7-na-beta1): the grunt alone at a point jump (the game adds a442c255/050553e7),
+  the grunt and the rest of the set at a ground flip or handstand leap, each skipped while the game's grunt played
+  on the hero within 300 ms; WALL JUMP SOUND plays d321a6f9 (default) or 110d202b for a headset A/B.
 
 ## Seamless launch build — local checks
 

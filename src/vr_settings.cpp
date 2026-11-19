@@ -345,6 +345,9 @@ static_assert(std::size(showtimeWhileChoices) == std::size(showtimeWhileSteps));
 constexpr int showtimeFadeSteps[] = {0, 100, 150, 250, 400};
 constexpr const char* showtimeFadeChoices[] = {"CUT (NO FADE)", "100 MS", "150 MS (DEFAULT)", "250 MS", "400 MS"};
 static_assert(std::size(showtimeFadeChoices) == std::size(showtimeFadeSteps));
+constexpr int wallJumpSoundSteps[] = {0, 1, 2};
+constexpr const char* wallJumpSoundChoices[] = {"OFF", "SOUND A (DEFAULT)", "SOUND B"};
+static_assert(std::size(wallJumpSoundChoices) == std::size(wallJumpSoundSteps));
 constexpr int showtimeBodySteps[] = {0, 1, 2, 3};
 constexpr const char* showtimeBodyChoices[] = {"GAME POSE, HEAD SHOWN (DEFAULT)", "AS IN PLAY (NO HEAD)",
                                              "NATURAL ARMS", "GAME SWING POSE (EXPERIMENTAL)"};
@@ -565,6 +568,8 @@ std::span<const int> steps(Item item) {
         return showtimeFadeSteps;
     case Item::showtimeBody:
         return showtimeBodySteps;
+    case Item::wallJumpSound:
+        return wallJumpSoundSteps;
     case Item::showtimeChord:
         return showtimeChordSteps;
     case Item::showtimeAutoDodge:
@@ -834,6 +839,8 @@ float numberOf(Item item, const Values& v) {
         return static_cast<float>(v.showtimeFadeMs);
     case Item::showtimeBody:
         return static_cast<float>(v.showtimeBody);
+    case Item::wallJumpSound:
+        return static_cast<float>(v.wallJumpSound);
     case Item::showtimeChord:
         return static_cast<float>(v.showtimeChord);
     case Item::showtimeAutoDodge:
@@ -1083,6 +1090,8 @@ template <class V> auto switchOf(Item item, V& v) -> decltype(&v.aimMarkers) {
         return &v.showtimeSlowMo;
     case Item::pointJumpBullet:
         return &v.pointJumpBullet;
+    case Item::pointJumpSound:
+        return &v.pointJumpSound;
     case Item::airLandingBlend:
         return &v.airLandingBlend;
     case Item::airLandingRelease:
@@ -1261,6 +1270,7 @@ Values sanitized(Values v) {
     v.showtimeWhile = std::clamp(v.showtimeWhile, 0, 1);
     v.showtimeFadeMs = std::clamp(v.showtimeFadeMs, 0, 400);
     v.showtimeBody = std::clamp(v.showtimeBody, 0, 3);
+    v.wallJumpSound = std::clamp(v.wallJumpSound, 0, 2);
     v.showtimeChord = std::clamp(v.showtimeChord, 0, 1);
     v.showtimeAutoDodge = std::clamp(v.showtimeAutoDodge, 0, 2);
     v.showtimeDistanceCm = std::clamp(v.showtimeDistanceCm, 150, 400);
@@ -2031,6 +2041,10 @@ const std::array<Row, rowTotal>& rows() {
          "Tuck in a flip, dive looking down, superhero fist up, starfish arms wide.", {}},
         {Item::handGrabClassRules, "HAND GRAB CLASS RULES",
          "Heavies and bosses resist throws unless stunned or webbed up. Off: all alike.", {}, Place::launcher},
+        {Item::pointJumpSound, "JUMP SOUNDS",
+         "The game's jump grunt on every point jump, ground flip and handstand leap.", {}},
+        {Item::wallJumpSound, "WALL JUMP SOUND",
+         "Two of the game's sounds to try on a wall jump. Tell us which fits. OFF: none.", wallJumpSoundChoices},
     }};
     static const std::array<Row, rowTotal> all = [] {
         std::array<Row, rowTotal> a{};
@@ -2197,7 +2211,7 @@ const std::array<Screen, categoryCount>& screens() {
     static constexpr Item pointJump[] = {
         Item::pointJump, Item::pointJumpTrigger, Item::pointJumpMinSpeed,
         Item::pointJumpMaxSpeed, Item::pointJumpFull, Item::pointJumpPush,
-        Item::pointJumpBullet,
+        Item::pointJumpBullet, Item::pointJumpSound, Item::wallJumpSound,
     };
     // SHOWTIME (showtime.hpp; experimental, off by default): its switch and its feel.
     static constexpr Item showtime[] = {
@@ -2741,6 +2755,9 @@ bool choose(Item item, int index, Values& v) {
     case Item::showtimeFade:
         v.showtimeFadeMs = s[index];
         break;
+    case Item::wallJumpSound:
+        v.wallJumpSound = s[index];
+        break;
     case Item::showtimeBody:
         v.showtimeBody = s[index];
         break;
@@ -3155,6 +3172,8 @@ constexpr TabOnly tabOnly[] = {
     {"showtime_latch", nullptr, &Values::showtimeLatch},
     {"air_correct_ms", nullptr, &Values::airCorrectMs},
     {"point_jump_bullet", &Values::pointJumpBullet, nullptr},
+    {"point_jump_sound", &Values::pointJumpSound, nullptr},
+    {"wall_jump_sound", nullptr, &Values::wallJumpSound},
     {"fall_handoff_ms", nullptr, &Values::fallHandoffMs},
     {"air_landing_blend", &Values::airLandingBlend, nullptr},
     {"air_landing_release", &Values::airLandingRelease, nullptr},

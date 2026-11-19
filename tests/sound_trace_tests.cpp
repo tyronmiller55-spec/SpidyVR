@@ -2,6 +2,7 @@
 // read back in a window, torn and overwritten entries skipped), the event
 // lines (hero ids first with ms offsets, nearby others, caps), the wait for a
 // window to close, and the setting. Portable.
+#include "spidy/sound_guard.hpp"
 #include "spidy/sound_trace.hpp"
 #include "spidy/vr_settings.hpp"
 #include <cstdio>
@@ -129,6 +130,46 @@ int main() {
         for (Item item : screens()[static_cast<size_t>(Category::nativeAnimation)].items)
             listed = listed || item == Item::soundTrace;
         check(listed, "on NA CORE");
+    }
+    // HERO CUE GUARD (sound_guard.hpp, A4/D6): the game's grunt within 300 ms skips our guarded jump set.
+    {
+        using namespace sound_guard;
+        const int64_t hz = 10'000'000;
+        check(!nativeSounding(0, hz, hz), "no grunt yet: ours plays");
+        check(nativeSounding(hz, hz + hz / 10, hz), "grunt 100 ms ago: skipped");
+        check(nativeSounding(hz, hz + hz * 299 / 1000, hz), "299 ms: skipped");
+        check(!nativeSounding(hz, hz + hz * 300 / 1000, hz), "300 ms: ours plays");
+        check(!nativeSounding(2 * hz, hz, hz), "a grunt stamped after now: ours plays");
+        check(!nativeSounding(hz, hz, 0), "no frequency: ours plays");
+        check(encode(jumpGrunt, true) == (0xdab33491ull | (1ull << 32)) && encode(jumpGrunt, false) == 0xdab33491ull,
+              "SpidySoundCue: the id low, the guard bit 32");
+        check(static_cast<uint32_t>(encode(jumpSet[2], true)) == 0xeedb2021u, "the id survives the guard bit");
+    }
+    // JUMP SOUNDS and WALL JUMP SOUND: on by default, POINT JUMP's tab, saved and read back.
+    {
+        using namespace vr_settings;
+        Values v;
+        check(v.pointJumpSound && v.wallJumpSound, "jump sounds on by default");
+        using sound_guard::wallJumpId;
+        bool jump = false, wall = false;
+        for (Item item : screens()[static_cast<size_t>(Category::pointJump)].items) {
+            jump = jump || item == Item::pointJumpSound;
+            wall = wall || item == Item::wallJumpSound;
+        }
+        check(jump && wall, "on POINT JUMP's tab");
+        check(isNativeAnimation(Item::pointJumpSound) && isNativeAnimation(Item::wallJumpSound), "NA settings");
+        check(choose(Item::pointJumpSound, 0, v) && !v.pointJumpSound, "JUMP SOUNDS OFF");
+        check(v.wallJumpSound == 1 && wallJumpId(v.wallJumpSound) == 0xd321a6f9u, "wall jump: d321a6f9 by default");
+        check(choose(Item::wallJumpSound, 2, v) && wallJumpId(v.wallJumpSound) == 0x110d202bu, "SOUND B: 110d202b");
+        check(wallJumpId(3) == 0 && wallJumpId(-1) == 0, "no third candidate (not 700c7633, a landing sound)");
+        check(withTabOnly(Values{}, "wall_jump_sound=7\n").wallJumpSound == 2, "read back clamped");
+        check(choose(Item::wallJumpSound, 0, v) && !v.wallJumpSound, "WALL JUMP SOUND OFF");
+        const std::string text = tabOnlyText(v);
+        check(text.find("point_jump_sound=0") != std::string::npos && text.find("wall_jump_sound=0") != std::string::npos,
+              "saved");
+        const Values back = withTabOnly(Values{}, text);
+        check(!back.pointJumpSound && !back.wallJumpSound, "read back");
+        check(!inactiveReason(Item::wallJumpSound, Values{}), "wall jump sound needs no point jump");
     }
     std::printf("sound trace: %d checks passed\n", passed);
     return 0;
