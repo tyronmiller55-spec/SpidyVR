@@ -157,6 +157,7 @@ add_test(NAME polish_runtime COMMAND spidy_polish_runtime_tests)
 # BETA POLISH PASS (Nov 19): eye stall watch, kick miss reasons, minimum stints, landings, sound cues, settings checks.
 add_executable(spidy_beta_polish_tests tests/beta_polish_tests.cpp)
 target_link_libraries(spidy_beta_polish_tests PRIVATE spidy_core)
+target_compile_definitions(spidy_beta_polish_tests PRIVATE SPIDY_SOURCE_DIR="${CMAKE_SOURCE_DIR}")
 add_test(NAME beta_polish COMMAND spidy_beta_polish_tests)
 add_executable(spidy_hybrid_owner_table_tests tests/hybrid_owner_table_tests.cpp)
 target_link_libraries(spidy_hybrid_owner_table_tests PRIVATE spidy_core)

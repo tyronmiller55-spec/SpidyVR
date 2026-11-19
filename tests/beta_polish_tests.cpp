@@ -6,6 +6,9 @@
 #include <cmath>
 #include <cstdio>
 #include <cstdlib>
+#include <cstring>
+#include <fstream>
+#include <sstream>
 #include <set>
 #include <string>
 #include <string_view>
@@ -22,7 +25,7 @@ void check(bool ok, const char* what) {
 }
 } // namespace
 
-int main() {
+int main(int argc, char** argv) {
     // R1: the eye stall watch forgives a module start on the eye worker, not a real stall.
     {
         using namespace eye_stall;
@@ -88,7 +91,7 @@ int main() {
         for (unsigned i = 1; i <= static_cast<unsigned>(lastItem); ++i)
             (isNativeAnimation(static_cast<Item>(i)) ? na : upstream) += 1;
         check(upstream == 89, "upstream 0.8.7 has 89 settings (its Item has 90 with none)");
-        check(na == 135, "the fork's settings are Native Animation's");
+        check(na == 136, "the fork's settings are Native Animation's (135, and NA HELP's page item)");
         check(isNativeAnimation(Item::showtime) && isNativeAnimation(Item::headProbe) &&
                   isNativeAnimation(Item::swingKickManual) && !isNativeAnimation(Item::webLines) &&
                   !isNativeAnimation(Item::airFists) && !isNativeAnimation(Item::enemyTypes) &&
@@ -148,6 +151,47 @@ int main() {
                     check(choice(row.item, reset) == choice(row.item, v), row.title);
             }
         }
+    }
+    // M5: NA HELP - every page fits the game's help column, the topics the owner asked for are there, the pages are
+    // the NA · HELP tab's rows in order, and docs/NA_HELP.md is the generated text (--write-help rewrites it).
+    {
+        using namespace vr_settings;
+        std::set<std::string_view> topics;
+        for (const auto& page : na_help::pages) {
+            check(page.text && std::strlen(page.text) <= na_help::pageChars, page.title);
+            check(page.title && std::strlen(page.title) > 0 && std::strlen(page.title) <= 32, page.topic);
+            for (const char* c = page.text; *c; ++c)
+                check(static_cast<unsigned char>(*c) < 0x80, "help is plain ASCII");
+            topics.insert(page.topic);
+        }
+        check(topics.size() >= 16, "16 topics or more");
+        for (const char* t : {"WHAT IS NATIVE ANIMATION", "SHOWTIME", "SWING KICK", "OTHER MODS", "HAND GRAB",
+                              "AIR KICKS", "GROUND KICKS", "HANDSTAND", "TROUBLESHOOTING"})
+            check(topics.count(t) == 1, t);
+        size_t at = settingRowCount;
+        for (const auto& page : na_help::pages) {
+            const Row& row = rows()[at++];
+            check(row.item == Item::helpPage && row.title == page.title && row.help == page.text &&
+                      row.choices.size() == 1 && row.place == Place::tab,
+                  "a help page's row");
+        }
+        const auto& tab = screens()[static_cast<size_t>(Category::help)];
+        check(tab.items.size() == 1 && tab.items[0] == Item::helpPage &&
+                  std::string(tab.tabTitle) == std::string(naTabPrefix) + "HELP",
+              "the NA HELP tab");
+        Values v;
+        check(!choose(Item::helpPage, 0, v) && choice(Item::helpPage, v) == 0 && v == Values{},
+              "a help page changes nothing");
+        const std::string md = helpMarkdown();
+        const std::string path = std::string(SPIDY_SOURCE_DIR) + "/docs/NA_HELP.md";
+        if (argc > 1 && std::string(argv[1]) == "--write-help") {
+            std::ofstream(path, std::ios::binary) << md;
+            std::printf("wrote %s\n", path.c_str());
+        }
+        std::ifstream in(path, std::ios::binary);
+        std::stringstream file;
+        file << in.rdbuf();
+        check(file.str() == md, "docs/NA_HELP.md is the generated help (run spidy_beta_polish_tests --write-help)");
     }
     std::printf("beta polish: %d checks passed\n", passed);
     return 0;

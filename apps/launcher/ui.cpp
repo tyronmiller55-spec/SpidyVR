@@ -3101,6 +3101,30 @@ void App::options(ImVec2 origin, ImVec2 size) {
             settingOption(Item::none, "Handoff place", "A landing or zip view farther than this from the head is placed, not glided. Default: 125 cm.",
                    S(150), [&] { fineSlider("##fineplace", tabOnly_.handoffPlaceCm, 0, 2000, 10, "%d cm", "Always glide"); });
         });
+        // NA HELP (beta polish M5): the same pages as the game's NA · HELP tab (na_help.hpp), a card per topic.
+        const int helpPage = static_cast<int>(Category::help);
+        static const std::vector<std::pair<const char*, std::string>> helpTopics = [] {
+            std::vector<std::pair<const char*, std::string>> topics;
+            for (const auto& page : spidy::na_help::pages) {
+                if (topics.empty() || std::strcmp(topics.back().first, page.topic) != 0)
+                    topics.emplace_back(page.topic, std::string());
+                else
+                    topics.back().second += ' ';
+                topics.back().second += page.text;
+            }
+            return topics;
+        }();
+        for (size_t t = 0; t < helpTopics.size(); ++t)
+            group(helpPage, static_cast<int>(t % 2), helpTopics[t].first, [&] {
+                ImGui::PushFont(fonts_.body, 14);
+                ImGui::PushStyleColor(ImGuiCol_Text, vec(kPaperDim));
+                ImGui::PushTextWrapPos(0);
+                ImGui::TextUnformatted(helpTopics[t].second.c_str());
+                ImGui::PopTextWrapPos();
+                ImGui::PopStyleColor();
+                ImGui::PopFont();
+                ImGui::Dummy(ImVec2(0, S(6)));
+            });
     }
     group(static_cast<int>(spidy::vr_settings::categoryCount) + 1, 0, "Troubleshooting", [&] {
         settingOption(Item::none, "Normal camera on the monitor",

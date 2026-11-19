@@ -11298,7 +11298,9 @@ int main() {
                            "the row is not the launcher's switch");
                  }
              check(found == 1, "the row is not there once");
-             check(vr_settings::lastItem == Item::enemyTypes, "enemy types is not the last item");
+             check(static_cast<unsigned>(Item::enemyTypes) + 1 == static_cast<unsigned>(Item::helpPage) &&
+                       vr_settings::lastItem == Item::helpPage,
+                   "enemy types is not the last setting (NA HELP's pages follow it)");
              vr_settings::Values on;
              on.enemyTypes = true;
              for (size_t i = 0; i < vr_settings::categoryCount; ++i)
@@ -24889,7 +24891,8 @@ int main() {
                 continue;
             }
             const auto bit = static_cast<size_t>(row.item);
-            check(!seen.test(bit), "a setting twice");
+            // NA HELP's pages share one item (they hold no value).
+            check(!seen.test(bit) || row.item == Item::helpPage, "a setting twice");
             seen.set(bit);
             check(row.help && std::strlen(row.help) <= 80, "help missing, or too long for the game's column");
             check(row.choices.size() <= maxChoices, "more choices than the tab shows");
@@ -24943,7 +24946,7 @@ int main() {
         // then (still November 14) HAND GRAB STRENGTH and HOLD COST, then AIR KICKS, AIM and SPIN.
         // then (still November 14) WEB TETHERS, TETHER POINTS and TETHER STEPS, then GROUND KICKS, ENEMY JOINTS and ENEMY LIMB ZONES.
         // Polish pass: HEADSET FIRST, ANIM HEAD RIDE and SHOULDER LIMIT (launcher rows) after those.
-        constexpr size_t rowsAfter = 76; // + the handoff tune's seven (Nov 18), + DIRECTIONAL FLIPS and MIDAIR POSES (Nov 18 1:09 PM)
+        constexpr size_t rowsAfter = 76 + na_help::pageCount; // + NA HELP's pages (beta polish) // + the handoff tune's seven (Nov 18), + DIRECTIONAL FLIPS and MIDAIR POSES (Nov 18 1:09 PM)
         // // (Nov 14: + AIR UPRIGHT TIME, POINT JUMP BULLET, FALL TO SPIDYVR, AIR LANDING BLEND, AIR LANDING RELEASE) + PUNCH AUTO-TARGET (4 rows), JUMP PULL (5 rows) and the handstand balance (4 rows), SHOWTIME (3 rows, then 8, Nov 14)
         check(all.size() == firstRealistic + std::size(realistic) + rowsAfter,
               "the realistic flips' rows are not the last but the appended ones");
@@ -25217,6 +25220,7 @@ int main() {
                 // November 14 (air takeover): launcher rows; HANDOFF TIMING's seven (Nov 18), the game's own tab.
                 (row.item >= Item::airCorrect && !(row.item >= Item::landingBlend && row.item <= Item::airPoses));
             check(row.place == (row.item == Item::view ? Place::page
+                                : row.item == Item::helpPage ? Place::tab
                                 : naRetired(row.item)    ? Place::launcher
                                 : naInGame(row.item)     ? Place::tab
                                 : launcherOnly           ? Place::launcher
@@ -25224,7 +25228,7 @@ int main() {
                   "a row in the wrong place");
         }
         check(std::count_if(all.begin(), all.end(), [](const Row& r) { return r.place == Place::tab; }) ==
-                  172, // (beta polish M4: +9 NA rows players tune in the headset, -4 retired legacy rows hidden) (Nov 18 1:09 PM: +2 DIRECTIONAL FLIPS, MIDAIR POSES) (Nov 18: +7 HANDOFF TIMING) (Nov 14: +15 SHOWTIME) November 11: +8 (SHOOTERS, LOCK STRENGTH, CAMERA MOTION, PITCH, ROLL, BOB x2, HEAD ANGLE), -5 old wrist rows; +6 POINT JUMP; November 12: +1 PUNCH VIEW EASE, +3 MOVE HAPTICS, VIEW YAW SOURCE, SOUND TRACE, +2 JUMP TO SPIDYVR, AIR VIEW EASE, +2 ANIM YAW SWAY, TURN-IN-PLACE ANGLE, +4 PASSIVE LEGS, PASSIVE COUPLING, AIR CROUCH, REACH SPREAD
+                  172 + na_help::pageCount, // (beta polish M5: + NA HELP's pages) (beta polish M4: +9 NA rows players tune in the headset, -4 retired legacy rows hidden) (Nov 18 1:09 PM: +2 DIRECTIONAL FLIPS, MIDAIR POSES) (Nov 18: +7 HANDOFF TIMING) (Nov 14: +15 SHOWTIME) November 11: +8 (SHOOTERS, LOCK STRENGTH, CAMERA MOTION, PITCH, ROLL, BOB x2, HEAD ANGLE), -5 old wrist rows; +6 POINT JUMP; November 12: +1 PUNCH VIEW EASE, +3 MOVE HAPTICS, VIEW YAW SOURCE, SOUND TRACE, +2 JUMP TO SPIDYVR, AIR VIEW EASE, +2 ANIM YAW SWAY, TURN-IN-PLACE ANGLE, +4 PASSIVE LEGS, PASSIVE COUPLING, AIR CROUCH, REACH SPREAD
               "the tab's own rows");
         check(all[1].item == Item::webStyle && std::strcmp(all[1].title, "WEB STYLE") == 0 &&
                   all[1].choices.size() == 2 && std::strcmp(all[1].choices[0], "REALISTIC") == 0 &&
@@ -33036,12 +33040,12 @@ int main() {
     test("Native Animation: combined menu inventory and upstream-compatible v39 settings packet", [] {
         using namespace vr_settings;
         const auto& all = rows();
-        check(all.size() == 232 && static_cast<unsigned>(lastItem) < 256, "row/Item bounds");
+        check(all.size() == 232 + na_help::pageCount && static_cast<unsigned>(lastItem) < 256, "row/Item bounds");
         std::array<unsigned, 256> seen{};
         size_t start = all.size();
         for (size_t i = 0; i < all.size(); ++i) {
             check(all[i].choices.size() <= maxChoices, "headset choice overflow");
-            if (all[i].item != Item::none)
+            if (all[i].item != Item::none && all[i].item != Item::helpPage) // NA HELP's pages share one item
                 check(++seen[static_cast<size_t>(all[i].item)] == 1, "duplicate item row");
             if (all[i].item == Item::nativeAnimation)
                 start = i;
@@ -33056,7 +33060,7 @@ int main() {
                 all[start + 8].item == Item::spidyRun && seen[static_cast<size_t>(Item::webLines)] == 1,
             "Native Animation block or WEB LINES missing");
         for (unsigned i = 1; i <= static_cast<unsigned>(lastItem); ++i)
-            check(seen[i] == 1, "Item has no menu row");
+            check(seen[i] == 1 || i == static_cast<unsigned>(Item::helpPage), "Item has no menu row");
         game_swing::Settings s;
         check(s.version == 42 && s.bytes == 196 && offsetof(game_swing::Settings, webLines) == 144 &&
                   offsetof(game_swing::Settings, headProbe) == 148 &&

@@ -1307,9 +1307,12 @@ Values sanitized(Values v) {
     v.targetScanIdleMs = std::clamp(v.targetScanIdleMs, 250, 2000);
     return v;
 }
-const std::array<Row, 232>& rows() {
+namespace {
+constexpr const char* helpChoices[] = {"READ"};
+}
+const std::array<Row, rowTotal>& rows() {
     // The help fits the game's description column beside the rows.
-    static const std::array<Row, 232> all{{
+    static const std::array<Row, settingRowCount> settings{{
         {Item::none, "WEBS", nullptr, {}},
         {Item::webStyle, "WEB STYLE",
          "Arcade: webs pass lamp posts, signs and cars, and swings stay above the street.", webStyleChoices},
@@ -2025,6 +2028,14 @@ const std::array<Row, 232>& rows() {
         {Item::airPoses, "MIDAIR POSES",
          "Tuck in a flip, dive looking down, superhero fist up, starfish arms wide.", {}},
     }};
+    static const std::array<Row, rowTotal> all = [] {
+        std::array<Row, rowTotal> a{};
+        for (size_t r = 0; r < settingRowCount; ++r)
+            a[r] = settings[r];
+        for (size_t p = 0; p < na_help::pageCount; ++p)
+            a[settingRowCount + p] = {Item::helpPage, na_help::pages[p].title, na_help::pages[p].text, helpChoices};
+        return a;
+    }();
     return all;
 }
 bool isNativeAnimation(Item item) {
@@ -2034,6 +2045,51 @@ bool isNativeAnimation(Item item) {
         return false;
     return static_cast<unsigned>(item) >= static_cast<unsigned>(Item::headProbe) &&
            static_cast<unsigned>(item) <= static_cast<unsigned>(lastItem);
+}
+std::string helpMarkdown() {
+    std::string md =
+        "# Native Animation help\n\n"
+        "Generated from `include/spidy/na_help.hpp` and the settings catalog (`src/vr_settings.cpp`); in the game "
+        "these pages are the NA \xC2\xB7 HELP tab. Do not edit by hand: `spidy_beta_polish_tests` checks it.\n";
+    const char* topic = nullptr;
+    for (const auto& page : na_help::pages) {
+        if (!topic || std::string_view(topic) != page.topic) {
+            if (topic)
+                md += "\n";
+            topic = page.topic;
+            md += "\n## ";
+            md += topic;
+            md += "\n\n";
+        } else {
+            md += " ";
+        }
+        md += page.text;
+    }
+    md += "\n\n## Every NA setting and its default\n";
+    for (size_t c = static_cast<size_t>(Category::nativeAnimation); c < categoryCount; ++c) {
+        if (static_cast<Category>(c) == Category::help)
+            continue;
+        const Screen& screen = screens()[c];
+        md += "\n### ";
+        md += screen.tabTitle;
+        md += "\n\n| Setting | Default | Where |\n|---|---|---|\n";
+        for (Item item : screen.items) {
+            const Row* row = rowFor(item);
+            if (!row)
+                continue;
+            const int def = defaultChoice(item);
+            std::string value = row->choices.empty() ? (def ? "ON" : "OFF")
+                                : def >= 0 && def < static_cast<int>(row->choices.size()) ? row->choices[def] : "?";
+            md += "| ";
+            md += row->title;
+            md += " | ";
+            md += value;
+            md += " | ";
+            md += row->place == Place::tab ? "game and launcher" : row->place == Place::page ? "pause page" : "launcher";
+            md += " |\n";
+        }
+    }
+    return md;
 }
 const Row* rowFor(Item item) {
     if (item == Item::none)
@@ -2166,6 +2222,8 @@ const std::array<Screen, categoryCount>& screens() {
         Item::headSeatGlide,
         Item::landingBodyEase,
     };
+    // NA · HELP (beta polish M5): every page of na_help.hpp (one item, its rows in order).
+    static constexpr Item help[] = {Item::helpPage};
     static const std::array<Screen, categoryCount> all{{
         {"Setup", "VR SETUP", setup},
         {"Webs", "VR WEBS", webs},
@@ -2182,6 +2240,7 @@ const std::array<Screen, categoryCount>& screens() {
         {"Web Shooters", SPIDY_NA_TAB_PREFIX "WEB SHOOTERS", shooters},
         {"Point Jump", SPIDY_NA_TAB_PREFIX "POINT JUMP", pointJump},
         {"Showtime", SPIDY_NA_TAB_PREFIX "SHOWTIME", showtime},
+        {"Help", SPIDY_NA_TAB_PREFIX "HELP", help},
     }};
     return all;
 }

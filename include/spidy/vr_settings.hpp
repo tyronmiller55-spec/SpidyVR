@@ -1,4 +1,5 @@
 #pragma once
+#include "spidy/na_help.hpp"
 #include <array>
 #include <cstdint>
 #include <span>
@@ -1144,8 +1145,11 @@ enum class Item : uint8_t {
     airPoses,
     // 0.8.7 (Ilya): ENEMY TYPES, after the fork's items (the launcher's order is the enum's).
     enemyTypes,
+    // NA HELP (beta polish M5, na_help.hpp): the NA · HELP tab's pages, one item for all of them (a page has no
+    // value: one choice, READ). Its rows are the catalog's last.
+    helpPage,
 };
-inline constexpr Item lastItem = Item::enemyTypes;
+inline constexpr Item lastItem = Item::helpPage;
 // SLOW-MO LENGTH's last step: no time limit (until L3 toggles it off).
 inline constexpr int slowMotionEndless = 91;
 // Real seconds a full meter lasts for a SLOW-MO LENGTH value; 0 = endless.
@@ -1175,12 +1179,18 @@ struct Row {
     Place place{};
 };
 // Stable row/setting numbers; categories below determine presentation order.
-const std::array<Row, 232>& rows();
+// The catalog: the settings' rows (232), then NA HELP's pages.
+inline constexpr size_t settingRowCount = 232;
+inline constexpr size_t rowTotal = settingRowCount + na_help::pageCount;
+const std::array<Row, rowTotal>& rows();
 const Row* rowFor(Item);
 // NATIVE ANIMATION'S OWN (beta polish M1): true for every setting the Native Animation fork added (135 at 88cc744),
 // false for upstream Spidy's (the 89 settings of v0.8.7's Item, WEB LINES, AIR FISTS and ENEMY TYPES among the fork's
 // numbers included). The one source for the launcher's NA highlight and the in-game NA tabs.
 bool isNativeAnimation(Item);
+// NA HELP (beta polish M5): docs/NA_HELP.md, generated from na_help.hpp and, for its cheat sheet, the catalog's NA
+// tabs (every row, where it shows and its default). beta_polish_tests keeps the file equal to this.
+std::string helpMarkdown();
 // camera, shooters and legs (November 11, the user: "I can't find legs or
 // camera settings in any of the menus. Make sure it's clearly labeled"): tabs
 // of their own, after the older ones so their numbers stay.
@@ -1190,7 +1200,7 @@ bool isNativeAnimation(Item);
 // numbered by its place only while the menu is open, so reordering needs no migration). KICKS & COMBAT took the
 // kicks out of LEGS and the punch / jump assists out of MOVEMENT.
 enum class Category : uint8_t { setup, webs, swinging, movement, flips, feedback, display, nativeAnimation,
-                                camera, handoff, legs, kicks, shooters, pointJump, showtime, count };
+                                camera, handoff, legs, kicks, shooters, pointJump, showtime, help, count };
 // The in-game NA tabs' prefix: "NA" and a middle dot (U+00B7, UTF-8). RE: the game's font is not verified to have
 // the dot (the capture-session list); swap this for "NA - " if a headset shows a box.
 #define SPIDY_NA_TAB_PREFIX "NA \xC2\xB7 "
