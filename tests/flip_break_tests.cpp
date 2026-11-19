@@ -143,8 +143,11 @@ void sameFrame() {
     check(o.update(f, t) == Domain::vr && o.enterVr && o.lastEnterVr == EnterVr::flip, "the switch not reported");
     check(o.update(f, t += frame) == Domain::vr && !o.enterVr, "reported twice");
     check(!o.breakForFlip(f.state, false, t), "a second break from VR");
-    // Landing on the feet always returns, whatever the flip left.
+    // Landing on the feet always returns, whatever the flip left (past the minimum stint, beta polish H1; falling,
+    // not a rising touchdown).
     f.state.grounded = true;
+    f.velY = -2;
+    t += hybrid_owner::landMinStintNs;
     check(o.update(f, t += frame) == Domain::anim && o.enterAnim && o.lastEnterAnim == EnterAnim::land,
           "landing did not snap back to the animation");
     // Not in a cutscene, not on Spidy's wall.
@@ -173,6 +176,7 @@ void gripCancel() {
     f.cancelGrip = false;
     check(o.update(f, t += frame) == Domain::vr, "the cancel did not hold the air");
     f.state.grounded = true;
+    f.velY = -2; // falling: a rising touchdown is no landing (hybrid_owner.hpp RISING TOUCHDOWN)
     t += landMinStintNs; // HANDOFF CHURN: past the takeover's least stint
     check(o.update(f, t += frame) == Domain::anim && o.lastEnterAnim == EnterAnim::land, "landing kept VR");
 }

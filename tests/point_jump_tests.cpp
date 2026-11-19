@@ -385,11 +385,13 @@ void ownership() {
     // Landing on the feet: back to the animation.
     f.state.grounded = true;
     check(o.update(f, t += frame) == Domain::anim && o.lastEnterAnim == EnterAnim::land, "landing snaps back");
-    // Without the hold, a ground VR goes back at once (the old rule stands).
+    // Without the hold, a ground VR goes back (the old rule stands) once the minimum stint is past (beta polish H1).
+    f.velY = 0;
     f.pointJump = true;
     o.update(f, t += frame);
     f.pointJump = false;
-    check(o.update(f, t += frame) == Domain::anim, "no hold: the ground returns");
+    check(o.update(f, t += frame) == Domain::vr, "no hold: the minimum stint holds the ground a moment");
+    check(o.update(f, t += hybrid_owner::landMinStintNs) == Domain::anim, "no hold: the ground returns");
     // Not in a cutscene.
     HybridOwner c;
     Frame g = f;

@@ -237,6 +237,16 @@ constexpr int64_t takeoffMinNs = 250'000'000;
 // "(landed)" under 50 ms, 20 of them at 0 ms, the hands jumping up to 2.4 m to the shown view and back. A
 // landing hands back only once such a takeover has lasted this long.
 constexpr int64_t landMinStintNs = 120'000'000;
+// MINIMUM STINT (beta polish H1, the owner's D10; the Nov 18-19 logs: 10-13% of VR stints under 150 ms, almost all
+// land and zip): every takeover but a handstand's or a swing's waits landMinStintNs before a landing hands back. A
+// hard landing (falling faster than hardLandVel) still hands back at once, except after a punch or a grip cancel
+// (the churn guard as it was).
+constexpr float hardLandVel = -6.f;
+// RISING TOUCHDOWN (F2, the Nov 19 log: a ground flip took off at 11 m/s and "touched down" 140 ms later still
+// rising at 10.7 m/s, handed straight back to the animation): ground reported while rising faster than this, within
+// risingTouchdownNs of the takeover, is no landing.
+constexpr float risingTouchdownVel = 3.f;
+constexpr int64_t risingTouchdownNs = 600'000'000;
 // LANDING BLEND-IN's early hand-back (air_landing_release, unverified): no sooner than this after the owner changed (the owner's 0.25 s
 // minimum dwell), the animation keeps the body while the impact is predicted within landKeepEta; if the prediction is lost for
 // landLostNs, or no landing came in landHandBackMaxNs, SpidyVR takes the air again.
@@ -539,6 +549,11 @@ class StrikeHold {
 struct HybridOwner {
     Domain domain = Domain::anim;
     int64_t sinceNs{};
+    // MINIMUM STINT / RISING TOUCHDOWN: landings held back (at most one a stint), the last one's reason (1 the
+    // minimum stint, 2 a rising touchdown) and how far into the stint it came.
+    uint32_t landingsHeld{};
+    uint8_t landHeldWhy{};
+    int64_t landHeldAtNs{};
     // When the last landing handed him to the animation (EnterAnim::land), until he is VR again (-1: none);
     // lastEnterAnim is only set on the switch's own frame.
     int64_t landNs = -1;
@@ -743,8 +758,19 @@ struct HybridOwner {
         if (supported(f.state) || (f.perched && f.state.wall != surfaceWall)) {
             airAnimNs = fallNs = -1;
             handedBack_ = false; // the landing came
-            const bool churn = (vrBy == EnterVr::punch || vrBy == EnterVr::cancel) && nowNs - sinceNs < landMinStintNs;
-            if (domain == Domain::vr && !f.groundAction && !f.pointJumpHold && !churn)
+            const bool churnKind = vrBy == EnterVr::punch || vrBy == EnterVr::cancel;
+            const bool guarded = vrBy != EnterVr::handstand && vrBy != EnterVr::swing && vrBy != EnterVr::none;
+            const bool hard = std::isfinite(f.velY) && f.velY < hardLandVel;
+            const bool churn = guarded && (churnKind || !hard) && nowNs - sinceNs < landMinStintNs;
+            const bool rising = f.state.grounded && std::isfinite(f.velY) && f.velY > risingTouchdownVel &&
+                                nowNs - sinceNs < risingTouchdownNs;
+            if (domain == Domain::vr && !f.groundAction && !f.pointJumpHold && (churn || rising) && !landHeldThisStint_) {
+                landHeldThisStint_ = true;
+                ++landingsHeld;
+                landHeldWhy = rising ? 2 : 1;
+                landHeldAtNs = nowNs - sinceNs;
+            }
+            if (domain == Domain::vr && !f.groundAction && !f.pointJumpHold && !churn && !rising)
                 goAnim(nowNs, f.state.grounded || f.perched ? EnterAnim::land : EnterAnim::mount);
             if (f.zipPress || f.state.zipping) {
                 zipNs = nowNs;
@@ -999,6 +1025,7 @@ struct HybridOwner {
     }
     JumpKind airKind_ = JumpKind::none;
     bool handedBack_{};
+    bool landHeldThisStint_{};
     int64_t lostNs_{-1};
     bool airRose_{}, prevSupported_{true}, prevRunRt_{};
     unsigned prevWall_{};
@@ -1021,6 +1048,7 @@ struct HybridOwner {
     void goVr(EnterVr why, int64_t nowNs) {
         domain = Domain::vr;
         handedBack_ = false;
+        landHeldThisStint_ = false;
         sinceNs = nowNs;
         enterVr = true;
         lastEnterVr = why;

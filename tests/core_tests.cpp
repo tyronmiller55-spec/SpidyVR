@@ -30073,6 +30073,7 @@ int main() {
         f.cancelGrip = false;
         check(o.update(f, t += 11'000'000) == Domain::vr, "cancel did not stay in the air");
         f.state.grounded = true;
+        f.velY = -2.f; // falling (a rising touchdown is no landing: hybrid_owner.hpp RISING TOUCHDOWN)
         // HANDOFF CHURN: a landing within landMinStintNs of the takeover waits for it.
         check(o.update(f, t += 11'000'000) == Domain::vr && !o.enterAnim, "a landing 33 ms in handed back at once");
         t = landMinStintNs + 11'000'000;

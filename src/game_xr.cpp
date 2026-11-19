@@ -1688,6 +1688,7 @@ DWORD WINAPI run(void*) {
         std::array<aim_watch::Lineup, 2> armLineup{};
         bool handstandGlitchWas{}; // TRACKING LOST: the last frame's palms glitched
         bool handstandAbsurdWas{}; // ABSURD ARMS: the last frame's arm readings were thrown out
+        uint32_t landingsHeldSeen{}; // MINIMUM STINT / RISING TOUCHDOWN: hybridOwner.landingsHeld as last logged
         // HAND SOURCE EASE: each hand's step at a source change, fading; the hand shown last frame.
         std::array<aim_watch::SourceEase, 2> handSourceEase{};
         Pose handShown[2]{};
@@ -10022,6 +10023,18 @@ DWORD WINAPI run(void*) {
                         legChordAirAnimLast = false;
                         if (hybridOn) {
                             hybridOwner.update(hybridFrame, handoffNs);
+                            // MINIMUM STINT / RISING TOUCHDOWN (hybrid_owner.hpp): a landing held back, once a stint.
+                            if (hybridOwner.landingsHeld != landingsHeldSeen) {
+                                landingsHeldSeen = hybridOwner.landingsHeld;
+                                diag_log::writef(
+                                    hybridOwner.landHeldWhy == 2
+                                        ? "hybrid: rising touchdown ignored %d ms into the %s stint (%.1f m/s up: no "
+                                          "landing), #%u"
+                                        : "hybrid: minimum stint held the landing %d ms into the %s stint (%.1f m/s), #%u",
+                                    static_cast<int>(hybridOwner.landHeldAtNs / 1'000'000),
+                                    hybrid_owner::enterVrName(hybridOwner.vrBy),
+                                    std::isfinite(hybridFrame.velY) ? hybridFrame.velY : 0.f, landingsHeldSeen);
+                            }
                             if (hybridFrame.groundWeb) {
                                 if (hybridOwner.enterVr && hybridOwner.lastEnterVr == hybrid_owner::EnterVr::cancel) {
                                     ++groundWebCancels;

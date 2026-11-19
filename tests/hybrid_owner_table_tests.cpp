@@ -119,9 +119,12 @@ int64_t enter(HybridOwner& o, EnterVr why, int64_t t) {
 }
 
 // Whether a touchdown this soon after the takeover waits for the least stint (HANDOFF CHURN).
+// MINIMUM STINT (beta polish H1): every takeover but a handstand's or a swing's; a hard landing still hands back at
+// once, except after a punch or a grip cancel.
 bool heldAtTouchdown(EnterVr why, float velY) {
-    (void)velY;
-    return why == EnterVr::punch || why == EnterVr::cancel;
+    if (why == EnterVr::handstand || why == EnterVr::swing || why == EnterVr::none)
+        return false;
+    return why == EnterVr::punch || why == EnterVr::cancel || !(velY < hybrid_owner::hardLandVel);
 }
 
 void takeovers() {
@@ -146,6 +149,20 @@ void takeovers() {
             o.update(ground(velY), t + landMinStintNs + ms);
             check(o.domain == Domain::anim, name + ": past the least stint the landing hands back");
             check(o.lastVrNs > 0, name + ": the stint's length is kept");
+            check(o.landingsHeld == (held ? 1u : 0u) && (!held || o.landHeldWhy == 1),
+                  name + ": a held landing is counted once, as the minimum stint's");
+        }
+        // RISING TOUCHDOWN (F2): ground while rising 10 m/s inside 600 ms is no landing; falling after, it is.
+        if (why != EnterVr::handstand) {
+            HybridOwner o;
+            const int64_t t = enter(o, why, 1'000 * ms);
+            o.update(ground(10.f), t + 200 * ms);
+            check(o.domain == Domain::vr && o.landingsHeld == 1 && o.landHeldWhy == 2,
+                  name + ": a rising touchdown keeps SpidyVR");
+            o.update(ground(10.f), t + 400 * ms);
+            check(o.landingsHeld == 1, name + ": counted once a stint");
+            o.update(ground(-2.f), t + 450 * ms);
+            check(o.domain == Domain::anim, name + ": then a real landing hands back");
         }
     }
 }
