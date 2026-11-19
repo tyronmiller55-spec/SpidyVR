@@ -20,6 +20,15 @@ inline constexpr Page pages[] = {
     {"WHAT IS NATIVE ANIMATION", "  (2) THE VIEW", "Your headset always leads the view: an animation never turns it."},
     {"WHAT IS NATIVE ANIMATION", "  (3) HAND-OFFS", "Hand-offs between the two glide; tune them on the NA HANDOFF tab."},
 
+    {"TRY THE BETA", "TRY THE BETA",
+     "This build has every current feature on so you can try them. Topics are below."},
+    {"TRY THE BETA", "  (2) WHAT TO TRY",
+     "Showtime (X+B), kicks (Y+X then a flick), hand grab, tethers, point jump (A+B)."},
+    {"TRY THE BETA", "  (3) ALSO TRY",
+     "Wall brake, grip fling, mid-air landings, a handstand and a swing kick."},
+    {"TRY THE BETA", "  (4) WHAT TO REPORT",
+     "If something feels off, post the newest reports folder files on Discord."},
+
     {"JUMPS & POINT JUMP", "JUMPS & POINT JUMP", "A jumps: the game's own jump. Hold A to charge it."},
     {"JUMPS & POINT JUMP", "  (2) POINT JUMP", "A + B together (or hold B, then A) charges a POINT JUMP where you look."},
     {"JUMPS & POINT JUMP", "  (3) CHARGE", "Tap for a hop, hold up to 1 s for a leap. A grip cancels the charge."},
@@ -81,7 +90,7 @@ inline constexpr Page pages[] = {
     {"OTHER MODS", "  (3) TESTING", "Remove other DLL loaders (winmm, version, dinput8) to test. See MOD_COMPAT.md."},
 
     {"TROUBLESHOOTING", "TROUBLESHOOTING", "A crash code 0xC0000409 as the game closes is known and harmless."},
-    {"TROUBLESHOOTING", "  (2) LOGS", "Logs are in the reports folder: send the newest three files."},
+    {"TROUBLESHOOTING", "  (2) LOGS", "Logs are in the reports folder: post the newest three files on Discord."},
 };
 inline constexpr size_t pageCount = sizeof(pages) / sizeof(pages[0]);
 

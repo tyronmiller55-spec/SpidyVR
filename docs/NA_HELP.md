@@ -6,6 +6,10 @@ Generated from `include/spidy/na_help.hpp` and the settings catalog (`src/vr_set
 
 Insomniac's own animations play your body on the ground; SpidyVR owns the air. Your headset always leads the view: an animation never turns it. Hand-offs between the two glide; tune them on the NA HANDOFF tab.
 
+## TRY THE BETA
+
+This build has every current feature on so you can try them. Topics are below. Showtime (X+B), kicks (Y+X then a flick), hand grab, tethers, point jump (A+B). Wall brake, grip fling, mid-air landings, a handstand and a swing kick. If something feels off, post the newest reports folder files on Discord.
+
 ## JUMPS & POINT JUMP
 
 A jumps: the game's own jump. Hold A to charge it. A + B together (or hold B, then A) charges a POINT JUMP where you look. Tap for a hop, hold up to 1 s for a leap. A grip cancels the charge.
@@ -76,7 +80,7 @@ Spidy chains its hooks in front of other mods (e.g. Manhattan Skies). If the SPI
 
 ## TROUBLESHOOTING
 
-A crash code 0xC0000409 as the game closes is known and harmless. Logs are in the reports folder: send the newest three files.
+A crash code 0xC0000409 as the game closes is known and harmless. Logs are in the reports folder: post the newest three files on Discord.
 
 ## Every NA setting and its default
 
