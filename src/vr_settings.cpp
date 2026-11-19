@@ -2033,6 +2033,14 @@ const std::array<Row, 232>& rows() {
     }};
     return all;
 }
+bool isNativeAnimation(Item item) {
+    // The fork's items start at HEAD PROBE; upstream's own that came later (0.8.6's WEB LINES and AIR FISTS,
+    // 0.8.7's ENEMY TYPES) sit among them.
+    if (item == Item::none || item == Item::webLines || item == Item::airFists || item == Item::enemyTypes)
+        return false;
+    return static_cast<unsigned>(item) >= static_cast<unsigned>(Item::headProbe) &&
+           static_cast<unsigned>(item) <= static_cast<unsigned>(lastItem);
+}
 const Row* rowFor(Item item) {
     if (item == Item::none)
         return nullptr;

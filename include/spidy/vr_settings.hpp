@@ -1173,6 +1173,10 @@ struct Row {
 // Stable row/setting numbers; categories below determine presentation order.
 const std::array<Row, 232>& rows();
 const Row* rowFor(Item);
+// NATIVE ANIMATION'S OWN (beta polish M1): true for every setting the Native Animation fork added (135 at 88cc744),
+// false for upstream Spidy's (the 89 settings of v0.8.7's Item, WEB LINES, AIR FISTS and ENEMY TYPES among the fork's
+// numbers included). The one source for the launcher's NA highlight and the in-game NA tabs.
+bool isNativeAnimation(Item);
 // camera, shooters and legs (November 11, the user: "I can't find legs or
 // camera settings in any of the menus. Make sure it's clearly labeled"): tabs
 // of their own, after the older ones so their numbers stay.

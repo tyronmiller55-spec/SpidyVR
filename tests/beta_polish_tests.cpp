@@ -6,7 +6,9 @@
 #include <cmath>
 #include <cstdio>
 #include <cstdlib>
+#include <set>
 #include <string>
+#include <string_view>
 
 using namespace spidy;
 namespace {
@@ -78,6 +80,31 @@ int main() {
         check(vr_settings::withTabOnly({}, "log_level=7\n").logLevel == 2 &&
                   vr_settings::withTabOnly({}, "log_level=0\n").logLevel == 0,
               "log_level is clamped and read");
+    }
+    // M1: the catalog - which settings are Native Animation's, and each in-game row in exactly one tab.
+    {
+        using namespace vr_settings;
+        unsigned na = 0, upstream = 0;
+        for (unsigned i = 1; i <= static_cast<unsigned>(lastItem); ++i)
+            (isNativeAnimation(static_cast<Item>(i)) ? na : upstream) += 1;
+        check(upstream == 89, "upstream 0.8.7 has 89 settings (its Item has 90 with none)");
+        check(na == 135, "the fork's settings are Native Animation's");
+        check(isNativeAnimation(Item::showtime) && isNativeAnimation(Item::headProbe) &&
+                  isNativeAnimation(Item::swingKickManual) && !isNativeAnimation(Item::webLines) &&
+                  !isNativeAnimation(Item::airFists) && !isNativeAnimation(Item::enemyTypes) &&
+                  !isNativeAnimation(Item::smoothTurn) && !isNativeAnimation(Item::none),
+              "the NA flag by example");
+        std::array<unsigned, 256> inScreens{};
+        for (const auto& screen : screens())
+            for (Item item : screen.items)
+                ++inScreens[static_cast<size_t>(item)];
+        for (const auto& row : rows()) {
+            if (row.item == Item::none)
+                continue;
+            check(row.place == Place::tab || row.place == Place::page || row.place == Place::launcher, "a valid place");
+            // The pause page's row (VR VIEW) stands outside the tabs; every other row in exactly one.
+            check(inScreens[static_cast<size_t>(row.item)] == (row.place == Place::page ? 0u : 1u), row.title);
+        }
     }
     std::printf("beta polish: %d checks passed\n", passed);
     return 0;
