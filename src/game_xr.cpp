@@ -1,3 +1,4 @@
+#include "spidy/eye_stall.hpp"
 #include "spidy/animation_cancel.hpp"
 #include "spidy/text_read.hpp"
 #include "spidy/frame_steps.hpp"
@@ -838,11 +839,16 @@ bool read(uintptr_t p, void* out, size_t bytes) {
 // FIRST-USE STARTS (polish pass; the 4d58169 playtest had one 750 ms stall in `prepare` at t=15 s, and G1 763 /
 // 827 ms, from something built on the first gameplay frame that no line named): a start that takes more than
 // 20 ms is written with its name, so the next session's log says which.
+// The module starts run on the eye worker, so while one runs no eye pair is shown: the stall check forgives a start
+// that ended after the last shown pair (eye_stall.hpp, beta polish R1).
+eye_stall::Watch eyeStartWatch;
 struct StartTimer {
     explicit StartTimer(const char* name) : name_(name) {
         QueryPerformanceCounter(&start_);
+        eyeStartWatch.begin(GetTickCount64());
     }
     ~StartTimer() {
+        eyeStartWatch.end(GetTickCount64());
         LARGE_INTEGER end{}, hz{};
         QueryPerformanceCounter(&end);
         QueryPerformanceFrequency(&hz);
@@ -1026,6 +1032,7 @@ DWORD WINAPI run(void*) {
     uint64_t serial = 1, nativeDeadline{};
     // lastPresentedMs: an image was on show. lastNewImageMs: the game delivered a newer one.
     uint64_t firstImageDeadline{}, lastPresentedMs{}, lastNewImageMs{};
+    uint64_t eyeStallForgivenFor{}; // the module start whose stall was forgiven (logged once)
     bool presented{}, wasGameplay{};
     // The last frame's predicted display time; held images age against it.
     int64_t displayTime{};
@@ -2542,8 +2549,20 @@ DWORD WINAPI run(void*) {
             const bool eyesWanted = motion.active && !flatScreen;
             if (eyesWanted && firstImageDeadline && !lastPresentedMs && GetTickCount64() >= firstImageDeadline)
                 throw std::runtime_error("No native eye images reached OpenXR within 3 seconds");
-            if (eyesWanted && lastPresentedMs && GetTickCount64() - lastPresentedMs >= 3000)
-                throw std::runtime_error("Native eye presentation stalled for 3 seconds");
+            if (eyesWanted && lastPresentedMs) {
+                const uint64_t nowMs = GetTickCount64();
+                const eye_stall::Verdict stall = eye_stall::judge(nowMs, lastPresentedMs, eyeStartWatch);
+                if (stall == eye_stall::Verdict::stalled)
+                    throw std::runtime_error("Native eye presentation stalled for 3 seconds");
+                if (stall == eye_stall::Verdict::forgivenStart && eyeStartWatch.startEndedMs != eyeStallForgivenFor) {
+                    eyeStallForgivenFor = eyeStartWatch.startEndedMs;
+                    char line[120];
+                    std::snprintf(line, sizeof line, "eye stall ignored during module start (%llu ms, no pair for %llu ms)",
+                                  static_cast<unsigned long long>(eyeStartWatch.lastStartMs()),
+                                  static_cast<unsigned long long>(nowMs - lastPresentedMs));
+                    diag_log::write(line);
+                }
+            }
             // The tracking space's turn in the world for this frame's display
             // time, once the frame placed it (FLIP REPROJECTION).
             flip_reprojection::Turn turnNow{};

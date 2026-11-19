@@ -154,6 +154,10 @@ add_test(NAME direction_report COMMAND spidy_direction_report_tests)
 add_executable(spidy_polish_runtime_tests tests/polish_runtime_tests.cpp)
 target_link_libraries(spidy_polish_runtime_tests PRIVATE spidy_core)
 add_test(NAME polish_runtime COMMAND spidy_polish_runtime_tests)
+# BETA POLISH PASS (Nov 19): eye stall watch, kick miss reasons, minimum stints, landings, sound cues, settings checks.
+add_executable(spidy_beta_polish_tests tests/beta_polish_tests.cpp)
+target_link_libraries(spidy_beta_polish_tests PRIVATE spidy_core)
+add_test(NAME beta_polish COMMAND spidy_beta_polish_tests)
 # PUNCH AUTO-TARGET (punch_track.hpp, polish pass slice 7): the throw, the verdict, the cone, the range, the settings.
 add_executable(spidy_punch_track_tests tests/punch_track_tests.cpp)
 target_link_libraries(spidy_punch_track_tests PRIVATE spidy_core)
