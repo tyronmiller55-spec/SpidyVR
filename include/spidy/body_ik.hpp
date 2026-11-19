@@ -155,6 +155,9 @@ bool prepare(Rig& rig, std::span<const float> restPose);
 
 // What the player's body should do, in model space (model units).
 struct Targets {
+    // SHOWTIME ARMS (beta polish D4/SA1): 0..1, how far the arms' length factor has eased to 1 (the hero's own
+    // proportions) for the camera outside; 0 in the headset (the player's reach).
+    float heroArms{};
     bool head{};
     // ANIMATED ARMS overlay: solve only the arm chains on top of the game's
     // pose (torso/legs/root/head untouched unless torsoAssist). Requires
@@ -321,7 +324,10 @@ struct Config {
     // The neck joints take this share of the head's turn from the chest.
     float neckShare = .5f;
     // The forearm takes this share of the wrist's roll about it.
-    float forearmRoll = .5f;
+    // SA4 (beta polish; the logs: forearm vs controller median 41-50 deg, p90 88-95): the share of the hand's twist
+    // the whole forearm takes from the elbow, the rest at the wrist. 0.5 candy-wrapped the elbow; the rig's twist
+    // helpers are not known (capture list), so less of it goes to the forearm.
+    float forearmRoll = .3f;
     // A closed fist: each finger joint after the one in the palm bends this
     // far from the joint before it (knuckle, middle, tip, radians), about
     // the finger's own hinge. The thumb's last joint bends thumbBend, the
@@ -413,6 +419,18 @@ struct State {
     float overlayTwistShare{1.f};
     std::array<float, 2> overlayArmScale{1.f, 1.f};
     std::array<Vec3, 2> overlayChestPole{};
+    // SHOWTIME ARMS (beta polish SA1-SA3): each arm's elbow as last solved - its bend side (held against a flip,
+    // SA2), how long a new side has been wanted, the bend side's flips past 90 degrees and the ones held off, the
+    // elbow's inside angle (degrees, 180 straight) - and the arm's length factor (bone length, SA1; the full body's
+    // too).
+    struct Elbow {
+        Vec3 bend{};
+        float away{};
+        unsigned flips{}, held{};
+        float degrees = 180.f;
+    };
+    std::array<Elbow, 2> elbow{};
+    std::array<float, 2> armFactor{1.f, 1.f};
     bool overlaySoftlock{};
     float crawlWeight{};
     float crawlTwist{};

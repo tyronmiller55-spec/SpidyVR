@@ -332,6 +332,9 @@ void setLegControl(bool on, const std::array<body::Targets::LegAngles, 2>& legs,
 // 1 right; `foot` the kick's foot from the player's feet in the world's axes (metres); `weight` 0..1.
 // on false: the leg blends back to the game's pose. Side channel: no Command layout or version change.
 void setGroundKick(bool on, int leg, Vec3 foot, float weight);
+// SHOWTIME ARMS (beta polish D4/SA1): 0..1, how far the arms ease to the hero's own length for the camera outside
+// (body::Targets::heroArms; 0 in the headset). Side channel: no Command layout or version change.
+void setHeroArms(float weight);
 // Slice C tracking-lock diag (side channel; no Command / Forearms layout change).
 // Latest armsOnly chest vs player yaw and overlay weights after a pose job.
 struct OverlayTracking {
@@ -364,6 +367,10 @@ struct OverlayTracking {
     // wrists reachable, and the scale each overlay arm took.
     float chestTwist{}, twistWanted{}, twistCap{}, twistShare{1.f};
     float armScale[2]{1.f, 1.f};
+    // SHOWTIME ARMS diag (beta polish SA1-SA3; any body, published after every solve): each arm's length factor,
+    // elbow inside angle (degrees, 180 straight), bend-side flips and flips held off (running counts).
+    float armFactor[2]{1.f, 1.f}, elbowDeg[2]{180.f, 180.f};
+    uint32_t elbowFlips[2]{}, elbowHeld[2]{};
 };
 // Gameplay only: 1 fresh original calibrated eye anchor in current world transform,
 // 0 not managed by player torso, -1 managed but missing/expired (never read

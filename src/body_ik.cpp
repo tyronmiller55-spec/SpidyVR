@@ -10,6 +10,7 @@
 namespace spidy::body {
 namespace {
 constexpr float pi = 3.14159265358979f;
+constexpr float deg = pi / 180.f;
 constexpr Vec3 worldUp{0, 1, 0};
 float dot4(Quat a, Quat b) {
     return a.x * b.x + a.y * b.y + a.z * b.z + a.w * b.w;
@@ -100,20 +101,75 @@ std::array<float, 2> turnsToDistance(Vec3 pivot, Vec3 hinge, Vec3 point, Vec3 fr
 // toward it, out of reach), bending toward `pole`. The upper bone first
 // rolls about itself so the lower one lies in the bend's plane: the middle
 // joint then bends about its hinge as the game animates it.
-void limb(Pose& pose, const Rig& rig, int upper, int lower, int end, Vec3 target, Vec3 pole, float w) {
+// SHOWTIME ARMS (beta polish SA1): an arm takes its length factor along its bones - the forearm moved out along
+// the upper arm, the hand along the forearm - not as a uniform scale about the shoulder, so the arm keeps its
+// girth and the hand its size (a scaled arm looked swollen from outside). Reach is the same:
+// (upper + forearm) * factor.
+void lengthenArm(Pose& pose, const Rig& rig, const ArmJoints& arm, float factor) {
+    if (!std::isfinite(factor) || std::abs(factor - 1.f) < 1e-4f || arm.upper < 0 || arm.lower < 0 || arm.hand < 0)
+        return;
+    const auto n = rig.below.size();
+    if (static_cast<size_t>(arm.lower) >= n || static_cast<size_t>(arm.hand) >= n)
+        return;
+    const Vec3 s = pose.position(arm.upper), e = pose.position(arm.lower), h = pose.position(arm.hand);
+    if (!finite(s) || !finite(e) || !finite(h))
+        return;
+    pose.move(rig.below[static_cast<size_t>(arm.lower)], (e - s) * (factor - 1.f));
+    pose.move(rig.below[static_cast<size_t>(arm.hand)], (h - e) * (factor - 1.f));
+}
+// ARMS (beta polish SA2/SA3), with `elbow`: the bend side is held for elbowHoldSeconds against a new one more than
+// elbowHoldDegrees away (no flip on a hand passing near the pole), never more than elbowInward into the torso (the
+// `inward` axis), and no hyperextension (reach clamped to elbowStraight of the chain). No fold limit: a hand at
+// the shoulder still meets its controller (a 150 degree limit pulled it 5-7 mm off; the hand on the controller
+// wins). The legs (no `elbow`) solve as before.
+constexpr float elbowHoldSeconds = .08f, elbowHoldDegrees = 25.f, elbowInward = .2f, elbowStraight = .999f;
+void limb(Pose& pose, const Rig& rig, int upper, int lower, int end, Vec3 target, Vec3 pole, float w,
+          State::Elbow* elbow = nullptr, float dt = 0.f, Vec3 inward = {}) {
     const Vec3 s = pose.position(upper), e = pose.position(lower), h = pose.position(end);
     const float a = length(e - s), b = length(h - e);
     float d = length(target - s);
     if (a < 1e-4f || b < 1e-4f || d < 1e-4f || !finite(target))
         return;
     const Vec3 dir = (target - s) / d;
-    d = std::clamp(d, std::abs(a - b) + 1e-3f, (a + b) * .9999f);
+    d = std::clamp(d, std::abs(a - b) + 1e-3f, (a + b) * (elbow ? elbowStraight : .9999f));
     Vec3 bend = across(pole, dir);
     if (length(bend) < 1e-3f)
         bend = across(e - s, dir);
     if (length(bend) < 1e-3f)
         return;
     bend = normalized(bend);
+    if (elbow) {
+        if (finite(inward) && length(inward) > .5f) {
+            const Vec3 in = normalized(inward);
+            const float k = dot(bend, in);
+            if (k > elbowInward) {
+                const Vec3 out = across(bend - in * (k - elbowInward), dir);
+                if (length(out) > 1e-3f)
+                    bend = normalized(out);
+            }
+        }
+        const Vec3 last = finite(elbow->bend) ? across(elbow->bend, dir) : Vec3{};
+        if (length(last) > 1e-3f) {
+            const Vec3 was = normalized(last);
+            const float c = dot(bend, was);
+            if (c < std::cos(elbowHoldDegrees * deg)) {
+                elbow->away += std::isfinite(dt) ? std::clamp(dt, 0.f, .1f) : 0.f;
+                if (elbow->away < elbowHoldSeconds) {
+                    bend = was;
+                    ++elbow->held;
+                } else {
+                    elbow->away = 0;
+                    if (c < 0)
+                        ++elbow->flips;
+                }
+            } else {
+                elbow->away = 0;
+            }
+        }
+        elbow->bend = bend;
+        const float inside = std::clamp((a * a + b * b - d * d) / (2 * a * b), -1.f, 1.f);
+        elbow->degrees = std::acos(inside) / deg;
+    }
     const float cosine = std::clamp((a * a + d * d - b * b) / (2 * a * d), -1.f, 1.f);
     const Vec3 middle = s + (dir * cosine + bend * std::sqrt(1 - cosine * cosine)) * a;
     const Vec3 reach = s + dir * d;
@@ -490,7 +546,10 @@ Result solve(Pose& pose, const Rig& rig, const Targets& targets, const Config& c
         if (!rig.ready || pose.count() < static_cast<int>(rig.parent.size()))
             return r;
         const float s = std::isfinite(scale) && scale > .1f ? scale : 1.f;
-        const float arms = std::isfinite(armScale) && armScale > .1f ? armScale : 1.f;
+        // SHOWTIME ARMS (D4): from outside, s * arms eases to 1 (the hero's own arm).
+        const float hero = std::isfinite(targets.heroArms) ? std::clamp(targets.heroArms, 0.f, 1.f) : 0.f;
+        const float armsAsked = std::isfinite(armScale) && armScale > .1f ? armScale : 1.f;
+        const float arms = armsAsked + (1.f / s - armsAsked) * hero;
         Vec3 up = finite(targets.up) && length(targets.up) > .5f ? normalized(targets.up) : Vec3{0, 1, 0};
         // ANIMATED AIR SPIN: the arms solve level on the game pose, then the
         // whole skeleton turns (end of this block). The rig's flip already
@@ -795,8 +854,9 @@ Result solve(Pose& pose, const Rig& rig, const Targets& targets, const Config& c
                 const float full = std::clamp(s * std::clamp(arms, .5f, 2.f), armScaleMin, armScaleMax);
                 const float factor = 1.f + (full - 1.f) * std::clamp(aw, 0.f, 1.f);
                 if (std::abs(factor - 1.f) > .004f)
-                    pose.scale(rig.below[static_cast<size_t>(arm.upper)], factor, pose.position(arm.upper));
+                    lengthenArm(pose, rig, arm, factor);
                 state.overlayArmScale[i] = factor;
+                state.armFactor[i] = factor;
             }
             if (arm.clavicle >= 0) {
                 // Shrug toward a wrist that is nearly out of reach (stronger than the old
@@ -833,7 +893,8 @@ Result solve(Pose& pose, const Rig& rig, const Targets& targets, const Config& c
                 }
             }
             state.overlayChestPole[i] = pole;
-            limb(pose, rig, arm.upper, arm.lower, arm.hand, wrist, pole, aw);
+            limb(pose, rig, arm.upper, arm.lower, arm.hand, wrist, pole, aw, &state.elbow[i], dt,
+                 i == 0 ? left * -1.f : left);
             r.handError[i] = length(pose.position(arm.hand) - wrist);
             if (c.handOrientation) {
                 const Quat pitchQ = axisAngle(right, c.fingerPitch);
@@ -970,7 +1031,10 @@ Result solve(Pose& pose, const Rig& rig, const Targets& targets, const Config& c
     if (length(F) < .5f || length(U) < .5f)
         return r;
     const float s = 1 + (std::clamp(std::isfinite(scale) ? scale : 1.f, .5f, 2.f) - 1) * w;
-    const float arms = 1 + (std::clamp(std::isfinite(armScale) ? armScale : 1.f, .5f, 2.f) - 1) * w;
+    const float heroArms = std::isfinite(t.heroArms) ? std::clamp(t.heroArms, 0.f, 1.f) : 0.f;
+    const float armsAsked = 1 + (std::clamp(std::isfinite(armScale) ? armScale : 1.f, .5f, 2.f) - 1) * w;
+    // SHOWTIME ARMS (D4): from outside the arms ease to the body's own proportion (the body keeps `s`).
+    const float arms = armsAsked + (1.f - armsAsked) * heroArms;
     // The world's up in the model: the hero may crawl on a wall, the body
     // stands as the player does. Yaw turns about it, from the model's forward
     // (or, facing straight up or down a wall, its left).
@@ -1015,7 +1079,8 @@ Result solve(Pose& pose, const Rig& rig, const Targets& targets, const Config& c
     // The player's arms: each arm, hand and all, about its shoulder.
     if (arms != 1)
         for (const auto& arm : rig.arms)
-            pose.scale(rig.below[static_cast<size_t>(arm.upper)], arms, pose.position(arm.upper));
+            lengthenArm(pose, rig, arm, arms);
+    state.armFactor = {arms, arms};
     // Which way the body faces: the headset's, once it turns far enough.
     Vec3 look = level(F);
     if (length(look) < .2f)
@@ -2272,7 +2337,7 @@ Result solve(Pose& pose, const Rig& rig, const Targets& targets, const Config& c
             }
             const Vec3 side = i == 0 ? left : left * -1.f;
             const Vec3 pole = upperTurn.rotate(normalized(up * -1.f + side * .6f - forward * .3f));
-            limb(pose, rig, arm.upper, arm.lower, arm.hand, wrist, pole, armW);
+            limb(pose, rig, arm.upper, arm.lower, arm.hand, wrist, pole, armW, &state.elbow[i], dt, side * -1.f);
             r.handError[i] = length(pose.position(arm.hand) - wrist);
             if (c.handOrientation) {
                 // The palm faces +x on a left hand, -x on a right one.

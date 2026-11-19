@@ -112,6 +112,7 @@ bool groundKickOn{};
 int groundKickLeg{};
 Vec3 groundKickFoot{};
 float groundKickShare{};
+float heroArmsShare{}; // SHOWTIME ARMS (setHeroArms)
 // ANIMATED HYBRID jump / air adopt (beginJumpAdopt): wanted since this tick (0 none), the live
 // pose snapshot taken at the first bodyOn job, and that first frame's result.
 uint64_t adoptWantedTick{};
@@ -630,6 +631,7 @@ void solveHero(float* out, uintptr_t job, uintptr_t instance) {
             t.torsoControl = airLegs && torsoControlOn;
             t.torso = torsoControlAngles;
             t.torsoAmount = torsoControlAmount;
+            t.heroArms = heroArmsShare;
             t.eyes = toModel.rotate(wanted.eyes);
             t.facing = toModel * wanted.facing;
             if (const Quat tilt = wanted.tilt; tilt.x != 0 || tilt.y != 0 || tilt.z != 0)
@@ -659,6 +661,7 @@ void solveHero(float* out, uintptr_t job, uintptr_t instance) {
             t.groundKickLeg = groundKickLeg;
             t.groundKickAt = t.groundKick ? toModel.rotate(groundKickFoot) : Vec3{};
             t.groundKickWeight = groundKickShare;
+            t.heroArms = heroArmsShare;
             t.eyes = toModel.rotate(wanted.eyes);
             t.facing = toModel * wanted.facing;
             for (int i = 0; i < 2; ++i) {
@@ -916,6 +919,13 @@ void solveHero(float* out, uintptr_t job, uintptr_t instance) {
         overlayTrackingSample.armScale[0] = state.overlayArmScale[0];
         overlayTrackingSample.armScale[1] = state.overlayArmScale[1];
     }
+    if (result.solved)
+        for (int i = 0; i < 2; ++i) {
+            overlayTrackingSample.armFactor[i] = state.armFactor[i];
+            overlayTrackingSample.elbowDeg[i] = state.elbow[i].degrees;
+            overlayTrackingSample.elbowFlips[i] = state.elbow[i].flips;
+            overlayTrackingSample.elbowHeld[i] = state.elbow[i].held;
+        }
     if (probing) {
         // And as the body left it, then published (its own lock, a copy).
         probe.solved = result.solved && (on || armsOverlayOn || armsBlend || spinOn);
@@ -1271,6 +1281,12 @@ void native_body::setGroundKick(bool on, int leg, Vec3 foot, float weight) {
     } else {
         groundKickShare = 0.f;
     }
+    ReleaseSRWLockExclusive(&solveLock);
+}
+
+void native_body::setHeroArms(float weight) {
+    AcquireSRWLockExclusive(&solveLock);
+    heroArmsShare = std::isfinite(weight) ? std::clamp(weight, 0.f, 1.f) : 0.f;
     ReleaseSRWLockExclusive(&solveLock);
 }
 

@@ -1477,6 +1477,10 @@ DWORD WINAPI run(void*) {
         showtime::Machine::Output showtimeOut{};
         showtime::BodyOut showtimeBodyOut{};
         bool showtimeBodyYielded{};
+        // SHOWTIME ARMS (beta polish D4/SA1): the arms' ease to the hero's own length while out (0..1), the ease's
+        // start factor and clock for its log line, and the once-a-second arm diag clock.
+        float showtimeHeroArms{}, showtimeHeroFrom = 1.f, showtimeHeroClock{}, showtimeArmsDiagClock{};
+        bool showtimeHeroLogged{};
         showtime::Chord::Output showtimeChordOut{};
         bool showtimeInit{}, showtimeRefSet{}, showtimeFeetKnown{};
         Vec3 showtimeFeetLast{};
@@ -11520,6 +11524,43 @@ DWORD WINAPI run(void*) {
                             if (bodyWas != showtimeBodyOut.body && bin.out)
                                 diag_log::writef("showtime: body %s owner=%s", showtime::bodyName(showtimeBodyOut.body),
                                                  showtime::ownerName(bin.owner));
+                            // SHOWTIME ARMS (D4): from outside the arms ease to the hero's own length (1.0x, by
+                            // bone length, body_ik lengthenArm) over showtimeHeroSeconds, and back on return; AS
+                            // IN PLAY draws him as first person does. The log scores the arm pass: the factor's
+                            // ease, then once a second the elbows (inside angle, bend flips and the ones held off).
+                            {
+                                constexpr float showtimeHeroSeconds = .25f;
+                                const float hdt =
+                                    std::isfinite(frame.seconds) ? std::clamp(frame.seconds, 0.f, .1f) : 0.f;
+                                const bool heroWanted = bin.out && showtimeBodyOut.body != showtime::Body::asInPlay;
+                                const auto ot = native_body::overlayTracking();
+                                if (heroWanted && showtimeHeroArms <= 0.f) {
+                                    showtimeHeroFrom = std::max(ot.armFactor[0], ot.armFactor[1]);
+                                    showtimeHeroClock = 0;
+                                    showtimeHeroLogged = false;
+                                }
+                                const float heroWas = showtimeHeroArms;
+                                showtimeHeroArms = std::clamp(
+                                    showtimeHeroArms + (heroWanted ? 1.f : -1.f) * hdt / showtimeHeroSeconds, 0.f, 1.f);
+                                if (heroWanted)
+                                    showtimeHeroClock += hdt;
+                                if (heroWanted && showtimeHeroArms >= 1.f && heroWas < 1.f && !showtimeHeroLogged) {
+                                    diag_log::writef("showtime: arms factor %.2f->1.00 over %.0f ms (bone length)",
+                                                     showtimeHeroFrom, showtimeHeroClock * 1000.f);
+                                    showtimeHeroLogged = true;
+                                }
+                                native_body::setHeroArms(showtimeHeroArms);
+                                showtimeArmsDiagClock = heroWanted ? showtimeArmsDiagClock + hdt : 0.f;
+                                if (heroWanted && showtimeArmsDiagClock >= 1.f) {
+                                    showtimeArmsDiagClock = 0;
+                                    diag_log::writef("showtime arms: factor %.2f/%.2f elbow %.0f/%.0f deg "
+                                                     "bend flips %u/%u held %u/%u forearm roll %.2f body %s",
+                                                     ot.armFactor[0], ot.armFactor[1], ot.elbowDeg[0], ot.elbowDeg[1],
+                                                     ot.elbowFlips[0], ot.elbowFlips[1], ot.elbowHeld[0],
+                                                     ot.elbowHeld[1], body::Config{}.forearmRoll,
+                                                     showtime::bodyName(showtimeBodyOut.body));
+                                }
+                            }
                         }
                         pose.trackingYaw = motion.swing.trackingYaw;
                         // A flip's tilt in world axes: the body turns with the player.

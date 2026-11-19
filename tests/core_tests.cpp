@@ -23082,7 +23082,7 @@ int main() {
         check(r.headError<1e-3f&&r.handError[0]<1e-3f,"the scaled body missed its targets");
         check(r.grounded&&std::abs(b.at(pose,23).y-b.at(b.rest,23).y*1.1f)<1e-3f,"the scaled feet left the ground");
     });
-    test("body: a player's longer arms reach their controllers, each arm scaled about its shoulder", [] {
+    test("body: a player's longer arms reach their controllers, each arm lengthened along its bones", [] {
         auto b=testBody();
         body::Config c;c.hideHead=false;
         // Where the shoulders end up under these eyes, without controllers.
@@ -23110,7 +23110,7 @@ int main() {
             near(length(b.at(pose,arm.lower)-b.at(pose,arm.upper)),.26f*longer,1e-3f);
             near(length(b.at(pose,arm.hand)-b.at(pose,arm.lower)),.30f*longer,1e-3f);
         }
-        near(length(b.at(pose,13)-b.at(pose,12)),.09f*longer,1e-3f); // the hand grows with its arm
+        near(length(b.at(pose,13)-b.at(pose,12)),.09f,1e-3f); // SA1: the arm lengthens by its bones; the hand keeps its size
         check(length(b.at(pose,1)-b.at(free,1))<1e-3f,"the arms moved the hips");
     });
     test("calibration: the rig's proportions, and the body's and arms' scales within their ranges", [] {
