@@ -2081,4 +2081,8 @@ Telemetry telemetry();
 // game's Settings (0.8.5) and nothing turned, with an "XBOX 360 For Windows"
 // controller also in his game log.
 uint16_t realButtons();
+// HOOK REPORT (beta polish G3, as game_menu::report does for the menu's hooks): a line for each XInput function
+// another mod hooked first (Spidy goes in front of it; MinHook copies the jump) and for each hook that could not be
+// made, with the library that has the jump when one is named. Empty when all is the game's own.
+const char* report();
 } // namespace spidy::game_pad

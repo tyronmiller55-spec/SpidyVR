@@ -2357,8 +2357,9 @@ DWORD WINAPI run(void*) {
             diagSettings = text;
             if (first) {
                 diag_log::writef("build: %s", diag_log::build());
-                // What the menu's hooks found that was another mod's (game_menu::report).
-                const std::string& found = game_menu::report();
+                // What the menu's and the controller's hooks found that was another mod's (game_menu::report,
+                // game_pad::report: beta polish G3).
+                const std::string found = game_menu::report() + game_pad::report();
                 for (size_t at = 0; at < found.size();) {
                     const size_t end = found.find('\n', at);
                     diag_log::writef("mods: %s", found.substr(at, end == std::string::npos ? end : end - at).c_str());
@@ -2539,6 +2540,8 @@ DWORD WINAPI run(void*) {
             }
             if (!padInstalled && GetTickCount64() >= padRetryMs) {
                 padInstalled = !game_pad::install();
+                if (padInstalled && *game_pad::report()) // G3: hooked later than the session's first lines
+                    diag_log::writef("mods: %s", game_pad::report());
                 padRetryMs = GetTickCount64() + 1000;
             }
             // VR play has eye images; the game played on its screen has the

@@ -1,10 +1,13 @@
 // The game's XInput reads, answered with the VR controllers for controller 0.
 #include "spidy/game_pad.hpp"
+#include "spidy/hook_chain.hpp"
 #include <MinHook.h>
 #include <algorithm>
 #include <atomic>
 #include <cmath>
+#include <cstdio>
 #include <cstring>
+#include <string>
 #include <windows.h>
 #include <Xinput.h>
 using namespace spidy;
@@ -29,6 +32,54 @@ std::atomic<uint64_t> reads{}, active{};
 std::atomic<bool> hooked{};
 // What a real controller in slot 0 held at the game's last read, before Spidy's buttons go over it.
 std::atomic<uint16_t> realHeld{};
+// HOOK REPORT (G3): what install() found that was another mod's, and the hooks it could not make.
+std::string hookReport;
+std::string libraryAt(uintptr_t at) {
+    HMODULE module{};
+    if (!at || !GetModuleHandleExA(GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS | GET_MODULE_HANDLE_EX_FLAG_UNCHANGED_REFCOUNT,
+                                   reinterpret_cast<const char*>(at), &module))
+        return {};
+    char path[MAX_PATH]{};
+    const DWORD n = GetModuleFileNameA(module, path, MAX_PATH);
+    std::string name(path, n);
+    const auto slash = name.find_last_of("\\/");
+    return slash == std::string::npos ? name : name.substr(slash + 1);
+}
+// Bytes at `at`, or false (no objects here: __try cannot unwind them).
+bool readAt(const void* at, void* out, size_t n) {
+    __try {
+        std::memcpy(out, at, n);
+        return true;
+    } __except (EXCEPTION_EXECUTE_HANDLER) {
+        return false;
+    }
+}
+// A jump at the start of an XInput function: another mod's hook (Spidy goes in front of it).
+void noteHooked(const wchar_t* module, const char* function, void* at) {
+    unsigned char bytes[16]{};
+    if (!readAt(at, bytes, sizeof bytes))
+        return;
+    auto jump = hook_chain::decode(bytes, reinterpret_cast<uintptr_t>(at));
+    if (jump.kind == hook_chain::Kind::none)
+        return;
+    if (jump.kind == hook_chain::Kind::pointer) {
+        uintptr_t to{};
+        jump.dest = readAt(reinterpret_cast<const void*>(jump.dest), &to, sizeof to) ? to : 0;
+    }
+    const std::string owner = libraryAt(jump.dest);
+    char m[32]{};
+    std::snprintf(m, sizeof m, "%ls", module);
+    hookReport += std::string(function) + " (" + m + ") is hooked by another mod (" +
+                  (owner.empty() ? std::string("an unnamed library") : owner) +
+                  "): Spidy goes in front of it and passes every call on\n";
+}
+void noteFailed(const wchar_t* module, const char* function, int status) {
+    char line[160]{};
+    std::snprintf(line, sizeof line, "%s (%ls) could not be hooked (MinHook %d): the VR controllers cannot press the "
+                                     "game's buttons through it\n",
+                  function, module, status);
+    hookReport += line;
+}
 
 int16_t larger(int16_t first, int16_t second) {
     return std::abs(static_cast<int>(first)) >= std::abs(static_cast<int>(second)) ? first : second;
@@ -114,6 +165,7 @@ uint32_t game_pad::install() {
     if (status != MH_OK && status != MH_ERROR_ALREADY_INITIALIZED)
         return 8100 + status;
     uint32_t result = 8001;
+    hookReport.clear(); // the latest attempt's account (install is tried again each second until XInput loads)
     for (unsigned i = 0; i < moduleCount; ++i) {
         const auto module = GetModuleHandleW(modules[i]);
         if (!module || originalStates[i])
@@ -122,11 +174,16 @@ uint32_t game_pad::install() {
         void* capabilities = reinterpret_cast<void*>(GetProcAddress(module, "XInputGetCapabilities"));
         if (!state || !capabilities)
             continue;
+        noteHooked(modules[i], "XInputGetState", state);
+        noteHooked(modules[i], "XInputGetCapabilities", capabilities);
         if ((status = MH_CreateHook(state, reinterpret_cast<void*>(stateHooks[i]),
-                                    reinterpret_cast<void**>(&originalStates[i]))) != MH_OK)
+                                    reinterpret_cast<void**>(&originalStates[i]))) != MH_OK) {
+            noteFailed(modules[i], "XInputGetState", status);
             return 8200 + status;
+        }
         if ((status = MH_CreateHook(capabilities, reinterpret_cast<void*>(capabilitiesHooks[i]),
                                     reinterpret_cast<void**>(&originalCapabilities[i]))) != MH_OK) {
+            noteFailed(modules[i], "XInputGetCapabilities", status);
             MH_RemoveHook(state);
             originalStates[i] = nullptr;
             return 8200 + status;
@@ -218,4 +275,7 @@ extern "C" __declspec(dllexport) DWORD WINAPI SpidyPadSample(void* output) {
         return 8501;
     }
     return 0;
+}
+const char* game_pad::report() {
+    return hookReport.c_str();
 }
