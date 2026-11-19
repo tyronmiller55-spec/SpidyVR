@@ -67,7 +67,7 @@ Log line each second out: `showtime: cam d=<m> lag=<m> v=<m/s> w=<rad/s> vignett
 |---|---|
 | Head restored | While out (fade to fade), his head is shown. In an animation the head shrink is a write in the game's own pose job (`game_fp::shrinkHead`); `game_fp::showtimeHead` (a 250 ms lease the XR thread refreshes each frame) makes it stand down, and since nothing persists, the next job shrinks it again at the cut back, or within a quarter second if the thread stalls. In SpidyVR (the native body) the solver's `hideHead` pose flag is dropped while out. The second is by the flag's own definition (`native_body.hpp`: "the head shrinks away"), not measured on a headset. |
 | Hands, webs, marks | Not drawn over the outside view (scene mode), as in S0. |
-| BODY (ADVANCED) | GAME POSE, HEAD SHOWN (default) / AS IN PLAY (NO HEAD): the second keeps the head hidden, to compare if the head restore misbehaves. |
+| BODY (ADVANCED) | GAME POSE, HEAD SHOWN (default) / AS IN PLAY (NO HEAD): the second keeps the head hidden, to compare if the head restore misbehaves. NATURAL ARMS (Nov 19, from EngineBot's S0, `showtime_body.hpp`): the head shown; SpidyVR's body at the hero's own arm length (`pose.armLength` 0, body_calibration's arm scale 1) and the arm overlay paused under the game's animation, so the game's arms show. GAME SWING POSE (EXPERIMENTAL): as NATURAL ARMS, and while SpidyVR owns a swing the game animates (ANIMATION MOVES on, `swingState.owned`) the VR body's `bodyOn` is dropped so the game's pose is drawn (physics stays VR); `native_body::beginReclaim` picks the body back up. Log: `showtime: body <mode> owner=<anim|vr|frozen>`. |
 | Who drives the body | Unchanged. Showtime never changes the owner (ANIM or VR) and never yields or re-adopts the pose: the body is what drives him now. |
 
 **Gated, not built:** the plan's CORRECTED and RAW (DEBUG) body modes and the hybrid's pose corrections (they need a body forced to the VR pose or a corrected animation pose outside, which would flip the owner or edit the game's pose mid-animation; nothing here was verified on the game), the pose-yield handling that puts the VR body back with the position lock, and the plan's "finisher ends while the chord is held: carry on" (finishers are not classified yet). The camera, its collision (the ray fan, the game's own collision query and the boom fields) and AUTO: FINISHERS are as described above.
@@ -75,3 +75,14 @@ Log line each second out: `showtime: cam d=<m> lag=<m> v=<m/s> w=<rad/s> vignett
 ## Verification
 
 `tests/showtime_rig_tests.cpp` (the spring has no overshoot and is exact for any step, placement, the yaw only from the stick, the snap and its blink, the height range, follow and lag, the vignette curve, the pull-in, the latch). `tests/showtime_tests.cpp` (chord order, Y block, B hold-back, fade at the cut, the exit reasons, the level frame's layout and yaw, the stick rotation). The camera, fade, and chord feel need the headset: nothing here was run on a headset.
+
+## EngineBot's Showtime series (Nov 19 port)
+
+EngineBot built a parallel Showtime on c6a8279 (`/workspace/spidyvr-patches/showtime/0001-0008`). This line already had
+its own Showtime (eca9a0a, 798a767, 4bb497e, 331a70b) covering the same chord, fade, follow spring, orbit (smooth and snap),
+vignette, close fade, latch, auto dodges and head restore, with the same `showtime_*` ini keys. Applying the series as is
+would have made a second SHOWTIME tab, a second X+B chord and clashing ini keys, so only what this line lacked was ported:
+the BODY modes (above) and the camera collision RE note (`SHOWTIME_CAMERA_COLLISION.md`). Not ported, with reasons:
+the ray fan (no free native ray slots), automatic finishers with the finisher camera (finishers are still not told apart
+from cutscenes; AUTO: FINISHERS stays log-only), and the exit realign to the heading (this line's exit keeps the exact
+heading the view left, by the headset-leads rule).
