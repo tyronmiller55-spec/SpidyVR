@@ -10340,13 +10340,14 @@ DWORD WINAPI run(void*) {
                                                     eyesOk ? worldYaw : NAN);
                             }
                             // The landing's head bone, a frame (or a few) after the switch: what the eye blend
-                            // actually starts from.
+                            // actually starts from. Logged as "land headbone", not a second "vr->anim" line, so the
+                            // switch lines count the switches once (beta polish H2: 441 raw lines for 294 switches).
                             if (landHeadProbe.pending && !hybridOwner.enterAnim) {
                                 ++landHeadProbe.frames;
                                 const float afterMs = static_cast<float>(handoffNs - landHeadProbe.startNs) / 1e6f;
                                 Mat4 headMat{};
                                 if (hybridOwner.enterVr) {
-                                    diag_log::writef("hybrid: vr->anim (%s) headbone n/a: back to VR %d frames, "
+                                    diag_log::writef("hybrid: land headbone (%s) n/a: back to VR %d frames, "
                                                      "%.0f ms after the switch",
                                                      landHeadProbe.why, landHeadProbe.frames, afterMs);
                                     landHeadProbe.pending = false;
@@ -10356,7 +10357,7 @@ DWORD WINAPI run(void*) {
                                     const float hbYaw =
                                         hybrid_handoff::lookYaw({headMat[8], headMat[9], headMat[10]});
                                     diag_log::writef(
-                                        "hybrid: vr->anim (%s) headbone %d frame(s), %.0f ms after the switch: dPos "
+                                        "hybrid: land headbone (%s) %d frame(s), %.0f ms after the switch: dPos "
                                         "%.2f m dAng %.0f deg from the last VR eyes",
                                         landHeadProbe.why, landHeadProbe.frames, afterMs,
                                         length(landHeadProbe.fromEyes - hb),
@@ -10440,7 +10441,7 @@ DWORD WINAPI run(void*) {
                                         }
                                     }
                                 } else if (landHeadProbe.frames >= 30 || !hybridOn) {
-                                    diag_log::writef("hybrid: vr->anim (%s) headbone still n/a %d frames, %.0f ms "
+                                    diag_log::writef("hybrid: land headbone (%s) still n/a %d frames, %.0f ms "
                                                      "after the switch",
                                                      landHeadProbe.why, landHeadProbe.frames, afterMs);
                                     landHeadProbe.pending = false;
