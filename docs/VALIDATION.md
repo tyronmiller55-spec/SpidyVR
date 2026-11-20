@@ -1,5 +1,14 @@
 # Validation — 2026-10-27
 
+## November 19: 0.8.7-na-beta2 (feat/087-beta2, test build)
+
+No new game address. AIR DODGE reuses the swing's point-jump path (`Swing::step`, the module's own exports
+`SpidySwingAirDodge` / `SpidyAirDodgeLive`, like `SpidySwingSidestep`). SHOWTIME RAY FAN reuses the native world
+rays (`native_rays.hpp`, 8 slots, the player's body filter) in the head-clearance slots (`appendTrackingRays`).
+FINISHERS read the existing first-person scene gate (`fpScene`) and the named-press pad bits (Y 0x8000, B 0x2000).
+Point jump sounds use the same game sound ids as the ground flip's set (`sound_guard.hpp`). Checklist and log
+evidence: [NA_BETA2.md](NA_BETA2.md).
+
 ## November 19: 0.8.7-na-beta1 becomes CURRENT (feat/087-beta1, session game-vr-20261119-130907)
 
 The owner's session of about 26 minutes from 1:09 PM PT on build `81fc830` (Quest 3S, Meta Quest Link,

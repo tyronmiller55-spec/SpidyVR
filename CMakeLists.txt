@@ -2,7 +2,7 @@ cmake_minimum_required(VERSION 3.24)
 project(Spidy VERSION 0.8.7 LANGUAGES C CXX)
 # The version players see (the launcher, the log's build line, the modules' version strings): the NA beta of
 # 0.8.7 (beta polish D8). The numbers stay 0.8.7 for the update check and the version resource.
-set(SPIDY_VERSION_LABEL "${PROJECT_VERSION}-na-beta1")
+set(SPIDY_VERSION_LABEL "${PROJECT_VERSION}-na-beta2")
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_EXTENSIONS OFF)
