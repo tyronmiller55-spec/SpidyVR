@@ -3,7 +3,7 @@
 A test build for the owner (branch `feat/087-beta2`, from `feat/087-beta1` 9e8d7cb). It is **not** the testers'
 CURRENT: that stays [0.8.7-na-beta1](NA_BETA1.md) until the owner asks. What changed: [CHANGELOG.md](CHANGELOG.md).
 Every feature stays on; settings files from before take migration revision 15 (AIR DODGE, SHOWTIME RAY FAN and
-STICKY HANDSTANDS come on once; a 0 chosen after it stays). No existing numeric default changed; WALL JUMP SOUND
+STICKY HANDSTANDS come on once; a 0 chosen after it stays) and 16 (FULL-LENGTH SWING LINES, Nov 20). No existing numeric default changed; WALL JUMP SOUND
 stays SOUND A. No new game address: everything below reuses hooks already in [REFERENCE.md](REFERENCE.md) and
 [VALIDATION.md](VALIDATION.md).
 
@@ -39,6 +39,26 @@ stays SOUND A. No new game address: everything below reuses hooks already in [RE
    the palms for a moment does not step down (`handstand: sticky: palms off the floor, held for the off grace`).
    The arms still have to be up.
 
+6. **Wrist shooters (SHOOTERS: LOCKED TO ARM, Nov 20).** Tilt the hand toward the palm: the web line leaves the
+   forearm toward the palm (up to 45 deg). Tilt it toward the back of the hand, or hold it straight: the line
+   stays on the forearm. Both hands. Log: `forearm sign: L/R +N deg (positive toward palm: the line follows it;
+   toward the back: on the forearm ...)`.
+7. **Full-length swing lines (NA · WEB SHOOTERS, FULL-LENGTH SWING LINES, Nov 20).** Swing in toward the anchor:
+   the web keeps its length and the extra hangs and swings as rope instead of the line shrinking. Reel in with the
+   trigger: it shortens by what you reel. The swing itself should feel exactly as before. Log on each catch and
+   (once a second) while reeling: `swing line: L caught drawn X m, line Y m (slack S m), swing rope R m, ...`.
+   Check that the slack never pokes through the hand or flickers, and how a very long web looks (past 30 m of
+   slack the rest is not drawn).
+
+## What the beta2 sessions showed (game-vr-20261119-170012 and -171657, build 4b13b66)
+
+- Point jump sounds: 151 of 155 point jumps played 4 of 4 of the game's jump sounds; 4 stood down for the game's
+  own. Air dodge: never fired (every air B came with a chord, a held web or a spider-sense dodge). Ray fan: pulled
+  the camera to 2.0 and 2.7 m at a wall; lag at most 3.6 m at 21 m/s. Handstands: no catch - every window failed
+  "not inverted enough" (most touchdowns under 15 deg; catchDegrees 100). Finisher: one Y+B finisher held to the
+  end. Forearm sign: as the owner said (fixed above). The second session ended in a game access violation with
+  1.0 GB RAM and 2.4 GB page file free (free commit as low as 238 MB). Full notes: the playtest's ANALYSIS.md.
+
 ## New settings
 
 | Setting | Tab | Default | ini |
@@ -46,6 +66,7 @@ stays SOUND A. No new game address: everything below reuses hooks already in [RE
 | AIR DODGE | NA · KICKS & COMBAT | ON | `air_dodge=1`, `air_dodge_speed=9` (3-20 m/s), `air_dodge_chord_ms=50` (0-200), `air_dodge_cooldown_ms=500` (100-3000) |
 | SHOWTIME RAY FAN | NA · SHOWTIME | ON | `showtime_ray_fan=1`, `showtime_speed_lead_pct=60` (0-100) |
 | STICKY HANDSTANDS | NA · BODY & LEGS | ON | `handstand_sticky=1`, `handstand_sticky_grace_ms=400` (250-1000) |
+| FULL-LENGTH SWING LINES | NA · WEB SHOOTERS | ON | `swing_line_full_length=1` |
 
 ## Known limits
 

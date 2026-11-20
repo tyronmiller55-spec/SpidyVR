@@ -28,6 +28,20 @@ numeric default changed, WALL JUMP SOUND stays SOUND A, and no new game address.
   held 0.4 s (beta1's t=657.9 catch dropped after 0.26 s when the rig re-placed hands and head together, now
   taken as a move); once caught the hands may lift 1.5x higher and for 0.15 s before it ends. Arms up stays
   required.
+- **Wrist shooters the right way round (Nov 20, t80u).** With LOCKED TO ARM, the line had taken the wrist's learned
+  resting angle (beta1 log: 22-38 deg; the beta2 sessions: median 28 L / 32 R), so it sat off the forearm at rest
+  and in a back-of-hand tilt and came in line on a palm-side tilt - the owner's "inverted". Now the line stays on
+  the forearm at rest and tilted toward the back of the hand, and a palm-side tilt offsets it toward the palm (up
+  to 45 deg, eased), both hands (`spherical_aim::ArmLine`, a core test pins the direction).
+- **Full-length swing lines** (NA · WEB SHOOTERS, `swing_line_full_length`, on; migration rev 16; Nov 20, t81u).
+  Swing webs had been drawn straight from the hand to the anchor, so they shortened as he swung in (the swing
+  takes its rope in, SwingConfig::taut; the beta2 session's ropes lost a median 71% between catch and release).
+  Now the drawn line keeps the length it had when the web caught; the length it does not need hangs as slack,
+  laid by the combat webs' rope (tether::Rope: 24 particles, 8 substeps, gravity, no world collision) through the
+  game rope's 6 hand points, or a sag curve if that cannot run. Only the trigger's reel shortens it, one-for-one;
+  past the drawn length (taut) it is the line; a new web starts again; slack past 30 m is not drawn. Looks only:
+  the swing's physics is unchanged. Not over edges, in flight, on a grab's tether or with one web in both hands.
+  Log: `swing line: L caught|reel drawn X m, line Y m (slack S m), swing rope R m, reeled in N m, laid by ...`.
 - **NA Help** pages for each, **version** 0.8.7-na-beta2 (the version resource stays 0.8.7).
 
 **0.8.7-na-beta1 (November 19, branch feat/087-beta1 from 966a812): the beta polish pass,**
