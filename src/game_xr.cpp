@@ -6365,7 +6365,7 @@ DWORD WINAPI run(void*) {
                                 // W2/W3 (D11): turned by the player's learned wrist angle (capped at 45 deg), and
                                 // the controller's direction past 60 deg (an arm behind the back or overhead).
                                 if (values.sphericalAim)
-                                    webLine = armLines[i].update(webLine, forearmModels[i], aimNow, dt);
+                                    webLine = armLines[i].update(webLine, forearmModels[i], aimNow, dt, static_cast<int>(i));
                                 else
                                     armLines[i].reset();
                                 const bool haveLine =
@@ -6440,8 +6440,8 @@ DWORD WINAPI run(void*) {
                                         diag_log::write(line);
                                     if (logNow || diagNow)
                                         diag_log::writef(
-                                            "forearm sign: %s %+.1f deg (positive toward palm, treated as "
-                                            "out; inward cap %.0f)%s",
+                                            "forearm sign: %s %+.1f deg (positive toward palm: the line "
+                                            "follows it; toward the back: on the forearm; inward cap %.0f)%s",
                                             i ? "R" : "L", static_cast<double>(signedDeg),
                                             static_cast<double>(limit),
                                             clamped ? ", inward capped" : "");

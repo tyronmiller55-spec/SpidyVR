@@ -4,6 +4,7 @@
 #include "spidy/showtime_fan.hpp"
 #include "spidy/showtime_rig.hpp"
 #include "spidy/handstand.hpp"
+#include "spidy/spherical_aim.hpp"
 #include "spidy/swing.hpp"
 #include "spidy/lab_world.hpp"
 #include "spidy/native_view.hpp"
@@ -33690,6 +33691,45 @@ int main() {
         v.handstandArmsOverHeadCm = 0;
         check(paramsOf(v).armsOverHead == 0.f && std::abs(paramsOf(v).armsBelowHead - .15f) < 1e-6f,
               "ARMS OVER HEAD 0 stays the world test, 5 cm easier");
+    });
+    test("locked to arm: a palm-side tilt offsets the web line, a tilt toward the back of the hand keeps it on the forearm", [&] {
+        namespace sa = spherical_aim;
+        const float d2r = 3.14159265f / 180;
+        const sa::ForearmModel none; // the palm-side rule needs no learned model
+        for (int hand = 0; hand < 2; ++hand) {
+            // The controller pointing along -Z of its aim pose; the hand's palm axis is aim +X (left) / -X (right).
+            const Quat base = Quat::yaw(.3f);
+            const Vec3 forearm = base.rotate({0, 0, -1});
+            const Vec3 palmAxis = base.rotate({hand == 0 ? 1.f : -1.f, 0, 0});
+            // Wrist flexion (toward the palm) turns the controller's line toward the palm axis; extension away.
+            const auto tilted = [&](float degrees) {
+                // Rotating about the aim's up turns -Z toward +X for a negative angle (yaw left is +).
+                const float toward = hand == 0 ? -degrees : degrees;
+                return base * Quat::yaw(toward * d2r);
+            };
+            const Quat flexed = tilted(30), extended = tilted(-30);
+            check(dot(flexed.rotate({0, 0, -1}), palmAxis) > .4f && dot(extended.rotate({0, 0, -1}), palmAxis) < -.4f,
+                  "the test's tilts go toward the palm and toward the back");
+            sa::ArmLine palm, back, rest;
+            Vec3 p{}, b{}, r{};
+            for (int i = 0; i < 90; ++i) {
+                p = palm.update(forearm, none, flexed, 1.f / 90, hand);
+                b = back.update(forearm, none, extended, 1.f / 90, hand);
+                r = rest.update(forearm, none, base, 1.f / 90, hand);
+            }
+            check(std::abs(sa::angleBetween(p, forearm) / d2r - 30) < 1 && std::abs(palm.offsetDegrees - 30) < 1,
+                  hand ? "R: a palm-side tilt did not offset the line by the tilt"
+                       : "L: a palm-side tilt did not offset the line by the tilt");
+            check(dot(p, palmAxis) > .4f, hand ? "R: the offset is not toward the palm" : "L: the offset is not toward the palm");
+            check(sa::angleBetween(b, forearm) < 1e-3f && back.offsetDegrees == 0,
+                  hand ? "R: a tilt toward the back of the hand moved the line off the forearm"
+                       : "L: a tilt toward the back of the hand moved the line off the forearm");
+            check(sa::angleBetween(r, forearm) < 1e-3f, "along the arm: on the forearm");
+            // The palm-side follow is capped at 45 degrees (offsetCapDegrees).
+            sa::ArmLine far;
+            for (int i = 0; i < 90; ++i) far.update(forearm, none, tilted(55), 1.f / 90, hand);
+            check(std::abs(far.offsetDegrees - sa::offsetCapDegrees) < .5f, "the palm-side follow's cap");
+        }
     });
     std::cout << total - failed << '/' << total << " tests passed\n";
     return failed ? 1 : 0;

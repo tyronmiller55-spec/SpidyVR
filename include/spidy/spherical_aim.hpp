@@ -186,13 +186,28 @@ inline float inwardShare(float signedRadians) {
 // the model is ready. Past fallbackDegrees between that line and the controller (a reach-around) the direction is
 // the controller's (the origin stays the wrist) until back under fallbackLeaveDegrees.
 constexpr float offsetCapDegrees = 45, offsetEaseSeconds = .5f, fallbackDegrees = 60, fallbackLeaveDegrees = 50;
+// The hand's palm axis (aim +X for the left hand, -X for the right) across `line`: unit, or zero.
+inline Vec3 palmAxis(Vec3 line, Quat aimNow, int hand) {
+    const Vec3 palm = aimNow.rotate({hand == 0 ? 1.f : -1.f, 0, 0});
+    const Vec3 across = palm - line * dot(palm, line);
+    return length(across) > .1f ? normalized(across) : Vec3{};
+}
+// How far the controller's line points from `line` toward the palm (radians, + palm side, - the back of the
+// hand), in the plane of the line and the palm axis (as web_aim::signedPalmAngle).
+inline float palmSideRadians(Vec3 line, Quat aimNow, int hand) {
+    const Vec3 c = aimNow.rotate({0, 0, -1}), out = palmAxis(line, aimNow, hand);
+    if (!unitish(out) || !unitish(c))
+        return 0.f;
+    return std::atan2(dot(c, out), dot(c, line));
+}
 struct ArmLine {
     float offsetWeight{};
     bool reachAround{};
     float offsetDegrees{}; // the turn applied last (degrees)
     float offDegrees{};    // the corrected line against the controller (degrees, before W3)
-    // `line` the forearm line (unit, or zero: none), `model` the learned forearm, `aimNow` the controller.
-    Vec3 update(Vec3 line, const ForearmModel& model, Quat aimNow, float seconds) {
+    // `line` the forearm line (unit, or zero: none), `model` the learned forearm, `aimNow` the controller,
+    // `hand` 0 left / 1 right for LOCKED TO ARM's palm-side rule below (-1: the learned offset, as in beta1).
+    Vec3 update(Vec3 line, const ForearmModel& model, Quat aimNow, float seconds, int hand = -1) {
         seconds = std::isfinite(seconds) ? std::clamp(seconds, 0.f, .25f) : 0.f;
         if (!unitish(line)) {
             reachAround = false;
@@ -200,9 +215,31 @@ struct ArmLine {
         }
         line = normalized(line);
         const Vec3 controller = normalized(aimNow.rotate({0, 0, -1}));
-        offsetWeight = model.ready() ? std::min(1.f, offsetWeight + seconds / offsetEaseSeconds) : 0.f;
+        const bool palmRule = hand == 0 || hand == 1;
+        offsetWeight =
+            model.ready() || palmRule ? std::min(1.f, offsetWeight + seconds / offsetEaseSeconds) : 0.f;
         offsetDegrees = 0;
-        if (offsetWeight > 0) {
+        if (palmRule) {
+            // PALM SIDE (beta2; the owner, Nov 20 t80u: "with lock to forearm, tilting the hand palm-side
+            // offsets the line, whereas tilting it towards the back of the hand brings it in line. Right now,
+            // it works the opposite way"). Beta1's learned offset (below) turned the arm's line by the
+            // wrist's USUAL angle - in the logs the controller rests 25-35 deg toward the back of the hand
+            // (forearm sign: L median about -30) - so the line sat that far toward the back of the hand at
+            // rest, stayed there tilted back, and a palm-side tilt brought the controller onto it: the
+            // owner's inverted feel. Now the line is the forearm's while the controller points toward the
+            // back of the hand (or along the arm), and follows the controller's tilt toward the palm (the
+            // hand's palm axis: left +X, right -X of the aim) up to offsetCapDegrees.
+            const float side = palmSideRadians(line, aimNow, hand);
+            if (side > 0) {
+                const float turn =
+                    std::min(side, offsetCapDegrees * degree) * offsetWeight * inwardShare(side);
+                const Vec3 palm = palmAxis(line, aimNow, hand);
+                if (unitish(palm)) {
+                    line = normalized(line * std::cos(turn) + palm * std::sin(turn));
+                    offsetDegrees = turn / degree;
+                }
+            }
+        } else if (offsetWeight > 0) {
             const Vec3 forearm = model.world(aimNow);
             const float learned = angleBetween(forearm, controller);
             if (learned > 1e-4f && learned < pi - 1e-3f) {

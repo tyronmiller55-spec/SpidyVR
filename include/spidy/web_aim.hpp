@@ -168,9 +168,10 @@ inline Quat forearmTurn(Vec3 inGrip, Quat gripNow, Quat aimNow, float limitDegre
 // (not a forearm stored on the grip, which turns with the wrist). Palm out
 // — toward that hand's palm axis, left +X / right -X — never goes past the
 // forearm. Palm in may follow the controller up to forearmInwardDegrees.
-// Positive signedPalmAngle is toward the palm and is treated as out; the
-// diag's "forearm sign:" line records it so a playtest can flip the sense
-// if tilting palm-out reads the other way.
+// Positive signedPalmAngle is toward the palm; the diag's "forearm sign:"
+// line records it. LOCKED TO ARM's web line follows a palm-side tilt and stays
+// on the forearm for a tilt toward the back of the hand (spherical_aim::ArmLine,
+// beta2, the owner's t80u); this clamp is called with no inward cap there.
 constexpr float forearmInwardDegrees = 15.f;
 inline float signedPalmAngle(Vec3 forearmWorld, Quat aimNow, int hand) {
     const Vec3 F = normalized(forearmWorld);
