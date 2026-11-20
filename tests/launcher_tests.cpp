@@ -800,6 +800,10 @@ int main() {
                 continue;
             if (key == "handstand_grace_after_ms")
                 continue;
+            if (key == "handstand_sticky")
+                continue;
+            if (key == "handstand_sticky_grace_ms")
+                continue;
             if (key == "showtime_ray_fan")
                 continue;
             if (key == "showtime_speed_lead_pct")

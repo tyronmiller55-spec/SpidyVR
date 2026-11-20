@@ -3,6 +3,7 @@
 #include "spidy/air_dodge.hpp"
 #include "spidy/showtime_fan.hpp"
 #include "spidy/showtime_rig.hpp"
+#include "spidy/handstand.hpp"
 #include "spidy/swing.hpp"
 #include "spidy/lab_world.hpp"
 #include "spidy/native_view.hpp"
@@ -11303,7 +11304,7 @@ int main() {
                            "the row is not the launcher's switch");
                  }
              check(found == 1, "the row is not there once");
-             check(static_cast<unsigned>(Item::enemyTypes) + 6 == static_cast<unsigned>(Item::helpPage) &&
+             check(static_cast<unsigned>(Item::enemyTypes) + 7 == static_cast<unsigned>(Item::helpPage) &&
                        vr_settings::lastItem == Item::helpPage,
                    "enemy types is not the last setting (NA HELP's pages follow it)");
              vr_settings::Values on;
@@ -24951,7 +24952,7 @@ int main() {
         // then (still November 14) HAND GRAB STRENGTH and HOLD COST, then AIR KICKS, AIM and SPIN.
         // then (still November 14) WEB TETHERS, TETHER POINTS and TETHER STEPS, then GROUND KICKS, ENEMY JOINTS and ENEMY LIMB ZONES.
         // Polish pass: HEADSET FIRST, ANIM HEAD RIDE and SHOULDER LIMIT (launcher rows) after those.
-        constexpr size_t rowsAfter = 81 + na_help::pageCount; // + HAND GRAB CLASS RULES, JUMP SOUNDS, WALL JUMP SOUND and NA HELP's pages (beta polish) // + the handoff tune's seven (Nov 18), + DIRECTIONAL FLIPS and MIDAIR POSES (Nov 18 1:09 PM) (Nov 19: + AIR DODGE, SHOWTIME RAY FAN)
+        constexpr size_t rowsAfter = 82 + na_help::pageCount; // + HAND GRAB CLASS RULES, JUMP SOUNDS, WALL JUMP SOUND and NA HELP's pages (beta polish) // + the handoff tune's seven (Nov 18), + DIRECTIONAL FLIPS and MIDAIR POSES (Nov 18 1:09 PM) (Nov 19: + AIR DODGE, SHOWTIME RAY FAN, STICKY HANDSTANDS)
         // // (Nov 14: + AIR UPRIGHT TIME, POINT JUMP BULLET, FALL TO SPIDYVR, AIR LANDING BLEND, AIR LANDING RELEASE) + PUNCH AUTO-TARGET (4 rows), JUMP PULL (5 rows) and the handstand balance (4 rows), SHOWTIME (3 rows, then 8, Nov 14)
         check(all.size() == firstRealistic + std::size(realistic) + rowsAfter,
               "the realistic flips' rows are not the last but the appended ones");
@@ -25226,7 +25227,8 @@ int main() {
                 (row.item >= Item::airCorrect && !(row.item >= Item::landingBlend && row.item <= Item::airPoses) &&
                  // Beta polish A4/A5: JUMP SOUNDS and WALL JUMP SOUND, NA · POINT JUMP's in-game rows; AIR DODGE (beta 2).
                  row.item != Item::pointJumpSound && row.item != Item::wallJumpSound && row.item != Item::airDodge &&
-                 row.item != Item::showtimeRayFan);
+                 row.item != Item::showtimeRayFan &&
+                 row.item != Item::handstandSticky);
             check(row.place == (row.item == Item::view ? Place::page
                                 : row.item == Item::helpPage ? Place::tab
                                 : naRetired(row.item)    ? Place::launcher
@@ -25236,7 +25238,7 @@ int main() {
                   "a row in the wrong place");
         }
         check(std::count_if(all.begin(), all.end(), [](const Row& r) { return r.place == Place::tab; }) ==
-                  176 + na_help::pageCount, // (beta 2: +2 AIR DODGE, SHOWTIME RAY FAN) (beta polish A4/A5: +2 JUMP SOUNDS, WALL JUMP SOUND) (beta polish M5: + NA HELP's pages) (beta polish M4: +9 NA rows players tune in the headset, -4 retired legacy rows hidden) (Nov 18 1:09 PM: +2 DIRECTIONAL FLIPS, MIDAIR POSES) (Nov 18: +7 HANDOFF TIMING) (Nov 14: +15 SHOWTIME) November 11: +8 (SHOOTERS, LOCK STRENGTH, CAMERA MOTION, PITCH, ROLL, BOB x2, HEAD ANGLE), -5 old wrist rows; +6 POINT JUMP; November 12: +1 PUNCH VIEW EASE, +3 MOVE HAPTICS, VIEW YAW SOURCE, SOUND TRACE, +2 JUMP TO SPIDYVR, AIR VIEW EASE, +2 ANIM YAW SWAY, TURN-IN-PLACE ANGLE, +4 PASSIVE LEGS, PASSIVE COUPLING, AIR CROUCH, REACH SPREAD
+                  177 + na_help::pageCount, // (beta 2: +3 AIR DODGE, SHOWTIME RAY FAN, STICKY HANDSTANDS) (beta polish A4/A5: +2 JUMP SOUNDS, WALL JUMP SOUND) (beta polish M5: + NA HELP's pages) (beta polish M4: +9 NA rows players tune in the headset, -4 retired legacy rows hidden) (Nov 18 1:09 PM: +2 DIRECTIONAL FLIPS, MIDAIR POSES) (Nov 18: +7 HANDOFF TIMING) (Nov 14: +15 SHOWTIME) November 11: +8 (SHOOTERS, LOCK STRENGTH, CAMERA MOTION, PITCH, ROLL, BOB x2, HEAD ANGLE), -5 old wrist rows; +6 POINT JUMP; November 12: +1 PUNCH VIEW EASE, +3 MOVE HAPTICS, VIEW YAW SOURCE, SOUND TRACE, +2 JUMP TO SPIDYVR, AIR VIEW EASE, +2 ANIM YAW SWAY, TURN-IN-PLACE ANGLE, +4 PASSIVE LEGS, PASSIVE COUPLING, AIR CROUCH, REACH SPREAD
               "the tab's own rows");
         check(all[1].item == Item::webStyle && std::strcmp(all[1].title, "WEB STYLE") == 0 &&
                   all[1].choices.size() == 2 && std::strcmp(all[1].choices[0], "REALISTIC") == 0 &&
@@ -25588,6 +25590,7 @@ int main() {
                   "marker_switch_hold_ms=150\n"
                   "air_dodge=1\nair_dodge_speed=9\nair_dodge_chord_ms=50\nair_dodge_cooldown_ms=500\n"
                   "showtime_ray_fan=1\nshowtime_speed_lead_pct=60\n"
+                  "handstand_sticky=1\nhandstand_sticky_grace_ms=400\n"
                   "log_level=1\n"
                   "movement_defaults=15\n",
               "the defaults' text");
@@ -33078,7 +33081,7 @@ int main() {
     test("Native Animation: combined menu inventory and upstream-compatible v39 settings packet", [] {
         using namespace vr_settings;
         const auto& all = rows();
-        check(all.size() == 237 + na_help::pageCount && static_cast<unsigned>(lastItem) < 256, "row/Item bounds");
+        check(all.size() == 238 + na_help::pageCount && static_cast<unsigned>(lastItem) < 256, "row/Item bounds");
         std::array<unsigned, 256> seen{};
         size_t start = all.size();
         for (size_t i = 0; i < all.size(); ++i) {
@@ -33580,6 +33583,114 @@ int main() {
                    "the speed lead cut the lag at 25 m/s by over 1.5 m");
              check(std::abs(lagAt(6, .6f) - lagAt(6, 0)) < 1e-4f, "slow, the lead does nothing");
          });
+    test("sticky handstands: the rig's re-placement is no loss, 0.4 s grace, a hold that does not drop at once, an easier entry", [&] {
+        using namespace handstand;
+        const float hdt = 1.f / 90;
+        const auto params = [](bool sticky) {
+            Params p;
+            p.enabled = true;
+            p.leap = false;
+            p.tipIn = false;
+            p.sticky = sticky;
+            if (sticky)
+                p.trackingGrace = std::max(p.trackingGrace, p.stickyGrace);
+            return p;
+        };
+        const auto pose = [&] {
+            Handstand::Input in;
+            in.seconds = hdt;
+            in.vrAir = true;
+            in.tracked = true;
+            in.floorPalms = 3;
+            in.palms[0] = {-.2f, 0, 0};
+            in.palms[1] = {.2f, 0, 0};
+            in.headKnown = true;
+            in.head = {0, .45f, .05f};
+            in.bodyUp = {0, -1, 0};
+            return in;
+        };
+        const auto caught = [&](Handstand& h, const Params& p) {
+            auto in = pose();
+            bool c = h.update(in, p).caughtNow;
+            for (int i = 0; i < 9; ++i) h.update(in, p);
+            return c;
+        };
+        // The logged t=657.9 catch: palms and head moved together by 1.2 m in a frame (the rig re-placed).
+        for (const bool sticky : {false, true}) {
+            const Params p = params(sticky);
+            Handstand h;
+            check(caught(h, p), "the catch");
+            auto moved = pose();
+            const Vec3 shift{.3f, -1.2f, .4f};
+            moved.palms[0] = moved.palms[0] + shift;
+            moved.palms[1] = moved.palms[1] + shift;
+            moved.head = moved.head + shift;
+            const auto o = h.update(moved, p);
+            if (sticky)
+                check(o.rigMoved && !o.glitch && o.exitNow == Exit::none, "sticky: the rig's move is taken, no glitch");
+            else
+                check(o.glitch && !o.rigMoved, "not sticky: a glitch, as before");
+            if (sticky) {
+                // The palms alone jumping (the head still) is still a glitch.
+                auto alone = moved;
+                alone.palms[0] = alone.palms[0] + Vec3{0, 0, 2.f};
+                alone.palms[1] = alone.palms[1] + Vec3{0, 0, 2.f};
+                check(h.update(alone, p).glitch, "sticky: palms jumping without the head are a glitch");
+            }
+        }
+        // A real loss of 0.30 s (the log's 0.26 s and a little): sticky holds it, the old grace (0.25 s) lets go.
+        const auto lossExit = [&](bool sticky, float seconds) {
+            const Params p = params(sticky);
+            Handstand h;
+            caught(h, p);
+            auto lost = pose();
+            lost.tracked = false;
+            Exit why = Exit::none;
+            for (int i = 0; i < static_cast<int>(seconds / hdt + .5f) && why == Exit::none; ++i)
+                why = h.update(lost, p).exitNow;
+            if (why == Exit::none)
+                why = h.update(pose(), p).exitNow;
+            return why;
+        };
+        check(lossExit(false, .30f) == Exit::tracking, "not sticky: 0.30 s lost lets go");
+        check(lossExit(true, .30f) == Exit::none, "sticky: 0.30 s lost is held and the hands come back");
+        check(lossExit(true, .50f) == Exit::tracking, "sticky: 0.5 s lost still lets go");
+        // The hold's hysteresis: palms off the floor for a frame or two is no step-down; 0.15 s is.
+        const auto offExit = [&](bool sticky, int frames) {
+            const Params p = params(sticky);
+            Handstand h;
+            caught(h, p);
+            for (int i = 0; i < 60; ++i) h.update(pose(), p); // into the balance
+            auto off = pose();
+            off.floorPalms = 0;
+            Exit why = Exit::none;
+            for (int i = 0; i < frames && why == Exit::none; ++i)
+                why = h.update(off, p).exitNow;
+            if (why == Exit::none)
+                why = h.update(pose(), p).exitNow;
+            return why;
+        };
+        check(offExit(false, 1) == Exit::stepDown, "not sticky: a palm lift steps down at once");
+        check(offExit(true, 9) == Exit::none, "sticky: 0.1 s off the floor and back holds");
+        check(offExit(true, 20) == Exit::stepDown, "sticky: 0.2 s off the floor steps down");
+        // The entry from the settings: 5 cm easier, held 0.08 s, the grace 0.4 s; off, as before. Arms up stays.
+        vr_settings::Values v;
+        const auto on = paramsOf(v);
+        check(on.sticky && std::abs(on.armsOverHead - .05f) < 1e-6f && std::abs(on.armsHoldSeconds - .08f) < 1e-6f &&
+                  std::abs(on.trackingGrace - .4f) < 1e-6f && std::abs(on.armsBelowHead - .2f) < 1e-6f,
+              "sticky's entry and grace from the defaults");
+        v.handstandSticky = false;
+        const auto off = paramsOf(v);
+        check(!off.sticky && std::abs(off.armsOverHead - .10f) < 1e-6f && std::abs(off.armsHoldSeconds - .12f) < 1e-6f &&
+                  std::abs(off.trackingGrace - .25f) < 1e-6f,
+              "STICKY HANDSTANDS off: as before");
+        v.handstandSticky = true;
+        v.handstandArmsOverHeadCm = 3;
+        check(std::abs(paramsOf(v).armsOverHead - .02f) < 1e-6f, "the arms-up test never below 2 cm");
+        v.handstandArmsOverHeadCm = 0;
+        check(paramsOf(v).armsOverHead == 0.f && std::abs(paramsOf(v).armsBelowHead - .15f) < 1e-6f,
+              "ARMS OVER HEAD 0 stays the world test, 5 cm easier");
+    });
     std::cout << total - failed << '/' << total << " tests passed\n";
     return failed ? 1 : 0;
 }

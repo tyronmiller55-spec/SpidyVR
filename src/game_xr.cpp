@@ -1542,6 +1542,7 @@ DWORD WINAPI run(void*) {
         Vec3 showtimeFeetLast{};
         showtime::OrbitRig showtimeRig;
         showtime::OrbitRig::Output showtimeCam{};
+        bool handstandOffWas{}; // STICKY HANDSTANDS: the palms were off the floor while holding (logged once)
         // SHOWTIME RAY FAN (showtime_fan.hpp): where the rig last wanted the fan (ms), the batch's limit as
         // last read (ms), and for the log the fan rays sent and the batches read with a hit.
         Vec3 showtimeFanFrom{}, showtimeFanTo{};
@@ -4597,6 +4598,14 @@ DWORD WINAPI run(void*) {
                                              frame.hands[0].valid && frame.hands[1].valid ? 1 : 0, hs.palmGaps[0],
                                              hs.palmGaps[1]);
                         handstandGlitchWas = hs.glitch;
+                        // STICKY HANDSTANDS (handstand.hpp): the rig re-placed hands and head together (kept, not a loss),
+                        // and a hold riding out palms off the floor.
+                        if (hs.rigMoved)
+                            diag_log::writef("handstand: sticky: the palms moved with the head (the rig re-placed them): "
+                                             "kept as the support, no tracking loss");
+                        if (values.handstandSticky && hs.offFor > 0.f && !handstandOffWas)
+                            diag_log::write("handstand: sticky: palms off the floor, held for the off grace");
+                        handstandOffWas = hs.offFor > 0.f && values.handstandSticky;
                         // ABSURD ARMS (handstand.hpp): readings that cannot be, thrown out, once per run of them.
                         if (hs.absurd && !handstandAbsurdWas)
                             diag_log::writef("handstand: absurd arm readings ignored (palm left %d right %d, from the "

@@ -135,6 +135,26 @@ struct Params {
     // number or past sanePalmReach, is no reading: the frame counts as untracked (no window, no catch; a catch rides it
     // out as a tracking glitch).
     float sanePalmReach = 3.f, sanePalmFloor = 5.f;
+    // STICKY HANDSTANDS (beta2; the owner, Nov 19 t79u: "making handstands \"sticky\" or easy to get into
+    // would help"; the na-beta1 log's t=657.9 catch ended "tracking lost" after 0.26 s: the palms and the
+    // head moved together by 1.2 m - the rig re-placed, not the hands - and the glitch test kept comparing to
+    // palms left behind). Off here, on from the settings (handstand_sticky, on by default):
+    //  - a frame whose palms jumped together WITH the head (each palm-from-head within rigShift of the good
+    //  one's) is the
+    //    rig moving, not a glitch: the good palms follow it, and the catch's re-seed moves the body with
+    //    them;
+    //  - a real loss is held for stickyGrace (0.4 s; handstand_sticky_grace_ms) instead of trackingGrace
+    //  (0.25 s);
+    //  - holding, the palms count on the floor from holdReachScale x floorReach (1.5 x), and must be off it
+    //  for
+    //    offSeconds (0.15 s) before a step-down or a miss - the in and out of the hold are not the same line;
+    //  - the entry is wider: the arms-up test in force is entrySlack (0.05 m) easier (ARMS OVER HEAD at least
+    //  0.02 m;
+    //    with it at 0, the world test at least 0.05 m) and its hold at most stickyHold (0.08 s). The arms
+    //    still have to be up.
+    bool sticky = false;
+    float rigShift = .3f, stickyGrace = .4f, holdReachScale = 1.5f, offSeconds = .15f;
+    float entrySlack = .05f, stickyHold = .08f;
 };
 
 template <class V> Params paramsOf(const V& v) {
@@ -160,6 +180,18 @@ template <class V> Params paramsOf(const V& v) {
     p.tipIn = v.handstandTipIn;
     p.tipInDegrees = static_cast<float>(std::clamp(v.handstandTipInDeg, 100, 180));
     p.tipInReach = std::clamp(v.handstandTipInReachCm, 60, 300) / 100.f;
+    // STICKY HANDSTANDS (above): the wider entry and the longer holds, from the settings.
+    p.sticky = v.handstandSticky;
+    if (p.sticky) {
+        p.stickyGrace = std::clamp(v.handstandStickyGraceMs, 250, 1000) / 1000.f;
+        p.trackingGrace = std::max(p.trackingGrace, p.stickyGrace);
+        // The arms-up test in force (ARMS OVER HEAD, or with it at 0 the world test) is the one made easier.
+        if (p.armsOverHead > 0.f)
+            p.armsOverHead = std::max(.02f, p.armsOverHead - p.entrySlack);
+        else
+            p.armsBelowHead = std::max(.05f, p.armsBelowHead - p.entrySlack);
+        p.armsHoldSeconds = std::min(p.armsHoldSeconds, p.stickyHold);
+    }
     return p;
 }
 
@@ -502,6 +534,10 @@ class Handstand {
         // TRACKING LOST: this frame's palms were a glitch (untracked, not finite, or a jump past glitchJump): the last
         // good support held.
         bool glitch{};
+        // STICKY: this frame's palms jumped with the head (the rig moved; taken as good), and how long they
+        // have been off the floor while holding (s).
+        bool rigMoved{};
+        float offFor{};
         // ABSURD ARMS: this frame's readings thrown out, bits 0/1 the palms, 2/3 the palms from the head (0 none).
         unsigned absurd{};
         unsigned failedNow{}, closedFailed{};
@@ -537,9 +573,17 @@ class Handstand {
         const float dt = std::isfinite(in.seconds) ? std::clamp(in.seconds, 0.f, .1f) : 0.f;
         exit_ = Exit::none;
         // TRACKING LOST: a glitching palm keeps the last good support.
-        const bool palmsGood = in.tracked && finite(in.palms[0]) && finite(in.palms[1]) &&
-                               (!haveGood_ || (length(in.palms[0] - goodPalms_[0]) <= p.glitchJump &&
-                                               length(in.palms[1] - goodPalms_[1]) <= p.glitchJump));
+        const bool palmsFinite = in.tracked && finite(in.palms[0]) && finite(in.palms[1]);
+        const bool palmsNear = !haveGood_ || (length(in.palms[0] - goodPalms_[0]) <= p.glitchJump &&
+                                              length(in.palms[1] - goodPalms_[1]) <= p.glitchJump);
+        // STICKY: the palms jumped together with the head - the rig re-placed, not the hands.
+        const bool headNow = in.headKnown && finite(in.head);
+        const bool rigMoved = p.sticky && palmsFinite && !palmsNear && haveGood_ && haveGoodHead_ &&
+                              headNow &&
+                              length((in.palms[0] - in.head) - (goodPalms_[0] - goodHead_)) <= p.rigShift &&
+                              length((in.palms[1] - in.head) - (goodPalms_[1] - goodHead_)) <= p.rigShift;
+        out.rigMoved = rigMoved;
+        const bool palmsGood = palmsFinite && (palmsNear || rigMoved);
         const bool holding = state_ == State::catching || state_ == State::balance;
         if (palmsGood || !holding || !haveGood_) {
             support_.a = in.palms[0];
@@ -548,8 +592,11 @@ class Handstand {
                 goodPalms_[0] = in.palms[0];
                 goodPalms_[1] = in.palms[1];
                 haveGood_ = true;
+                haveGoodHead_ = headNow;
+                if (headNow)
+                    goodHead_ = in.head;
             } else if (!holding) {
-                haveGood_ = false;
+                haveGood_ = haveGoodHead_ = false;
             }
         } else {
             support_.a = goodPalms_[0];
@@ -610,9 +657,10 @@ class Handstand {
                 const float gap = finite(in.palms[i]) ? in.palms[i].y - in.floorY : 1e9f;
                 palmGap = std::max(palmGap, gap);
                 out.palmGaps[i] = gap < 1e8f ? gap : NAN;
-                const float reach = state_ == State::off ? (tipIntent ? std::max(p.touchdownReach, p.tipInReach)
-                                                                      : p.touchdownReach)
-                                                         : p.floorReach;
+                const float reach =
+                    state_ == State::off
+                        ? (tipIntent ? std::max(p.touchdownReach, p.tipInReach) : p.touchdownReach)
+                        : p.floorReach * (p.sticky ? p.holdReachScale : 1.f);
                 // The touchdown's reach path also needs the arms up: ARMS OVER HEAD, the palm over the head as the
                 // player holds it (no tracked offset: no test; or both over it within the grace); 0, the old world
                 // test - the palm clearly below the head (no head: no test).
@@ -733,6 +781,7 @@ class Handstand {
             last_.x = last_.xi = x0;
             gripCarried_ = in.grip;
             out.gripCarried = gripCarried_;
+            offFor_ = 0.f;
             state_ = State::catching;
             age_ = 0;
             push_.reset();
@@ -746,6 +795,11 @@ class Handstand {
         case State::catching:
         case State::balance: {
             age_ += dt;
+            // STICKY: the palms off the floor for offSeconds before that ends it (none otherwise: at once, as
+            // before).
+            offFor_ = palmsDown ? 0.f : offFor_ + dt;
+            const float offNeed = p.sticky ? p.offSeconds : 0.f;
+            out.offFor = offFor_;
             if (!in.grip)
                 gripCarried_ = false; // released once: a new squeeze lets go
             Exit why = Exit::none;
@@ -761,10 +815,10 @@ class Handstand {
                 why = Exit::grip;
             else if (pushed > p.pushSpeed && palmsDown)
                 why = Exit::push;
-            else if (!palmsDown && state_ == State::catching &&
+            else if (!palmsDown && offFor_ >= offNeed && state_ == State::catching &&
                      age_ > (touchdownCaught_ ? p.touchdownSettle : p.catchGrace))
                 why = Exit::missed;
-            else if (!palmsDown && state_ == State::balance)
+            else if (!palmsDown && offFor_ >= offNeed && state_ == State::balance)
                 why = Exit::stepDown;
             if (why == Exit::none && !out.glitch) {
                 if (state_ == State::catching && age_ >= p.catchGrace && both)
@@ -876,6 +930,11 @@ class Handstand {
     Vec3 goodPalms_[2]{};
     bool haveGood_{};
     float lostFor_{};
+    // STICKY: the head when the good palms were read, and how long the palms have been off the floor while
+    // holding.
+    Vec3 goodHead_{};
+    bool haveGoodHead_{};
+    float offFor_{};
 };
 
 // The view's lean on the hands: the body's up straight down, turned toward

@@ -749,6 +749,12 @@ struct Values {
     // velocity the pivot is carried by at 25 m/s (none below 8 m/s), for less lag at swing speed; 0: as before.
     bool showtimeRayFan = true;
     int showtimeSpeedLeadPct = 60;
+    // STICKY HANDSTANDS (beta2, handstand.hpp Params::sticky; the owner, Nov 19 t79u: "making handstands \"sticky\" or
+    // easy to get into would help"): the arms-up tests 5 cm easier and held 0.08 s, a tracking loss held
+    // handstand_sticky_grace_ms (400; was 250), the rig's re-placement taken as a move, not a loss, and the hold's
+    // floor line 1.5 x HANDSTAND HOLD with 0.15 s off the floor before it ends. The arms still have to be up.
+    bool handstandSticky = true;
+    int handstandStickyGraceMs = 400;
     // HERO ATTACK SOUND (beta polish A2; attack_sound, spidy_vr.ini only, no menu row): one of the game's sounds played
     // on Spidey as a punch is thrown or a kick starts (at most one a hand every 250 ms, hit_sound.hpp): the id's 32
     // bits as a signed decimal. 0 (the default): none - the game's own whoosh and effort ids are not captured yet
@@ -1190,6 +1196,8 @@ enum class Item : uint8_t {
     airDodge,
     // SHOWTIME RAY FAN (beta2).
     showtimeRayFan,
+    // STICKY HANDSTANDS (beta2).
+    handstandSticky,
     // NA HELP (beta polish M5, na_help.hpp): the NA · HELP tab's pages, one item for all of them (a page has no
     // value: one choice, READ). Its rows are the catalog's last.
     helpPage,
@@ -1224,8 +1232,8 @@ struct Row {
     Place place{};
 };
 // Stable row/setting numbers; categories below determine presentation order.
-// The catalog: the settings' rows (237), then NA HELP's pages.
-inline constexpr size_t settingRowCount = 237;
+// The catalog: the settings' rows (238), then NA HELP's pages.
+inline constexpr size_t settingRowCount = 238;
 inline constexpr size_t rowTotal = settingRowCount + na_help::pageCount;
 const std::array<Row, rowTotal>& rows();
 const Row* rowFor(Item);

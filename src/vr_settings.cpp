@@ -1096,6 +1096,8 @@ template <class V> auto switchOf(Item item, V& v) -> decltype(&v.aimMarkers) {
         return &v.airDodge;
     case Item::showtimeRayFan:
         return &v.showtimeRayFan;
+    case Item::handstandSticky:
+        return &v.handstandSticky;
     case Item::airLandingBlend:
         return &v.airLandingBlend;
     case Item::airLandingRelease:
@@ -1275,6 +1277,7 @@ Values sanitized(Values v) {
     v.showtimeFadeMs = std::clamp(v.showtimeFadeMs, 0, 400);
     v.showtimeBody = std::clamp(v.showtimeBody, 0, 3);
     v.wallJumpSound = std::clamp(v.wallJumpSound, 0, 2);
+    v.handstandStickyGraceMs = std::clamp(v.handstandStickyGraceMs, 250, 1000);
     v.showtimeSpeedLeadPct = std::clamp(v.showtimeSpeedLeadPct, 0, 100);
     v.airDodgeSpeed = std::clamp(v.airDodgeSpeed, 3, 20);
     v.airDodgeChordMs = std::clamp(v.airDodgeChordMs, 0, 200);
@@ -2061,6 +2064,10 @@ const std::array<Row, rowTotal>& rows() {
          "SHOWTIME RAY FAN",
          "SHOWTIME's camera pulls in before walls and keeps up with him at speed.",
          {}},
+        {Item::handstandSticky,
+         "STICKY HANDSTANDS",
+         "Handstands catch more easily and ride out a short tracking loss. Arms still up.",
+         {}},
     }};
     static const std::array<Row, rowTotal> all = [] {
         std::array<Row, rowTotal> a{};
@@ -2212,7 +2219,7 @@ const std::array<Screen, categoryCount>& screens() {
         Item::directionalFlips, Item::airCorrect,
         Item::handstand, Item::handstandAssist, Item::handstandGrace, Item::handstandFall, Item::handstandSupport,
         Item::handstandDamping, Item::handstandLeap, Item::handstandPushGain,
-        Item::handstandPushMax, Item::handstandHeight, Item::handstandGain, Item::handstandEyeDrop,
+        Item::handstandPushMax, Item::handstandHeight, Item::handstandGain, Item::handstandEyeDrop, Item::handstandSticky,
         Item::wallBrake, Item::gripFling, Item::physicalTethers, Item::tetherParticles, Item::tetherSubsteps,
     };
     // NA · KICKS & COMBAT (beta polish M4): the kicks, the punch and jump assists, the hand grab.
@@ -2317,6 +2324,7 @@ const char* inactiveReason(Item item, const Values& v) {
     case Item::handstand:
         return !v.realisticFlips ? "Handstands need REALISTIC FLIPS on." : nullptr;
     case Item::handstandAssist:
+    case Item::handstandSticky:
     case Item::handstandFall:
     case Item::handstandPushGain:
     case Item::handstandPushMax:
@@ -3236,6 +3244,8 @@ constexpr TabOnly tabOnly[] = {
     {"air_dodge_cooldown_ms", nullptr, &Values::airDodgeCooldownMs},
     {"showtime_ray_fan", &Values::showtimeRayFan, nullptr},
     {"showtime_speed_lead_pct", nullptr, &Values::showtimeSpeedLeadPct},
+    {"handstand_sticky", &Values::handstandSticky, nullptr},
+    {"handstand_sticky_grace_ms", nullptr, &Values::handstandStickyGraceMs},
     {"log_level", nullptr, &Values::logLevel},
     {"movement_defaults", nullptr, &Values::movementDefaults},
 };
@@ -3421,6 +3431,7 @@ Values withMovementDefaults(Values v, std::string_view text) {
         // this only makes the rule the same as revision 14's (a 0 chosen after this revision stays).
         v.airDodge = true;
         v.showtimeRayFan = true;
+        v.handstandSticky = true;
     }
     v.movementDefaults = movementDefaultsRevision;
     return sanitized(v);

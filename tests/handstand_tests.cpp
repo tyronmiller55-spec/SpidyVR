@@ -953,6 +953,7 @@ int main() {
     {
         vr_settings::Values d;
         d.realisticFlips = true;
+        d.handstandSticky = false; // the grace and tip-in's own numbers (STICKY HANDSTANDS: core_tests)
         const Params P = paramsOf(d);
         check(d.handstandReachCm == 160 && std::abs(P.touchdownReach - 1.6f) < 1e-6f &&
                   std::abs(P.armsGraceBefore - .3f) < 1e-6f && std::abs(P.touchdownGrace - .4f) < 1e-6f && P.tipIn &&
@@ -1285,7 +1286,10 @@ int main() {
         old.armsOverHead = 0.f;
         check(!attempt(100.f, overhead, old) && !attempt(117.f, overhead, old) && attempt(150.f, overhead, old),
               "0: the old world test (hands over the head refused at 100 and 117, caught at 150)");
-        check(handstand::paramsOf(vr_settings::Values{}).armsOverHead == .10f, "the setting's default reaches the params");
+        // (STICKY HANDSTANDS, on by default since beta2, takes 5 cm off it: core_tests' sticky test.)
+        vr_settings::Values plain;
+        plain.handstandSticky = false;
+        check(handstand::paramsOf(plain).armsOverHead == .10f, "the setting's default reaches the params");
     }
     std::printf("handstand: %d checks passed\n", passed);
     return 0;

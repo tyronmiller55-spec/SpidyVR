@@ -188,6 +188,7 @@ A crash code 0xC0000409 as the game closes is known and harmless. Logs are in th
 | HANDSTAND BALANCE HEIGHT | 95 CM | launcher |
 | HANDSTAND BALANCE GAIN | 500% | launcher |
 | HANDSTAND VIEW DROP | 90 CM | launcher |
+| STICKY HANDSTANDS | ON | game and launcher |
 | WALL BRAKE (EXPERIMENTAL) | ON | launcher |
 | GRIP FLING (EXPERIMENTAL) | ON | launcher |
 | WEB TETHERS (EXPERIMENTAL) | ON | launcher |

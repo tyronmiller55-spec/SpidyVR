@@ -2880,6 +2880,14 @@ void App::options(ImVec2 origin, ImVec2 size) {
                 "How far your view comes down toward the floor when you are upside down (0 to 120 cm). 90 "
                 "by default. Needs Realistic flips.",
                 S(150), [&] { tabCombo("##handstandeye", Item::handstandEyeDrop); });
+            settingOption(
+                Item::handstandSticky, "Sticky handstands",
+                "Easier to get into and harder to drop: the hands-over-head test is 5 cm easier and needs "
+                "0.08 s, "
+                "a tracking loss is held for 0.4 s (spidy_vr.ini: handstand_sticky_grace_ms), the headset "
+                "re-placing your hands and head together is no loss, and once caught the hands may lift a "
+                "little higher and for 0.15 s before it ends. Your arms still have to be up. On by default.",
+                S(42), [&] { tabToggle("##handstandsticky", Item::handstandSticky); });
         });
         // BODY & LEGS / KICKS & COMBAT (beta polish M4): the NA rows that lived on MOVEMENT and FLIPS.
         group(legsPage, 0, "Flips (Native Animation)", [&] {
