@@ -43,6 +43,14 @@ stays SOUND A. No new game address: everything below reuses hooks already in [RE
    forearm toward the palm (up to 45 deg). Tilt it toward the back of the hand, or hold it straight: the line
    stays on the forearm. Both hands. Log: `forearm sign: L/R +N deg (positive toward palm: the line follows it;
    toward the back: on the forearm ...)`.
+   **To settle the direction**, stand still, hold each arm straight out in front with the palm facing inward,
+   and for about 3 s each: (a) keep the wrist straight, (b) bend the wrist toward the palm, (c) bend it toward
+   the back of the hand. Do the left hand, then the right, and note in chat which tilts looked wrong. Each half second
+   the log writes `shooter check: L palm-side +N, offset N, web vs arm N, vs controller N deg; arm palm on aim +X
+   +0.NN (L expects +)`. On (b), palm-side should read about +30 to +60 and the web should follow (web vs arm ≈ the
+   offset). On (c), palm-side should read negative with offset 0 and web vs arm about 0. If (b) reads negative,
+   or the arm palm value has the wrong sign for that hand, the palm axis is flipped in the game's frame for that
+   hand.
 7. **Full-length swing lines (NA · WEB SHOOTERS, FULL-LENGTH SWING LINES, Nov 20).** Swing in toward the anchor:
    the web keeps its length and the extra hangs and swings as rope instead of the line shrinking. Reel in with the
    trigger: it shortens by what you reel. The swing itself should feel exactly as before. Log on each catch and

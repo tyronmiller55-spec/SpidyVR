@@ -1480,6 +1480,7 @@ DWORD WINAPI run(void*) {
         std::array<spherical_aim::ForearmModel, 2> forearmModels;
         std::array<spherical_aim::Blend, 2> forearmBlends;
         std::array<spherical_aim::ArmLine, 2> armLines; // W2/W3: the wrist's learned offset, the reach-around fallback
+        float shooterCheckSeconds[2]{};                 // "shooter check:" twice a second a hand
         std::array<Quat, 2> webTurnsNow{}, forearmTargets{};
         bool webTurnsOn{};
         uint64_t forearmJob{};
@@ -6369,6 +6370,7 @@ DWORD WINAPI run(void*) {
                                     forearmBlends[i].reset();
                                 // W2/W3 (D11): turned by the player's learned wrist angle (capped at 45 deg), and
                                 // the controller's direction past 60 deg (an arm behind the back or overhead).
+                                const Vec3 armLineIn = webLine; // the arm's line before the palm-side rule
                                 if (values.sphericalAim)
                                     webLine = armLines[i].update(webLine, forearmModels[i], aimNow, dt, static_cast<int>(i));
                                 else
@@ -6398,6 +6400,49 @@ DWORD WINAPI run(void*) {
                                 // WRIST SHOOTERS without MODEL FOREARM takes all of it.
                                 webTurnsNow[i] = forearmAims[i].turn(shooter_lock::strength(values));
                                 turns.turns[i] = webTurnsNow[i];
+                                // SHOOTER CHECK (beta2, Nov 20 t83u: "web shooters were still off"): the
+                                // palm-side rule's own numbers in one short line (the "forearm aim:" line is
+                                // cut before its palm.x), twice a second: the controller against the arm's
+                                // line (+ toward the palm the rule assumes: the aim's +X left, -X right), the
+                                // offset it gave, where the web finally goes against the arm and the
+                                // controller, and the drawn arm's palm on the aim's +X - an independent check
+                                // of that assumption (left expects +, right -). Tilt each hand toward the
+                                // palm and then the back to read it.
+                                shooterCheckSeconds[i] += dt;
+                                if (shooterCheckSeconds[i] >= .5f && input.hands[i].tracked) {
+                                    shooterCheckSeconds[i] = 0;
+                                    const Vec3 web = (aimNow * webTurnsNow[i]).rotate({0, 0, -1});
+                                    const Vec3 ctrl = aimNow.rotate({0, 0, -1});
+                                    const bool armOk = spherical_aim::unitish(armLineIn);
+                                    const float modelPalm =
+                                        f.valid && finite(f.palm) && length(f.palm) > .5f
+                                            ? dot(normalized(f.palm), aimNow.rotate({1, 0, 0}))
+                                            : 9.f;
+                                    char palmText[24];
+                                    if (modelPalm < 2.f)
+                                        std::snprintf(palmText, sizeof palmText, "%+.2f",
+                                                      static_cast<double>(modelPalm));
+                                    else
+                                        std::snprintf(palmText, sizeof palmText, "n/a");
+                                    diag_log::writef(
+                                        "shooter check: %s palm-side %+.0f, offset %.0f, web vs arm %.0f, vs "
+                                        "controller "
+                                        "%.0f deg; arm palm on aim +X %s (%s expects %s)%s",
+                                        i ? "R" : "L",
+                                        armOk ? static_cast<double>(
+                                                    spherical_aim::palmSideRadians(armLineIn, aimNow,
+                                                                                   static_cast<int>(i)) *
+                                                    57.29578f)
+                                              : 0.0,
+                                        static_cast<double>(armLines[i].offsetDegrees),
+                                        armOk ? static_cast<double>(
+                                                    spherical_aim::angleBetween(web, armLineIn) * 57.29578f)
+                                              : -1.0,
+                                        static_cast<double>(spherical_aim::angleBetween(web, ctrl) *
+                                                            57.29578f),
+                                        palmText, i ? "R" : "L", i ? "-" : "+",
+                                        armLines[i].reachAround ? ", reach-around" : "");
+                                }
                                 // In the diagnostics only as it changes
                                 // (diag_log::ChangeOnly); the timeline as before.
                                 const bool diagNow = forearmDiag[i].update(

@@ -33825,6 +33825,23 @@ int main() {
         const std::string chosen = "swing_line_full_length=0\nmovement_defaults=16\n";
         check(!withMovementDefaults(withTabOnly({}, chosen), chosen).swingLineFullLength, "a 0 chosen after it moved");
     });
+    test("shooter check: the logged forearm sign and the palm-side rule read the same palm, both hands", [&] {
+        const float d2r = 3.14159265f / 180;
+        for (int hand = 0; hand < 2; ++hand)
+            for (float yaw = -60; yaw <= 60; yaw += 15)
+                for (float pitch = -30; pitch <= 30; pitch += 30) {
+                    const Quat base = Quat::yaw(.4f);
+                    const Vec3 arm = base.rotate({0, 0, -1});
+                    const Quat aim = base * Quat::yaw(yaw * d2r) * Quat::around({1, 0, 0}, pitch * d2r);
+                    const float logged = web_aim::signedPalmAngle(arm, aim, hand);
+                    const float rule = spherical_aim::palmSideRadians(arm, aim, hand);
+                    check(std::abs(logged - rule) < 1e-3f, "the log and the rule disagree on the palm side");
+                    // The left palm faces the aim's +X, the right -X (OpenXR's grip: +X away from the left palm,
+                    // into the right one): a yaw toward +X is palm-side for the left hand only.
+                    if (std::abs(yaw) >= 15 && pitch == 0)
+                        check((logged > 0) == ((yaw < 0) == (hand == 0)), "the palm side's sign per hand");
+                }
+    });
     std::cout << total - failed << '/' << total << " tests passed\n";
     return failed ? 1 : 0;
 }
