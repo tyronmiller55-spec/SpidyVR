@@ -25,13 +25,14 @@ inline constexpr Page pages[] = {
     {"TRY THE BETA", "  (2) WHAT TO TRY",
      "Showtime (X+B), kicks (Y+X then a flick), hand grab, tethers, point jump (A+B)."},
     {"TRY THE BETA", "  (3) ALSO TRY",
-     "Wall brake, grip fling, mid-air landings, a handstand and a swing kick."},
+     "Wall brake, grip fling, mid-air landings, air dodge (B), handstands, swing kick."},
     {"TRY THE BETA", "  (4) WHAT TO REPORT",
      "If something feels off, post the newest reports folder files on Discord."},
 
     {"JUMPS & POINT JUMP", "JUMPS & POINT JUMP", "A jumps: the game's own jump. Hold A to charge it."},
     {"JUMPS & POINT JUMP", "  (2) POINT JUMP", "A + B together (or hold B, then A) charges a POINT JUMP where you look."},
     {"JUMPS & POINT JUMP", "  (3) CHARGE", "Tap for a hop, hold up to 1 s for a leap. A grip cancels the charge."},
+    {"JUMPS & POINT JUMP", "  (4) AIR DODGE", "In SpidyVR's air, B alone dodges the way the left stick points (rest: back)."},
 
     {"FLIPS (A TAPS)", "FLIPS (A TAPS)", "Hold the left stick a way and tap A (under 180 ms): a flip that way."},
     {"FLIPS (A TAPS)", "  (2) FRONT AND BACK", "Right stick flicked down then A: backflip; flicked up then A: front flip."},
@@ -57,6 +58,7 @@ inline constexpr Page pages[] = {
 
     {"PUNCHES", "PUNCHES", "Punch for real. PUNCH TRACK steers a blow onto the enemy in its cone (120 deg)."},
     {"PUNCHES", "  (2) THE VIEW", "A punch hands the body to SpidyVR briefly; the view eases back after."},
+    {"PUNCHES", "  (3) FINISHERS", "Y + B when the game offers it is the game's finisher; SpidyVR waits it out."},
 
     {"X: THROW & INTERACT", "X: THROW & INTERACT", "X sends the game's LB + RB where the game shows it: throw, pick up, rip."},
     {"X: THROW & INTERACT", "  (2) INSTANT", "X and Y stay instant on the ground. Hold X for the gadget wheel elsewhere."},
@@ -72,9 +74,11 @@ inline constexpr Page pages[] = {
     {"HANDSTAND", "HANDSTAND", "Fall inverted onto both palms (REALISTIC FLIPS on): you balance on your hands."},
     {"HANDSTAND", "  (2) MOVING", "Lean to walk, push off to leap, let go or lean past FALL ANGLE to drop."},
     {"HANDSTAND", "  (3) TUNING", "BALANCE ASSIST steadies you; SWAY TIME is how long you may be off balance."},
+    {"HANDSTAND", "  (4) STICKY", "STICKY HANDSTANDS: easier to catch (arms still up), short tracking drops held."},
 
     {"SHOWTIME", "SHOWTIME", "SHOWTIME: hold X + B for 200 ms to step outside Spider-Man."},
     {"SHOWTIME", "  (2) ORBIT", "The right stick orbits; let go to return. WATCH ONLY keeps your hands still."},
+    {"SHOWTIME", "  (3) WALLS", "SHOWTIME RAY FAN pulls the camera in before walls and trails less at speed."},
 
     {"CAMERA & STABILIZATION", "CAMERA & STABILIZATION", "How much the animation moves your view: CAMERA MOTION, PITCH, ROLL, BOB."},
     {"CAMERA & STABILIZATION", "  (2) SMOOTHING", "How smoothly: STABILIZATION and the LIGHT / HEAVY times. Lower = calmer."},
