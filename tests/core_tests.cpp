@@ -1,6 +1,8 @@
 #include "spidy/aim_steady.hpp"
 #include "spidy/finisher_handoff.hpp"
 #include "spidy/air_dodge.hpp"
+#include "spidy/showtime_fan.hpp"
+#include "spidy/showtime_rig.hpp"
 #include "spidy/swing.hpp"
 #include "spidy/lab_world.hpp"
 #include "spidy/native_view.hpp"
@@ -11301,7 +11303,7 @@ int main() {
                            "the row is not the launcher's switch");
                  }
              check(found == 1, "the row is not there once");
-             check(static_cast<unsigned>(Item::enemyTypes) + 5 == static_cast<unsigned>(Item::helpPage) &&
+             check(static_cast<unsigned>(Item::enemyTypes) + 6 == static_cast<unsigned>(Item::helpPage) &&
                        vr_settings::lastItem == Item::helpPage,
                    "enemy types is not the last setting (NA HELP's pages follow it)");
              vr_settings::Values on;
@@ -24949,7 +24951,7 @@ int main() {
         // then (still November 14) HAND GRAB STRENGTH and HOLD COST, then AIR KICKS, AIM and SPIN.
         // then (still November 14) WEB TETHERS, TETHER POINTS and TETHER STEPS, then GROUND KICKS, ENEMY JOINTS and ENEMY LIMB ZONES.
         // Polish pass: HEADSET FIRST, ANIM HEAD RIDE and SHOULDER LIMIT (launcher rows) after those.
-        constexpr size_t rowsAfter = 80 + na_help::pageCount; // + HAND GRAB CLASS RULES, JUMP SOUNDS, WALL JUMP SOUND and NA HELP's pages (beta polish) // + the handoff tune's seven (Nov 18), + DIRECTIONAL FLIPS and MIDAIR POSES (Nov 18 1:09 PM) (Nov 19: + AIR DODGE)
+        constexpr size_t rowsAfter = 81 + na_help::pageCount; // + HAND GRAB CLASS RULES, JUMP SOUNDS, WALL JUMP SOUND and NA HELP's pages (beta polish) // + the handoff tune's seven (Nov 18), + DIRECTIONAL FLIPS and MIDAIR POSES (Nov 18 1:09 PM) (Nov 19: + AIR DODGE, SHOWTIME RAY FAN)
         // // (Nov 14: + AIR UPRIGHT TIME, POINT JUMP BULLET, FALL TO SPIDYVR, AIR LANDING BLEND, AIR LANDING RELEASE) + PUNCH AUTO-TARGET (4 rows), JUMP PULL (5 rows) and the handstand balance (4 rows), SHOWTIME (3 rows, then 8, Nov 14)
         check(all.size() == firstRealistic + std::size(realistic) + rowsAfter,
               "the realistic flips' rows are not the last but the appended ones");
@@ -25223,7 +25225,8 @@ int main() {
                 // November 14 (air takeover): launcher rows; HANDOFF TIMING's seven (Nov 18), the game's own tab.
                 (row.item >= Item::airCorrect && !(row.item >= Item::landingBlend && row.item <= Item::airPoses) &&
                  // Beta polish A4/A5: JUMP SOUNDS and WALL JUMP SOUND, NA · POINT JUMP's in-game rows; AIR DODGE (beta 2).
-                 row.item != Item::pointJumpSound && row.item != Item::wallJumpSound && row.item != Item::airDodge);
+                 row.item != Item::pointJumpSound && row.item != Item::wallJumpSound && row.item != Item::airDodge &&
+                 row.item != Item::showtimeRayFan);
             check(row.place == (row.item == Item::view ? Place::page
                                 : row.item == Item::helpPage ? Place::tab
                                 : naRetired(row.item)    ? Place::launcher
@@ -25233,7 +25236,7 @@ int main() {
                   "a row in the wrong place");
         }
         check(std::count_if(all.begin(), all.end(), [](const Row& r) { return r.place == Place::tab; }) ==
-                  175 + na_help::pageCount, // (beta 2: +1 AIR DODGE) (beta polish A4/A5: +2 JUMP SOUNDS, WALL JUMP SOUND) (beta polish M5: + NA HELP's pages) (beta polish M4: +9 NA rows players tune in the headset, -4 retired legacy rows hidden) (Nov 18 1:09 PM: +2 DIRECTIONAL FLIPS, MIDAIR POSES) (Nov 18: +7 HANDOFF TIMING) (Nov 14: +15 SHOWTIME) November 11: +8 (SHOOTERS, LOCK STRENGTH, CAMERA MOTION, PITCH, ROLL, BOB x2, HEAD ANGLE), -5 old wrist rows; +6 POINT JUMP; November 12: +1 PUNCH VIEW EASE, +3 MOVE HAPTICS, VIEW YAW SOURCE, SOUND TRACE, +2 JUMP TO SPIDYVR, AIR VIEW EASE, +2 ANIM YAW SWAY, TURN-IN-PLACE ANGLE, +4 PASSIVE LEGS, PASSIVE COUPLING, AIR CROUCH, REACH SPREAD
+                  176 + na_help::pageCount, // (beta 2: +2 AIR DODGE, SHOWTIME RAY FAN) (beta polish A4/A5: +2 JUMP SOUNDS, WALL JUMP SOUND) (beta polish M5: + NA HELP's pages) (beta polish M4: +9 NA rows players tune in the headset, -4 retired legacy rows hidden) (Nov 18 1:09 PM: +2 DIRECTIONAL FLIPS, MIDAIR POSES) (Nov 18: +7 HANDOFF TIMING) (Nov 14: +15 SHOWTIME) November 11: +8 (SHOOTERS, LOCK STRENGTH, CAMERA MOTION, PITCH, ROLL, BOB x2, HEAD ANGLE), -5 old wrist rows; +6 POINT JUMP; November 12: +1 PUNCH VIEW EASE, +3 MOVE HAPTICS, VIEW YAW SOURCE, SOUND TRACE, +2 JUMP TO SPIDYVR, AIR VIEW EASE, +2 ANIM YAW SWAY, TURN-IN-PLACE ANGLE, +4 PASSIVE LEGS, PASSIVE COUPLING, AIR CROUCH, REACH SPREAD
               "the tab's own rows");
         check(all[1].item == Item::webStyle && std::strcmp(all[1].title, "WEB STYLE") == 0 &&
                   all[1].choices.size() == 2 && std::strcmp(all[1].choices[0], "REALISTIC") == 0 &&
@@ -25584,6 +25587,7 @@ int main() {
                   "marker_turn_rate_dps=360\n"
                   "marker_switch_hold_ms=150\n"
                   "air_dodge=1\nair_dodge_speed=9\nair_dodge_chord_ms=50\nair_dodge_cooldown_ms=500\n"
+                  "showtime_ray_fan=1\nshowtime_speed_lead_pct=60\n"
                   "log_level=1\n"
                   "movement_defaults=15\n",
               "the defaults' text");
@@ -33074,7 +33078,7 @@ int main() {
     test("Native Animation: combined menu inventory and upstream-compatible v39 settings packet", [] {
         using namespace vr_settings;
         const auto& all = rows();
-        check(all.size() == 236 + na_help::pageCount && static_cast<unsigned>(lastItem) < 256, "row/Item bounds");
+        check(all.size() == 237 + na_help::pageCount && static_cast<unsigned>(lastItem) < 256, "row/Item bounds");
         std::array<unsigned, 256> seen{};
         size_t start = all.size();
         for (size_t i = 0; i < all.size(); ++i) {
@@ -33483,6 +33487,98 @@ int main() {
              spidy::Swing swing;
              swing.airDodge({5, 0, 0});
              check(swing.airDodges() == 0, "queued is not taken");
+         });
+    test("showtime ray fan: the head's free slots, the nearest hit less a margin, fast in and slow out, less "
+         "lag at speed",
+         [&] {
+             using namespace showtime_fan;
+             // The slots: aim 2 + hands 2 + roof leave three; no hands, five; never more than five, none when
+             // full.
+             check(room(2, 2, true) == 3 && room(2, 0, true) == 5 && room(0, 0, false) == 5 &&
+                       room(6, 2, true) == 0,
+                   "the fan's room among the eight slots");
+             std::array<native_rays::Ray, maxRays> fan{};
+             const Vec3 from{0, 1, 0}, to{0, 1.3f, 2.5f};
+             unsigned n = rays(from, to, 3, fan);
+             check(n == 3 && fan[0].tag == 40 && fan[2].tag == 42, "three rays, tags 40 on");
+             check(std::abs(fan[0].distance - length(to - from)) < 1e-4f &&
+                       length(fan[0].direction - normalized(to - from)) < 1e-4f,
+                   "the centre ray goes to the camera's place");
+             const Vec3 end1 = fan[1].origin + fan[1].direction * fan[1].distance;
+             check(std::abs(length(end1 - to) - ring) < 1e-3f, "the ring's rays end 0.25 m from the place");
+             check(rays(from, from + Vec3{0, 0, .1f}, 5, fan) == 0 && rays(from, to, 0, fan) == 0,
+                   "no fan too close or none");
+             // The nearest hit, less 0.25 m, as a share; misses and other tags change nothing.
+             native_rays::Hit hits[4]{};
+             hits[0].ray = {from, 2.f, {0, 0, 1}, 40};
+             hits[0].count = 0; // a miss
+             hits[1].ray = {from, 2.f, {0, 0, 1}, 41};
+             hits[1].count = 1;
+             hits[1].fraction = .5f; // 1 m
+             hits[2].ray = {from, 4.f, {0, 0, 1}, 42};
+             hits[2].count = 1;
+             hits[2].fraction = .5f;                  // 2 m of 4
+             hits[3].ray = {from, 2.f, {0, 0, 1}, 3}; // the head's, not the fan's
+             hits[3].count = 1;
+             hits[3].fraction = .01f;
+             auto l = select(hits, 4);
+             check(l.ok && l.rays == 3 && l.hits == 2 && std::abs(l.ratio - .375f) < 1e-4f && l.tag == 41,
+                   "the nearest fan hit less the margin");
+             hits[1].fraction = .05f;
+             check(select(hits, 4).ratio == 0.f, "a hit inside the margin: as close as it goes");
+             check(!select(hits + 3, 1).ok, "no fan rays, no limit");
+             check(speedLead(5, .6f) == 0 && std::abs(speedLead(25, .6f) - .6f) < 1e-5f &&
+                       speedLead(30, 2) == 1 && speedLead(NAN, .6f) == 0,
+                   "the speed lead's ramp from 8 to 25 m/s");
+             // The rig: a fan limit pulls in fast, and its going lets out slowly.
+             using namespace showtime;
+             RigParams p;
+             OrbitRig rig;
+             rig.begin({0, 0, 0}, 0, p);
+             OrbitRig::Input in;
+             in.seconds = 1 / 72.f;
+             in.feet = {0, 0, 0};
+             OrbitRig::Output o;
+             for (int i = 0; i < 72; ++i)
+                 o = rig.update(in, p);
+             const auto away = [&](const OrbitRig::Output& out) {
+                 return std::hypot(out.position.x, out.position.z);
+             };
+             check(std::abs(away(o) - p.distance) < .05f, "open space: the full distance");
+             check(length(o.fanTo - Vec3{o.position.x, o.position.y, o.position.z}) < .05f &&
+                       std::abs(o.fanFrom.y - 1) < 1e-4f,
+                   "the fan goes from his pelvis to the wanted place");
+             in.raysOk = true;
+             in.rayRatio = .4f;
+             for (int i = 0; i < 11; ++i)
+                 o = rig.update(in, p); // 0.15 s
+             check(away(o) < p.distance * .4f + .1f && o.rayLimit > 0,
+                   "a wall pulled the camera in within 0.15 s");
+             in.rayRatio = 1.f;
+             for (int i = 0; i < 11; ++i)
+                 o = rig.update(in, p);
+             check(away(o) < p.distance * .75f, "the camera let out slowly, not at once");
+             for (int i = 0; i < 216; ++i)
+                 o = rig.update(in, p);
+             check(std::abs(away(o) - p.distance) < .05f, "and back to the full distance in time");
+             // SPEED LEAD: at 25 m/s the lag shrinks; at 6 m/s it is as before.
+             const auto lagAt = [&](float v, float lead) {
+                 RigParams q;
+                 q.speedLead = lead;
+                 OrbitRig r;
+                 r.begin({0, 0, 0}, 0, q);
+                 OrbitRig::Input k;
+                 k.seconds = 1 / 72.f;
+                 OrbitRig::Output out;
+                 for (int i = 0; i < 720; ++i) {
+                     k.feet = {v * static_cast<float>(i) / 72.f, 0, 0};
+                     out = r.update(k, q);
+                 }
+                 return out.lag;
+             };
+             check(lagAt(25, .6f) < lagAt(25, 0) - 1.5f,
+                   "the speed lead cut the lag at 25 m/s by over 1.5 m");
+             check(std::abs(lagAt(6, .6f) - lagAt(6, 0)) < 1e-4f, "slow, the lead does nothing");
          });
     std::cout << total - failed << '/' << total << " tests passed\n";
     return failed ? 1 : 0;

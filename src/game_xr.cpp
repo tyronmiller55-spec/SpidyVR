@@ -1542,6 +1542,13 @@ DWORD WINAPI run(void*) {
         Vec3 showtimeFeetLast{};
         showtime::OrbitRig showtimeRig;
         showtime::OrbitRig::Output showtimeCam{};
+        // SHOWTIME RAY FAN (showtime_fan.hpp): where the rig last wanted the fan (ms), the batch's limit as
+        // last read (ms), and for the log the fan rays sent and the batches read with a hit.
+        Vec3 showtimeFanFrom{}, showtimeFanTo{};
+        uint64_t showtimeFanAtMs{}, showtimeFanSeenMs{};
+        showtime_fan::Limit showtimeFan{};
+        uint32_t showtimeFanSent{}, showtimeFanBatches{}, showtimeFanHitBatches{};
+        uint64_t showtimeFanSerial{};
         showtime::Latch showtimeLatch;
         showtime::Auto showtimeAuto;
         showtime::Why showtimeWhy{};
@@ -5374,9 +5381,41 @@ DWORD WINAPI run(void*) {
                                 headroomSeen = 0.f;
                                 ++landingRays;
                             }
-                            appendTrackingRays(aim, head, hands, roof, collisionRayPhase++);
+                            // SHOWTIME RAY FAN: while Showtime's camera is out, the head's slots carry the
+                            // fan.
+                            const uint64_t fanNowMs = GetTickCount64();
+                            if (values.showtimeRayFan && showtimeMachine.state() == showtime::State::out &&
+                                fanNowMs - showtimeFanAtMs < 200) {
+                                std::array<native_rays::Ray, showtime_fan::maxRays> fan{};
+                                const unsigned made = showtime_fan::rays(showtimeFanFrom, showtimeFanTo,
+                                                                         showtime_fan::maxRays, fan);
+                                showtimeFanSent += appendShowtimeFanRays(aim, fan, made, hands, roof);
+                            } else {
+                                appendTrackingRays(aim, head, hands, roof, collisionRayPhase++);
+                            }
                         }
                         check(submitRays(&aim), "Controller world rays");
+                        // SHOWTIME RAY FAN: the nearest of the fan's hits in the batch the bridge last
+                        // finished.
+                        if (rayResults && values.showtimeRayFan &&
+                            showtimeMachine.state() == showtime::State::out) {
+                            const auto sequence = rayResults->sequence;
+                            if (!(sequence & 1)) {
+                                MemoryBarrier();
+                                const native_rays::Data sample = *rayResults;
+                                MemoryBarrier();
+                                if (rayResults->sequence == sequence && sample.serial != showtimeFanSerial) {
+                                    const auto limit = showtime_fan::select(sample.hits, sample.count);
+                                    if (limit.ok) {
+                                        showtimeFanSerial = sample.serial;
+                                        showtimeFan = limit;
+                                        showtimeFanSeenMs = GetTickCount64();
+                                        ++showtimeFanBatches;
+                                        showtimeFanHitBatches += limit.hits ? 1u : 0u;
+                                    }
+                                }
+                            }
+                        }
                         // What the roof's ray found, from the batch the bridge
                         // last finished (the head's go to the rig before its
                         // update, above).
@@ -12879,6 +12918,11 @@ DWORD WINAPI run(void*) {
                         rp.snap = values.showtimeTurn == 1;
                         rp.turnRadians = values.smoothTurn > 0 ? static_cast<float>(values.smoothTurn) * 0.017453292f : 2.0943951f;
                         rp.vignette = values.showtimeVignette;
+                        // SHOWTIME RAY FAN's speed lead (showtime_speed_lead_pct; 0 with the fan off: as
+                        // before).
+                        rp.speedLead = values.showtimeRayFan
+                                           ? static_cast<float>(values.showtimeSpeedLeadPct) / 100.f
+                                           : 0.f;
                         if (showtimeInit) {
                             showtimeInit = false;
                             showtimeRef = {frame.head.position, screenAhead(frame.head, 0).orientation};
@@ -12899,7 +12943,14 @@ DWORD WINAPI run(void*) {
                         float stockYaw{};
                         ri.stockOk = game_fp::stockSeat(stockPlace, stockYaw);
                         ri.stock = stockPlace;
+                        const uint64_t fanMs = GetTickCount64();
+                        ri.raysOk =
+                            values.showtimeRayFan && showtimeFan.ok && fanMs - showtimeFanSeenMs < 250;
+                        ri.rayRatio = ri.raysOk ? showtimeFan.ratio : 1.f;
                         showtimeCam = showtimeRig.update(ri, rp);
+                        showtimeFanFrom = showtimeCam.fanFrom;
+                        showtimeFanTo = showtimeCam.fanTo;
+                        showtimeFanAtMs = fanMs;
                         const Mat4 stFrame = showtime::levelFrame(showtimeCam.position, showtimeCam.yaw);
                         game_fp::showtimeFrame(&stFrame);
                         game_fp::showtimeHead(values.showtimeBody != showtime::bodyAsInPlay);
@@ -12907,11 +12958,21 @@ DWORD WINAPI run(void*) {
                         saved.showtimeFade = std::max({showtimeOut.fade, showtimeCam.blink, showtimeCam.closeFade});
                         if (const uint64_t nowMs = GetTickCount64(); nowMs - showtimeLogMs >= 1000) {
                             showtimeLogMs = nowMs;
-                            diag_log::writef("showtime: cam d=%.1f m lag=%.1f m v=%.1f m/s w=%.1f rad/s vignette=%.2f collide=%s "
-                                             "pull=%.1f m fade=%s",
-                                             rp.distance, showtimeCam.lag, showtimeCam.speed, showtimeCam.omega,
-                                             showtimeCam.vignette, ri.stockOk ? "stock" : "none", showtimeCam.pull,
-                                             showtimeCam.closeFade > .01f ? "close" : "none");
+                            diag_log::writef(
+                                "showtime: cam d=%.1f m lag=%.1f m v=%.1f m/s w=%.1f rad/s vignette=%.2f "
+                                "collide=%s "
+                                "pull=%.1f m fade=%s rays=%.1f m (%u of %u hit, %u batches %u with a hit, %u "
+                                "sent) "
+                                "lead=%.2f",
+                                rp.distance, showtimeCam.lag, showtimeCam.speed, showtimeCam.omega,
+                                showtimeCam.vignette,
+                                ri.raysOk && ri.stockOk ? "rays+stock"
+                                : ri.raysOk             ? "rays"
+                                : ri.stockOk            ? "stock"
+                                                        : "none",
+                                showtimeCam.pull, showtimeCam.closeFade > .01f ? "close" : "none",
+                                showtimeCam.rayLimit, showtimeFan.hits, showtimeFan.rays, showtimeFanBatches,
+                                showtimeFanHitBatches, showtimeFanSent, showtimeCam.lead);
                         }
                         headset_smoothing::liveLevel.store(0, std::memory_order_relaxed);
                         headset_smoothing::publish({});

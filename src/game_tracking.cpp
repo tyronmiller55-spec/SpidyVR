@@ -28,6 +28,37 @@ void appendTrackingRays(native_rays::Command& command, const std::array<HeadClea
     append(roof);
     if (command.count) command.leaseMs = 100;
 }
+unsigned appendShowtimeFanRays(native_rays::Command& command, const std::array<native_rays::Ray, 5>& fan,
+                               unsigned fanCount, const std::array<native_rays::Ray, 2>& hands,
+                               native_rays::Ray roof) {
+    // As appendTrackingRays: each stands in for the player's body (Command::bodyRays), so the camera stops
+    // where he would and passes what he passes.
+    const auto valid = [](const native_rays::Ray& ray) {
+        return ray.distance >= .01f && std::isfinite(ray.distance) && finite(ray.origin) &&
+               finite(ray.direction) && std::abs(length(ray.direction) - 1) < .001f;
+    };
+    const auto append = [&](native_rays::Ray ray) {
+        if (command.count < native_rays::capacity && valid(ray)) {
+            command.bodyRays |= 1u << command.count;
+            command.rays[command.count++] = ray;
+            return true;
+        }
+        return false;
+    };
+    unsigned handRays = 0;
+    for (const auto& ray : hands)
+        handRays += valid(ray) ? 1u : 0u;
+    const unsigned room = showtime_fan::room(command.count, handRays, valid(roof));
+    unsigned sent = 0;
+    for (unsigned i = 0; i < fanCount && i < fan.size() && sent < room; ++i)
+        sent += append(fan[i]) ? 1u : 0u;
+    for (const auto& ray : hands)
+        append(ray);
+    append(roof);
+    if (command.count)
+        command.leaseMs = 100;
+    return sent;
+}
 native_rays::Command controllerAimRays(const Input& input, uint64_t serial) {
     native_rays::Command out;
     out.serial = serial;

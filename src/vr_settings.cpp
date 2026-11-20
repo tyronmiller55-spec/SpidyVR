@@ -1094,6 +1094,8 @@ template <class V> auto switchOf(Item item, V& v) -> decltype(&v.aimMarkers) {
         return &v.pointJumpSound;
     case Item::airDodge:
         return &v.airDodge;
+    case Item::showtimeRayFan:
+        return &v.showtimeRayFan;
     case Item::airLandingBlend:
         return &v.airLandingBlend;
     case Item::airLandingRelease:
@@ -1273,6 +1275,7 @@ Values sanitized(Values v) {
     v.showtimeFadeMs = std::clamp(v.showtimeFadeMs, 0, 400);
     v.showtimeBody = std::clamp(v.showtimeBody, 0, 3);
     v.wallJumpSound = std::clamp(v.wallJumpSound, 0, 2);
+    v.showtimeSpeedLeadPct = std::clamp(v.showtimeSpeedLeadPct, 0, 100);
     v.airDodgeSpeed = std::clamp(v.airDodgeSpeed, 3, 20);
     v.airDodgeChordMs = std::clamp(v.airDodgeChordMs, 0, 200);
     v.airDodgeCooldownMs = std::clamp(v.airDodgeCooldownMs, 100, 3000);
@@ -2054,6 +2057,10 @@ const std::array<Row, rowTotal>& rows() {
          "AIR DODGE",
          "In SpidyVR's air, B dodges the way the left stick points. Stick at rest: back.",
          {}},
+        {Item::showtimeRayFan,
+         "SHOWTIME RAY FAN",
+         "SHOWTIME's camera pulls in before walls and keeps up with him at speed.",
+         {}},
     }};
     static const std::array<Row, rowTotal> all = [] {
         std::array<Row, rowTotal> a{};
@@ -2236,7 +2243,7 @@ const std::array<Screen, categoryCount>& screens() {
         Item::showtimeFollow,
         Item::showtimeVignette,
         Item::showtimeSlowMo,
-        Item::showtimeLatch,
+        Item::showtimeLatch, Item::showtimeRayFan,
     };
     // HANDOFF TIMING (Nov 18, the owner: "give me smaller increments to set"): the handoff and landing glides'
     // times, speed and distance, a tab of their own (NATIVE ANIMATION's holds 20 rows already).
@@ -3227,6 +3234,8 @@ constexpr TabOnly tabOnly[] = {
     {"air_dodge_speed", nullptr, &Values::airDodgeSpeed},
     {"air_dodge_chord_ms", nullptr, &Values::airDodgeChordMs},
     {"air_dodge_cooldown_ms", nullptr, &Values::airDodgeCooldownMs},
+    {"showtime_ray_fan", &Values::showtimeRayFan, nullptr},
+    {"showtime_speed_lead_pct", nullptr, &Values::showtimeSpeedLeadPct},
     {"log_level", nullptr, &Values::logLevel},
     {"movement_defaults", nullptr, &Values::movementDefaults},
 };
@@ -3411,6 +3420,7 @@ Values withMovementDefaults(Values v, std::string_view text) {
         // testing): the beta2 features come on once. They are new keys, so an older file has none of them;
         // this only makes the rule the same as revision 14's (a 0 chosen after this revision stays).
         v.airDodge = true;
+        v.showtimeRayFan = true;
     }
     v.movementDefaults = movementDefaultsRevision;
     return sanitized(v);

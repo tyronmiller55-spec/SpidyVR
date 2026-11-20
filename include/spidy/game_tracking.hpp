@@ -6,6 +6,7 @@
 #include "native_view.hpp"
 #include "realistic_flip.hpp"
 #include "recoil.hpp"
+#include "showtime_fan.hpp"
 #include "swing.hpp"
 #include "tracking.hpp"
 #include "view_ease.hpp"
@@ -25,6 +26,12 @@ native_rays::Command controllerAimRays(const Input&, uint64_t serial);
 void appendTrackingRays(native_rays::Command&, const std::array<HeadClearance::Ray, 5>& head,
                         const std::array<native_rays::Ray, 2>& hands, native_rays::Ray roof,
                         unsigned phase);
+// SHOWTIME RAY FAN (showtime_fan.hpp): while Showtime's camera is out, the head's slots carry the fan instead
+// - as many of `fan`'s first `fanCount` as the aim, the hands' contact and the roof leave - then the hands
+// and the roof as above. Returns the fan rays sent.
+unsigned appendShowtimeFanRays(native_rays::Command&, const std::array<native_rays::Ray, 5>& fan,
+                               unsigned fanCount, const std::array<native_rays::Ray, 2>& hands,
+                               native_rays::Ray roof);
 struct GameMotionFrame {
     bool active{}, releaseWebs = true;
     bool controlledFlipControls{}; // A-toggled left-stick mode, separate from basic right-stick flips

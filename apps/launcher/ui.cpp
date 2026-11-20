@@ -3092,6 +3092,13 @@ void App::options(ImVec2 origin, ImVec2 size) {
                    "Darkens the edges of the view as the camera itself moves fast (a swing, a zip): Light 25%, "
                    "Strong 45%. It follows the camera's speed, never your head.",
                    S(150), [&] { tabCombo("##showtimevignette", Item::showtimeVignette); });
+            settingOption(
+                Item::showtimeRayFan, "Ray fan",
+                "While Showtime's camera is out, the native world rays the head uses in play go from Spidey "
+                "to where the camera wants to sit; the nearest wall pulls it in fast and lets it out slowly, "
+                "so it stays out of walls. At swing speed the camera is also carried with him, so it trails "
+                "less (spidy_vr.ini: showtime_speed_lead_pct, 60; 0: as before). On by default.",
+                S(42), [&] { tabToggle("##showtimerayfan", Item::showtimeRayFan); });
             settingOption(Item::showtimeSlowMo, "Slow motion in Showtime",
                    "While you are outside, a click of the left stick starts slow motion as it does in play, "
                    "drains the same meter and ends the same way. Off: the click does nothing out there.",

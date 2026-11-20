@@ -268,3 +268,4 @@ A crash code 0xC0000409 as the game closes is known and harmless. Logs are in th
 | VIGNETTE | LIGHT (DEFAULT) | game and launcher |
 | SLOW-MO IN SHOWTIME | ON | game and launcher |
 | LATCH | OFF (DEFAULT) | game and launcher |
+| SHOWTIME RAY FAN | ON | game and launcher |

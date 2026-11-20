@@ -10,11 +10,15 @@
 //   - the orbit: the stick turns at the player's turn speed, eased in and out over 0.15 s; or in 30 degree steps under a 100 ms
 //     blink (the yaw moves at the blink's black).
 //   - the stick's up and down: the height, -0.5 to +1.5 m in all.
-//   - collision: gated in this build (docs/SHOWTIME.md): only the game's own camera as a pull-in, below.
+//   - collision: the game's own camera as a pull-in (below), and SHOWTIME RAY FAN's nearest hit (showtime_fan.hpp) as a
+//     limit; either pulls in fast (omega 20) and lets out slowly (omega 3).
+//   - SPEED LEAD (beta2): from 8 to 25 m/s the pivot is carried by up to speedLead of his velocity each step before its
+//     spring, so the follow's lag at swing speed (2 v / omega: about 3.5 m logged) shrinks; slower, as before.
 //   - the vignette: from the rig's speed or acceleration (never from head motion), LIGHT 25 % or STRONG 45 %.
 //   - a camera nearer him than 0.8 m fades to black.
 #pragma once
 #include "math.hpp"
+#include "showtime_fan.hpp"
 #include <algorithm>
 #include <cmath>
 
@@ -33,6 +37,7 @@ struct RigParams {
     bool snap = false;         // ORBIT TURN: false smooth, true 30 degree steps
     float turnRadians = 2.09f; // the player's smooth turn speed, rad/s
     int vignette = 1;          // 0 OFF, 1 LIGHT, 2 STRONG
+    float speedLead = 0.f;     // SPEED LEAD: 0..1 of his velocity at 25 m/s (showtime_fan::speedLead)
 };
 inline float horizontalOmega(int follow) {
     return follow <= 0 ? 4.f : follow == 1 ? 6.f : 9.f;
@@ -60,6 +65,8 @@ class OrbitRig {
         bool turning{};        // the orbit is the player's now (out, not fading back)
         bool stockOk{};        // the game's own camera's place was sampled in the last half second
         Vec3 stock{};
+        bool raysOk{};        // SHOWTIME RAY FAN: a fresh fan batch was read
+        float rayRatio = 1.f; // ... and the share of the wanted distance it leaves (showtime_fan::select)
     };
     struct Output {
         Vec3 position{};
@@ -68,6 +75,9 @@ class OrbitRig {
         float blink{};     // 0..1 black, added to the fade
         float closeFade{}; // 0..1 black: the camera is nearer him than minDistance
         float speed{}, lag{}, omega{}, pull{}; // for the log
+        float rayLimit{};                      // the fan's limit in force (m), 0: none
+        float lead{};                          // the speed lead's share this step
+        Vec3 fanFrom{}, fanTo{};               // where the next fan goes: his pelvis to the wanted place
     };
     // The cut: the pivot, the orbit heading (the heading the player was looking along) and the params.
     void begin(Vec3 feet, float yaw, const RigParams& p) {
@@ -112,6 +122,12 @@ class OrbitRig {
         const float lag = std::hypot(dx, dz);
         float omega = horizontalOmega(p.follow);
         omega += (12.f - omega) * ramp(lag, 3.f, 6.f);
+        // SPEED LEAD: carry the pivot with him first, so the spring has less to catch up.
+        const float lead = showtime_fan::speedLead(speed, p.speedLead);
+        if (lead > 0 && finite(lookV_)) {
+            pivot_.x += lookV_.x * lead * dt;
+            pivot_.z += lookV_.z * lead * dt;
+        }
         spring(pivot_.x, vx_, aim.x, omega, dt);
         spring(pivot_.z, vz_, aim.z, omega, dt);
         spring(pivot_.y, vy_, aim.y, 3.5f, dt);
@@ -121,7 +137,12 @@ class OrbitRig {
         float pull = 0.f;
         if (in.stockOk)
             pull = stockPull(in.stock, a, want, dt);
-        const float limit = pull > 0 ? std::min(want, pull) : want;
+        float limit = pull > 0 ? std::min(want, pull) : want;
+        float rayLimit = 0.f;
+        if (in.raysOk && std::isfinite(in.rayRatio) && in.rayRatio < 1.f) {
+            rayLimit = want * std::clamp(in.rayRatio, 0.f, 1.f);
+            limit = std::min(limit, rayLimit);
+        }
         // Fast in, slow out.
         const float w = limit < distance_ ? 20.f : 3.f;
         distance_ = limit < distance_ ? limit + (distance_ - limit) * std::exp(-w * dt)
@@ -139,6 +160,10 @@ class OrbitRig {
         o.lag = lag;
         o.omega = omega;
         o.pull = pull;
+        o.rayLimit = rayLimit;
+        o.lead = lead;
+        o.fanFrom = pivotOf(in.feet);
+        o.fanTo = {pivot_.x + std::sin(a) * want, pivot_.y + height_, pivot_.z + std::cos(a) * want};
         last_ = o;
         return o;
     }

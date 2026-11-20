@@ -743,6 +743,12 @@ struct Values {
     int airDodgeSpeed = 9;
     int airDodgeChordMs = 50;
     int airDodgeCooldownMs = 500;
+    // SHOWTIME RAY FAN (beta2, showtime_fan.hpp; the owner, Nov 19 t79u: "ray fan for Showtime is a good call"): while
+    // SHOWTIME's camera is out, the head's clearance slots of the native rays carry a fan from his pelvis to the camera's
+    // place; the nearest hit limits the distance (fast in, slow out). showtime_speed_lead_pct (60): the share of his
+    // velocity the pivot is carried by at 25 m/s (none below 8 m/s), for less lag at swing speed; 0: as before.
+    bool showtimeRayFan = true;
+    int showtimeSpeedLeadPct = 60;
     // HERO ATTACK SOUND (beta polish A2; attack_sound, spidy_vr.ini only, no menu row): one of the game's sounds played
     // on Spidey as a punch is thrown or a kick starts (at most one a hand every 250 ms, hit_sound.hpp): the id's 32
     // bits as a signed decimal. 0 (the default): none - the game's own whoosh and effort ids are not captured yet
@@ -1182,6 +1188,8 @@ enum class Item : uint8_t {
     wallJumpSound,
     // AIR DODGE (beta2).
     airDodge,
+    // SHOWTIME RAY FAN (beta2).
+    showtimeRayFan,
     // NA HELP (beta polish M5, na_help.hpp): the NA · HELP tab's pages, one item for all of them (a page has no
     // value: one choice, READ). Its rows are the catalog's last.
     helpPage,
@@ -1216,8 +1224,8 @@ struct Row {
     Place place{};
 };
 // Stable row/setting numbers; categories below determine presentation order.
-// The catalog: the settings' rows (236), then NA HELP's pages.
-inline constexpr size_t settingRowCount = 236;
+// The catalog: the settings' rows (237), then NA HELP's pages.
+inline constexpr size_t settingRowCount = 237;
 inline constexpr size_t rowTotal = settingRowCount + na_help::pageCount;
 const std::array<Row, rowTotal>& rows();
 const Row* rowFor(Item);

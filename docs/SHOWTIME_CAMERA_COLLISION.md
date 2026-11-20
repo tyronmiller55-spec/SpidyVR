@@ -7,9 +7,17 @@ that we can repurpose". **No new game address is used or guessed here.** Every
 address below is already in the code base, with the file that holds it.
 
 > Ported Nov 19 from EngineBot's Showtime series onto this line's own Showtime (`showtime_rig.hpp`). This line's
-> camera uses only the stock camera's pull-in (`game_fp::stockSeat`, SHOWTIME.md S1). The ray fan described below is
-> **not** built here: the eight native ray slots are taken by the head, hands and roof (SHOWTIME.md), so it stays a
-> plan, not code.
+> camera uses the stock camera's pull-in (`game_fp::stockSeat`, SHOWTIME.md S1) and, since 0.8.7-na-beta2, the
+> **ray fan** below (SHOWTIME RAY FAN, `include/spidy/showtime_fan.hpp`). No new game address: while the camera is
+> out (`showtime::State::out`) the head's clearance slots (tags 2 to 6, `appendTrackingRays` in
+> `src/game_tracking.cpp`) are not needed - the eyes are the outside camera's - so `appendShowtimeFanRays` puts
+> the fan there instead: the centre plus as many of the 0.25 m ring as the aim (2), the hands' contact (0 to 2) and
+> the roof (1) leave of the 8 slots (`native_rays::capacity`), tags 40 to 44, as body rays (the player's own
+> filter, `Command::bodyRays`). The nearest hit less 0.25 m limits the distance by the same ratio; the rig pulls in
+> at omega 20 and lets out at omega 3. Known gap: on the way back (`toHead`) the head's rays return, and their first
+> batch is about 100 ms late, under the fade. SHOWTIME RAY FAN also carries the pivot with him at speed
+> (`showtime_speed_lead_pct`, 60: from 8 to 25 m/s), so the follow lags less (logged about 3.5 m at swing speed).
+> The log line `showtime: cam ... collide=<rays+stock|rays|stock|none> ... rays=<limit> m (...)` shows it.
 
 ## What the mod already knows (no new RE)
 
