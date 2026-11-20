@@ -5,6 +5,7 @@
 #include "spidy/showtime_rig.hpp"
 #include "spidy/handstand.hpp"
 #include "spidy/spherical_aim.hpp"
+#include "spidy/swing_line.hpp"
 #include "spidy/swing.hpp"
 #include "spidy/lab_world.hpp"
 #include "spidy/native_view.hpp"
@@ -11305,7 +11306,7 @@ int main() {
                            "the row is not the launcher's switch");
                  }
              check(found == 1, "the row is not there once");
-             check(static_cast<unsigned>(Item::enemyTypes) + 7 == static_cast<unsigned>(Item::helpPage) &&
+             check(static_cast<unsigned>(Item::enemyTypes) + 8 == static_cast<unsigned>(Item::helpPage) &&
                        vr_settings::lastItem == Item::helpPage,
                    "enemy types is not the last setting (NA HELP's pages follow it)");
              vr_settings::Values on;
@@ -24953,7 +24954,7 @@ int main() {
         // then (still November 14) HAND GRAB STRENGTH and HOLD COST, then AIR KICKS, AIM and SPIN.
         // then (still November 14) WEB TETHERS, TETHER POINTS and TETHER STEPS, then GROUND KICKS, ENEMY JOINTS and ENEMY LIMB ZONES.
         // Polish pass: HEADSET FIRST, ANIM HEAD RIDE and SHOULDER LIMIT (launcher rows) after those.
-        constexpr size_t rowsAfter = 82 + na_help::pageCount; // + HAND GRAB CLASS RULES, JUMP SOUNDS, WALL JUMP SOUND and NA HELP's pages (beta polish) // + the handoff tune's seven (Nov 18), + DIRECTIONAL FLIPS and MIDAIR POSES (Nov 18 1:09 PM) (Nov 19: + AIR DODGE, SHOWTIME RAY FAN, STICKY HANDSTANDS)
+        constexpr size_t rowsAfter = 83 + na_help::pageCount; // + HAND GRAB CLASS RULES, JUMP SOUNDS, WALL JUMP SOUND and NA HELP's pages (beta polish) // + the handoff tune's seven (Nov 18), + DIRECTIONAL FLIPS and MIDAIR POSES (Nov 18 1:09 PM) (Nov 19: + AIR DODGE, SHOWTIME RAY FAN, STICKY HANDSTANDS) (Nov 20: + FULL-LENGTH SWING LINES)
         // // (Nov 14: + AIR UPRIGHT TIME, POINT JUMP BULLET, FALL TO SPIDYVR, AIR LANDING BLEND, AIR LANDING RELEASE) + PUNCH AUTO-TARGET (4 rows), JUMP PULL (5 rows) and the handstand balance (4 rows), SHOWTIME (3 rows, then 8, Nov 14)
         check(all.size() == firstRealistic + std::size(realistic) + rowsAfter,
               "the realistic flips' rows are not the last but the appended ones");
@@ -25130,7 +25131,7 @@ int main() {
                   "the movement defaults overrode a choice made after them");
             check(withMovementDefaults(withTabOnly({}, ""), "").runCurve,
                   "no file: not the movement defaults");
-            check(tabOnlyText(migrated).find("movement_defaults=15\n") != std::string::npos,
+            check(tabOnlyText(migrated).find("movement_defaults=16\n") != std::string::npos,
                   "the migration is not remembered");
         }
         {
@@ -25229,7 +25230,7 @@ int main() {
                  // Beta polish A4/A5: JUMP SOUNDS and WALL JUMP SOUND, NA · POINT JUMP's in-game rows; AIR DODGE (beta 2).
                  row.item != Item::pointJumpSound && row.item != Item::wallJumpSound && row.item != Item::airDodge &&
                  row.item != Item::showtimeRayFan &&
-                 row.item != Item::handstandSticky);
+                 row.item != Item::handstandSticky && row.item != Item::swingLineFullLength);
             check(row.place == (row.item == Item::view ? Place::page
                                 : row.item == Item::helpPage ? Place::tab
                                 : naRetired(row.item)    ? Place::launcher
@@ -25239,7 +25240,7 @@ int main() {
                   "a row in the wrong place");
         }
         check(std::count_if(all.begin(), all.end(), [](const Row& r) { return r.place == Place::tab; }) ==
-                  177 + na_help::pageCount, // (beta 2: +3 AIR DODGE, SHOWTIME RAY FAN, STICKY HANDSTANDS) (beta polish A4/A5: +2 JUMP SOUNDS, WALL JUMP SOUND) (beta polish M5: + NA HELP's pages) (beta polish M4: +9 NA rows players tune in the headset, -4 retired legacy rows hidden) (Nov 18 1:09 PM: +2 DIRECTIONAL FLIPS, MIDAIR POSES) (Nov 18: +7 HANDOFF TIMING) (Nov 14: +15 SHOWTIME) November 11: +8 (SHOOTERS, LOCK STRENGTH, CAMERA MOTION, PITCH, ROLL, BOB x2, HEAD ANGLE), -5 old wrist rows; +6 POINT JUMP; November 12: +1 PUNCH VIEW EASE, +3 MOVE HAPTICS, VIEW YAW SOURCE, SOUND TRACE, +2 JUMP TO SPIDYVR, AIR VIEW EASE, +2 ANIM YAW SWAY, TURN-IN-PLACE ANGLE, +4 PASSIVE LEGS, PASSIVE COUPLING, AIR CROUCH, REACH SPREAD
+                  178 + na_help::pageCount, // (beta 2: +4 AIR DODGE, SHOWTIME RAY FAN, STICKY HANDSTANDS, FULL-LENGTH SWING LINES) (beta polish A4/A5: +2 JUMP SOUNDS, WALL JUMP SOUND) (beta polish M5: + NA HELP's pages) (beta polish M4: +9 NA rows players tune in the headset, -4 retired legacy rows hidden) (Nov 18 1:09 PM: +2 DIRECTIONAL FLIPS, MIDAIR POSES) (Nov 18: +7 HANDOFF TIMING) (Nov 14: +15 SHOWTIME) November 11: +8 (SHOOTERS, LOCK STRENGTH, CAMERA MOTION, PITCH, ROLL, BOB x2, HEAD ANGLE), -5 old wrist rows; +6 POINT JUMP; November 12: +1 PUNCH VIEW EASE, +3 MOVE HAPTICS, VIEW YAW SOURCE, SOUND TRACE, +2 JUMP TO SPIDYVR, AIR VIEW EASE, +2 ANIM YAW SWAY, TURN-IN-PLACE ANGLE, +4 PASSIVE LEGS, PASSIVE COUPLING, AIR CROUCH, REACH SPREAD
               "the tab's own rows");
         check(all[1].item == Item::webStyle && std::strcmp(all[1].title, "WEB STYLE") == 0 &&
                   all[1].choices.size() == 2 && std::strcmp(all[1].choices[0], "REALISTIC") == 0 &&
@@ -25592,8 +25593,9 @@ int main() {
                   "air_dodge=1\nair_dodge_speed=9\nair_dodge_chord_ms=50\nair_dodge_cooldown_ms=500\n"
                   "showtime_ray_fan=1\nshowtime_speed_lead_pct=60\n"
                   "handstand_sticky=1\nhandstand_sticky_grace_ms=400\n"
+                  "swing_line_full_length=1\n"
                   "log_level=1\n"
-                  "movement_defaults=15\n",
+                  "movement_defaults=16\n",
               "the defaults' text");
         Values changed = defaults;
         changed.recordingFov = 140;
@@ -33082,7 +33084,7 @@ int main() {
     test("Native Animation: combined menu inventory and upstream-compatible v39 settings packet", [] {
         using namespace vr_settings;
         const auto& all = rows();
-        check(all.size() == 238 + na_help::pageCount && static_cast<unsigned>(lastItem) < 256, "row/Item bounds");
+        check(all.size() == 239 + na_help::pageCount && static_cast<unsigned>(lastItem) < 256, "row/Item bounds");
         std::array<unsigned, 256> seen{};
         size_t start = all.size();
         for (size_t i = 0; i < all.size(); ++i) {
@@ -33730,6 +33732,98 @@ int main() {
             for (int i = 0; i < 90; ++i) far.update(forearm, none, tilted(55), 1.f / 90, hand);
             check(std::abs(far.offsetDegrees - sa::offsetCapDegrees) < .5f, "the palm-side follow's cap");
         }
+    });
+    test("full-length swing lines: the drawn length stays as he closes in, the reel shortens it one-for-one", [&] {
+        namespace sl = swing_line;
+        using sl::DrawnLength, sl::Change, sl::Line, sl::sagPoints;
+        using SlInput = sl::Input;
+        // Caught 20 m from the anchor (the swing rope 20 m too), then swung in to 8 m: the swing takes its rope in
+        // (SwingConfig::taut), the drawn line keeps 20 m.
+        DrawnLength d;
+        Change c;
+        SlInput in{true, true, 7, 20.f, 20.f, false, false};
+        check(std::abs(d.update(in, &c) - 20.f) < 1e-4f && c.attached, "caught: the distance at the catch");
+        for (float dist = 19.f; dist >= 8.f; dist -= 1.f) {
+            in.distance = dist;
+            in.ropeLength = dist; // taken in by the swing
+            d.update(in, &c);
+        }
+        check(std::abs(d.drawn() - 20.f) < 1e-4f && !c.reeled, "closing in shortened the drawn line");
+        // Holding there a while: it does not shrink by itself.
+        for (int i = 0; i < 300; ++i)
+            d.update(in);
+        check(std::abs(d.drawn() - 20.f) < 1e-4f, "the drawn line shrank while hanging close");
+        // The reel takes 3 m in: the drawn line 3 m shorter, one-for-one.
+        in.reeling = true;
+        for (int i = 0; i < 3; ++i) {
+            in.ropeLength -= 1.f;
+            in.distance -= 1.f;
+            d.update(in, &c);
+        }
+        check(std::abs(d.drawn() - 17.f) < 1e-3f && c.reeled && std::abs(d.reeledIn() - 3.f) < 1e-3f,
+              "the reel did not shorten it one-for-one");
+        // Taut: past the drawn length, it is the distance.
+        in.reeling = false;
+        in.distance = 25.f;
+        in.ropeLength = 25.f;
+        check(std::abs(d.update(in) - 25.f) < 1e-4f, "a line longer than drawn is drawn as long as it is");
+        // On the ground the swing pays out: the drawn line grows by as much.
+        in.distance = 10.f;
+        in.ropeLength = 25.f;
+        d.update(in);
+        in.grounded = true;
+        in.ropeLength = 27.f;
+        check(std::abs(d.update(in) - 27.f) < 1e-3f, "the ground's payout did not lengthen it");
+        // A new web: the length again from the distance.
+        in = {true, true, 8, 6.f, 6.f, false, false};
+        check(std::abs(d.update(in, &c) - 6.f) < 1e-4f && c.attached, "a new web did not start again");
+        // Off: the distance (the straight line, as before).
+        in.enabled = false;
+        in.distance = 4.f;
+        check(std::abs(d.update(in) - 4.f) < 1e-4f && !d.started(), "off: not the straight line");
+        // Let go: the next catch starts again even with the same key.
+        DrawnLength e;
+        e.update({true, true, 9, 15.f, 15.f, false, false});
+        e.update({true, false, 9, 5.f, 5.f, false, false});
+        check(std::abs(e.update({true, true, 9, 5.f, 5.f, false, false}) - 5.f) < 1e-4f, "a let-go web kept its length");
+    });
+    test("full-length swing lines: the slack hangs below the line (the combat rope), straight when taut or off", [&] {
+        namespace sl = swing_line;
+        using sl::DrawnLength, sl::Change, sl::Line, sl::sagPoints;
+        using SlInput = sl::Input;
+        const Vec3 anchor{0, 20, 0};
+        Line line;
+        SlInput in{true, true, 3, 0, 20.f, false, false};
+        Vec3 wrist{20, 20, 0};
+        auto o = line.update(in, wrist, anchor, 1.f / 72);
+        check(o.change.attached && std::abs(o.drawn - 20.f) < 1e-3f && o.count == 0, "caught taut: straight");
+        // Swung in to 10 m: 10 m of slack, laid by the rope below the line.
+        wrist = {10, 20, 0};
+        in.ropeLength = 10.f;
+        for (int i = 0; i < 144; ++i)
+            o = line.update(in, wrist, anchor, 1.f / 72);
+        check(std::abs(o.drawn - 20.f) < 1e-3f && std::abs(o.distance - 10.f) < 1e-3f, "the drawn length");
+        check(o.simulated && o.count > 0 && o.count <= tether::maxDrawn, "the combat rope did not lay the slack");
+        float lowest = 20.f;
+        for (int k = 0; k < o.count; ++k)
+            lowest = std::min(lowest, o.points[k].y);
+        check(lowest < 20.f - 2.f, "the slack does not hang (gravity)");
+        // The sag curve: as long as drawn, below the line.
+        Vec3 pts[6]{};
+        const int n = sagPoints({10, 20, 0}, anchor, 20.f, 6, pts);
+        check(n == 6 && pts[2].y < 18.f && pts[3].y < 18.f, "the fallback sag");
+        check(sagPoints({10, 20, 0}, anchor, 10.02f, 6, pts) == 0, "no slack: no fallback points");
+        // Off: straight, as before.
+        in.enabled = false;
+        o = line.update(in, wrist, anchor, 1.f / 72);
+        check(o.count == 0 && std::abs(o.drawn - 10.f) < 1e-3f, "off: not straight");
+        // The toggle's default and its migration (revision 16): on, and a 0 chosen after it stays.
+        using vr_settings::Values, vr_settings::withMovementDefaults, vr_settings::withTabOnly;
+        check(Values{}.swingLineFullLength, "FULL-LENGTH SWING LINES is on by default");
+        const std::string old = "movement_defaults=15\n";
+        check(withMovementDefaults(withTabOnly({}, old), old).swingLineFullLength, "an older file did not get it");
+        const std::string chosen = "swing_line_full_length=0\nmovement_defaults=16\n";
+        check(!withMovementDefaults(withTabOnly({}, chosen), chosen).swingLineFullLength, "a 0 chosen after it moved");
     });
     std::cout << total - failed << '/' << total << " tests passed\n";
     return failed ? 1 : 0;

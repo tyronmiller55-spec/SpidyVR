@@ -1098,6 +1098,8 @@ template <class V> auto switchOf(Item item, V& v) -> decltype(&v.aimMarkers) {
         return &v.showtimeRayFan;
     case Item::handstandSticky:
         return &v.handstandSticky;
+    case Item::swingLineFullLength:
+        return &v.swingLineFullLength;
     case Item::airLandingBlend:
         return &v.airLandingBlend;
     case Item::airLandingRelease:
@@ -2068,6 +2070,10 @@ const std::array<Row, rowTotal>& rows() {
          "STICKY HANDSTANDS",
          "Handstands catch more easily and ride out a short tracking loss. Arms still up.",
          {}},
+        {Item::swingLineFullLength,
+         "FULL-LENGTH SWING LINES",
+         "Swing webs keep the length they caught at; the slack hangs. Reel shortens them.",
+         {}},
     }};
     static const std::array<Row, rowTotal> all = [] {
         std::array<Row, rowTotal> a{};
@@ -2210,6 +2216,7 @@ const std::array<Screen, categoryCount>& screens() {
         Item::shooterMode,   Item::shooterLock,  Item::webAngle,
         Item::webAimSource,  Item::forearmBlend, Item::forearmAimLimit,
         Item::wristShooters, Item::palmShooters, Item::animForearmFallback,
+        Item::swingLineFullLength,
     };
     // NA · BODY & LEGS (LEGS (ADVANCED) since November 11): shown even while unavailable, the help saying why
     // (shownWhenInactive); the flips' NA rows and the handstand with it.
@@ -3246,6 +3253,7 @@ constexpr TabOnly tabOnly[] = {
     {"showtime_speed_lead_pct", nullptr, &Values::showtimeSpeedLeadPct},
     {"handstand_sticky", &Values::handstandSticky, nullptr},
     {"handstand_sticky_grace_ms", nullptr, &Values::handstandStickyGraceMs},
+    {"swing_line_full_length", &Values::swingLineFullLength, nullptr},
     {"log_level", nullptr, &Values::logLevel},
     {"movement_defaults", nullptr, &Values::movementDefaults},
 };
@@ -3432,6 +3440,11 @@ Values withMovementDefaults(Values v, std::string_view text) {
         v.airDodge = true;
         v.showtimeRayFan = true;
         v.handstandSticky = true;
+    }
+    if (seen < 16) {
+        // Revision 16 (beta2; the owner, Nov 20 t81u: "Let's add this as a toggle option", all features left on for
+        // testing): FULL-LENGTH SWING LINES comes on once. A new key; a 0 chosen after this revision stays.
+        v.swingLineFullLength = true;
     }
     v.movementDefaults = movementDefaultsRevision;
     return sanitized(v);

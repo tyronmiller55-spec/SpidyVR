@@ -302,7 +302,7 @@ struct Values {
     // from before it gets RUN CURVE on and EARLY JUMP QUICK TAP once (the
     // user: "movement fixes will be defaults"); after that the player's own
     // choice stands. Not a row. movement_defaults.
-    int movementDefaults = 15; // movementDefaultsRevision: a new file has seen them
+    int movementDefaults = 16; // movementDefaultsRevision: a new file has seen them
     // SOFT LANDING (the tab's SOFT LANDING; Swing::allowSoftLanding,
     // run_update::softLandVertical): a fall the swing flies, with no web
     // holding, eases to 9 m/s down over its last 3 m (or 0.35 s), its speed
@@ -755,6 +755,11 @@ struct Values {
     // floor line 1.5 x HANDSTAND HOLD with 0.15 s off the floor before it ends. The arms still have to be up.
     bool handstandSticky = true;
     int handstandStickyGraceMs = 400;
+    // FULL-LENGTH SWING LINES (beta2, swing_line.hpp; the owner, Nov 20 t81u: "Yes, reel should shorten one-for-one,
+    // the line should stay full. Let's add this as a toggle option."): a swing web is drawn as long as it was when it
+    // caught, its slack hanging (the combat webs' rope), shortened only by the reel. Visual only: the swing is as
+    // before. Off: the straight line from the hand to the anchor.
+    bool swingLineFullLength = true;
     // HERO ATTACK SOUND (beta polish A2; attack_sound, spidy_vr.ini only, no menu row): one of the game's sounds played
     // on Spidey as a punch is thrown or a kick starts (at most one a hand every 250 ms, hit_sound.hpp): the id's 32
     // bits as a signed decimal. 0 (the default): none - the game's own whoosh and effort ids are not captured yet
@@ -1198,6 +1203,8 @@ enum class Item : uint8_t {
     showtimeRayFan,
     // STICKY HANDSTANDS (beta2).
     handstandSticky,
+    // FULL-LENGTH SWING LINES (beta2).
+    swingLineFullLength,
     // NA HELP (beta polish M5, na_help.hpp): the NA · HELP tab's pages, one item for all of them (a page has no
     // value: one choice, READ). Its rows are the catalog's last.
     helpPage,
@@ -1232,8 +1239,8 @@ struct Row {
     Place place{};
 };
 // Stable row/setting numbers; categories below determine presentation order.
-// The catalog: the settings' rows (238), then NA HELP's pages.
-inline constexpr size_t settingRowCount = 238;
+// The catalog: the settings' rows (239), then NA HELP's pages.
+inline constexpr size_t settingRowCount = 239;
 inline constexpr size_t rowTotal = settingRowCount + na_help::pageCount;
 const std::array<Row, rowTotal>& rows();
 const Row* rowFor(Item);
@@ -1300,7 +1307,7 @@ std::string tabOnlyText(const Values&);
 // key, or whose value is no whole number, is passed over.
 Values withTabOnly(Values, std::string_view text);
 // The movement defaults' revision (Values::movementDefaults) this build has.
-inline constexpr int movementDefaultsRevision = 15;
+inline constexpr int movementDefaultsRevision = 16;
 // November 12 movement cleanup: a settings file (that text) older than
 // movementDefaultsRevision gets the new movement defaults once - RUN CURVE
 // on, EARLY JUMP at least QUICK TAP - and is marked as having seen them; a

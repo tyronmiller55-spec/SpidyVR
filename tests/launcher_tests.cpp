@@ -806,6 +806,8 @@ int main() {
                 continue;
             if (key == "showtime_ray_fan")
                 continue;
+            if (key == "swing_line_full_length")
+                continue;
             if (key == "showtime_speed_lead_pct")
                 continue;
             if (key == "air_dodge")

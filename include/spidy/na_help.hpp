@@ -66,6 +66,7 @@ inline constexpr Page pages[] = {
     {"WEBS & WEB CANCEL", "WEBS & WEB CANCEL", "Shoot a web on the ground or a perch to cancel the animation into SpidyVR."},
     {"WEBS & WEB CANCEL", "  (2) NOT WHEN", "Not in fights, cutscenes, dodges or your own wall run. A zip cancels at once."},
     {"WEBS & WEB CANCEL", "  (3) SHOOTERS", "Y + X cuts a zip. SHOOTERS: LOCKED TO ARM fires from your wrist."},
+    {"WEBS & WEB CANCEL", "  (4) SWING LINES", "FULL-LENGTH SWING LINES: webs keep their length, slack hangs; the reel shortens."},
 
     {"HAND GRAB", "HAND GRAB", "HAND GRAB: a palm on an enemy or prop holds it."},
     {"HAND GRAB", "  (2) HEAVIES", "Heavies and bosses resist throws unless stunned or webbed up (open)."},

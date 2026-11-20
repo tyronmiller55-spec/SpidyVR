@@ -48,7 +48,7 @@ X sends the game's LB + RB where the game shows it: throw, pick up, rip. X and Y
 
 ## WEBS & WEB CANCEL
 
-Shoot a web on the ground or a perch to cancel the animation into SpidyVR. Not in fights, cutscenes, dodges or your own wall run. A zip cancels at once. Y + X cuts a zip. SHOOTERS: LOCKED TO ARM fires from your wrist.
+Shoot a web on the ground or a perch to cancel the animation into SpidyVR. Not in fights, cutscenes, dodges or your own wall run. A zip cancels at once. Y + X cuts a zip. SHOOTERS: LOCKED TO ARM fires from your wrist. FULL-LENGTH SWING LINES: webs keep their length, slack hangs; the reel shortens.
 
 ## HAND GRAB
 
@@ -235,6 +235,7 @@ A crash code 0xC0000409 as the game closes is known and harmless. Logs are in th
 | WRIST SHOOTERS (OLD) | OFF | launcher |
 | PALM SHOOTERS (OLD) | OFF | launcher |
 | ARM AIM FALLBACK | 60 DEG | launcher |
+| FULL-LENGTH SWING LINES | ON | game and launcher |
 
 ### NA · POINT JUMP
 

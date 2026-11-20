@@ -2716,6 +2716,13 @@ void App::options(ImVec2 origin, ImVec2 size) {
                 "In Native Animation, webs aim along your controller once his forearm is this far off it "
                 "(his arm is deformed there). Off: always the forearm. 60 degrees by default.",
                 S(150), [&] { tabCombo("##animforearmfallback", Item::animForearmFallback); });
+            settingOption(
+                Item::swingLineFullLength, "Full-length swing lines",
+                "A swing web keeps the length it had when it caught: as you swing in close to the anchor the "
+                "extra hangs as slack (the combat webs' rope sim, gravity sag), and only reeling in with the "
+                "trigger shortens it, one for one. Looks only: the swing itself is unchanged. Off: the straight "
+                "line from your hand to the anchor, as before. On by default.",
+                S(42), [&] { tabToggle("##swinglinefulllength", Item::swingLineFullLength); });
         });
         group(shootersPage, 1, "Replaced settings", [&] {
             ImGui::PushTextWrapPos(0);

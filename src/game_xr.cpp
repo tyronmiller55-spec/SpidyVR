@@ -67,6 +67,7 @@
 #include "spidy/camera_motion.hpp"
 #include "spidy/shooter_lock.hpp"
 #include "spidy/spherical_aim.hpp"
+#include "spidy/swing_line.hpp"
 #include "spidy/aim_watch.hpp"
 #include "spidy/leg_control.hpp"
 #include "spidy/leg_hold.hpp"
@@ -2069,6 +2070,10 @@ DWORD WINAPI run(void*) {
         // The swing's ticks in each hand (swing_haptics.hpp).
         swing_haptics::Ticks swingTicks[2];
         bool attachedBefore[2]{};
+        // FULL-LENGTH SWING LINES (swing_line.hpp): each hand's drawn length and the rope laying its slack,
+        // and when each last logged its reel.
+        swing_line::Line swingLines[2];
+        uint64_t swingLineReelLogMs[2]{};
         // Which of the game's two ropes draws which hand's web (one web in
         // both hands has one rope), and when a free hand last came onto the
         // other hand's web (a tick says a press there takes hold of it).
@@ -7713,6 +7718,7 @@ DWORD WINAPI run(void*) {
                             // The game draws these webs from the tracked web shooters.
                             native_webs::Request webs;
                             native_webs::Bent bent[2]{};
+                            bool swingLineSeen[2]{};
                             webs.feet = motion.anchor;
                             for (unsigned i = 0; i < 2; ++i) {
                                 auto& hand = webs.hands[i];
@@ -7782,6 +7788,57 @@ DWORD WINAPI run(void*) {
                                     for (uint32_t k = 0; k < bent[i].count; ++k)
                                         bent[i].points[k] = edges.points[k];
                                 }
+                                // FULL-LENGTH SWING LINES (swing_line.hpp; the owner, Nov 20 t81u): a swing
+                                // web drawn straight keeps the length it caught at, its slack hung by the
+                                // combat webs' rope through the hand points (6 at most), the reel shortening
+                                // it one-for-one. Only where nothing else lays points (no edges, no flight,
+                                // no grab's tether, not one web in both hands) and with the hand points hook;
+                                // else the straight line. Looks only: the swing's own rope
+                                // (SwingConfig::taut) is as before.
+                                if (!swingLineSeen[from]) {
+                                    swingLineSeen[from] = true;
+                                    const auto& web = swingState.webs[from];
+                                    const bool drawn = values.swingLineFullLength && hand.attached == 1 &&
+                                                       (web.attached & 1u) && !grabPhases[from] &&
+                                                       !flightVisual[from].flying() && bent[i].count == 0 &&
+                                                       webRopes.upper() < 0 && native_webs::drawsHeld();
+                                    swing_line::Input sl;
+                                    sl.enabled = drawn;
+                                    sl.attached = drawn;
+                                    sl.key = hand.attachedAt;
+                                    sl.ropeLength = web.length;
+                                    sl.reeling = (web.attached & 8u) != 0;
+                                    sl.grounded = swingState.grounded != 0;
+                                    const auto out =
+                                        swingLines[from].update(sl, hand.wrist, hand.anchor, frame.seconds);
+                                    if (drawn && out.count > 0) {
+                                        bent[i].count = static_cast<uint32_t>(
+                                            std::min(out.count, static_cast<int>(native_webs::maxRopeBends)));
+                                        for (uint32_t k = 0; k < bent[i].count; ++k)
+                                            bent[i].points[k] = out.points[k];
+                                    }
+                                    const uint64_t nowMs = GetTickCount64();
+                                    if (drawn &&
+                                        (out.change.attached ||
+                                         (out.change.reeled && nowMs - swingLineReelLogMs[from] >= 1000))) {
+                                        if (out.change.reeled)
+                                            swingLineReelLogMs[from] = nowMs;
+                                        diag_log::writef("swing line: %c %s drawn %.1f m, line %.1f m (slack "
+                                                         "%.1f m), swing rope "
+                                                         "%.1f m%s, reeled in %.1f m, laid by %s",
+                                                         from ? 'R' : 'L',
+                                                         out.change.attached ? "caught" : "reel", out.drawn,
+                                                         out.distance,
+                                                         std::max(0.f, out.drawn - out.distance), web.length,
+                                                         out.drawn - out.distance > swing_line::maxSlack
+                                                             ? " (slack past 30 m not drawn)"
+                                                             : "",
+                                                         swingLines[from].drawnLength().reeledIn(),
+                                                         out.simulated ? "the rope"
+                                                         : out.count   ? "the sag curve"
+                                                                       : "none (straight)");
+                                    }
+                                }
                             }
                             // A zip to a web line: its web from the hand that shot it to
                             // where it holds on the line, in the game's own material, on a
@@ -7817,6 +7874,11 @@ DWORD WINAPI run(void*) {
                                                  0.f);
                                 }
                             }
+                            // A hand no rope drew this frame lets its swing line go (the next web starts
+                            // again).
+                            for (unsigned h = 0; h < 2; ++h)
+                                if (!swingLineSeen[h])
+                                    swingLines[h].update({}, {}, {}, 0.f);
                             native_webs::submit(webs, 200, bent);
                             // The web tie's webs, in the game's own rope material.
                             native_webs::TieRope tieRopes[native_webs::maxTieRopes]{};
