@@ -135,6 +135,25 @@ struct ForearmModel {
         *this = {};
     }
 };
+// How far the solved forearm is off the model ACROSS the wrist's bend (degrees; negative before the model is
+// ready). The model is the forearm in the controller's frame at the wrist's usual angle, so a wrist bent
+// toward the palm or the back of the hand turns the controller about its own Y (the thumb-to-little-finger
+// axis, square to the palm's +-X) and puts the solve that far off the model although the solve is right.
+// Beta2's session 031344 (d482497; the owner, Nov 20 t83u: "web shooters were still off"): the full angle cut
+// trust to a median 0.23 at a 30-45 deg palm-side bend on the left (0.47 at 45-60 on the right, 0.37 at 60-75
+// back), so the web took the model's line, which turns with the hand - the palm-side rule then read no offset
+// (L median 0), and a bend toward the back of the hand moved the line with it. Only what a bend about that
+// axis cannot do counts here: the difference of the two lines' Y components in the aim frame.
+inline float offModelAcrossBendDegrees(Vec3 solvedWorld, const ForearmModel& model, Quat aimAtSolve) {
+    if (!model.ready() || !unitish(solvedWorld))
+        return -1.f;
+    const Vec3 local = normalized(aimAtSolve.conjugate().rotate(normalized(solvedWorld)));
+    if (!unitish(local))
+        return -1.f;
+    const float a = std::asin(std::clamp(local.y, -1.f, 1.f)),
+                b = std::asin(std::clamp(model.inAim.y, -1.f, 1.f));
+    return std::abs(a - b) / degree;
+}
 // The forearm line the webs take: the solve's where it is trusted, the
 // model's where it is not, eased (trustSeconds) along the great circle.
 struct Blend {
@@ -219,6 +238,7 @@ struct ArmLine {
         offsetWeight =
             model.ready() || palmRule ? std::min(1.f, offsetWeight + seconds / offsetEaseSeconds) : 0.f;
         offsetDegrees = 0;
+        float side = 0;
         if (palmRule) {
             // PALM SIDE (beta2; the owner, Nov 20 t80u: "with lock to forearm, tilting the hand palm-side
             // offsets the line, whereas tilting it towards the back of the hand brings it in line. Right now,
@@ -229,7 +249,7 @@ struct ArmLine {
             // owner's inverted feel. Now the line is the forearm's while the controller points toward the
             // back of the hand (or along the arm), and follows the controller's tilt toward the palm (the
             // hand's palm axis: left +X, right -X of the aim) up to offsetCapDegrees.
-            const float side = palmSideRadians(line, aimNow, hand);
+            side = palmSideRadians(line, aimNow, hand);
             if (side > 0) {
                 const float turn =
                     std::min(side, offsetCapDegrees * degree) * offsetWeight * inwardShare(side);
@@ -250,7 +270,19 @@ struct ArmLine {
             }
         }
         offDegrees = angleBetween(line, controller) / degree;
-        reachAround = reachAround ? offDegrees > fallbackLeaveDegrees : offDegrees > fallbackDegrees;
+        // The reach-around is for an arm behind the back or overhead, not a wrist bent back: toward the back
+        // of the hand (palm rule) only what the bend cannot make counts - the line off the aim's palm plane
+        // (its Y; offModelAcrossBendDegrees). Session 031344 (d482497): bent back 60-75 deg past the forearm
+        // the left hand's web went to the controller (reach-around) in 50 of 75 samples - the owner's "still
+        // off".
+        float reach = offDegrees;
+        if (palmRule && side <= 0) {
+            const Vec3 across = aimNow.rotate({0, 1, 0});
+            reach = unitish(across)
+                        ? std::abs(std::asin(std::clamp(dot(line, normalized(across)), -1.f, 1.f))) / degree
+                        : offDegrees;
+        }
+        reachAround = reachAround ? reach > fallbackLeaveDegrees : reach > fallbackDegrees;
         return reachAround ? controller : line;
     }
     void reset() {

@@ -6356,11 +6356,23 @@ DWORD WINAPI run(void*) {
                                     ? spherical_aim::angleBetween(solvedDir, forearmModels[i].world(solvedAim)) *
                                           57.29578f
                                     : -1.f;
+                                // Trusted ACROSS the wrist's bend (spherical_aim::offModelAcrossBendDegrees):
+                                // a wrist bent toward the palm or the back no longer hands the web to the
+                                // model's line, which turns with the hand. The model still learns only from
+                                // samples at the usual angle (the full off-model angle), so a bent wrist does
+                                // not move it.
+                                const float offAcrossBend = solvedOk
+                                                                ? spherical_aim::offModelAcrossBendDegrees(
+                                                                      solvedDir, forearmModels[i], solvedAim)
+                                                                : -1.f;
                                 const float trustNow =
+                                    solvedOk ? spherical_aim::trust(f.handError, offAcrossBend, modelReady)
+                                             : 0.f;
+                                const float learnTrustNow =
                                     solvedOk ? spherical_aim::trust(f.handError, offModel, modelReady) : 0.f;
                                 // Learned in animation too: the arm is the tracked hand's.
                                 if (values.sphericalAim && solvedOk &&
-                                    trustNow >= spherical_aim::learnTrust)
+                                    learnTrustNow >= spherical_aim::learnTrust)
                                     forearmModels[i].learn(solvedDir, solvedAim, dt);
                                 Vec3 webLine = solvedDir;
                                 if (modelAllowed)
@@ -6498,7 +6510,8 @@ DWORD WINAPI run(void*) {
                                     if (logNow || diagNow)
                                         diag_log::writef(
                                             "spherical aim: %s %s, trust %.2f (target %.2f), model %s "
-                                            "(%.2f s), solve off model %.0f deg, line off controller %.0f deg, "
+                                            "(%.2f s), solve off model %.0f deg (across the bend %.0f), line "
+                                            "off controller %.0f deg, "
                                             "wrist offset %.0f deg%s",
                                             i ? "R" : "L", web_aim::fallbackName(why),
                                             static_cast<double>(forearmBlends[i].trust),
@@ -6507,14 +6520,16 @@ DWORD WINAPI run(void*) {
                                             : modelReady         ? "ready"
                                                                  : "learning",
                                             static_cast<double>(forearmModels[i].learned),
-                                            static_cast<double>(offModel),
+                                            static_cast<double>(offModel), static_cast<double>(offAcrossBend),
                                             haveLine ? static_cast<double>(
                                                            spherical_aim::angleBetween(
                                                                webLine, aimNow.rotate({0, 0, -1})) *
                                                            57.29578f)
                                                      : -1.0,
                                             static_cast<double>(armLines[i].offsetDegrees),
-                                            armLines[i].reachAround ? ", reach-around: the controller's direction" : "");
+                                            armLines[i].reachAround
+                                                ? ", reach-around: the controller's direction"
+                                                : "");
                                     if (logNow || diagNow)
                                         diag_log::writef(
                                             "shooter lock: %s %s, %s, strength %d%%, line off controller %.0f deg",

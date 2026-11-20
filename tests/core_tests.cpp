@@ -33842,6 +33842,59 @@ int main() {
                         check((logged > 0) == ((yaw < 0) == (hand == 0)), "the palm side's sign per hand");
                 }
     });
+    test("locked to arm: a wrist bent toward the palm or the back keeps trusting the solved arm (session 031344)", [&] {
+        namespace sa = spherical_aim;
+        const float d2r = 3.14159265f / 180;
+        for (int hand = 0; hand < 2; ++hand) {
+            // The controller at rest 25 deg off the forearm toward the back of the hand, as in the session.
+            const Quat rest = Quat::yaw(.3f);
+            // The forearm 25 deg toward the palm from the controller (yaw + turns -Z toward -X; the left palm is +X).
+            const float towardPalm = hand == 0 ? -25.f : 25.f;
+            const Vec3 forearm = (rest * Quat::yaw(towardPalm * d2r)).rotate({0, 0, -1});
+            sa::ForearmModel model;
+            for (int k = 0; k < 900; ++k)
+                model.learn(forearm, rest, 1.f / 90);
+            check(model.ready(), "the model learned");
+            // Bent toward the palm (about the aim's Y): the solve is right and stays trusted. 60 deg from the usual
+            // angle: the full off-model angle distrusted it (the bug); across the bend nothing is off.
+            const Quat far = rest * Quat::yaw((hand == 0 ? -60.f : 60.f) * d2r);
+            const float full = sa::angleBetween(forearm, model.world(far)) / d2r;
+            check(full > 55 && sa::trust(0, full, true) < .5f, "the full angle distrusts a bent wrist (the bug)");
+            check(sa::trust(0, sa::offModelAcrossBendDegrees(forearm, model, far), true) > .99f,
+                  "a 60 deg bend cut the solve's trust");
+            // 45 deg from the usual angle: 20 deg past the forearm toward the palm.
+            const float palm = hand == 0 ? -45.f : 45.f;
+            const Quat flexed = rest * Quat::yaw(palm * d2r);
+            const float across = sa::offModelAcrossBendDegrees(forearm, model, flexed);
+            check(across >= 0 && across < 1 && sa::trust(0, across, true) > .99f,
+                  hand ? "R: a palm-side bend cut the solve's trust" : "L: a palm-side bend cut the solve's trust");
+            // So the web keeps the solved arm and the palm-side rule offsets it toward the palm.
+            sa::Blend blend;
+            sa::ArmLine line;
+            Vec3 web{};
+            for (int k = 0; k < 90; ++k)
+                web = line.update(blend.update(forearm, model.world(flexed), sa::trust(0, across, true), 1.f / 90),
+                                  model, flexed, 1.f / 90, hand);
+            const float side = sa::palmSideRadians(forearm, flexed, hand) / d2r;
+            check(side > 15 && std::abs(line.offsetDegrees - side) < 1.5f,
+                  hand ? "R: the palm-side bend did not offset the line" : "L: the palm-side bend did not offset the line");
+            // Bent 60 deg toward the back: trusted, and the line stays on the forearm.
+            const Quat extended = rest * Quat::yaw(-palm * d2r);
+            sa::Blend blend2;
+            sa::ArmLine line2;
+            const float across2 = sa::offModelAcrossBendDegrees(forearm, model, extended);
+            for (int k = 0; k < 90; ++k)
+                web = line2.update(
+                    blend2.update(forearm, model.world(extended), sa::trust(0, across2, true), 1.f / 90), model,
+                    extended, 1.f / 90, hand);
+            check(sa::angleBetween(web, forearm) < 1.5f * d2r && line2.offsetDegrees == 0,
+                  hand ? "R: a back-of-hand bend moved the line off the forearm"
+                       : "L: a back-of-hand bend moved the line off the forearm");
+            // A turn the wrist's bend cannot make (about the aim's palm axis, 50 deg) still counts.
+            const Quat twisted = rest * Quat::around({1, 0, 0}, 50 * d2r);
+            check(sa::offModelAcrossBendDegrees(forearm, model, twisted) > 40, "a turn across the bend still counts");
+        }
+    });
     std::cout << total - failed << '/' << total << " tests passed\n";
     return failed ? 1 : 0;
 }
