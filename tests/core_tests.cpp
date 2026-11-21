@@ -25599,6 +25599,9 @@ int main() {
                   "landing_view_snap=1\n"
                   "landing_view_snap_cm=15\n"
                   "landing_view_snap_ms=120\n"
+                  "head_seat_pull=1\n"
+                  "head_seat_pull_cm=5\n"
+                  "head_seat_pull_cm_s=50\n"
                   "log_level=1\n"
                   "movement_defaults=17\n",
               "the defaults' text");
@@ -33865,15 +33868,57 @@ int main() {
         check(longer.durNs == 400 * ms && longer.startNs == 50 * ms - 100 * ms, "longer works as the stretch");
         check(retimeKeepingProgress(0, 0, 200 * ms, 120 * ms).durNs == 120 * ms, "at the start: the new length");
     });
+    test("head seat pull: a slow walk stays within 6 cm of the neck, no 20 cm reseat; a glide is left alone (H4)", [&] {
+        using namespace head_seat;
+        Glide g;
+        Pose ref{};
+        Vec3 head{};
+        float worst = 0.f;
+        int reseats = 0;
+        // 12 s of walking about the room at 0.4 m/s, 90 Hz (Nov 21: a 0.20 m reseat about every 12 s).
+        for (int i = 0; i < 90 * 12; ++i) {
+            head.x += .4f / 90;
+            pull(g, ref, head, 1.f / 90, .05f, .5f);
+            if (overDrift(g, ref, head))
+                ++reseats;
+            worst = (std::max)(worst, length(drift(g, ref, head)));
+        }
+        check(worst <= .06f && reseats == 0, "a slow walk drifted past 6 cm");
+        // Off (no pull): the same walk passes the 20 cm backstop.
+        Pose still{};
+        check(overDrift(g, still, head), "without the pull it would have reseated");
+        // A fast step outruns the pull: the backstop still catches it.
+        Pose r2{};
+        Vec3 h2{};
+        bool over = false;
+        for (int i = 0; i < 45; ++i) {
+            h2.z += 1.5f / 90;
+            pull(g, r2, h2, 1.f / 90, .05f, .5f);
+            over |= overDrift(g, r2, h2);
+        }
+        check(over, "a 1.5 m/s step is left to the backstop");
+        // Within the floor nothing moves; a glide under way is left alone; bad input moves nothing.
+        Pose r3{};
+        check(pull(g, r3, {.04f, 0, 0}, 1.f / 90, .05f, .5f) == 0.f && r3.position.x == 0.f, "inside 5 cm: no pull");
+        Glide gliding;
+        gliding.active = true;
+        check(pull(gliding, r3, {.5f, 0, 0}, 1.f / 90, .05f, .5f) == 0.f, "a glide under way was pulled");
+        check(pull(g, r3, {.5f, 0, 0}, 0.f, .05f, .5f) == 0.f && pull(g, r3, {std::nanf(""), 0, 0}, .01f, .05f, .5f) == 0.f,
+              "no time or no head: no pull");
+        const float m = pull(g, r3, {.5f, 0, 0}, .1f, .05f, .5f);
+        check(std::abs(m - .05f) < 1e-5f && std::abs(r3.position.x - .05f) < 1e-5f, "at most the rate");
+    });
     test("beta3 switches: on by default, on once for an older file (revision 17), and a 0 chosen after it stays", [&] {
         using vr_settings::Values, vr_settings::withMovementDefaults, vr_settings::withTabOnly, vr_settings::tabOnlyText;
         const Values d{};
         check(d.handoffHeadFirst, "HANDOFF HEAD FIRST is on by default");
         check(d.landingViewSnap && d.landingViewSnapCm == 15 && d.landingViewSnapMs == 120, "LANDING VIEW SNAP: on, 15 cm, 120 ms");
+        check(d.headSeatPull && d.headSeatPullCm == 5 && d.headSeatPullCmS == 50, "HEAD SEAT PULL: on, 5 cm, 50 cm/s");
         // BETA3 DEFAULT CHECKS END
         Values off{};
         off.handoffHeadFirst = false;
         off.landingViewSnap = false;
+        off.headSeatPull = false;
         // BETA3 OFF END
         std::string base = tabOnlyText(off);
         base = base.substr(0, base.find("movement_defaults="));
@@ -33881,11 +33926,13 @@ int main() {
         const Values migrated = withMovementDefaults(withTabOnly({}, old), old);
         check(migrated.handoffHeadFirst, "an older file did not get HANDOFF HEAD FIRST");
         check(migrated.landingViewSnap, "an older file did not get LANDING VIEW SNAP");
+        check(migrated.headSeatPull, "an older file did not get HEAD SEAT PULL");
         // BETA3 MIGRATED END
         const std::string chosen = base + "movement_defaults=17\n";
         const Values kept = withMovementDefaults(withTabOnly({}, chosen), chosen);
         check(!kept.handoffHeadFirst, "a 0 chosen after revision 17 moved");
         check(!kept.landingViewSnap, "LANDING VIEW SNAP: a 0 chosen after revision 17 moved");
+        check(!kept.headSeatPull, "HEAD SEAT PULL: a 0 chosen after revision 17 moved");
         // BETA3 KEPT END
     });
     test("handoff head gap: one report per switch with the worst gap, the settled gap and the time over it (H6)", [&] {

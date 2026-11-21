@@ -1813,6 +1813,12 @@ DWORD WINAPI run(void*) {
         Vec3 cameraBobShift{};
         // The check that keeps that reference seated on the neck over every switch (head_seat.hpp).
         head_seat::Glide animHeadSeat{};
+        // HEAD SEAT PULL (head_seat_pull, H4): the last frame's clock, and the metres pulled since the last
+        // log.
+        int64_t headPullLastNs{};
+        int64_t headPullDiagAt{};
+        float headPullMetres{};
+        uint32_t headPullFrames{};
         handoff_gap::Watch
             handoffGap; // HANDOFF HEAD GAP (H6): the view against the drawn head after a switch
         int animSeatStateWas = -1;
@@ -12220,7 +12226,34 @@ DWORD WINAPI run(void*) {
                                         animHeadSeat.durNs / 1e6, animSeatCount);
                                 }
                             }
+                            // HEAD SEAT PULL (H4): past head_seat_pull_cm the reference follows the headset
+                            // at up to head_seat_pull_cm_s, so the 20 cm reseat above is a backstop, not
+                            // every ~12 s of walking.
+                            if (values.headSeatPull && values.animatedHybrid && values.animatedMoves &&
+                                headPullLastNs > 0) {
+                                const float dt = std::clamp(
+                                    static_cast<float>(eyeBlendNow - headPullLastNs) / 1e9f, 0.f, .05f);
+                                const float moved = head_seat::pull(
+                                    animHeadSeat, animHeadRef, frame.head.position, dt,
+                                    values.headSeatPullCm * .01f, values.headSeatPullCmS * .01f);
+                                if (moved > 0.f) {
+                                    headPullMetres += moved;
+                                    ++headPullFrames;
+                                }
+                                if (eyeBlendNow - headPullDiagAt > 10'000'000'000LL && headPullFrames > 0) {
+                                    diag_log::writef(
+                                        "head seat pull: %.2f m over %u frames in %.0f s (past %d cm, "
+                                        "at most %d cm/s); %u reseats this lock",
+                                        headPullMetres, headPullFrames,
+                                        headPullDiagAt > 0 ? (eyeBlendNow - headPullDiagAt) / 1e9 : 0.0,
+                                        values.headSeatPullCm, values.headSeatPullCmS, animSeatCount);
+                                    headPullDiagAt = eyeBlendNow;
+                                    headPullMetres = 0.f;
+                                    headPullFrames = 0;
+                                }
+                            }
                         }
+                        headPullLastNs = eyeBlendNow;
                         // The reference this frame (a glide under way included): eyes and hands alike.
                         head_seat::step(animHeadSeat, animHeadRef, eyeBlendNow);
                         // Full (ground): anchored 2 follows anim head pitch/roll.

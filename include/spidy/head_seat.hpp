@@ -129,4 +129,23 @@ inline bool overDrift(const Glide& g, const Pose& reference, Vec3 head) {
     return std::isfinite(d) && d > maxDrift;
 }
 
+// HEAD SEAT PULL (head_seat_pull, beta3 H4; the owner, Nov 21 t86u: the head "periodically disconnecting"
+// from the body): instead of waiting for the 20 cm backstop and then gliding 20 cm in one go (a visible
+// reseat every ~12 s of walking), the reference follows the headset continuously once it is more than
+// `floorM` away, at most `rateMps`, so a slow walk or lean keeps the view within a few centimetres of the
+// neck. A glide under way is left alone; the backstop stays for a step faster than the pull. Returns the
+// metres moved this frame.
+inline float pull(const Glide& g, Pose& reference, Vec3 head, float dtSeconds, float floorM, float rateMps) {
+    if (g.active || !finite(head) || !finite(reference.position) || !(dtSeconds > 0.f) || !(rateMps > 0.f))
+        return 0.f;
+    const Vec3 off = head - reference.position;
+    const float d = length(off);
+    const float floor = (std::max)(floorM, 0.f);
+    if (!std::isfinite(d) || d <= floor)
+        return 0.f;
+    const float move = (std::min)(rateMps * dtSeconds, d - floor);
+    reference.position = reference.position + off * (move / d);
+    return move;
+}
+
 } // namespace spidy::head_seat

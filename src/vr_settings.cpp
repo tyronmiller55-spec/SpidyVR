@@ -1328,6 +1328,8 @@ Values sanitized(Values v) {
     v.handstandGraceAfterMs = std::clamp(v.handstandGraceAfterMs, 100, 1000);
     v.handstandGraceBeforeMs = std::clamp(v.handstandGraceBeforeMs, 0, 1000);
     v.handoffPlaceCm = std::clamp(v.handoffPlaceCm, 0, 2000);
+    v.headSeatPullCmS = std::clamp(v.headSeatPullCmS, 5, 200);
+    v.headSeatPullCm = std::clamp(v.headSeatPullCm, 0, 20);
     v.landingViewSnapMs = std::clamp(v.landingViewSnapMs, 40, 400);
     v.landingViewSnapCm = std::clamp(v.landingViewSnapCm, 0, 100);
     v.turnPushPct = std::clamp(v.turnPushPct, 20, 100);
@@ -3260,6 +3262,9 @@ constexpr TabOnly tabOnly[] = {
     {"landing_view_snap", &Values::landingViewSnap, nullptr},
     {"landing_view_snap_cm", nullptr, &Values::landingViewSnapCm},
     {"landing_view_snap_ms", nullptr, &Values::landingViewSnapMs},
+    {"head_seat_pull", &Values::headSeatPull, nullptr},
+    {"head_seat_pull_cm", nullptr, &Values::headSeatPullCm},
+    {"head_seat_pull_cm_s", nullptr, &Values::headSeatPullCmS},
     {"log_level", nullptr, &Values::logLevel},
     {"movement_defaults", nullptr, &Values::movementDefaults},
 };
@@ -3457,6 +3462,7 @@ Values withMovementDefaults(Values v, std::string_view text) {
         // for testing): the beta3 switches come on once. New keys; a 0 chosen after this revision stays.
         v.handoffHeadFirst = true;
         v.landingViewSnap = true;
+        v.headSeatPull = true;
         // BETA3 MIGRATION END
     }
     v.movementDefaults = movementDefaultsRevision;

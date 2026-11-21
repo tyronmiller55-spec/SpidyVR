@@ -3208,6 +3208,12 @@ void App::options(ImVec2 origin, ImVec2 size) {
                    S(150), [&] { fineSlider("##landingsnapcm", tabOnly_.landingViewSnapCm, 0, 100, 1, "%d cm", "Onto the head"); });
             settingOption(Item::none, "Snap glide", "The glide over the last few centimetres after the snap. Default: 120 ms.",
                    S(150), [&] { fineSlider("##landingsnapms", tabOnly_.landingViewSnapMs, 40, 400, 10, "%d ms", nullptr); });
+            settingOption(Item::none, "Neck pull", "Past a few centimetres off his neck your view follows back smoothly, not a jump every few steps. Default: on.",
+                   S(42), [&] { flagToggle("##headseatpull", tabOnly_.headSeatPull); });
+            settingOption(Item::none, "Neck pull starts", "How far off his neck your view may lean before the pull. Default: 5 cm.",
+                   S(150), [&] { fineSlider("##headseatpullcm", tabOnly_.headSeatPullCm, 0, 20, 1, "%d cm", "At once"); });
+            settingOption(Item::none, "Neck pull speed", "The pull at most; faster steps still re-seat at 20 cm. Default: 50 cm/s.",
+                   S(150), [&] { fineSlider("##headseatpullcms", tabOnly_.headSeatPullCmS, 5, 200, 5, "%d cm/s", nullptr); });
             // BETA3 LAUNCHER END
         });
         // NA HELP (beta polish M5): the same pages as the game's NA · HELP tab (na_help.hpp), a card per topic.

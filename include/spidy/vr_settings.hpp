@@ -772,6 +772,14 @@ struct Values {
     int landingViewSnapCm = 15; // (cm, 0 to 100) how far from the head the snap leaves the view
     // (ms, 40 to 400) the glide over the last LANDING VIEW SNAP CM
     int landingViewSnapMs = 120;
+    // HEAD SEAT PULL (beta3, H4; the owner, Nov 21 t86u: the head "periodically disconnecting"): while the view is
+    // head-locked on the animation, past HEAD SEAT PULL CM from the neck it follows your headset back at up to
+    // HEAD SEAT PULL SPEED, instead of a 20 cm reseat glide every ~12 s of walking (the 20 cm reseat stays as a
+    // backstop for a fast step). Off: as beta2.
+    bool headSeatPull = true;
+    int headSeatPullCm = 5; // (cm, 0 to 20) how far off the neck the view may lean before the pull
+    // (cm/s, 5 to 200) the pull at most
+    int headSeatPullCmS = 50;
     // BETA3 SETTINGS END
     // HERO ATTACK SOUND (beta polish A2; attack_sound, spidy_vr.ini only, no menu row): one of the game's sounds played
     // on Spidey as a punch is thrown or a kick starts (at most one a hand every 250 ms, hit_sound.hpp): the id's 32
