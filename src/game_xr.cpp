@@ -1619,6 +1619,10 @@ DWORD WINAPI run(void*) {
             float stintMs{}; // the VR stint that just ended (the handoff gap's log)
         } landHeadProbe;
         uint32_t handoffPlaces{};
+        // HANDOFF HEAD FIRST (handoff_head_first, H2): a switch into the animation whose head is not read
+        // yet, and the frames SpidyVR's body has been kept drawn for it (at most 2).
+        bool headFirstPending{};
+        int headFirstFrames{};
         uint32_t handstandWindowMisses{};
         uint64_t hybridAdoptSeen{};
         // Horizontal measured (feet position-delta) speed for the owner's speed intent.
@@ -10944,6 +10948,17 @@ DWORD WINAPI run(void*) {
                                         "hybrid: adopt never seeded (no SpidyVR body frame before "
                                         "the animation took him back)");
                                 hybridLeapAir = hybridAdoptWaiting = false;
+                                // HANDOFF HEAD FIRST (H2): the head sample turns on now, before the head is
+                                // read below (it turned on only with the head follow, after this: "headbone
+                                // n/a" on 297 of 300 switches on Nov 21), so the landing knows where the head
+                                // is on its own frame.
+                                headFirstPending = false;
+                                if (values.handoffHeadFirst && !flatScreen &&
+                                    animated_moves::followsHead(values.animatedHead, true, animState)) {
+                                    game_fp::followHero(true);
+                                    headFirstPending = true;
+                                    headFirstFrames = 0;
+                                }
                                 // Slice 3 T→G (vr→anim): blend eyes back to the headbone; keep
                                 // IK state warm; delay MODEL YAW until the blend ends;
                                 // seed actor facing from the rig look yaw. No adoptFeet.
@@ -11196,6 +11211,29 @@ DWORD WINAPI run(void*) {
                         yieldAnim = animOnly ? animatedOnlyLatch.update(rawYield, animatedMovesHandoff.yielding,
                                                                         handoffNs)
                                              : rawYield;
+                        // HANDOFF HEAD FIRST (H2): until the animation's head is read, SpidyVR's body stays
+                        // drawn (at most 2 frames) so the view never shows his body with no head to put it
+                        // on.
+                        bool headFirstHold = false;
+                        if (headFirstPending) {
+                            Mat4 firstHead{};
+                            if (!yieldAnim || game_fp::heroHead(firstHead)) {
+                                if (headFirstFrames > 0)
+                                    diag_log::writef(
+                                        "handoff head first: the head was read %d frame(s) after the "
+                                        "switch; SpidyVR's body was drawn until then",
+                                        headFirstFrames);
+                                headFirstPending = false;
+                            } else if (++headFirstFrames > 2) {
+                                diag_log::write(
+                                    "handoff head first: no head after 2 frames; the animation's body is "
+                                    "shown anyway");
+                                headFirstPending = false;
+                            } else {
+                                yieldAnim = false;
+                                headFirstHold = true;
+                            }
+                        }
                         const bool onlyHeld = animOnly && animatedOnlyLatch.held;
                         if (!animOnly) {
                             animatedOnlyLatch = {};
@@ -11234,7 +11272,7 @@ DWORD WINAPI run(void*) {
                         animHeadFollowNow = headFollow;
                         // Always character-held camera while HEAD ≠ Off (ground
                         // headbone or midair softlock proxy); shrinkHead stays on.
-                        game_fp::followHero(headFollow);
+                        game_fp::followHero(headFollow || headFirstHold);
                         const Vec3 nowFeet = finite(Vec3{body[12], body[13], body[14]})
                                                  ? Vec3{body[12], body[13], body[14]}
                                                  : motion.anchor;

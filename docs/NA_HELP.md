@@ -68,7 +68,7 @@ How much the animation moves your view: CAMERA MOTION, PITCH, ROLL, BOB. How smo
 
 ## HANDOFF TIMING
 
-LANDING BLEND, GLIDE SPEED and LONGEST, PLACE, ANGLE TIME, HEAD SEAT: how view and body glide between animation and SpidyVR. Smaller = snappier.
+LANDING BLEND, GLIDE SPEED and LONGEST, PLACE, ANGLE TIME, HEAD SEAT: how view and body glide between animation and SpidyVR. Smaller = snappier. HANDOFF HEAD FIRST: your body stays drawn until his head is read (2 frames).
 
 ## SETTINGS & RESET
 

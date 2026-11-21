@@ -302,7 +302,7 @@ struct Values {
     // from before it gets RUN CURVE on and EARLY JUMP QUICK TAP once (the
     // user: "movement fixes will be defaults"); after that the player's own
     // choice stands. Not a row. movement_defaults.
-    int movementDefaults = 16; // movementDefaultsRevision: a new file has seen them
+    int movementDefaults = 17; // movementDefaultsRevision: a new file has seen them
     // SOFT LANDING (the tab's SOFT LANDING; Swing::allowSoftLanding,
     // run_update::softLandVertical): a fall the swing flies, with no web
     // holding, eases to 9 m/s down over its last 3 m (or 0.35 s), its speed
@@ -760,6 +760,12 @@ struct Values {
     // caught, its slack hanging (the combat webs' rope), shortened only by the reel. Visual only: the swing is as
     // before. Off: the straight line from the hand to the anchor.
     bool swingLineFullLength = true;
+    // HANDOFF HEAD FIRST (beta3, H2; the owner, Nov 21 t86u: frames of the body without the neck): on a switch into
+    // the animation the hero's head is read on the switch's own frame (the Nov 21 log said "headbone n/a" on 297 of
+    // 300), and SpidyVR's body stays drawn until it is (at most 2 frames), so the view never shows the animation's
+    // body without a head to put it on. Off: as beta2.
+    bool handoffHeadFirst = true;
+    // BETA3 SETTINGS END
     // HERO ATTACK SOUND (beta polish A2; attack_sound, spidy_vr.ini only, no menu row): one of the game's sounds played
     // on Spidey as a punch is thrown or a kick starts (at most one a hand every 250 ms, hit_sound.hpp): the id's 32
     // bits as a signed decimal. 0 (the default): none - the game's own whoosh and effort ids are not captured yet
@@ -1307,7 +1313,7 @@ std::string tabOnlyText(const Values&);
 // key, or whose value is no whole number, is passed over.
 Values withTabOnly(Values, std::string_view text);
 // The movement defaults' revision (Values::movementDefaults) this build has.
-inline constexpr int movementDefaultsRevision = 16;
+inline constexpr int movementDefaultsRevision = 17;
 // November 12 movement cleanup: a settings file (that text) older than
 // movementDefaultsRevision gets the new movement defaults once - RUN CURVE
 // on, EARLY JUMP at least QUICK TAP - and is marked as having seen them; a

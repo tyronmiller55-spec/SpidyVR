@@ -86,6 +86,7 @@ inline constexpr Page pages[] = {
 
     {"HANDOFF TIMING", "HANDOFF TIMING", "LANDING BLEND, GLIDE SPEED and LONGEST, PLACE, ANGLE TIME, HEAD SEAT:"},
     {"HANDOFF TIMING", "  (2) WHAT THEY DO", "how view and body glide between animation and SpidyVR. Smaller = snappier."},
+    {"HANDOFF TIMING", "  (3) HEAD FIRST", "HANDOFF HEAD FIRST: your body stays drawn until his head is read (2 frames)."},
 
     {"SETTINGS & RESET", "SETTINGS & RESET", "Y RESET ALL on an NA tab resets only that tab; launcher-only rows stay."},
     {"SETTINGS & RESET", "  (2) EVERY SETTING", "Every switch with its default: docs/NA_HELP.md and the launcher, NA marked."},

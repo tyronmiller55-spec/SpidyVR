@@ -3254,6 +3254,7 @@ constexpr TabOnly tabOnly[] = {
     {"handstand_sticky", &Values::handstandSticky, nullptr},
     {"handstand_sticky_grace_ms", nullptr, &Values::handstandStickyGraceMs},
     {"swing_line_full_length", &Values::swingLineFullLength, nullptr},
+    {"handoff_head_first", &Values::handoffHeadFirst, nullptr},
     {"log_level", nullptr, &Values::logLevel},
     {"movement_defaults", nullptr, &Values::movementDefaults},
 };
@@ -3445,6 +3446,12 @@ Values withMovementDefaults(Values v, std::string_view text) {
         // Revision 16 (beta2; the owner, Nov 20 t81u: "Let's add this as a toggle option", all features left on for
         // testing): FULL-LENGTH SWING LINES comes on once. A new key; a 0 chosen after this revision stays.
         v.swingLineFullLength = true;
+    }
+    if (seen < 17) {
+        // Revision 17 (0.8.7-na-beta3; the owner, Nov 21: the handoff fixes and the rest approved, all features on
+        // for testing): the beta3 switches come on once. New keys; a 0 chosen after this revision stays.
+        v.handoffHeadFirst = true;
+        // BETA3 MIGRATION END
     }
     v.movementDefaults = movementDefaultsRevision;
     return sanitized(v);

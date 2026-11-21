@@ -25132,7 +25132,7 @@ int main() {
                   "the movement defaults overrode a choice made after them");
             check(withMovementDefaults(withTabOnly({}, ""), "").runCurve,
                   "no file: not the movement defaults");
-            check(tabOnlyText(migrated).find("movement_defaults=16\n") != std::string::npos,
+            check(tabOnlyText(migrated).find("movement_defaults=17\n") != std::string::npos,
                   "the migration is not remembered");
         }
         {
@@ -25595,8 +25595,9 @@ int main() {
                   "showtime_ray_fan=1\nshowtime_speed_lead_pct=60\n"
                   "handstand_sticky=1\nhandstand_sticky_grace_ms=400\n"
                   "swing_line_full_length=1\n"
+                  "handoff_head_first=1\n"
                   "log_level=1\n"
-                  "movement_defaults=16\n",
+                  "movement_defaults=17\n",
               "the defaults' text");
         Values changed = defaults;
         changed.recordingFov = 140;
@@ -33842,6 +33843,25 @@ int main() {
                     if (std::abs(yaw) >= 15 && pitch == 0)
                         check((logged > 0) == ((yaw < 0) == (hand == 0)), "the palm side's sign per hand");
                 }
+    });
+    test("beta3 switches: on by default, on once for an older file (revision 17), and a 0 chosen after it stays", [&] {
+        using vr_settings::Values, vr_settings::withMovementDefaults, vr_settings::withTabOnly, vr_settings::tabOnlyText;
+        const Values d{};
+        check(d.handoffHeadFirst, "HANDOFF HEAD FIRST is on by default");
+        // BETA3 DEFAULT CHECKS END
+        Values off{};
+        off.handoffHeadFirst = false;
+        // BETA3 OFF END
+        std::string base = tabOnlyText(off);
+        base = base.substr(0, base.find("movement_defaults="));
+        const std::string old = base + "movement_defaults=16\n";
+        const Values migrated = withMovementDefaults(withTabOnly({}, old), old);
+        check(migrated.handoffHeadFirst, "an older file did not get HANDOFF HEAD FIRST");
+        // BETA3 MIGRATED END
+        const std::string chosen = base + "movement_defaults=17\n";
+        const Values kept = withMovementDefaults(withTabOnly({}, chosen), chosen);
+        check(!kept.handoffHeadFirst, "a 0 chosen after revision 17 moved");
+        // BETA3 KEPT END
     });
     test("handoff head gap: one report per switch with the worst gap, the settled gap and the time over it (H6)", [&] {
         using namespace spidy::handoff_gap;

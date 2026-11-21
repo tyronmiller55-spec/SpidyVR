@@ -3190,6 +3190,20 @@ void App::options(ImVec2 origin, ImVec2 size) {
             settingOption(Item::none, "Handoff place", "A landing or zip view farther than this from the head is placed, not glided. Default: 125 cm.",
                    S(150), [&] { fineSlider("##fineplace", tabOnly_.handoffPlaceCm, 0, 2000, 10, "%d cm", "Always glide"); });
         });
+        // BETA3 HANDOFF FIXES (0.8.7-na-beta3): the new handoff switches, each on by default for testing. The same
+        // spidy_vr.ini keys as the game's NA tabs.
+        const auto flagToggle = [&](const char* id, bool& field) {
+            bool on = field;
+            if (toggle(id, &on)) {
+                field = on;
+                tabChanged = true;
+            }
+        };
+        group(handoffPage, 1, "Handoff fixes (beta3)", [&] {
+            settingOption(Item::none, "Head first", "A switch into the animation reads his head first; your body stays drawn until then (2 frames at most). Default: on.",
+                   S(42), [&] { flagToggle("##headfirst", tabOnly_.handoffHeadFirst); });
+            // BETA3 LAUNCHER END
+        });
         // NA HELP (beta polish M5): the same pages as the game's NA · HELP tab (na_help.hpp), a card per topic.
         const int helpPage = static_cast<int>(Category::help);
         static const std::vector<std::pair<const char*, std::string>> helpTopics = [] {

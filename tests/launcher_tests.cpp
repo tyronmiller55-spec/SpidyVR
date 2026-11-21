@@ -808,6 +808,8 @@ int main() {
                 continue;
             if (key == "swing_line_full_length")
                 continue;
+            if (key == "handoff_head_first")
+                continue;
             if (key == "showtime_speed_lead_pct")
                 continue;
             if (key == "air_dodge")
