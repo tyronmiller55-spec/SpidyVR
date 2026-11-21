@@ -3,6 +3,14 @@
 Every build, newest first, with what changed, why, and what was measured.
 Per-check results are in [VALIDATION.md](VALIDATION.md).
 
+**0.8.7-na-beta3, build beta3b (November 21, the owner's t88u):** the same version, a second test package
+([checklist](NA_BETA3.md#beta3b-showtime-auto-kinds-and-double-tap-a)); migration rev 18.
+
+- **Showtime auto kinds and how often.** `showtime_auto_finisher` and `showtime_auto_strike` replace beta3's single
+  switch (a saved 0 turns both off), and finishers, strikes and dodges each get `_every` (1) and `_cooldown_ms` (0).
+- **Double-tap A: upside down** (`air_flip_double_tap=1`, `_ms=300`). In the air one A rights him at once as before;
+  a second A inside the window turns him upside down instead (the upright's turn mirrored), held to stay there.
+
 **0.8.7-na-beta3 (November 21, branch feat/087-beta3 from 1418992): the owner's t86u handoff pass,** a test build
 ([headset checklist](NA_BETA3.md)); 0.8.7-na-beta2 stays CURRENT. One change per commit, every feature on,
 migration rev 17 (the new switches come on once; a saved 120 handstand tip-in becomes 60). HANDOFF PLACE stays
