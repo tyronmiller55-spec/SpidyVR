@@ -553,6 +553,10 @@ class Swing {
     bool reeling(int hand) const {
         return hand >= 0 && hand < 2 && webs_[hand].attached && hands_[hand].reeling;
     }
+    // That hand climbs a shared strand hand over hand (BETTER CLIMBING): its rope changes only by the pulls.
+    bool ropeClimbing(int hand) const {
+        return hand >= 0 && hand < 2 && webs_[hand].attached && hands_[hand].ropeClimbing;
+    }
     // A shared strand keeps the length taken in by hand-over-hand pulling.
     void allowBetterClimbing(bool on) {
         betterClimbing_ = on;

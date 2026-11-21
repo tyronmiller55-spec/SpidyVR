@@ -3315,6 +3315,8 @@ void App::options(ImVec2 origin, ImVec2 size) {
         group(shootersPage, 1, "Webs across the game (beta3c)", [&] {
             settingOption(Item::none, "Wrap slack", "A full-length line round edges keeps its length; the slack hangs between your hand and the first edge. Default: on.",
                    S(42), [&] { flagToggle("##webwrapslack", tabOnly_.webWrapSlack); });
+            settingOption(Item::none, "Second hand", "A web your other hand takes keeps its line; climbing hand over hand takes line in. Default: on.",
+                   S(42), [&] { flagToggle("##websharedslack", tabOnly_.webSharedSlack); });
             // BETA3C LAUNCHER END
         });
         // NA HELP (beta polish M5): the same pages as the game's NA · HELP tab (na_help.hpp), a card per topic.

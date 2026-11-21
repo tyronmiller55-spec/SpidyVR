@@ -1119,6 +1119,7 @@ int main() {
         in.hands[1].grip = 1;
         step();
         check(swing.shared(), "two hands did not share the web");
+        check(swing.ropeClimbing(0) || swing.ropeClimbing(1), "the shared web's climbing hand not reported (bit 16)");
         for (int i = 0; i < 30; ++i) {
             in.hands[1].gripRelativeToHead.y -= .01f;
             step();
@@ -25617,6 +25618,7 @@ int main() {
                   "air_flip_double_tap=1\n"
                   "air_flip_double_tap_ms=300\n"
                   "web_wrap_slack=1\n"
+                  "web_shared_slack=1\n"
                   "log_level=1\n"
                   "movement_defaults=19\n",
               "the defaults' text");
@@ -33888,6 +33890,17 @@ int main() {
                   "the defaults changed the line");
         }
     });
+    test("webs across the game: hand-over-hand climbing takes line in one-for-one, as the reel", [&] {
+        swing_line::DrawnLength d;
+        swing_line::Input in{true, true, 4, 12.f, 12.f, false, false};
+        d.update(in);
+        in.distance = 8.f;
+        in.ropeLength = 10.f; // the swing's rope taken in as he closes (not a climb): kept
+        check(std::abs(d.update(in) - 12.f) < 1e-3f, "closing in shortened the line");
+        in.reeling = true; // XR passes a climbing hand's pulls (WebState bit 16) as the reel
+        in.ropeLength = 9.f;
+        check(std::abs(d.update(in) - 11.f) < 1e-3f, "the climb did not take line in");
+    });
     test("shooter check: the logged forearm sign and the palm-side rule read the same palm, both hands", [&] {
         const float d2r = 3.14159265f / 180;
         for (int hand = 0; hand < 2; ++hand)
@@ -34176,6 +34189,7 @@ int main() {
               "AUTO: FINISHERS and STRIKES on, every one, no cooldown");
         check(d.airFlipDoubleTap && d.airFlipDoubleTapMs == 300, "DOUBLE-TAP A: on, 300 ms");
         check(d.webWrapSlack, "WRAP SLACK: on");
+        check(d.webSharedSlack, "SECOND HAND: on");
         // BETA3 DEFAULT CHECKS END
         Values off{};
         off.handoffHeadFirst = false;
@@ -34185,6 +34199,7 @@ int main() {
         off.showtimeAutoFinisher = off.showtimeAutoStrike = false;
         off.airFlipDoubleTap = false;
         off.webWrapSlack = false;
+        off.webSharedSlack = false;
         // BETA3 OFF END
         std::string base = tabOnlyText(off);
         base = base.substr(0, base.find("movement_defaults="));
@@ -34211,6 +34226,7 @@ int main() {
         const std::string rev18 = base + "movement_defaults=18\n";
         const Values webs = withMovementDefaults(withTabOnly({}, rev18), rev18);
         check(webs.webWrapSlack, "a revision 18 file did not get WRAP SLACK");
+        check(webs.webSharedSlack, "a revision 18 file did not get SECOND HAND");
         check(!webs.airFlipDoubleTap, "revision 18 ran again");
         // BETA3 MIGRATED END
         const std::string chosen = base + "movement_defaults=19\n";
@@ -34222,6 +34238,7 @@ int main() {
         check(!kept.showtimeAutoFinisher && !kept.showtimeAutoStrike, "AUTO: FINISHERS/STRIKES: a 0 chosen after it moved");
         check(!kept.airFlipDoubleTap, "DOUBLE-TAP A: a 0 chosen after revision 18 moved");
         check(!kept.webWrapSlack, "WRAP SLACK: a 0 chosen after revision 19 moved");
+        check(!kept.webSharedSlack, "SECOND HAND: a 0 chosen after revision 19 moved");
         // BETA3 KEPT END
     });
     test("handoff head gap: one report per switch with the worst gap, the settled gap and the time over it (H6)", [&] {

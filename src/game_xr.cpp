@@ -7962,11 +7962,12 @@ DWORD WINAPI run(void*) {
                                     auto& line = swingLines[i];
                                     const bool sharedNow = rope.hands == 3;
                                     const bool wrapOk = values.webWrapSlack && edgeBent;
-                                    const bool drawn = values.swingLineFullLength && hand.attached == 1 &&
-                                                       (web.attached & 1u) && !grabPhases[from] &&
-                                                       !flightVisual[from].flying() &&
-                                                       (bent[i].count == 0 || wrapOk) &&
-                                                       webRopes.upper() < 0 && native_webs::drawsHeld();
+                                    const bool drawn =
+                                        values.swingLineFullLength && hand.attached == 1 &&
+                                        (web.attached & 1u) && !grabPhases[from] &&
+                                        !flightVisual[from].flying() && (bent[i].count == 0 || wrapOk) &&
+                                        (webRopes.upper() < 0 || (values.webSharedSlack && sharedNow)) &&
+                                        native_webs::drawsHeld();
                                     // Round edges: the free run ends at the first edge; edge to edge to where
                                     // it sticks counts in the length.
                                     const uint32_t edgeCount = drawn && wrapOk ? bent[i].count : 0u;
@@ -7980,20 +7981,26 @@ DWORD WINAPI run(void*) {
                                             beyond += length(edges.points[k + 1] - edges.points[k]);
                                         beyond += length(hand.anchor - edges.points[edgeCount - 1]);
                                     }
-                                    // The hand points the edges leave.
-                                    const int room = static_cast<int>(native_webs::maxRopeBends) -
-                                                     static_cast<int>(edgeCount);
+                                    // In both hands the held bow takes three of the game rope's points.
+                                    const int room =
+                                        (sharedNow ? 5 : static_cast<int>(native_webs::maxRopeBends)) -
+                                        static_cast<int>(edgeCount);
+                                    const bool climbing =
+                                        sharedNow &&
+                                        ((swingState.webs[0].attached | swingState.webs[1].attached) & 16u) !=
+                                            0;
                                     swing_line::Input sl;
                                     sl.enabled = drawn;
                                     sl.attached = drawn;
                                     sl.key = hand.attachedAt;
                                     sl.ropeLength = web.length;
-                                    sl.reeling = (web.attached & 8u) != 0;
+                                    sl.reeling = (web.attached & 8u) != 0 || climbing;
                                     sl.grounded = swingState.grounded != 0;
                                     sl.beyond = beyond;
                                     sl.most = std::max(room, 0);
                                     if (!drawn)
                                         last.drawn = false; // drawn no more on this web: not a line to let go
+                                    const float drawnBefore = line.drawnLength().drawn();
                                     const auto out = line.update(sl, hand.wrist, runEnd, frame.seconds);
                                     if (drawn) {
                                         uint32_t n = 0;
@@ -8014,7 +8021,10 @@ DWORD WINAPI run(void*) {
                                             "swing line: %c %s drawn %.1f m, line %.1f m (slack "
                                             "%.1f m), swing rope "
                                             "%.1f m%s, reeled in %.1f m, laid by %s",
-                                            from ? 'R' : 'L', out.change.attached ? "caught" : "reel",
+                                            from ? 'R' : 'L',
+                                            out.change.attached ? "caught"
+                                            : climbing          ? "climb"
+                                                                : "reel",
                                             out.drawn, out.distance + beyond, out.slack, web.length,
                                             out.slack > swing_line::maxSlack ? " (slack past 30 m not drawn)"
                                                                              : "",
@@ -8033,10 +8043,18 @@ DWORD WINAPI run(void*) {
                                                 "slack %.1f m on the free run (%d point(s))",
                                                 from ? 'R' : 'L', edgeCount, out.drawn, out.distance, beyond,
                                                 out.slack, out.count);
+                                        if (sharedNow && !last.shared)
+                                            diag_log::writef(
+                                                "web shared: the web in both hands keeps its line "
+                                                "from the %s wrist, drawn %.1f m, slack %.1f m%s",
+                                                from ? "right" : "left", out.drawn, out.slack,
+                                                climbing ? ", climbing hand over hand" : "");
                                     }
                                     if (drawn) {
                                         if (!last.drawn || last.key != hand.attachedAt)
                                             last = {};
+                                        if (climbing && drawnBefore > out.drawn)
+                                            last.climbed += drawnBefore - out.drawn;
                                         last.drawn = true;
                                         last.key = hand.attachedAt;
                                         last.from = from;

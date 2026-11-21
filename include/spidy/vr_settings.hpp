@@ -811,6 +811,9 @@ struct Values {
     // WRAP SLACK: a full-length swing line round edges keeps its length; the slack hangs on the run from the wrist to
     // the first edge. Off: round edges the web is drawn taut, as before.
     bool webWrapSlack = true;
+    // SECOND HAND: a web the other hand takes hold of keeps its full-length line (the slack on the upper hand's run);
+    // hand-over-hand climbing takes line in one-for-one, as the reel. Off: one web in both hands is drawn taut.
+    bool webSharedSlack = true;
     // BETA3 SETTINGS END
     // HERO ATTACK SOUND (beta polish A2; attack_sound, spidy_vr.ini only, no menu row): one of the game's sounds played
     // on Spidey as a punch is thrown or a kick starts (at most one a hand every 250 ms, hit_sound.hpp): the id's 32

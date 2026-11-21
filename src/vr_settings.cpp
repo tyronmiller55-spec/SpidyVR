@@ -3285,6 +3285,7 @@ constexpr TabOnly tabOnly[] = {
     {"air_flip_double_tap", &Values::airFlipDoubleTap, nullptr},
     {"air_flip_double_tap_ms", nullptr, &Values::airFlipDoubleTapMs},
     {"web_wrap_slack", &Values::webWrapSlack, nullptr},
+    {"web_shared_slack", &Values::webSharedSlack, nullptr},
     {"log_level", nullptr, &Values::logLevel},
     {"movement_defaults", nullptr, &Values::movementDefaults},
 };
@@ -3506,6 +3507,7 @@ Values withMovementDefaults(Values v, std::string_view text) {
         // Revision 19 (0.8.7-na-beta3c; the owner, Nov 21 t92u: "get it going", all features on for testing): the web
         // switches come on once. New keys; a 0 chosen after this revision stays.
         v.webWrapSlack = true;
+        v.webSharedSlack = true;
         // BETA3C MIGRATION END
     }
     v.movementDefaults = movementDefaultsRevision;
