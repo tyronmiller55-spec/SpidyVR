@@ -359,7 +359,7 @@ class Latch {
 class Auto {
   public:
     static constexpr float tailSeconds = .3f, giveUpSeconds = .5f, capSeconds = 4.f;
-    // AUTO: FINISHERS AND STRIKES (showtime_auto_finisher_strike, 0.8.7-na-beta3): a Y+B finisher plays up
+    // AUTO: FINISHERS (showtime_auto_finisher, 0.8.7-na-beta3): a Y+B finisher plays up
     // to 6.3 s (the Nov 19-21 logs), so its moment may last this long; the tail and the give-up are the same.
     static constexpr float finisherCapSeconds = 10.f;
     void trigger(Why why, float cap = capSeconds) {
@@ -405,6 +405,31 @@ class Auto {
     Why why_ = Why::dodge;
     float t_{}, tail_{}, cap_ = capSeconds;
     bool on_{}, seen_{};
+};
+
+// HOW OFTEN (showtime_auto_<kind>_every / _cooldown_ms, 0.8.7-na-beta3b; the owner, Nov 21 t88u: "different
+// timings for how often it fires"): one gate per kind of moment. Every event of the kind counts; the camera
+// goes out on the Nth (every 1: each one) once at least cooldownMs have passed since that kind last took it
+// out (0: no wait). An event held back by the cooldown leaves the count full, so the first one after the wait
+// goes out.
+struct AutoGate {
+    int count{};
+    int64_t lastMs = -1;
+    enum class Result : uint8_t { fire, counting, cooling };
+    Result event(int64_t nowMs, int every, int cooldownMs) {
+        const int n = std::clamp(every, 1, 10);
+        count = (std::min)(count + 1, n);
+        if (count < n)
+            return Result::counting;
+        if (cooldownMs > 0 && lastMs >= 0 && nowMs - lastMs < cooldownMs)
+            return Result::cooling;
+        count = 0;
+        lastMs = nowMs;
+        return Result::fire;
+    }
+    bool fire(int64_t nowMs, int every, int cooldownMs) {
+        return event(nowMs, every, cooldownMs) == Result::fire;
+    }
 };
 
 // What keeps an automatic moment going (Auto::update's `live`): the dodge while it dodges, the game's

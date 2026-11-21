@@ -1555,6 +1555,9 @@ DWORD WINAPI run(void*) {
         uint64_t showtimeFanSerial{};
         showtime::Latch showtimeLatch;
         showtime::Auto showtimeAuto;
+        // HOW OFTEN (showtime_auto_<kind>_every / _cooldown_ms, beta3b): one gate per kind of automatic
+        // moment.
+        showtime::AutoGate showtimeGateDodge, showtimeGateFinisher, showtimeGateStrike;
         showtime::Why showtimeWhy{};
         float showtimeStickX{}, showtimeStickY{}, showtimeEntryHeading{};
         uint64_t showtimeLogMs{};
@@ -2852,10 +2855,10 @@ DWORD WINAPI run(void*) {
                     // (swallowX/swallowB), and while the camera is out the hands start nothing new (WATCH ONLY). It never writes the
                     // view heading: see the header.
                     {
-                        // AUTO: FINISHERS AND STRIKES (showtime_auto_finisher_strike): the game's finisher is
+                        // AUTO: FINISHERS (showtime_auto_finisher): the game's finisher is
                         // a scene, not play, so while its automatic moment lasts (and the 0.3 s tail after)
                         // that is in play too.
-                        const bool stAutoScene = values.showtimeAutoFinisherStrike && showtimeAuto.on() &&
+                        const bool stAutoScene = values.showtimeAutoFinisher && showtimeAuto.on() &&
                                                  showtimeAuto.why() == showtime::Why::finisher;
                         const bool stOk = values.showtime && values.body && !flatScreen && viewing &&
                                           (gameplay || stAutoScene) && motion.active && spiderMan &&
@@ -5113,12 +5116,25 @@ DWORD WINAPI run(void*) {
                         message(3, 0, text);
                         // FINISHERS ON Y+B (finisher_handoff.hpp): a scene in a fight within 1.5 s of Y+B is
                         // the game's own finisher. SpidyVR leaves it to the game: the animation keeps the
-                        // body, and the grip cancel waits until it ends. AUTO: FINISHERS AND STRIKES (beta3,
-                        // showtime_auto_finisher_strike): Showtime's camera is out while it plays.
+                        // body, and the grip cancel waits until it ends. AUTO: FINISHERS (beta3,
+                        // showtime_auto_finisher; how often: _every, _cooldown_ms): Showtime's camera is out
+                        // while it plays.
                         if (fpScene) {
                             const auto fin = finisherWatch.started(fightLately);
-                            const bool finAuto =
-                                fin.finisher && values.showtime && values.showtimeAutoFinisherStrike;
+                            bool finAuto = false;
+                            if (fin.finisher && values.showtime && values.showtimeAutoFinisher) {
+                                const auto gate = showtimeGateFinisher.event(
+                                    static_cast<int64_t>(GetTickCount64()), values.showtimeAutoFinisherEvery,
+                                    values.showtimeAutoFinisherCooldownMs);
+                                finAuto = gate == showtime::AutoGate::Result::fire;
+                                if (!finAuto)
+                                    diag_log::writef(
+                                        "showtime: auto finisher held back (%s: every %d, cooldown %d ms)",
+                                        gate == showtime::AutoGate::Result::counting ? "counting"
+                                                                                     : "cooling down",
+                                        values.showtimeAutoFinisherEvery,
+                                        values.showtimeAutoFinisherCooldownMs);
+                            }
                             if (finAuto)
                                 showtimeAuto.trigger(showtime::Why::finisher,
                                                      showtime::Auto::finisherCapSeconds);
@@ -5130,7 +5146,7 @@ DWORD WINAPI run(void*) {
                                     "takes nothing back until it ends%s",
                                     fin.named ? "the prompt's Y+B " : "", fin.since * 1000.f,
                                     fin.gap * 1000.f, game_fp::onCamera() ? "on" : "off",
-                                    finAuto ? "; Showtime's camera out for it (AUTO: FINISHERS AND STRIKES)"
+                                    finAuto ? "; Showtime's camera out for it (AUTO: FINISHERS)"
                                     : values.showtime && values.showtimeAutoFinish
                                         ? "; AUTO: FINISHERS is log only"
                                         : "");
@@ -7333,14 +7349,20 @@ DWORD WINAPI run(void*) {
                                 strikes.phase == static_cast<uint32_t>(WebStrike::Phase::Flying) &&
                                 strikes.hand == static_cast<uint32_t>(WebStrike::diveHand);
                             if (strikes.opened > strikesBefore && input.focused) {
-                                // AUTO: FINISHERS AND STRIKES (beta3): Showtime's camera out while the strike
-                                // flies (a finisher's moment is not cut short by one).
-                                if (values.showtime && values.showtimeAutoFinisherStrike &&
+                                // AUTO: STRIKES (beta3, showtime_auto_strike; how often: _every,
+                                // _cooldown_ms): Showtime's camera out while the strike flies (a finisher's
+                                // moment is not cut short by one).
+                                if (values.showtime && values.showtimeAutoStrike &&
                                     !(showtimeAuto.on() && showtimeAuto.why() == showtime::Why::finisher)) {
-                                    if (!showtimeAuto.on())
-                                        diag_log::writef("showtime: auto (web strike #%llu)",
-                                                         static_cast<unsigned long long>(strikes.opened));
-                                    showtimeAuto.trigger(showtime::Why::strike);
+                                    const auto gate = showtimeGateStrike.event(
+                                        static_cast<int64_t>(GetTickCount64()),
+                                        values.showtimeAutoStrikeEvery, values.showtimeAutoStrikeCooldownMs);
+                                    if (gate == showtime::AutoGate::Result::fire) {
+                                        if (!showtimeAuto.on())
+                                            diag_log::writef("showtime: auto (web strike #%llu)",
+                                                             static_cast<unsigned long long>(strikes.opened));
+                                        showtimeAuto.trigger(showtime::Why::strike);
+                                    }
                                 }
                                 // Off to him: a tick in both hands, and the rush. A
                                 // dive's is harder, and the last of its way slows.
@@ -8951,7 +8973,12 @@ DWORD WINAPI run(void*) {
                         }
                         // A perfect dodge: the game slows its own time within a
                         // moment of a B that went down with it at full speed.
-                        if (walk.dodge && !dodging && values.showtime && values.showtimeAutoDodge == 2)
+                        // HOW OFTEN (showtime_auto_dodge_every / _cooldown_ms, beta3b): each dodge counts
+                        // once.
+                        if (walk.dodge && !dodging && values.showtime && values.showtimeAutoDodge == 2 &&
+                            showtimeGateDodge.fire(static_cast<int64_t>(GetTickCount64()),
+                                                   values.showtimeAutoDodgeEvery,
+                                                   values.showtimeAutoDodgeCooldownMs))
                             showtimeAuto.trigger(showtime::Why::dodge);
                         if (walk.dodge && !dodging) {
                             dodgeWatch = game_time::telemetry().own > .95f ? .7f : 0.f;
@@ -8969,7 +8996,16 @@ DWORD WINAPI run(void*) {
                             if (const auto time = game_time::telemetry(); time.installed && time.own < .9f) {
                                 dodgeWatch = 0;
                                 moments.start(Moment::dodge);
-                                if (values.showtime && values.showtimeAutoDodge >= 1)
+                                // ALL DODGES: this dodge was counted as it began; its perfect moment only
+                                // keeps a camera it took out going. PERFECT ONLY: the perfect dodge is the
+                                // event.
+                                if (values.showtime && values.showtimeAutoDodge == 2 && showtimeAuto.on() &&
+                                    showtimeAuto.why() == showtime::Why::dodge)
+                                    showtimeAuto.trigger(showtime::Why::dodge);
+                                else if (values.showtime && values.showtimeAutoDodge == 1 &&
+                                         showtimeGateDodge.fire(static_cast<int64_t>(GetTickCount64()),
+                                                                values.showtimeAutoDodgeEvery,
+                                                                values.showtimeAutoDodgeCooldownMs))
                                     showtimeAuto.trigger(showtime::Why::dodge);
                                 runtime.haptic(0, .5f);
                                 runtime.haptic(1, .5f);

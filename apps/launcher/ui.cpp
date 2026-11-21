@@ -3147,16 +3147,53 @@ void App::options(ImVec2 origin, ImVec2 size) {
                    "Hold X+B: you step outside by hand (the default). Auto only: the chord does nothing and X and B "
                    "are the game's as always; only the automatic moments below take the camera out.",
                    S(150), [&] { tabCombo("##showtimechord", Item::showtimeChord); });
-            settingOption(Item::none, "Auto: finishers and strikes",
-                   "The camera steps outside on its own when the game's Y+B finisher starts or a web strike flies, "
-                   "and comes back the usual way 0.3 s after it ends. Needs Showtime. On by default.",
-                   S(42), [&] {
-                       bool on = tabOnly_.showtimeAutoFinisherStrike;
-                       if (toggle("##showtimeautofinisherstrike", &on)) {
-                           tabOnly_.showtimeAutoFinisherStrike = on;
-                           tabChanged = true;
-                       }
-                   });
+            // AUTO MOMENTS (beta3b; the owner, Nov 21 t88u): a switch per kind and how often each fires.
+            const auto autoToggle = [&](const char* id, bool& field) {
+                bool on = field;
+                if (toggle(id, &on)) {
+                    field = on;
+                    tabChanged = true;
+                }
+            };
+            const auto autoSlider = [&](const char* id, int& field, int lowest, int highest, int step, const char* format,
+                                        const char* zero) {
+                int value = field;
+                ImGui::PushFont(fonts_.semibold, 14);
+                if (slider(id, &value, lowest, highest, zero && value <= 0 ? zero : format)) {
+                    value = std::clamp((value - lowest + step / 2) / step * step + lowest, lowest, highest);
+                    if (value != field) {
+                        field = value;
+                        tabChanged = true;
+                    }
+                }
+                ImGui::PopFont();
+            };
+            settingOption(Item::none, "Auto: finishers",
+                   "The camera steps outside on its own when the game's Y+B finisher starts, and comes back the usual "
+                   "way 0.3 s after it ends. Needs Showtime. On by default.",
+                   S(42), [&] { autoToggle("##showtimeautofinisher", tabOnly_.showtimeAutoFinisher); });
+            settingOption(Item::none, "Finishers: every",
+                   "Out on every Nth finisher (1: every one). Default: 1.",
+                   S(150), [&] { autoSlider("##showtimeautofinisherevery", tabOnly_.showtimeAutoFinisherEvery, 1, 10, 1, "every %d", nullptr); });
+            settingOption(Item::none, "Finishers: cooldown",
+                   "The least time between two automatic finisher cameras. Default: none.",
+                   S(150), [&] { autoSlider("##showtimeautofinishercd", tabOnly_.showtimeAutoFinisherCooldownMs, 0, 60000, 500, "%d ms", "None"); });
+            settingOption(Item::none, "Auto: web strikes",
+                   "The camera steps outside on its own while a web strike flies, and comes back 0.3 s after. "
+                   "Needs Showtime. On by default.",
+                   S(42), [&] { autoToggle("##showtimeautostrike", tabOnly_.showtimeAutoStrike); });
+            settingOption(Item::none, "Strikes: every",
+                   "Out on every Nth web strike (1: every one). Default: 1.",
+                   S(150), [&] { autoSlider("##showtimeautostrikeevery", tabOnly_.showtimeAutoStrikeEvery, 1, 10, 1, "every %d", nullptr); });
+            settingOption(Item::none, "Strikes: cooldown",
+                   "The least time between two automatic web strike cameras. Default: none.",
+                   S(150), [&] { autoSlider("##showtimeautostrikecd", tabOnly_.showtimeAutoStrikeCooldownMs, 0, 60000, 500, "%d ms", "None"); });
+            settingOption(Item::none, "Dodges: every",
+                   "With Auto: dodges on, out on every Nth dodge it counts (1: every one). Default: 1.",
+                   S(150), [&] { autoSlider("##showtimeautododgeevery", tabOnly_.showtimeAutoDodgeEvery, 1, 10, 1, "every %d", nullptr); });
+            settingOption(Item::none, "Dodges: cooldown",
+                   "The least time between two automatic dodge cameras. Default: none.",
+                   S(150), [&] { autoSlider("##showtimeautododgecd", tabOnly_.showtimeAutoDodgeCooldownMs, 0, 60000, 500, "%d ms", "None"); });
             settingOption(Item::showtimeAutoDodge, "Auto: dodges",
                    "The camera steps outside by itself for a dodge and comes back 0.3 s after it ends (and not "
                    "while you hold X+B). Perfect only: just the dodge the game slows time for. All: every dodge. "

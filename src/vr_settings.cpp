@@ -1328,6 +1328,12 @@ Values sanitized(Values v) {
     v.handstandGraceAfterMs = std::clamp(v.handstandGraceAfterMs, 100, 1000);
     v.handstandGraceBeforeMs = std::clamp(v.handstandGraceBeforeMs, 0, 1000);
     v.handoffPlaceCm = std::clamp(v.handoffPlaceCm, 0, 2000);
+    v.showtimeAutoFinisherEvery = std::clamp(v.showtimeAutoFinisherEvery, 1, 10);
+    v.showtimeAutoStrikeEvery = std::clamp(v.showtimeAutoStrikeEvery, 1, 10);
+    v.showtimeAutoDodgeEvery = std::clamp(v.showtimeAutoDodgeEvery, 1, 10);
+    v.showtimeAutoFinisherCooldownMs = std::clamp(v.showtimeAutoFinisherCooldownMs, 0, 60000);
+    v.showtimeAutoStrikeCooldownMs = std::clamp(v.showtimeAutoStrikeCooldownMs, 0, 60000);
+    v.showtimeAutoDodgeCooldownMs = std::clamp(v.showtimeAutoDodgeCooldownMs, 0, 60000);
     v.handstandCatchDeg = std::clamp(v.handstandCatchDeg, 45, 150);
     v.headSeatPullCmS = std::clamp(v.headSeatPullCmS, 5, 200);
     v.headSeatPullCm = std::clamp(v.headSeatPullCm, 0, 20);
@@ -3267,7 +3273,14 @@ constexpr TabOnly tabOnly[] = {
     {"head_seat_pull_cm", nullptr, &Values::headSeatPullCm},
     {"head_seat_pull_cm_s", nullptr, &Values::headSeatPullCmS},
     {"handstand_catch_deg", nullptr, &Values::handstandCatchDeg},
-    {"showtime_auto_finisher_strike", &Values::showtimeAutoFinisherStrike, nullptr},
+    {"showtime_auto_finisher", &Values::showtimeAutoFinisher, nullptr},
+    {"showtime_auto_finisher_every", nullptr, &Values::showtimeAutoFinisherEvery},
+    {"showtime_auto_finisher_cooldown_ms", nullptr, &Values::showtimeAutoFinisherCooldownMs},
+    {"showtime_auto_strike", &Values::showtimeAutoStrike, nullptr},
+    {"showtime_auto_strike_every", nullptr, &Values::showtimeAutoStrikeEvery},
+    {"showtime_auto_strike_cooldown_ms", nullptr, &Values::showtimeAutoStrikeCooldownMs},
+    {"showtime_auto_dodge_every", nullptr, &Values::showtimeAutoDodgeEvery},
+    {"showtime_auto_dodge_cooldown_ms", nullptr, &Values::showtimeAutoDodgeCooldownMs},
     {"log_level", nullptr, &Values::logLevel},
     {"movement_defaults", nullptr, &Values::movementDefaults},
 };
@@ -3309,12 +3322,16 @@ Values withMovementDefaults(Values v, std::string_view text) {
     // The revision the text has seen: 0 when it names none (older than the
     // November 12 cleanup, or no file at all).
     int seen = 0;
+    // The beta3 SHOWTIME AUTO: FINISHERS AND STRIKES key (one switch for both; split in beta3b): a saved 0.
+    bool finisherStrikeOff = false;
     while (!text.empty()) {
         const size_t end = text.find('\n');
         std::string_view line = text.substr(0, end);
         text.remove_prefix(end == std::string_view::npos ? text.size() : end + 1);
         if (!line.empty() && line.back() == '\r')
             line.remove_suffix(1);
+        if (line == "showtime_auto_finisher_strike=0")
+            finisherStrikeOff = true;
         constexpr std::string_view key = "movement_defaults=";
         if (line.substr(0, key.size()) != key)
             continue;
@@ -3466,11 +3483,16 @@ Values withMovementDefaults(Values v, std::string_view text) {
         v.handoffHeadFirst = true;
         v.landingViewSnap = true;
         v.headSeatPull = true;
-        v.showtimeAutoFinisherStrike = true;
+        v.showtimeAutoFinisher = v.showtimeAutoStrike = true;
         // HANDSTAND ENTRY ANGLE: the tip-in from 60 degrees; a saved 120 was the old default, another number a choice.
         if (v.handstandTipInDeg == 120)
             v.handstandTipInDeg = 60;
         // BETA3 MIGRATION END
+    }
+    if (seen < 18 && finisherStrikeOff) {
+        // Revision 18 (0.8.7-na-beta3b; the owner, Nov 21 t88u: separate toggles): beta3's one switch for finishers
+        // and strikes, saved off, turns both of the new switches off.
+        v.showtimeAutoFinisher = v.showtimeAutoStrike = false;
     }
     v.movementDefaults = movementDefaultsRevision;
     return sanitized(v);

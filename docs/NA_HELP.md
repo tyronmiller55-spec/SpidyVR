@@ -60,7 +60,7 @@ Fall inverted onto both palms (REALISTIC FLIPS on): you balance on your hands. L
 
 ## SHOWTIME
 
-SHOWTIME: hold X + B for 200 ms to step outside Spider-Man. The right stick orbits; let go to return. WATCH ONLY keeps your hands still. SHOWTIME RAY FAN pulls the camera in before walls and trails less at speed. AUTO: FINISHERS AND STRIKES steps out for a Y+B finisher or a web strike.
+SHOWTIME: hold X + B for 200 ms to step outside Spider-Man. The right stick orbits; let go to return. WATCH ONLY keeps your hands still. SHOWTIME RAY FAN pulls the camera in before walls and trails less at speed. AUTO: FINISHERS and AUTO: WEB STRIKES step out for a Y+B finisher or a strike. Each auto kind (dodges too): EVERY N fires on every Nth, COOLDOWN waits.
 
 ## CAMERA & STABILIZATION
 

@@ -302,7 +302,7 @@ struct Values {
     // from before it gets RUN CURVE on and EARLY JUMP QUICK TAP once (the
     // user: "movement fixes will be defaults"); after that the player's own
     // choice stands. Not a row. movement_defaults.
-    int movementDefaults = 17; // movementDefaultsRevision: a new file has seen them
+    int movementDefaults = 18; // movementDefaultsRevision: a new file has seen them
     // SOFT LANDING (the tab's SOFT LANDING; Swing::allowSoftLanding,
     // run_update::softLandVertical): a fall the swing flies, with no web
     // holding, eases to 9 m/s down over its last 3 m (or 0.35 s), its speed
@@ -783,11 +783,21 @@ struct Values {
     // HANDSTAND CATCH ANGLE (beta3; the owner, Nov 21: "Lower the handstand tip-in angle too"): inverted at least this
     // far (degrees, 45 to 150) for a touchdown on the palms to catch; 100 before (hardcoded). A new key, default 60.
     int handstandCatchDeg = 60;
-    // SHOWTIME AUTO: FINISHERS AND STRIKES (beta3; the owner, Nov 21 t87u: "activate Showtime during finishers and web
-    // strikes"): Showtime's camera steps out when the game's Y+B finisher starts (finisher_handoff's scene detection)
-    // or a web strike opens (SpidyVR's WebStrike), and back through the normal exit 0.3 s after it ends (a finisher
-    // at most 10 s, a strike 4 s). Needs SHOWTIME. Off: as beta2.
-    bool showtimeAutoFinisherStrike = true;
+    // SHOWTIME AUTO: FINISHERS / STRIKES (beta3, the owner Nov 21 t87u: "activate Showtime during finishers and web
+    // strikes"; split in beta3b, t88u: "separate toggles for dodges, finishers, and strikes, and different timings for
+    // how often it fires"): Showtime's camera steps out when the game's Y+B finisher starts (finisher_handoff's scene
+    // detection) or a web strike opens (SpidyVR's WebStrike), and back through the normal exit 0.3 s after it ends (a
+    // finisher at most 10 s, a strike 4 s). Needs SHOWTIME. Each kind, the dodges' (AUTO: DODGES) too: _every N fires
+    // on every Nth one (1: every one), _cooldown_ms the least time between two of that kind (0: none). The beta3 key
+    // showtime_auto_finisher_strike is read once by revision 18: a saved 0 turns finishers and strikes off.
+    bool showtimeAutoFinisher = true;
+    int showtimeAutoFinisherEvery = 1;      // 1 to 10
+    int showtimeAutoFinisherCooldownMs = 0; // 0 to 60000
+    bool showtimeAutoStrike = true;
+    int showtimeAutoStrikeEvery = 1;
+    int showtimeAutoStrikeCooldownMs = 0;
+    int showtimeAutoDodgeEvery = 1;
+    int showtimeAutoDodgeCooldownMs = 0;
     // BETA3 SETTINGS END
     // HERO ATTACK SOUND (beta polish A2; attack_sound, spidy_vr.ini only, no menu row): one of the game's sounds played
     // on Spidey as a punch is thrown or a kick starts (at most one a hand every 250 ms, hit_sound.hpp): the id's 32
@@ -1336,7 +1346,7 @@ std::string tabOnlyText(const Values&);
 // key, or whose value is no whole number, is passed over.
 Values withTabOnly(Values, std::string_view text);
 // The movement defaults' revision (Values::movementDefaults) this build has.
-inline constexpr int movementDefaultsRevision = 17;
+inline constexpr int movementDefaultsRevision = 18;
 // November 12 movement cleanup: a settings file (that text) older than
 // movementDefaultsRevision gets the new movement defaults once - RUN CURVE
 // on, EARLY JUMP at least QUICK TAP - and is marked as having seen them; a

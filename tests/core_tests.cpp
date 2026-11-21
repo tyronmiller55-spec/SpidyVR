@@ -25133,7 +25133,7 @@ int main() {
                   "the movement defaults overrode a choice made after them");
             check(withMovementDefaults(withTabOnly({}, ""), "").runCurve,
                   "no file: not the movement defaults");
-            check(tabOnlyText(migrated).find("movement_defaults=17\n") != std::string::npos,
+            check(tabOnlyText(migrated).find("movement_defaults=18\n") != std::string::npos,
                   "the migration is not remembered");
         }
         {
@@ -25604,9 +25604,16 @@ int main() {
                   "head_seat_pull_cm=5\n"
                   "head_seat_pull_cm_s=50\n"
                   "handstand_catch_deg=60\n"
-                  "showtime_auto_finisher_strike=1\n"
+                  "showtime_auto_finisher=1\n"
+                  "showtime_auto_finisher_every=1\n"
+                  "showtime_auto_finisher_cooldown_ms=0\n"
+                  "showtime_auto_strike=1\n"
+                  "showtime_auto_strike_every=1\n"
+                  "showtime_auto_strike_cooldown_ms=0\n"
+                  "showtime_auto_dodge_every=1\n"
+                  "showtime_auto_dodge_cooldown_ms=0\n"
                   "log_level=1\n"
-                  "movement_defaults=17\n",
+                  "movement_defaults=18\n",
               "the defaults' text");
         Values changed = defaults;
         changed.recordingFov = 140;
@@ -33953,6 +33960,34 @@ int main() {
             ++given;
         check(given * dt > .75f && given * dt < .85f, "the give-up");
     });
+    test("showtime how often: every Nth event of a kind, a cooldown between two, a held-back event fires after it (beta3b)", [&] {
+        using showtime::AutoGate;
+        AutoGate every1;
+        bool all = true;
+        for (int i = 0; i < 5; ++i)
+            all &= every1.fire(i * 100, 1, 0);
+        check(all, "every 1, no cooldown: each one (as beta3)");
+        AutoGate third;
+        int fired = 0;
+        for (int i = 1; i <= 9; ++i)
+            if (third.fire(i * 1000, 3, 0)) {
+                ++fired;
+                check(i % 3 == 0, "every 3 fired off the third");
+            }
+        check(fired == 3, "every 3: 3 of 9");
+        AutoGate cool;
+        check(cool.event(0, 1, 2000) == AutoGate::Result::fire, "the first goes out");
+        check(cool.event(500, 1, 2000) == AutoGate::Result::cooling, "500 ms later: cooling");
+        check(cool.event(1999, 1, 2000) == AutoGate::Result::cooling, "1999 ms later: cooling");
+        check(cool.event(2000, 1, 2000) == AutoGate::Result::fire, "2 s later: out");
+        AutoGate both;
+        check(both.event(0, 2, 5000) == AutoGate::Result::counting && both.event(10, 2, 5000) == AutoGate::Result::fire,
+              "every 2: the second");
+        check(both.event(20, 2, 5000) == AutoGate::Result::counting && both.event(30, 2, 5000) == AutoGate::Result::cooling,
+              "the next second one inside the cooldown is held back");
+        check(both.event(6000, 2, 5000) == AutoGate::Result::fire, "held back, the first after the wait goes out");
+        check(AutoGate{}.event(0, 0, -5) == AutoGate::Result::fire, "nonsense settings: every one");
+    });
     test("beta3 switches: on by default, on once for an older file (revision 17), and a 0 chosen after it stays", [&] {
         using vr_settings::Values, vr_settings::withMovementDefaults, vr_settings::withTabOnly, vr_settings::tabOnlyText;
         const Values d{};
@@ -33960,14 +33995,17 @@ int main() {
         check(d.landingViewSnap && d.landingViewSnapCm == 15 && d.landingViewSnapMs == 120, "LANDING VIEW SNAP: on, 15 cm, 120 ms");
         check(d.headSeatPull && d.headSeatPullCm == 5 && d.headSeatPullCmS == 50, "HEAD SEAT PULL: on, 5 cm, 50 cm/s");
         check(d.handstandCatchDeg == 60 && d.handstandTipInDeg == 60, "HANDSTAND: catch and tip-in from 60 deg");
-        check(d.showtimeAutoFinisherStrike, "AUTO: FINISHERS AND STRIKES is on by default");
+        check(d.showtimeAutoFinisher && d.showtimeAutoStrike && d.showtimeAutoFinisherEvery == 1 &&
+                  d.showtimeAutoStrikeEvery == 1 && d.showtimeAutoDodgeEvery == 1 && d.showtimeAutoFinisherCooldownMs == 0 &&
+                  d.showtimeAutoStrikeCooldownMs == 0 && d.showtimeAutoDodgeCooldownMs == 0,
+              "AUTO: FINISHERS and STRIKES on, every one, no cooldown");
         // BETA3 DEFAULT CHECKS END
         Values off{};
         off.handoffHeadFirst = false;
         off.landingViewSnap = false;
         off.headSeatPull = false;
         off.handstandTipInDeg = 120;
-        off.showtimeAutoFinisherStrike = false;
+        off.showtimeAutoFinisher = off.showtimeAutoStrike = false;
         // BETA3 OFF END
         std::string base = tabOnlyText(off);
         base = base.substr(0, base.find("movement_defaults="));
@@ -33979,15 +34017,25 @@ int main() {
         check(migrated.handstandTipInDeg == 60, "a saved 120 tip-in did not become 60");
         const std::string tuned = "handstand_tip_in_deg=130\nmovement_defaults=16\n";
         check(withMovementDefaults(withTabOnly({}, tuned), tuned).handstandTipInDeg == 130, "a tuned tip-in angle moved");
-        check(migrated.showtimeAutoFinisherStrike, "an older file did not get AUTO: FINISHERS AND STRIKES");
+        check(migrated.showtimeAutoFinisher && migrated.showtimeAutoStrike, "an older file did not get AUTO: FINISHERS/STRIKES");
+        // Revision 18: beta3's one switch saved off turns both off; saved on (or absent) leaves both on.
+        const std::string beta3Off = "showtime_auto_finisher_strike=0\nmovement_defaults=17\n";
+        const Values split = withMovementDefaults(withTabOnly({}, beta3Off), beta3Off);
+        check(!split.showtimeAutoFinisher && !split.showtimeAutoStrike && split.showtimeAutoDodge == Values{}.showtimeAutoDodge,
+              "a saved 0 did not turn finishers and strikes off");
+        const std::string beta3On = "showtime_auto_finisher_strike=1\nmovement_defaults=17\n";
+        const Values both = withMovementDefaults(withTabOnly({}, beta3On), beta3On);
+        check(both.showtimeAutoFinisher && both.showtimeAutoStrike, "a saved 1 turned one off");
+        const std::string later = "showtime_auto_finisher_strike=0\nshowtime_auto_strike=1\nmovement_defaults=18\n";
+        check(withMovementDefaults(withTabOnly({}, later), later).showtimeAutoStrike, "revision 18 ran twice");
         // BETA3 MIGRATED END
-        const std::string chosen = base + "movement_defaults=17\n";
+        const std::string chosen = base + "movement_defaults=18\n";
         const Values kept = withMovementDefaults(withTabOnly({}, chosen), chosen);
         check(!kept.handoffHeadFirst, "a 0 chosen after revision 17 moved");
         check(!kept.landingViewSnap, "LANDING VIEW SNAP: a 0 chosen after revision 17 moved");
         check(!kept.headSeatPull, "HEAD SEAT PULL: a 0 chosen after revision 17 moved");
         check(kept.handstandTipInDeg == 120, "a 120 tip-in chosen after revision 17 moved");
-        check(!kept.showtimeAutoFinisherStrike, "AUTO: FINISHERS AND STRIKES: a 0 chosen after revision 17 moved");
+        check(!kept.showtimeAutoFinisher && !kept.showtimeAutoStrike, "AUTO: FINISHERS/STRIKES: a 0 chosen after it moved");
         // BETA3 KEPT END
     });
     test("handoff head gap: one report per switch with the worst gap, the settled gap and the time over it (H6)", [&] {
