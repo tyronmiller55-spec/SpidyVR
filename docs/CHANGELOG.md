@@ -3,6 +3,26 @@
 Every build, newest first, with what changed, why, and what was measured.
 Per-check results are in [VALIDATION.md](VALIDATION.md).
 
+**0.8.7-na-beta3 (November 21, branch feat/087-beta3 from 1418992): the owner's t86u handoff pass,** a test build
+([headset checklist](NA_BETA3.md)); 0.8.7-na-beta2 stays CURRENT. One change per commit, every feature on,
+migration rev 17 (the new switches come on once; a saved 120 handstand tip-in becomes 60). HANDOFF PLACE stays
+125 cm, WALL JUMP SOUND stays SOUND A, and no new game address.
+
+- **Handoff head gap (log).** One `handoff head gap:` line per owner switch: the worst view-to-head gap in the
+  second after it, when, the settled gap and the frames over settled+5 cm.
+- **Head first** (`handoff_head_first=1`). 297 of 300 beta2 `vr->anim` switches read `headbone n/a`: the head
+  sample turned on after the head read. It turns on first now, and SpidyVR's body stays drawn until the head is
+  read (2 frames at most), so no frames of his body without a head.
+- **Landing view snap** (`landing_view_snap=1`, `_cm=15`, `_ms=120`). Landings, zips and mounts put the view
+  within 15 cm of the head at once and settle over 120 ms (the beta2 glide: up to 1.25 m over up to 450 ms).
+- **Neck pull** (`head_seat_pull=1`, `_cm=5`, `_cm_s=50`). The head-locked view follows the headset back past
+  5 cm instead of a 0.20 m reseat glide every ~12 s of walking; the 20 cm reseat stays as the backstop.
+- **Takeovers** already start the SpidyVR body at the view (TAKEOVER VIEW EASE); no new switch.
+- **Handstands from 60 degrees** (`handstand_catch_deg=60` new, `handstand_tip_in_deg` 120 -> 60).
+- **Showtime auto: finishers and strikes** (`showtime_auto_finisher_strike=1`, the owner t87u). Showtime's camera
+  steps out for a Y+B finisher (its scene) or a web strike (SpidyVR's WebStrike) and back 0.3 s after.
+- **NA Help** pages for each, **version** 0.8.7-na-beta3 (the version resource stays 0.8.7).
+
 **0.8.7-na-beta2 (November 19-21, branch feat/087-beta2 from 9e8d7cb): the owner's t79u pass,** now the testers'
 **CURRENT** after the owner's Nov 21 session (t86u: "it feels good, the polish is there") ([headset checklist](NA_BETA2.md)). One change per commit, every
 feature on, migration rev 15 (AIR DODGE, SHOWTIME RAY FAN and STICKY HANDSTANDS come on once). No existing

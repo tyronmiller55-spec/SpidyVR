@@ -23,6 +23,11 @@ not belong in upstream Spidy's bug tracker. Source is provided under GPL-3.0.
 Windows package: **Spidy-0.8.7-na-beta2-win64-<commit>.zip** (version **0.8.7-na-beta2**). Extract into a
 writable folder outside the game install. Never copy the mod into the game's folder.
 
+**0.8.7-na-beta3** (test build, Nov 21; not CURRENT): cleaner handoffs - his head is read before his body is
+shown, landings snap the view onto his head with a short settle, the view follows your walking back onto his neck
+smoothly, a per-switch head-gap log line; handstands from 60 degrees; Showtime steps out on its own for Y+B
+finishers and web strikes. [Checklist](docs/NA_BETA3.md).
+
 **0.8.7-na-beta2** (CURRENT, Nov 21): point jumps play the game's whole jump sound set; Y+B finishers stay the
 game's own and a grip no longer cancels one; **air dodge on B** in SpidyVR's air (the left stick picks the way;
 A+B, X+B and Y+B keep their chords); a **Showtime ray fan** that pulls the camera in before walls and trails less
