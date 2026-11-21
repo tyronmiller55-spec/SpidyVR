@@ -903,6 +903,7 @@ void Swing::reset(Body b) {
     kick_ = {};
     kickKeep_ = -1;
     pullOn_ = false;
+    ropePull_ = {};
     pulled_ = pullAir_ = 0;
     pointJumpQueued_ = false;
     pointJumpVelocity_ = {};
@@ -1816,6 +1817,10 @@ void Swing::step(float dt, const Input& in, const WorldQueries& world, const Wor
                 pulled_ += pull.added;
             }
         }
+        // ROPE PHYSICS ON THE SWING: the hanging lines' pull, with a web on, in this simulated air only.
+        if (!body_.grounded && (webs_[0].attached || webs_[1].attached) &&
+            (ropePull_.x != 0 || ropePull_.y != 0 || ropePull_.z != 0))
+            body_.velocity += ropePull_ * dt;
         Vec3 steering = finite(in.move) ? limited(Vec3{in.move.x, 0, in.move.z}, 1) : Vec3{};
         body_.velocity +=
             steering * ((body_.grounded ? config_.groundAcceleration : config_.airAcceleration * poseSteer_) * dt);

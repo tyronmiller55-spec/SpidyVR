@@ -881,6 +881,15 @@ class Swing {
     float jumpPullAdded() const {
         return pulled_;
     }
+    // ROPE PHYSICS ON THE SWING (beta3c, swing_line::Line::pull): the swing lines' pull (m/s^2, world), set
+    // each sample; zero (or never set) pulls nothing. Applied in SpidyVR's own air only, while a web is
+    // attached, before the taut rope's constraint (which takes the outward part), so it mostly bends the arc.
+    void ropePull(Vec3 accel) {
+        ropePull_ = finite(accel) && length(accel) < 50.f ? accel : Vec3{};
+    }
+    Vec3 ropePullApplied() const {
+        return ropePull_;
+    }
     // The player kept `keep` of his velocity from a kick's blow, on the next step.
     void kickRecoil(float keep) {
         if (std::isfinite(keep) && keep >= 0 && keep <= 1)
@@ -1064,6 +1073,7 @@ class Swing {
     float kickKeep_ = -1;
     // JUMP PULL: the pick in force, the speed this jump has had added, and how long it has been in the air.
     bool pullOn_{};
+    Vec3 ropePull_{};
     jump_pull::Config pullConfig_{};
     Vec3 pullAim_{};
     float pullWeight_{}, pulled_{}, pullAir_{};

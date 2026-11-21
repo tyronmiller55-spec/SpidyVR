@@ -822,6 +822,12 @@ struct Values {
     // CONNECT HANDOFF: a web line or web tie made with the stick click (or a zip to a line) takes the hands' webs at
     // once: no let-go line keeps swinging in the way of its rope. Off: fading lines stay until their time is up.
     bool webConnectHandoff = true;
+    // ROPE PHYSICS ON THE SWING (feel change; t91u "see what's possible", t92u approved): with FULL-LENGTH SWING LINES,
+    // the hanging line pulls the player: its slack's weight, a coil whipping out, and the drag of a line trailing a fast
+    // swing (swing_line::Line::pull), in SpidyVR's own air while a web is on. Off (or 0%): the swing as before.
+    bool swingRopePhysics = true;
+    // (%, 0 to 300) the pull's strength: 100 moderate (30 m of slack hanging pulls about 1.5 m/s^2; at most 2.5)
+    int swingRopePhysicsPct = 100;
     // BETA3 SETTINGS END
     // HERO ATTACK SOUND (beta polish A2; attack_sound, spidy_vr.ini only, no menu row): one of the game's sounds played
     // on Spidey as a punch is thrown or a kick starts (at most one a hand every 250 ms, hit_sound.hpp): the id's 32

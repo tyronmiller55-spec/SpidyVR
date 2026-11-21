@@ -372,6 +372,10 @@ JumpPullAsk pullAsk{};
 ULONGLONG pullAt{};
 uint64_t pullTarget{};
 float pullPeak{};
+// ROPE PHYSICS ON THE SWING (SpidyRopePull, beta3c): XR's latest ask (every frame while on) and when it came.
+SRWLOCK ropePullLock = SRWLOCK_INIT;
+RopePullAsk ropePullAsk{};
+ULONGLONG ropePullAt{};
 // GRIP ACROSS THE GAME (SpidySwingGrip, grip.hpp): the latest settings (the swing's step applies them).
 SRWLOCK gripLock = SRWLOCK_INIT;
 GripAsk gripAsk{};
@@ -1816,6 +1820,21 @@ void visit(const native_rays::QueryContext& world) {
                                      {ask.stick[0], ask.stick[1], ask.stick[2]}, list.data(), count);
         }
         solver.jumpPull(pick.valid, pc, pick.aim, pick.weight);
+        // ROPE PHYSICS ON THE SWING (beta3c): the swing lines' pull, while XR sends it (200 ms at most old).
+        {
+            AcquireSRWLockShared(&ropePullLock);
+            const RopePullAsk rp = ropePullAsk;
+            const bool fresh = GetTickCount64() - ropePullAt <= 200;
+            ReleaseSRWLockShared(&ropePullLock);
+            Vec3 accel{};
+            if (fresh && (rp.flags & 1u) && focused) {
+                accel = {rp.accel[0], rp.accel[1], rp.accel[2]};
+                const float m = length(accel);
+                if (m > rp.cap && m > 0)
+                    accel = accel * (rp.cap / m);
+            }
+            solver.ropePull(accel);
+        }
         volatile JumpPullLive& live = SpidyJumpPullLive;
         const uint64_t target = pick.valid ? pick.id : 0;
         const float added = solver.jumpPullAdded();
@@ -2671,6 +2690,25 @@ extern "C" __declspec(dllexport) DWORD WINAPI SpidyJumpPull(void* input) {
     pullAsk = a;
     pullAt = GetTickCount64();
     ReleaseSRWLockExclusive(&pullLock);
+    return 0;
+}
+// ROPE PHYSICS ON THE SWING (beta3c): XR's ask, every frame while on. 2001: not a RopePullAsk; 1004: the
+// swing has not started; 0 taken.
+extern "C" __declspec(dllexport) DWORD WINAPI SpidyRopePull(void* input) {
+    RopePullAsk a;
+    if (!input || !copy(&a, input, sizeof(a)) || a.magic != 0x53575250 || a.version != 1 ||
+        a.bytes != sizeof(a) || (a.flags & ~1u) || !std::isfinite(a.accel[0]) || !std::isfinite(a.accel[1]) ||
+        !std::isfinite(a.accel[2]) || !std::isfinite(a.cap) || a.cap < 0.f || a.cap > 10.f)
+        return 2001;
+    AcquireSRWLockShared(&lifecycle);
+    const bool running = started;
+    ReleaseSRWLockShared(&lifecycle);
+    if (!running)
+        return 1004;
+    AcquireSRWLockExclusive(&ropePullLock);
+    ropePullAsk = a;
+    ropePullAt = GetTickCount64();
+    ReleaseSRWLockExclusive(&ropePullLock);
     return 0;
 }
 // GRIP ACROSS THE GAME (grip.hpp): the VR worker's settings. 2001: not a GripAsk; 1004: the swing has not

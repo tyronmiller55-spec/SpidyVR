@@ -43,6 +43,8 @@ struct Input {
     float beyond{};
     // How many points the free part may use (the game rope's hand points left after the edges).
     int most = tether::maxDrawn;
+    // ROPE PHYSICS ON THE SWING (beta3c, swing_rope_physics): the pull's strength, 1 = moderate; 0 = none.
+    float pullStrength{};
 };
 struct Change {
     bool attached{}; // this update caught a new web
@@ -138,6 +140,7 @@ class Line {
         bool simulated{};                // laid by the rope (else the sag curve, or straight)
         Change change{};
         float slack{}; // drawn past the line (metres)
+        Vec3 pull{};   // ROPE PHYSICS ON THE SWING: the line's pull on the player (m/s^2), 0 when not asked
     };
     Out update(const Input& in, Vec3 wrist, Vec3 anchor, float seconds) {
         Out o;
@@ -188,6 +191,8 @@ class Line {
         }
         if (!o.simulated && most > 0)
             o.count = sagPoints(wrist, anchor, o.drawn - beyond, most, o.points);
+        if (in.pullStrength > 0 && !in.grounded && (r.active || r.asleep))
+            o.pull = pull(slack, in.pullStrength);
         return o;
     }
     // PHYSICS UNTIL FADE (beta3c, web_fade_physics): the web was let go of. Its wrist end comes free with the
@@ -260,6 +265,38 @@ class Line {
         rope_.reset();
         laid_ = 0;
         age_ = 0;
+    }
+    // ROPE PHYSICS ON THE SWING: the pull (m/s^2 on the player) the hanging line puts on the hand, along the
+    // rope's first segment there (where a hanging rope's tension pulls): half the laid slack's weight, and
+    // the momentum the slack carries away from the hand handed over in flingSeconds. The line's mass per
+    // metre is massPerMetre of the player's; capped at pullCap (both times the strength), ramped in over
+    // pullRamp after a catch. The sim's damping is world-space (still air), so a line trailing a fast swing
+    // pulls back: the drag.
+    static constexpr float massPerMetre = .0102f, flingSeconds = .5f, pullCap = 2.5f, pullRamp = .3f;
+    Vec3 pull(float slack, float strength) const {
+        const auto x = rope_.points();
+        const auto v = rope_.velocities();
+        const size_t n = x.size();
+        if (n < 3 || v.size() != n || !(strength > 0) || !(slack > minSlack))
+            return {};
+        const Vec3 first = x[1] - x[0];
+        const float len = length(first);
+        if (!(len > 1e-5f))
+            return {};
+        const Vec3 dir = first / len;
+        const float mass = massPerMetre * std::min(slack, maxSlack);
+        float along = 0;
+        for (size_t i = 1; i + 1 < n; ++i)
+            along += dot(v[i] - handVelocity_, dir);
+        along /= static_cast<float>(n - 2);
+        const float weight = .5f * mass * config().gravity;
+        const float fling = mass * std::max(along, 0.f) / flingSeconds;
+        Vec3 a = dir * ((weight + fling) * strength);
+        const float cap = pullCap * strength, m = length(a);
+        if (m > cap && m > 0)
+            a = a * (cap / m);
+        a = a * std::clamp(age_ / pullRamp, 0.f, 1.f);
+        return finite(a) ? a : Vec3{};
     }
     const DrawnLength& drawnLength() const {
         return length_;

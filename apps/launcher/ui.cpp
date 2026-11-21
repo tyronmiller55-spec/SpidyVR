@@ -3323,6 +3323,10 @@ void App::options(ImVec2 origin, ImVec2 size) {
                    S(150), [&] { fineSlider("##webfadems", tabOnly_.webFadeMs, 300, 3000, 100, "%d ms", nullptr); });
             settingOption(Item::none, "Connect handoff", "A web line or web tie made with the stick click takes the hands' webs at once. Default: on.",
                    S(42), [&] { flagToggle("##webconnecthandoff", tabOnly_.webConnectHandoff); });
+            settingOption(Item::none, "Rope physics on the swing", "Changes the feel: the hanging line pulls you - its weight, a coil whipping out, the drag of a trailing line. Needs full-length swing lines. Off: the swing as before. Default: on.",
+                   S(42), [&] { flagToggle("##swingropephysics", tabOnly_.swingRopePhysics); });
+            settingOption(Item::none, "Rope pull strength", "How hard the line pulls. 100% is moderate; 0% is none. Default: 100%.",
+                   S(150), [&] { fineSlider("##swingropephysicspct", tabOnly_.swingRopePhysicsPct, 0, 300, 10, "%d%%", "Off"); });
             // BETA3C LAUNCHER END
         });
         // NA HELP (beta polish M5): the same pages as the game's NA · HELP tab (na_help.hpp), a card per topic.

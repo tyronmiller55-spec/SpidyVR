@@ -25622,6 +25622,8 @@ int main() {
                   "web_fade_physics=1\n"
                   "web_fade_ms=1200\n"
                   "web_connect_handoff=1\n"
+                  "swing_rope_physics=1\n"
+                  "swing_rope_physics_pct=100\n"
                   "log_level=1\n"
                   "movement_defaults=19\n",
               "the defaults' text");
@@ -33886,10 +33888,11 @@ int main() {
         SlInput given = plain;
         given.beyond = 0;
         given.most = tether::maxDrawn;
+        given.pullStrength = 0;
         for (int i = 0; i < 100; ++i) {
             const Vec3 w{20.f - i * .1f, 20, 0};
             const auto x = a.update(plain, w, {0, 20, 0}, 1.f / 72), y = b.update(given, w, {0, 20, 0}, 1.f / 72);
-            check(x.count == y.count && x.drawn == y.drawn,
+            check(x.count == y.count && x.drawn == y.drawn && length(x.pull) == 0 && length(y.pull) == 0,
                   "the defaults changed the line");
         }
     });
@@ -33933,6 +33936,71 @@ int main() {
         check(line.release(), "the second release");
         line.update(in, {20, 20, 0}, anchor, 1.f / 72);
         check(!line.fading(), "a new web did not end the fade");
+    });
+    test("rope physics on the swing: the hanging slack pulls down along the rope, capped, none taut, off or grounded", [&] {
+        namespace sl = swing_line;
+        const Vec3 anchor{0, 40, 0};
+        const auto settle = [&](float strength, bool grounded, float distance, float ropeDrawn) {
+            sl::Line line;
+            sl::Input in{true, true, 6, 0, ropeDrawn, false, grounded};
+            in.pullStrength = strength;
+            line.update(in, {ropeDrawn, 40, 0}, anchor, 1.f / 72);
+            sl::Line::Out o;
+            for (int i = 0; i < 72 * 3; ++i)
+                o = line.update(in, {distance, 40, 0}, anchor, 1.f / 72);
+            return o;
+        };
+        const auto hung = settle(1.f, false, 10.f, 40.f); // 30 m of slack
+        check(hung.slack > 29.f && hung.pull.y < -.5f, "30 m of slack does not pull down");
+        check(length(hung.pull) <= sl::Line::pullCap + 1e-3f, "past the cap");
+        const auto strong = settle(3.f, false, 10.f, 40.f);
+        check(length(strong.pull) > length(hung.pull) && length(strong.pull) <= 3.f * sl::Line::pullCap + 1e-3f,
+              "the strength does not scale it");
+        check(length(settle(0.f, false, 10.f, 40.f).pull) == 0.f, "0%: a pull");
+        check(length(settle(1.f, true, 10.f, 40.f).pull) == 0.f, "on the ground: a pull");
+        check(length(settle(1.f, false, 40.f, 40.f).pull) == 0.f, "taut: a pull (the swing's rope holds him)");
+        const auto little = settle(1.f, false, 35.f, 40.f); // 5 m of slack
+        check(length(little.pull) < length(hung.pull), "less slack does not pull less");
+        // Ramped in after a catch.
+        sl::Line fresh;
+        sl::Input in{true, true, 8, 0, 40.f, false, false};
+        in.pullStrength = 1.f;
+        fresh.update(in, {40, 40, 0}, anchor, 1.f / 72);
+        const auto first = fresh.update(in, {10, 40, 0}, anchor, 1.f / 72);
+        check(length(first.pull) < .3f * sl::Line::pullCap, "not ramped in");
+    });
+    test("rope physics on the swing: the pull bends SpidyVR's air with a web on; none, or a zero pull, leaves it as before", [] {
+        const auto run = [](int mode, Vec3* position) {
+            TestWorld world;
+            world.enabled = false;
+            spidy::Swing swing([] {
+                auto c = inert();
+                c.physical = true;
+                return c;
+            }());
+            swing.allowAirAnchors(true);
+            auto in = aimed();
+            in.hands[0].trigger = 0;
+            spidy::Body body{{}, {}, false};
+            auto intent = swing.predictNativeStep(1.f / 90, in, world, body);
+            bool attached = false;
+            for (int frame = 0; frame < 200; ++frame) {
+                body = spidy::Body{intent.target, intent.velocity, false};
+                attached |= swing.webs()[0].attached;
+                if (mode == 1)
+                    swing.ropePull({});
+                else if (mode == 2)
+                    swing.ropePull({3, 0, 0});
+                intent = swing.predictNativeStep(1.f / 90, in, world, body);
+            }
+            *position = intent.target;
+            return attached;
+        };
+        Vec3 none, zero, pulled;
+        const bool a0 = run(0, &none), a1 = run(1, &zero), a2 = run(2, &pulled);
+        check(a0 && a1 && a2, "the web never attached");
+        check(none.x == zero.x && none.y == zero.y && none.z == zero.z, "a zero pull changed the swing");
+        check(pulled.x > none.x + .05f, "the pull did not move him");
     });
     test("shooter check: the logged forearm sign and the palm-side rule read the same palm, both hands", [&] {
         const float d2r = 3.14159265f / 180;
@@ -34225,6 +34293,7 @@ int main() {
         check(d.webSharedSlack, "SECOND HAND: on");
         check(d.webFadePhysics && d.webFadeMs == 1200, "PHYSICS UNTIL FADE: on, 1200 ms");
         check(d.webConnectHandoff, "CONNECT HANDOFF: on");
+        check(d.swingRopePhysics && d.swingRopePhysicsPct == 100, "ROPE PHYSICS: on, 100%");
         // BETA3 DEFAULT CHECKS END
         Values off{};
         off.handoffHeadFirst = false;
@@ -34237,6 +34306,7 @@ int main() {
         off.webSharedSlack = false;
         off.webFadePhysics = false;
         off.webConnectHandoff = false;
+        off.swingRopePhysics = false;
         // BETA3 OFF END
         std::string base = tabOnlyText(off);
         base = base.substr(0, base.find("movement_defaults="));
@@ -34266,6 +34336,7 @@ int main() {
         check(webs.webSharedSlack, "a revision 18 file did not get SECOND HAND");
         check(webs.webFadePhysics, "a revision 18 file did not get PHYSICS UNTIL FADE");
         check(webs.webConnectHandoff, "a revision 18 file did not get CONNECT HANDOFF");
+        check(webs.swingRopePhysics, "a revision 18 file did not get ROPE PHYSICS");
         check(!webs.airFlipDoubleTap, "revision 18 ran again");
         // BETA3 MIGRATED END
         const std::string chosen = base + "movement_defaults=19\n";
@@ -34280,6 +34351,7 @@ int main() {
         check(!kept.webSharedSlack, "SECOND HAND: a 0 chosen after revision 19 moved");
         check(!kept.webFadePhysics, "PHYSICS UNTIL FADE: a 0 chosen after revision 19 moved");
         check(!kept.webConnectHandoff, "CONNECT HANDOFF: a 0 chosen after revision 19 moved");
+        check(!kept.swingRopePhysics, "ROPE PHYSICS: a 0 chosen after revision 19 moved");
         // BETA3 KEPT END
     });
     test("handoff head gap: one report per switch with the worst gap, the settled gap and the time over it (H6)", [&] {

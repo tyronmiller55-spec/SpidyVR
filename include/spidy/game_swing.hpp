@@ -755,6 +755,20 @@ struct JumpPullAsk {
     uint32_t reserved{};
 };
 static_assert(sizeof(JumpPullAsk) == 64);
+// Side channel from XR (ROPE PHYSICS ON THE SWING, beta3c, swing_rope_physics; swing_line::Line::pull): sent
+// every frame while it is on to SpidyRopePull; an ask older than 200 ms is none. `flags` bit 0: on. `accel`:
+// the swing lines' pull on the player (m/s^2, world), both hands summed; `cap` its most (m/s^2). The swing
+// adds it to its own air velocity while a web is attached and it is off the ground; the animation's air is
+// never touched. Not a Command or Settings field: an older module has no export and XR then sends none (the
+// swing as before).
+struct RopePullAsk {
+    uint32_t magic = 0x53575250, version = 1, bytes = sizeof(RopePullAsk), serial{};
+    uint32_t flags{};
+    float accel[3]{};
+    float cap{};
+    uint32_t reserved[3]{};
+};
+static_assert(sizeof(RopePullAsk) == 48);
 // SpidyJumpPullLive: what the pull did. `events` counts up LAST (a pick began, changed or ended); `active` is 1 while a
 // pick is in force; `target` his record, `weight` 0..1, `angleDeg` off the picking line, `distance` to him (m), `added` what
 // this jump has had added (m/s), `byStick` whether the stick's cone picked him. `pulls` counts jumps that were pulled.

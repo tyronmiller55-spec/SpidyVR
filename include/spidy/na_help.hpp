@@ -73,6 +73,7 @@ inline constexpr Page pages[] = {
     {"WEBS & WEB CANCEL", "  (6) SECOND HAND", "SECOND HAND: the web in both hands keeps its line; climbing takes it in."},
     {"WEBS & WEB CANCEL", "  (7) UNTIL FADE", "PHYSICS UNTIL FADE: a let-go line swings free 1.2 s, then dissolves."},
     {"WEBS & WEB CANCEL", "  (8) CONNECT", "A stick-click web line or tie takes the hands' webs at once (CONNECT HANDOFF)."},
+    {"WEBS & WEB CANCEL", "  (9) ROPE PHYSICS", "ROPE PHYSICS: hanging slack pulls you, coils fling, trailing lines drag. 100%."},
 
     {"HAND GRAB", "HAND GRAB", "HAND GRAB: a palm on an enemy or prop holds it."},
     {"HAND GRAB", "  (2) HEAVIES", "Heavies and bosses resist throws unless stunned or webbed up (open)."},

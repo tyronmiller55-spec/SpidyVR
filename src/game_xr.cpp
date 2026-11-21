@@ -724,6 +724,9 @@ const game_swing::SwingScanCost* swingScanCost{};
 // JUMP PULL (jump_pull.hpp): the ask the swing gets every frame (SpidyJumpPull: the gaze and the stick move) and what it did
 // (SpidyJumpPullLive); none in an older module (no pull).
 BridgeCall jumpPullCall{};
+// ROPE PHYSICS ON THE SWING (beta3c): the swing lines' pull, sent every frame while on (SpidyRopePull); none
+// in an older module (the swing as before).
+BridgeCall ropePullCall{};
 const game_swing::JumpPullLive* jumpPullLive{};
 // AIR KICKS' settings and gestures for the swing (SpidyAirKick), and its account (SpidyAirKickLive); none in an
 // older module (no air kicks).
@@ -2116,6 +2119,8 @@ DWORD WINAPI run(void*) {
         };
         SwingFade swingFades[2]{};
         uint32_t webTieCountSeen{}, webLineCountSeen{};
+        uint32_t ropePullSerial{};
+        bool ropePullWasOn{};
         // Which of the game's two ropes draws which hand's web (one web in
         // both hands has one rope), and when a free hand last came onto the
         // other hand's web (a tick says a press there takes hold of it).
@@ -7895,6 +7900,8 @@ DWORD WINAPI run(void*) {
                                     (swingLines[0].fading() ? 1 : 0) + (swingLines[1].fading() ? 1 : 0));
                             webTieCountSeen = tieState.count;
                             webLineCountSeen = lineState.count;
+                            // ROPE PHYSICS ON THE SWING: the lines' pull this frame, both hands.
+                            Vec3 ropePullSum{};
                             webs.feet = motion.anchor;
                             for (unsigned i = 0; i < 2; ++i) {
                                 auto& hand = webs.hands[i];
@@ -8022,6 +8029,8 @@ DWORD WINAPI run(void*) {
                                     sl.grounded = swingState.grounded != 0;
                                     sl.beyond = beyond;
                                     sl.most = std::max(room, 0);
+                                    sl.pullStrength =
+                                        values.swingRopePhysics ? values.swingRopePhysicsPct * .01f : 0.f;
                                     // Let go of (no web on this rope now, or another): the line's account,
                                     // then PHYSICS UNTIL FADE - it swings free from where it sticks while the
                                     // rope is not wanted, until WEB FADE MS, a new web, or a stick-click line
@@ -8098,6 +8107,7 @@ DWORD WINAPI run(void*) {
                                              ++k)
                                             bent[i].points[n++] = edges.points[k];
                                         bent[i].count = n;
+                                        ropePullSum += out.pull;
                                     }
                                     const uint64_t nowMs = GetTickCount64();
                                     if (drawn &&
@@ -8156,6 +8166,10 @@ DWORD WINAPI run(void*) {
                                         last.shared = sharedNow;
                                         last.drawnM = out.drawn;
                                         last.peakSlack = std::max(last.peakSlack, out.slack);
+                                        const float pulled = length(out.pull);
+                                        last.peakPull = std::max(last.peakPull, pulled);
+                                        if (pulled > .05f)
+                                            last.pulledSeconds += std::max(frame.seconds, 0.f);
                                     }
                                 }
                             }
@@ -8198,6 +8212,33 @@ DWORD WINAPI run(void*) {
                                 if (!swingLineSeen[h])
                                     swingLines[h].update({}, {}, {}, 0.f);
                             native_webs::submit(webs, 200, bent);
+                            // ROPE PHYSICS ON THE SWING (beta3c): the lines' pull to the swing every frame
+                            // while on (SpidyRopePull); off, once on the change, then nothing (the swing as
+                            // before).
+                            if (ropePullCall) {
+                                const bool on = values.swingRopePhysics && values.swingLineFullLength &&
+                                                values.swingRopePhysicsPct > 0;
+                                if (on || ropePullWasOn) {
+                                    game_swing::RopePullAsk ask;
+                                    ask.serial = ++ropePullSerial;
+                                    ask.flags = on ? 1u : 0u;
+                                    const Vec3 a = on && finite(ropePullSum) ? ropePullSum : Vec3{};
+                                    ask.accel[0] = a.x;
+                                    ask.accel[1] = a.y;
+                                    ask.accel[2] = a.z;
+                                    // Both hands' cap.
+                                    ask.cap = std::min(2.f * swing_line::Line::pullCap *
+                                                           values.swingRopePhysicsPct * .01f,
+                                                       10.f);
+                                    if (ropePullCall(&ask) == 0) {
+                                        if (on != ropePullWasOn)
+                                            diag_log::writef(
+                                                "rope pull: %s (strength %d%%, at most %.1f m/s^2)",
+                                                on ? "on" : "off", values.swingRopePhysicsPct, ask.cap);
+                                        ropePullWasOn = on;
+                                    }
+                                }
+                            }
                             // The web tie's webs, in the game's own rope material.
                             native_webs::TieRope tieRopes[native_webs::maxTieRopes]{};
                             uint32_t tieRopeCount{};
@@ -14485,6 +14526,7 @@ extern "C" __declspec(dllexport) DWORD WINAPI SpidyXrStart(void* input) {
                           swingScanCost->bytes != expected.bytes))
         swingScanCost = nullptr; // an older module has none: no "punch scan:" line
     jumpPullCall = reinterpret_cast<BridgeCall>(GetProcAddress(rays, "SpidyJumpPull"));
+    ropePullCall = reinterpret_cast<BridgeCall>(GetProcAddress(rays, "SpidyRopePull"));
     jumpPullLive = reinterpret_cast<const game_swing::JumpPullLive*>(GetProcAddress(rays, "SpidyJumpPullLive"));
     if (const game_swing::JumpPullLive expected;
         jumpPullLive && (jumpPullLive->magic != expected.magic || jumpPullLive->version != expected.version ||

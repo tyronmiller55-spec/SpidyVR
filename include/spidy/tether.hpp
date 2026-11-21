@@ -189,6 +189,10 @@ class Rope {
     std::span<const Vec3> points() const {
         return {x_.data(), started_ ? static_cast<std::size_t>(config_.particles) : 0u};
     }
+    // The particles' velocities (m/s), as points().
+    std::span<const Vec3> velocities() const {
+        return {v_.data(), started_ ? static_cast<std::size_t>(config_.particles) : 0u};
+    }
     const std::vector<Plane>& planes() const {
         return planes_;
     }

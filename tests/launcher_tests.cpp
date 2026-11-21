@@ -808,6 +808,10 @@ int main() {
                 continue;
             if (key == "swing_line_full_length")
                 continue;
+            if (key == "swing_rope_physics_pct")
+                continue;
+            if (key == "swing_rope_physics")
+                continue;
             if (key == "web_connect_handoff")
                 continue;
             if (key == "web_fade_ms")

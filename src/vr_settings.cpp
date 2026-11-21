@@ -1328,6 +1328,7 @@ Values sanitized(Values v) {
     v.handstandGraceAfterMs = std::clamp(v.handstandGraceAfterMs, 100, 1000);
     v.handstandGraceBeforeMs = std::clamp(v.handstandGraceBeforeMs, 0, 1000);
     v.handoffPlaceCm = std::clamp(v.handoffPlaceCm, 0, 2000);
+    v.swingRopePhysicsPct = std::clamp(v.swingRopePhysicsPct, 0, 300);
     v.webFadeMs = std::clamp(v.webFadeMs, 300, 3000);
     v.airFlipDoubleTapMs = std::clamp(v.airFlipDoubleTapMs, 150, 600);
     v.showtimeAutoFinisherEvery = std::clamp(v.showtimeAutoFinisherEvery, 1, 10);
@@ -3290,6 +3291,8 @@ constexpr TabOnly tabOnly[] = {
     {"web_fade_physics", &Values::webFadePhysics, nullptr},
     {"web_fade_ms", nullptr, &Values::webFadeMs},
     {"web_connect_handoff", &Values::webConnectHandoff, nullptr},
+    {"swing_rope_physics", &Values::swingRopePhysics, nullptr},
+    {"swing_rope_physics_pct", nullptr, &Values::swingRopePhysicsPct},
     {"log_level", nullptr, &Values::logLevel},
     {"movement_defaults", nullptr, &Values::movementDefaults},
 };
@@ -3514,6 +3517,7 @@ Values withMovementDefaults(Values v, std::string_view text) {
         v.webSharedSlack = true;
         v.webFadePhysics = true;
         v.webConnectHandoff = true;
+        v.swingRopePhysics = true;
         // BETA3C MIGRATION END
     }
     v.movementDefaults = movementDefaultsRevision;
