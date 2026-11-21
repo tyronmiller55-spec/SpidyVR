@@ -10865,9 +10865,17 @@ DWORD WINAPI run(void*) {
                                         const float trackedGap = length(landHeadProbe.fromEyes - hb);
                                         const Vec3 carried = hybrid_handoff::travel(hybridBlend.fromAnchor, motion.anchor);
                                         const Vec3 feetNow{body[12], body[13], body[14]};
-                                        const auto plan = hybrid_handoff::landingGlide(
-                                            gap, baseMs, values.handoffGlideCmS, values.handoffGlideMaxMs,
-                                            values.handoffPlaceCm, hybrid_handoff::peakSmoothstep);
+                                        // LANDING VIEW SNAP (H1): within landing_view_snap_cm at once, the
+                                        // rest over landing_view_snap_ms; off, the glide and place as in
+                                        // beta2.
+                                        const bool snap = values.landingViewSnap;
+                                        const auto plan =
+                                            snap ? hybrid_handoff::landingSnap(gap, values.landingViewSnapCm,
+                                                                               values.landingViewSnapMs)
+                                                 : hybrid_handoff::landingGlide(
+                                                       gap, baseMs, values.handoffGlideCmS,
+                                                       values.handoffGlideMaxMs, values.handoffPlaceCm,
+                                                       hybrid_handoff::peakSmoothstep);
                                         // Why the gap is what it is (the owner, Nov 17: find the 20-47 m gaps).
                                         if (gap > 1.f || trackedGap > 1.f)
                                             diag_log::writef(
@@ -10894,8 +10902,15 @@ DWORD WINAPI run(void*) {
                                                              "%d cm; the angle still blends), #%u",
                                                              landHeadProbe.why, gap, values.handoffPlaceCm,
                                                              handoffPlaces);
-                                        } else if (plan.place || plan.ms > baseMs) {
-                                            if (softPlaced) {
+                                        } else if (plan.place || plan.ms > baseMs ||
+                                                   (snap && plan.ms != baseMs)) {
+                                            if (softPlaced && snap) {
+                                                diag_log::writef(
+                                                    "landing view snap: %s %.2f m from the head, %.2f m "
+                                                    "snapped at once, the last %.2f m glide over %d ms",
+                                                    landHeadProbe.why, gap, plan.placed, gap - plan.placed,
+                                                    plan.ms);
+                                            } else if (softPlaced) {
                                                 ++handoffPlaces;
                                                 diag_log::writef("handoff place: %s %.2f m onto the head, %.2f m placed at once, "
                                                                  "the last %.2f m glide over %d ms, #%u",
@@ -10903,9 +10918,13 @@ DWORD WINAPI run(void*) {
                                                                  plan.ms, handoffPlaces);
                                             }
                                             // Stretched at the progress it has (a few ms in): no step back.
-                                            const auto clock = hybrid_handoff::stretchKeepingProgress(
-                                                handoffNs, hybridBlend.startNs, hybridBlend.durNs,
-                                                static_cast<int64_t>(plan.ms) * 1'000'000);
+                                            const int64_t planNs = static_cast<int64_t>(plan.ms) * 1'000'000;
+                                            const auto clock = snap ? hybrid_handoff::retimeKeepingProgress(
+                                                                          handoffNs, hybridBlend.startNs,
+                                                                          hybridBlend.durNs, planNs)
+                                                                    : hybrid_handoff::stretchKeepingProgress(
+                                                                          handoffNs, hybridBlend.startNs,
+                                                                          hybridBlend.durNs, planNs);
                                             if (clock.durNs != hybridBlend.durNs) {
                                                 hybridBlend.posStartNs = clock.startNs;
                                                 hybridBlend.posDurNs = clock.durNs;

@@ -765,6 +765,13 @@ struct Values {
     // 300), and SpidyVR's body stays drawn until it is (at most 2 frames), so the view never shows the animation's
     // body without a head to put it on. Off: as beta2.
     bool handoffHeadFirst = true;
+    // LANDING VIEW SNAP (beta3, H1; the owner, Nov 21 t86u: "Handoffs have to be cleaned up so that jump isn't
+    // visible"): a landing, zip or mount puts the view within LANDING VIEW SNAP CM of the head at once and glides the
+    // rest over LANDING VIEW SNAP MS (the beta2 glide: up to handoff_place_cm over up to 450 ms). Off: as beta2.
+    bool landingViewSnap = true;
+    int landingViewSnapCm = 15; // (cm, 0 to 100) how far from the head the snap leaves the view
+    // (ms, 40 to 400) the glide over the last LANDING VIEW SNAP CM
+    int landingViewSnapMs = 120;
     // BETA3 SETTINGS END
     // HERO ATTACK SOUND (beta polish A2; attack_sound, spidy_vr.ini only, no menu row): one of the game's sounds played
     // on Spidey as a punch is thrown or a kick starts (at most one a hand every 250 ms, hit_sound.hpp): the id's 32

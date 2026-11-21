@@ -106,6 +106,36 @@ inline BlendClock stretchKeepingProgress(int64_t nowNs, int64_t startNs, int64_t
     return {nowNs - static_cast<int64_t>(t * static_cast<double>(newDurNs)), newDurNs};
 }
 
+// LANDING VIEW SNAP (landing_view_snap, beta3 H1; the owner, Nov 21 t86u: "Handoffs have to be cleaned up so
+// that jump isn't visible to players"): a landing, zip or mount puts the view within `snapCm` of the head at
+// once and glides the rest over a short `snapMs`, instead of gliding up to handoff_place_cm over up to 450 ms
+// with his body drawn away from the view. The position only; the angle still blends.
+inline LandingGlide landingSnap(float metres, int snapCm, int snapMs) {
+    LandingGlide g;
+    g.ms = (std::max)(snapMs, 1);
+    if (!std::isfinite(metres) || metres <= 0.f)
+        return g;
+    const float keep = static_cast<float>((std::max)(snapCm, 0)) * .01f;
+    if (metres > keep) {
+        g.place = true;
+        g.placed = metres - keep;
+    }
+    return g;
+}
+// stretchKeepingProgress for any new length, shorter too (LANDING VIEW SNAP shortens the glide): the same
+// progress t on the new clock, so the view does not step. A blend already done, or no new length, keeps its
+// own clock.
+inline BlendClock retimeKeepingProgress(int64_t nowNs, int64_t startNs, int64_t durNs, int64_t newDurNs) {
+    const int64_t d = durNs > 0 ? durNs : handoffNs;
+    const int64_t elapsed = nowNs - startNs;
+    if (newDurNs <= 0 || newDurNs == d || elapsed >= d)
+        return {startNs, d};
+    if (elapsed <= 0)
+        return {startNs, newDurNs};
+    const double t = static_cast<double>(elapsed) / static_cast<double>(d);
+    return {nowNs - static_cast<int64_t>(t * static_cast<double>(newDurNs)), newDurNs};
+}
+
 // World look yaw from a level forward (0 = facing −Z, same as the tracking rig).
 inline float lookYaw(Vec3 forward) {
     if (!finite(forward))

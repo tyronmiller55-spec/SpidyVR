@@ -808,6 +808,12 @@ int main() {
                 continue;
             if (key == "swing_line_full_length")
                 continue;
+            if (key == "landing_view_snap_ms")
+                continue;
+            if (key == "landing_view_snap_cm")
+                continue;
+            if (key == "landing_view_snap")
+                continue;
             if (key == "handoff_head_first")
                 continue;
             if (key == "showtime_speed_lead_pct")

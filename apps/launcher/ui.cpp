@@ -3202,6 +3202,12 @@ void App::options(ImVec2 origin, ImVec2 size) {
         group(handoffPage, 1, "Handoff fixes (beta3)", [&] {
             settingOption(Item::none, "Head first", "A switch into the animation reads his head first; your body stays drawn until then (2 frames at most). Default: on.",
                    S(42), [&] { flagToggle("##headfirst", tabOnly_.handoffHeadFirst); });
+            settingOption(Item::none, "Landing view snap", "A landing, zip or mount puts the view near his head at once, then a short glide. Default: on.",
+                   S(42), [&] { flagToggle("##landingsnap", tabOnly_.landingViewSnap); });
+            settingOption(Item::none, "Snap distance", "How far from his head the snap leaves the view; the rest glides. Default: 15 cm.",
+                   S(150), [&] { fineSlider("##landingsnapcm", tabOnly_.landingViewSnapCm, 0, 100, 1, "%d cm", "Onto the head"); });
+            settingOption(Item::none, "Snap glide", "The glide over the last few centimetres after the snap. Default: 120 ms.",
+                   S(150), [&] { fineSlider("##landingsnapms", tabOnly_.landingViewSnapMs, 40, 400, 10, "%d ms", nullptr); });
             // BETA3 LAUNCHER END
         });
         // NA HELP (beta polish M5): the same pages as the game's NA · HELP tab (na_help.hpp), a card per topic.

@@ -1328,6 +1328,8 @@ Values sanitized(Values v) {
     v.handstandGraceAfterMs = std::clamp(v.handstandGraceAfterMs, 100, 1000);
     v.handstandGraceBeforeMs = std::clamp(v.handstandGraceBeforeMs, 0, 1000);
     v.handoffPlaceCm = std::clamp(v.handoffPlaceCm, 0, 2000);
+    v.landingViewSnapMs = std::clamp(v.landingViewSnapMs, 40, 400);
+    v.landingViewSnapCm = std::clamp(v.landingViewSnapCm, 0, 100);
     v.turnPushPct = std::clamp(v.turnPushPct, 20, 100);
     v.targetScanIdleMs = std::clamp(v.targetScanIdleMs, 250, 2000);
     return v;
@@ -3255,6 +3257,9 @@ constexpr TabOnly tabOnly[] = {
     {"handstand_sticky_grace_ms", nullptr, &Values::handstandStickyGraceMs},
     {"swing_line_full_length", &Values::swingLineFullLength, nullptr},
     {"handoff_head_first", &Values::handoffHeadFirst, nullptr},
+    {"landing_view_snap", &Values::landingViewSnap, nullptr},
+    {"landing_view_snap_cm", nullptr, &Values::landingViewSnapCm},
+    {"landing_view_snap_ms", nullptr, &Values::landingViewSnapMs},
     {"log_level", nullptr, &Values::logLevel},
     {"movement_defaults", nullptr, &Values::movementDefaults},
 };
@@ -3451,6 +3456,7 @@ Values withMovementDefaults(Values v, std::string_view text) {
         // Revision 17 (0.8.7-na-beta3; the owner, Nov 21: the handoff fixes and the rest approved, all features on
         // for testing): the beta3 switches come on once. New keys; a 0 chosen after this revision stays.
         v.handoffHeadFirst = true;
+        v.landingViewSnap = true;
         // BETA3 MIGRATION END
     }
     v.movementDefaults = movementDefaultsRevision;

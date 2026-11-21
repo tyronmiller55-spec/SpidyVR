@@ -25596,6 +25596,9 @@ int main() {
                   "handstand_sticky=1\nhandstand_sticky_grace_ms=400\n"
                   "swing_line_full_length=1\n"
                   "handoff_head_first=1\n"
+                  "landing_view_snap=1\n"
+                  "landing_view_snap_cm=15\n"
+                  "landing_view_snap_ms=120\n"
                   "log_level=1\n"
                   "movement_defaults=17\n",
               "the defaults' text");
@@ -33844,23 +33847,45 @@ int main() {
                         check((logged > 0) == ((yaw < 0) == (hand == 0)), "the palm side's sign per hand");
                 }
     });
+    test("landing view snap: within 15 cm at once, the rest over 120 ms, retimed at the progress it had (H1)", [&] {
+        using namespace hybrid_handoff;
+        const auto far = landingSnap(1.2f, 15, 120);
+        check(far.place && std::abs(far.placed - 1.05f) < 1e-4f && far.ms == 120, "1.2 m: 1.05 m snapped, 120 ms");
+        const auto near = landingSnap(.1f, 15, 120);
+        check(!near.place && near.placed == 0.f && near.ms == 120, "already within 15 cm: glide only");
+        check(landingSnap(.5f, 0, 120).placed == .5f, "0 cm: all of it at once");
+        check(!landingSnap(std::nanf(""), 15, 120).place && !landingSnap(-1.f, 15, 120).place, "no distance: no snap");
+        // A 200 ms blend, 20 ms in (t = .1), shortened to 120 ms: still t = .1, so the view does not step.
+        const int64_t ms = 1'000'000;
+        const auto c = retimeKeepingProgress(20 * ms, 0, 200 * ms, 120 * ms);
+        check(c.durNs == 120 * ms && c.startNs == 20 * ms - 12 * ms, "shorter, at the same progress");
+        const auto done = retimeKeepingProgress(250 * ms, 0, 200 * ms, 120 * ms);
+        check(done.startNs == 0 && done.durNs == 200 * ms, "a finished blend keeps its clock");
+        const auto longer = retimeKeepingProgress(50 * ms, 0, 200 * ms, 400 * ms);
+        check(longer.durNs == 400 * ms && longer.startNs == 50 * ms - 100 * ms, "longer works as the stretch");
+        check(retimeKeepingProgress(0, 0, 200 * ms, 120 * ms).durNs == 120 * ms, "at the start: the new length");
+    });
     test("beta3 switches: on by default, on once for an older file (revision 17), and a 0 chosen after it stays", [&] {
         using vr_settings::Values, vr_settings::withMovementDefaults, vr_settings::withTabOnly, vr_settings::tabOnlyText;
         const Values d{};
         check(d.handoffHeadFirst, "HANDOFF HEAD FIRST is on by default");
+        check(d.landingViewSnap && d.landingViewSnapCm == 15 && d.landingViewSnapMs == 120, "LANDING VIEW SNAP: on, 15 cm, 120 ms");
         // BETA3 DEFAULT CHECKS END
         Values off{};
         off.handoffHeadFirst = false;
+        off.landingViewSnap = false;
         // BETA3 OFF END
         std::string base = tabOnlyText(off);
         base = base.substr(0, base.find("movement_defaults="));
         const std::string old = base + "movement_defaults=16\n";
         const Values migrated = withMovementDefaults(withTabOnly({}, old), old);
         check(migrated.handoffHeadFirst, "an older file did not get HANDOFF HEAD FIRST");
+        check(migrated.landingViewSnap, "an older file did not get LANDING VIEW SNAP");
         // BETA3 MIGRATED END
         const std::string chosen = base + "movement_defaults=17\n";
         const Values kept = withMovementDefaults(withTabOnly({}, chosen), chosen);
         check(!kept.handoffHeadFirst, "a 0 chosen after revision 17 moved");
+        check(!kept.landingViewSnap, "LANDING VIEW SNAP: a 0 chosen after revision 17 moved");
         // BETA3 KEPT END
     });
     test("handoff head gap: one report per switch with the worst gap, the settled gap and the time over it (H6)", [&] {
