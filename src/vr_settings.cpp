@@ -3284,6 +3284,7 @@ constexpr TabOnly tabOnly[] = {
     {"showtime_auto_dodge_cooldown_ms", nullptr, &Values::showtimeAutoDodgeCooldownMs},
     {"air_flip_double_tap", &Values::airFlipDoubleTap, nullptr},
     {"air_flip_double_tap_ms", nullptr, &Values::airFlipDoubleTapMs},
+    {"web_wrap_slack", &Values::webWrapSlack, nullptr},
     {"log_level", nullptr, &Values::logLevel},
     {"movement_defaults", nullptr, &Values::movementDefaults},
 };
@@ -3500,6 +3501,12 @@ Values withMovementDefaults(Values v, std::string_view text) {
     if (seen < 18) {
         // Revision 18 (beta3b, t88u): DOUBLE-TAP A: UPSIDE DOWN comes on once. A new key; a 0 chosen after it stays.
         v.airFlipDoubleTap = true;
+    }
+    if (seen < 19) {
+        // Revision 19 (0.8.7-na-beta3c; the owner, Nov 21 t92u: "get it going", all features on for testing): the web
+        // switches come on once. New keys; a 0 chosen after this revision stays.
+        v.webWrapSlack = true;
+        // BETA3C MIGRATION END
     }
     v.movementDefaults = movementDefaultsRevision;
     return sanitized(v);

@@ -2094,6 +2094,20 @@ DWORD WINAPI run(void*) {
         // and when each last logged its reel.
         swing_line::Line swingLines[2];
         uint64_t swingLineReelLogMs[2]{};
+        // WEBS ACROSS THE GAME (beta3c): per game rope (slot), the last frame's drawn line - its key, the end
+        // of its free run, where it sticks, the edges past the free run - for the fade; and the web's account
+        // for its let-go line (the most slack, the most pull, how long it pulled).
+        struct SwingLineLast {
+            bool drawn{};
+            int64_t key{};
+            unsigned from{};
+            Vec3 runEnd{}, anchor{};
+            native_webs::Bent edges{};
+            float drawnM{}, peakSlack{}, peakPull{}, pulledSeconds{}, climbed{};
+            uint32_t edgeCount{};
+            bool shared{};
+        };
+        SwingLineLast swingLineLast[2]{};
         // Which of the game's two ropes draws which hand's web (one web in
         // both hands has one rope), and when a free hand last came onto the
         // other hand's web (a tick says a press there takes hold of it).
@@ -7915,6 +7929,7 @@ DWORD WINAPI run(void*) {
                                 // jumped to each new one. Where Spidy cannot lay the rope's points
                                 // (no hand points hook) it stays drawn to that edge, not straight
                                 // through the building to its end.
+                                bool edgeBent = false;
                                 if (const auto& edges = swingBends.hands[from];
                                     hand.attached == 1 && !grabPhases[from] && edges.count &&
                                     finite(edges.end) && native_webs::drawsHeld()) {
@@ -7925,21 +7940,49 @@ DWORD WINAPI run(void*) {
                                         std::min<uint32_t>(edges.count, native_webs::maxRopeBends);
                                     for (uint32_t k = 0; k < bent[i].count; ++k)
                                         bent[i].points[k] = edges.points[k];
+                                    edgeBent = !flightVisual[from].flying();
                                 }
                                 // FULL-LENGTH SWING LINES (swing_line.hpp; the owner, Nov 20 t81u): a swing
-                                // web drawn straight keeps the length it caught at, its slack hung by the
-                                // combat webs' rope through the hand points (6 at most), the reel shortening
-                                // it one-for-one. Only where nothing else lays points (no edges, no flight,
-                                // no grab's tether, not one web in both hands) and with the hand points hook;
-                                // else the straight line. Looks only: the swing's own rope
-                                // (SwingConfig::taut) is as before.
-                                if (!swingLineSeen[from]) {
-                                    swingLineSeen[from] = true;
+                                // web keeps the length it caught at, its slack hung by the combat webs' rope
+                                // through the hand points (6 at most), the reel shortening it one-for-one.
+                                // Not with a flight or a grab's tether, and only with the hand points hook;
+                                // else the straight line. By game rope (slot), so a web that changes hands
+                                // keeps its line. WEBS ACROSS THE GAME (beta3c, WEB_POLISH_PLAN.md): round
+                                // edges (WRAP SLACK) the slack hangs on the run from the wrist to the first
+                                // edge, the rest of the web counted in its length; in both hands (SECOND
+                                // HAND) on the upper hand's run, after the held bow, hand-over-hand climbing
+                                // taking line in; a line let go of swings free until it fades (PHYSICS UNTIL
+                                // FADE, below). ROPE PHYSICS ON THE SWING: its pull on the player
+                                // (swing_line::Line::pull), sent to the swing after the loop; otherwise looks
+                                // only (the swing's rope, SwingConfig::taut, is as before).
+                                if (!swingLineSeen[i]) {
+                                    swingLineSeen[i] = true;
                                     const auto& web = swingState.webs[from];
+                                    auto& last = swingLineLast[i];
+                                    auto& line = swingLines[i];
+                                    const bool sharedNow = rope.hands == 3;
+                                    const bool wrapOk = values.webWrapSlack && edgeBent;
                                     const bool drawn = values.swingLineFullLength && hand.attached == 1 &&
                                                        (web.attached & 1u) && !grabPhases[from] &&
-                                                       !flightVisual[from].flying() && bent[i].count == 0 &&
+                                                       !flightVisual[from].flying() &&
+                                                       (bent[i].count == 0 || wrapOk) &&
                                                        webRopes.upper() < 0 && native_webs::drawsHeld();
+                                    // Round edges: the free run ends at the first edge; edge to edge to where
+                                    // it sticks counts in the length.
+                                    const uint32_t edgeCount = drawn && wrapOk ? bent[i].count : 0u;
+                                    native_webs::Bent edges{};
+                                    float beyond = 0;
+                                    Vec3 runEnd = hand.anchor;
+                                    if (edgeCount) {
+                                        edges = bent[i];
+                                        runEnd = edges.points[0];
+                                        for (uint32_t k = 0; k + 1 < edgeCount; ++k)
+                                            beyond += length(edges.points[k + 1] - edges.points[k]);
+                                        beyond += length(hand.anchor - edges.points[edgeCount - 1]);
+                                    }
+                                    // The hand points the edges leave.
+                                    const int room = static_cast<int>(native_webs::maxRopeBends) -
+                                                     static_cast<int>(edgeCount);
                                     swing_line::Input sl;
                                     sl.enabled = drawn;
                                     sl.attached = drawn;
@@ -7947,34 +7990,66 @@ DWORD WINAPI run(void*) {
                                     sl.ropeLength = web.length;
                                     sl.reeling = (web.attached & 8u) != 0;
                                     sl.grounded = swingState.grounded != 0;
-                                    const auto out =
-                                        swingLines[from].update(sl, hand.wrist, hand.anchor, frame.seconds);
-                                    if (drawn && out.count > 0) {
-                                        bent[i].count = static_cast<uint32_t>(
-                                            std::min(out.count, static_cast<int>(native_webs::maxRopeBends)));
-                                        for (uint32_t k = 0; k < bent[i].count; ++k)
-                                            bent[i].points[k] = out.points[k];
+                                    sl.beyond = beyond;
+                                    sl.most = std::max(room, 0);
+                                    if (!drawn)
+                                        last.drawn = false; // drawn no more on this web: not a line to let go
+                                    const auto out = line.update(sl, hand.wrist, runEnd, frame.seconds);
+                                    if (drawn) {
+                                        uint32_t n = 0;
+                                        for (int k = 0; k < out.count && n < native_webs::maxRopeBends; ++k)
+                                            bent[i].points[n++] = out.points[k];
+                                        for (uint32_t k = 0; k < edgeCount && n < native_webs::maxRopeBends;
+                                             ++k)
+                                            bent[i].points[n++] = edges.points[k];
+                                        bent[i].count = n;
                                     }
                                     const uint64_t nowMs = GetTickCount64();
                                     if (drawn &&
                                         (out.change.attached ||
-                                         (out.change.reeled && nowMs - swingLineReelLogMs[from] >= 1000))) {
+                                         (out.change.reeled && nowMs - swingLineReelLogMs[i] >= 1000))) {
                                         if (out.change.reeled)
-                                            swingLineReelLogMs[from] = nowMs;
-                                        diag_log::writef("swing line: %c %s drawn %.1f m, line %.1f m (slack "
-                                                         "%.1f m), swing rope "
-                                                         "%.1f m%s, reeled in %.1f m, laid by %s",
-                                                         from ? 'R' : 'L',
-                                                         out.change.attached ? "caught" : "reel", out.drawn,
-                                                         out.distance,
-                                                         std::max(0.f, out.drawn - out.distance), web.length,
-                                                         out.drawn - out.distance > swing_line::maxSlack
-                                                             ? " (slack past 30 m not drawn)"
-                                                             : "",
-                                                         swingLines[from].drawnLength().reeledIn(),
-                                                         out.simulated ? "the rope"
-                                                         : out.count   ? "the sag curve"
-                                                                       : "none (straight)");
+                                            swingLineReelLogMs[i] = nowMs;
+                                        diag_log::writef(
+                                            "swing line: %c %s drawn %.1f m, line %.1f m (slack "
+                                            "%.1f m), swing rope "
+                                            "%.1f m%s, reeled in %.1f m, laid by %s",
+                                            from ? 'R' : 'L', out.change.attached ? "caught" : "reel",
+                                            out.drawn, out.distance + beyond, out.slack, web.length,
+                                            out.slack > swing_line::maxSlack ? " (slack past 30 m not drawn)"
+                                                                             : "",
+                                            line.drawnLength().reeledIn(),
+                                            out.simulated ? "the rope"
+                                            : out.count   ? "the sag curve"
+                                                          : "none (straight)");
+                                    }
+                                    // The states the line goes through, once each as it enters them.
+                                    if (drawn && !out.change.attached && last.drawn &&
+                                        last.key == hand.attachedAt) {
+                                        if (edgeCount && !last.edgeCount)
+                                            diag_log::writef(
+                                                "web wrap slack: %c line round %u edge(s), drawn "
+                                                "%.1f m, free run %.1f m + %.1f m past the edges, "
+                                                "slack %.1f m on the free run (%d point(s))",
+                                                from ? 'R' : 'L', edgeCount, out.drawn, out.distance, beyond,
+                                                out.slack, out.count);
+                                    }
+                                    if (drawn) {
+                                        if (!last.drawn || last.key != hand.attachedAt)
+                                            last = {};
+                                        last.drawn = true;
+                                        last.key = hand.attachedAt;
+                                        last.from = from;
+                                        last.runEnd = runEnd;
+                                        last.anchor = hand.anchor;
+                                        last.edges = {};
+                                        last.edgeCount = edgeCount;
+                                        for (uint32_t k = 0; k < edgeCount; ++k)
+                                            last.edges.points[k] = edges.points[k];
+                                        last.edges.count = edgeCount;
+                                        last.shared = sharedNow;
+                                        last.drawnM = out.drawn;
+                                        last.peakSlack = std::max(last.peakSlack, out.slack);
                                     }
                                 }
                             }
@@ -8012,8 +8087,7 @@ DWORD WINAPI run(void*) {
                                                  0.f);
                                 }
                             }
-                            // A hand no rope drew this frame lets its swing line go (the next web starts
-                            // again).
+                            // A rope not seen this frame lets its swing line go (the next web starts again).
                             for (unsigned h = 0; h < 2; ++h)
                                 if (!swingLineSeen[h])
                                     swingLines[h].update({}, {}, {}, 0.f);

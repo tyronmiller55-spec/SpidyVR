@@ -25135,7 +25135,7 @@ int main() {
                   "the movement defaults overrode a choice made after them");
             check(withMovementDefaults(withTabOnly({}, ""), "").runCurve,
                   "no file: not the movement defaults");
-            check(tabOnlyText(migrated).find("movement_defaults=18\n") != std::string::npos,
+            check(tabOnlyText(migrated).find("movement_defaults=19\n") != std::string::npos,
                   "the migration is not remembered");
         }
         {
@@ -25616,8 +25616,9 @@ int main() {
                   "showtime_auto_dodge_cooldown_ms=0\n"
                   "air_flip_double_tap=1\n"
                   "air_flip_double_tap_ms=300\n"
+                  "web_wrap_slack=1\n"
                   "log_level=1\n"
-                  "movement_defaults=18\n",
+                  "movement_defaults=19\n",
               "the defaults' text");
         Values changed = defaults;
         changed.recordingFov = 140;
@@ -33847,6 +33848,46 @@ int main() {
         const std::string chosen = "swing_line_full_length=0\nmovement_defaults=16\n";
         check(!withMovementDefaults(withTabOnly({}, chosen), chosen).swingLineFullLength, "a 0 chosen after it moved");
     });
+    test("webs across the game: round edges the line keeps its length, the slack on the free run", [&] {
+        namespace sl = swing_line;
+        using sl::Line;
+        using SlInput = sl::Input;
+        const Vec3 edge{0, 20, 0};
+        Line line;
+        // Caught 10 m from the first edge, 5 m more past it: drawn 15 m.
+        SlInput in{true, true, 7, 0, 15.f, false, false};
+        in.beyond = 5.f;
+        Vec3 wrist{10, 20, 0};
+        auto o = line.update(in, wrist, edge, 1.f / 72);
+        check(o.change.attached && std::abs(o.drawn - 15.f) < 1e-3f && o.count == 0, "caught round an edge: taut");
+        // Swung in to 4 m from the edge: 6 m of slack, hung on the free run below it.
+        wrist = {4, 20, 0};
+        in.ropeLength = 9.f;
+        in.most = 3;
+        for (int i = 0; i < 144; ++i)
+            o = line.update(in, wrist, edge, 1.f / 72);
+        check(std::abs(o.drawn - 15.f) < 1e-3f && std::abs(o.slack - 6.f) < 1e-3f, "the slack round edges");
+        check(o.simulated && o.count > 0 && o.count <= 3, "the free run's points stay in the room the edges leave");
+        float lowest = 20.f;
+        for (int k = 0; k < o.count; ++k)
+            lowest = std::min(lowest, o.points[k].y);
+        check(lowest < 19.f, "the free run's slack does not hang");
+        in.most = 0;
+        o = line.update(in, wrist, edge, 1.f / 72);
+        check(o.count == 0 && std::abs(o.slack - 6.f) < 1e-3f, "no room: straight, the length kept");
+        // A straight web (beyond 0, the room 6, no pull) is the line as before.
+        Line a, b;
+        SlInput plain{true, true, 9, 0, 20.f, false, false};
+        SlInput given = plain;
+        given.beyond = 0;
+        given.most = tether::maxDrawn;
+        for (int i = 0; i < 100; ++i) {
+            const Vec3 w{20.f - i * .1f, 20, 0};
+            const auto x = a.update(plain, w, {0, 20, 0}, 1.f / 72), y = b.update(given, w, {0, 20, 0}, 1.f / 72);
+            check(x.count == y.count && x.drawn == y.drawn,
+                  "the defaults changed the line");
+        }
+    });
     test("shooter check: the logged forearm sign and the palm-side rule read the same palm, both hands", [&] {
         const float d2r = 3.14159265f / 180;
         for (int hand = 0; hand < 2; ++hand)
@@ -34134,6 +34175,7 @@ int main() {
                   d.showtimeAutoStrikeCooldownMs == 0 && d.showtimeAutoDodgeCooldownMs == 0,
               "AUTO: FINISHERS and STRIKES on, every one, no cooldown");
         check(d.airFlipDoubleTap && d.airFlipDoubleTapMs == 300, "DOUBLE-TAP A: on, 300 ms");
+        check(d.webWrapSlack, "WRAP SLACK: on");
         // BETA3 DEFAULT CHECKS END
         Values off{};
         off.handoffHeadFirst = false;
@@ -34142,6 +34184,7 @@ int main() {
         off.handstandTipInDeg = 120;
         off.showtimeAutoFinisher = off.showtimeAutoStrike = false;
         off.airFlipDoubleTap = false;
+        off.webWrapSlack = false;
         // BETA3 OFF END
         std::string base = tabOnlyText(off);
         base = base.substr(0, base.find("movement_defaults="));
@@ -34165,8 +34208,12 @@ int main() {
         const std::string later = "showtime_auto_finisher_strike=0\nshowtime_auto_strike=1\nmovement_defaults=18\n";
         check(withMovementDefaults(withTabOnly({}, later), later).showtimeAutoStrike, "revision 18 ran twice");
         check(migrated.airFlipDoubleTap, "an older file did not get DOUBLE-TAP A");
+        const std::string rev18 = base + "movement_defaults=18\n";
+        const Values webs = withMovementDefaults(withTabOnly({}, rev18), rev18);
+        check(webs.webWrapSlack, "a revision 18 file did not get WRAP SLACK");
+        check(!webs.airFlipDoubleTap, "revision 18 ran again");
         // BETA3 MIGRATED END
-        const std::string chosen = base + "movement_defaults=18\n";
+        const std::string chosen = base + "movement_defaults=19\n";
         const Values kept = withMovementDefaults(withTabOnly({}, chosen), chosen);
         check(!kept.handoffHeadFirst, "a 0 chosen after revision 17 moved");
         check(!kept.landingViewSnap, "LANDING VIEW SNAP: a 0 chosen after revision 17 moved");
@@ -34174,6 +34221,7 @@ int main() {
         check(kept.handstandTipInDeg == 120, "a 120 tip-in chosen after revision 17 moved");
         check(!kept.showtimeAutoFinisher && !kept.showtimeAutoStrike, "AUTO: FINISHERS/STRIKES: a 0 chosen after it moved");
         check(!kept.airFlipDoubleTap, "DOUBLE-TAP A: a 0 chosen after revision 18 moved");
+        check(!kept.webWrapSlack, "WRAP SLACK: a 0 chosen after revision 19 moved");
         // BETA3 KEPT END
     });
     test("handoff head gap: one report per switch with the worst gap, the settled gap and the time over it (H6)", [&] {

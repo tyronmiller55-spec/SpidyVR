@@ -37,6 +37,12 @@ struct Input {
     float ropeLength{}; // the swing's rope (game_swing::WebState::length)
     bool reeling{};     // that hand reels it in now (WebState::attached bit 8)
     bool grounded{};    // the swing pays out on the ground (Swing::payOut)
+    // WRAP (beta3c, web_wrap_slack): the web's run past the free part, metres (wrist to the first edge is the
+    // free part; the edges to where it sticks are this). It counts in the line's length; the slack hangs on
+    // the free part. 0: a straight web.
+    float beyond{};
+    // How many points the free part may use (the game rope's hand points left after the edges).
+    int most = tether::maxDrawn;
 };
 struct Change {
     bool attached{}; // this update caught a new web
@@ -131,38 +137,43 @@ class Line {
         Vec3 points[tether::maxDrawn]{}; // from the wrist toward the anchor
         bool simulated{};                // laid by the rope (else the sag curve, or straight)
         Change change{};
+        float slack{}; // drawn past the line (metres)
     };
     Out update(const Input& in, Vec3 wrist, Vec3 anchor, float seconds) {
         Out o;
         o.distance = finite(wrist) && finite(anchor) ? length(anchor - wrist) : -1.f;
+        const float beyond = std::isfinite(in.beyond) ? std::max(in.beyond, 0.f) : 0.f;
         Input given = in;
-        given.distance = o.distance;
+        given.distance = o.distance < 0 ? o.distance : o.distance + beyond;
         o.drawn = length_.update(given, &o.change);
+        const float dt = std::isfinite(seconds) ? std::clamp(seconds, 0.f, .1f) : 0.f;
         if (!in.enabled || !in.attached || o.distance < 0) {
             rope_.reset();
             return o;
         }
         if (o.change.attached)
             rope_.reset();
-        const float slack = o.drawn - o.distance;
+        const float slack = o.drawn - (o.distance + beyond);
+        o.slack = std::max(slack, 0.f);
         // Past maxSlack the rope is drawn maxSlack longer than the line (the rest is not drawn).
-        const float laid = o.distance + std::min(slack, maxSlack);
+        const float laid = o.distance + std::clamp(slack, 0.f, maxSlack);
         if (!rope_.started())
             rope_.configure(config());
         tether::Rope::Frame f;
-        f.dt = std::isfinite(seconds) ? std::clamp(seconds, 0.f, .1f) : 0.f;
+        f.dt = dt;
         f.hand = wrist;
         f.end = anchor;
         f.length = laid;
         const auto r = rope_.step(f);
         if (!(slack > minSlack))
             return o; // taut: the straight line, as before (the rope keeps running for the next slack)
-        if (r.active || r.asleep) {
-            o.count = rope_.draw(o.points, tether::maxDrawn);
+        const int most = std::clamp(in.most, 0, tether::maxDrawn);
+        if (most > 0 && (r.active || r.asleep)) {
+            o.count = rope_.draw(o.points, most);
             o.simulated = o.count > 0;
         }
-        if (!o.simulated)
-            o.count = sagPoints(wrist, anchor, o.drawn, tether::maxDrawn, o.points);
+        if (!o.simulated && most > 0)
+            o.count = sagPoints(wrist, anchor, o.drawn - beyond, most, o.points);
         return o;
     }
     const DrawnLength& drawnLength() const {

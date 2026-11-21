@@ -3310,6 +3310,13 @@ void App::options(ImVec2 origin, ImVec2 size) {
                    S(150), [&] { fineSlider("##headseatpullcms", tabOnly_.headSeatPullCmS, 5, 200, 5, "%d cm/s", nullptr); });
             // BETA3 LAUNCHER END
         });
+        // WEBS ACROSS THE GAME (0.8.7-na-beta3c): the swing lines in every web state, and the rope's pull on the swing,
+        // each on by default for testing. The same spidy_vr.ini keys as the game's NA tabs.
+        group(shootersPage, 1, "Webs across the game (beta3c)", [&] {
+            settingOption(Item::none, "Wrap slack", "A full-length line round edges keeps its length; the slack hangs between your hand and the first edge. Default: on.",
+                   S(42), [&] { flagToggle("##webwrapslack", tabOnly_.webWrapSlack); });
+            // BETA3C LAUNCHER END
+        });
         // NA HELP (beta polish M5): the same pages as the game's NA · HELP tab (na_help.hpp), a card per topic.
         const int helpPage = static_cast<int>(Category::help);
         static const std::vector<std::pair<const char*, std::string>> helpTopics = [] {

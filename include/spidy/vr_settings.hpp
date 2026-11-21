@@ -302,7 +302,7 @@ struct Values {
     // from before it gets RUN CURVE on and EARLY JUMP QUICK TAP once (the
     // user: "movement fixes will be defaults"); after that the player's own
     // choice stands. Not a row. movement_defaults.
-    int movementDefaults = 18; // movementDefaultsRevision: a new file has seen them
+    int movementDefaults = 19; // movementDefaultsRevision: a new file has seen them
     // SOFT LANDING (the tab's SOFT LANDING; Swing::allowSoftLanding,
     // run_update::softLandVertical): a fall the swing flies, with no web
     // holding, eases to 9 m/s down over its last 3 m (or 0.35 s), its speed
@@ -805,6 +805,12 @@ struct Values {
     bool airFlipDoubleTap = true;
     // (ms, 150 to 600) the double tap's window, from the first press to the second
     int airFlipDoubleTapMs = 300;
+    // WEBS ACROSS THE GAME (0.8.7-na-beta3c; the owner, Nov 21 t90u: "polish our webs to work across all of those
+    // states, and let them keep the physics until they fade away"; t92u approved). Plan:
+    // /workspace/playtest-na-beta3b/WEB_POLISH_PLAN.md. Each comes on once (revision 19); looks only unless said.
+    // WRAP SLACK: a full-length swing line round edges keeps its length; the slack hangs on the run from the wrist to
+    // the first edge. Off: round edges the web is drawn taut, as before.
+    bool webWrapSlack = true;
     // BETA3 SETTINGS END
     // HERO ATTACK SOUND (beta polish A2; attack_sound, spidy_vr.ini only, no menu row): one of the game's sounds played
     // on Spidey as a punch is thrown or a kick starts (at most one a hand every 250 ms, hit_sound.hpp): the id's 32
@@ -1353,7 +1359,7 @@ std::string tabOnlyText(const Values&);
 // key, or whose value is no whole number, is passed over.
 Values withTabOnly(Values, std::string_view text);
 // The movement defaults' revision (Values::movementDefaults) this build has.
-inline constexpr int movementDefaultsRevision = 18;
+inline constexpr int movementDefaultsRevision = 19;
 // November 12 movement cleanup: a settings file (that text) older than
 // movementDefaultsRevision gets the new movement defaults once - RUN CURVE
 // on, EARLY JUMP at least QUICK TAP - and is marked as having seen them; a
