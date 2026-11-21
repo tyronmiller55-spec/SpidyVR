@@ -3,6 +3,17 @@
 Every build, newest first, with what changed, why, and what was measured.
 Per-check results are in [VALIDATION.md](VALIDATION.md).
 
+**0.8.7-na-beta3, build beta3c (November 21, the owner's t90u-t92u):** the same version, a third test package
+([checklist](NA_BETA3.md#beta3c-webs-across-the-game-and-rope-physics)); migration rev 19, every new switch on.
+
+- **Webs across the game.** Full-length swing lines keep their slack round edges (`web_wrap_slack`) and in both
+  hands, taking line in as you climb hand over hand (`web_shared_slack`). A let-go line swings free from where it
+  sticks for `web_fade_ms` (1200) before it dissolves (`web_fade_physics`). A stick-click web line or tie takes the
+  webs at once (`web_connect_handoff`).
+- **Rope physics on the swing** (feel change; `swing_rope_physics=1`, `swing_rope_physics_pct=100`). The hanging
+  line's weight, a coil's fling and a trailing line's drag pull SpidyVR's own air through the new `SpidyRopePull`
+  side channel. Off: the swing exactly as before (beta3b's lines were looks only).
+
 **0.8.7-na-beta3, build beta3b (November 21, the owner's t88u):** the same version, a second test package
 ([checklist](NA_BETA3.md#beta3b-showtime-auto-kinds-and-double-tap-a)); migration rev 18.
 

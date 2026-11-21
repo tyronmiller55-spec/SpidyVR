@@ -28,6 +28,8 @@ shown, landings snap the view onto his head with a short settle, the view follow
 smoothly, a per-switch head-gap log line; handstands from 60 degrees; Showtime steps out on its own for Y+B
 finishers and web strikes. Build **beta3b** (same version) splits Showtime's automatic camera into finishers, web
 strikes and dodges with how-often controls, and adds double-tap A in the air to turn upside down (hold to stay).
+Build **beta3c** makes swing lines work round edges, in both hands and while climbing, swing free until they fade,
+and hand over to stick-click web lines. The hanging line now really pulls on the swing (ROPE PHYSICS, on at 100%).
 [Checklist](docs/NA_BETA3.md).
 
 **0.8.7-na-beta2** (CURRENT, Nov 21): point jumps play the game's whole jump sound set; Y+B finishers stay the

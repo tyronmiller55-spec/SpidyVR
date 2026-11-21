@@ -3,6 +3,11 @@
 > **Build beta3b** (same version, 0.8.7-na-beta3; package `Spidy-0.8.7-na-beta3b-win64-<commit>.zip`): adds the
 > [beta3b section](#beta3b-showtime-auto-kinds-and-double-tap-a) below - Showtime's automatic camera split per kind
 > with how-often controls, and double-tap A to turn upside down. Settings revision 18.
+>
+> **Build beta3c** (same version; package `Spidy-0.8.7-na-beta3c-win64-<commit>.zip`): adds the
+> [beta3c section](#beta3c-webs-across-the-game-and-rope-physics) below. Full-length swing lines now work round
+> edges, in both hands and while climbing, swing free until they fade, and hand over to stick-click web lines. A
+> new switch (on, 100%) makes the hanging line really pull on the swing. Settings revision 19.
 
 A **test build** (branch `feat/087-beta3`, from `feat/087-beta2` 1418992). The testers' **CURRENT** build stays
 [0.8.7-na-beta2](NA_BETA2.md) until this one is played. What changed: [CHANGELOG.md](CHANGELOG.md).
@@ -114,3 +119,54 @@ ground (a jump) never counts as the first tap.
 3. **Chords.** A+B point jumps and ground jumps feel exactly as before (no added delay).
 4. Watch: righting from a perfect upside down with a single A may turn him through a pitch rather than a roll (the
    upright's turn is unchanged); say if he ends up facing backward.
+
+## beta3c: webs across the game and rope physics
+
+The owner, Nov 21 t90u: "Webs wrap around things and the web can be grabbed by your second hand to control the web or
+climb ... polish our webs to work across all of those states, and let them keep the physics until they fade away ...
+there's a feature that lets you click the sticks when the controllers are close to 'connect' two webs. Make sure our
+webs work there too." t91u: "if it's just visual then fine, but see what's possible here because I like it." t92u:
+"get it going".
+
+**What beta3b was.** The full-length lines were looks only (`swing_line::Line` fed only the game rope's hand points;
+the swing's rope, `SwingConfig::taut`, never saw them). The pull and fling you felt were the real, shorter swing
+rope plus the drawing. Beta3c makes the pull real, behind its own switch. The analysis and plan are in the
+beta3b playtest's ANALYSIS.md and WEB_POLISH_PLAN.md.
+
+Settings revision 19: every new switch comes on once; a 0 chosen after it stays. No game address is new. The rope
+pull uses a new side channel between SpidyVR's own modules (`SpidyRopePull`, the same pattern as `SpidyJumpPull`).
+
+| Key | Default | What |
+| --- | --- | --- |
+| `web_wrap_slack` | 1 | Round edges the line keeps its length. The slack hangs between the hand and the first edge; the run edge to edge counts in its length. Off: taut through the edges, as before. |
+| `web_shared_slack` | 1 | A web your other hand takes keeps its line (now kept per game rope, so it no longer restarts when it changes hands). Hand-over-hand climbing (BETTER CLIMBING, `WebState` bit 16) takes line in one-for-one, like the reel. Off: one web in both hands is drawn taut, as before. |
+| `web_fade_physics` | 1 | A line you let go of swings free from where it sticks: its hand end falls with your hand's last velocity on the rope's length, and the rope sim lays the line. Then it dissolves as before. A new web on that rope ends it at once. |
+| `web_fade_ms` | 1200 | (300 to 3000) how long the let-go line swings. |
+| `web_connect_handoff` | 1 | A web line or web tie made with the stick click, or a zip to a line, ends any let-go line at once, so the game rope is free for the line. |
+| `swing_rope_physics` | 1 | **Feel change.** With FULL-LENGTH SWING LINES, the hanging line pulls you along its first segment: half the slack's weight, plus the momentum of a coil whipping away from your hand. A line trailing a fast swing drags you back (the sim's still air). Only in SpidyVR's own air while a web is on; never taut (the swing rope already holds you), never on the ground. Off or 0%: the swing exactly as before. |
+| `swing_rope_physics_pct` | 100 | (0 to 300) strength. At 100%, 30 m of slack hanging straight pulls about 1.5 m/s^2, at most 2.5 m/s^2 per hand. |
+
+Launcher: Web shooters page, card "Webs across the game (beta3c)". NA HELP: WEBS & WEB CANCEL pages 5 to 9.
+
+**Limits (no validated signal).**
+- The game's own last dissolve is still its own straight fade. Its hand-points hook skips a released rope (+70c bit
+  2), so the fade keeps the rope unreleased while it swings, then releases it.
+- A web line's own rope takes no hand points, so the line itself stays taut. The hand webs hand over to it cleanly.
+- In both hands the slack on the upper run can include the short span between your hands (the held bow is drawn
+  separately, at most 0.5 m).
+
+### beta3c checklist
+
+1. **Rope pull.** Catch a far web (a long line) and swing in close: the slack's weight should tug you down and back,
+   gently. Whip the hand: the coil should give a small yank. Try ROPE PULL STRENGTH 0, 100 and 200 and say which feels
+   right. With the switch off, swings must feel exactly like beta3b.
+2. **Wrap.** Swing round a corner so the web takes an edge: the slack should stay, hanging before the first edge, not
+   snap taut. Log: `web wrap slack: L line round 1 edge(s) ...`.
+3. **Second hand / climb.** Grab your web with the other hand: the line stays full. Climb hand over hand: the line
+   takes in as you climb. Log: `web shared: ...` and `swing line: L climb drawn ...`.
+4. **Until fade.** Let go of a long web: it should swing down from its anchor for about a second, then dissolve. Shoot
+   again at once: the new web is not blocked. Log: `swing line: L let go: ... it swings free until it fades` and
+   `web fade: L dissolves after 1200 ms (faded|a new web|...)`.
+5. **Connect.** Hold webs on two surfaces, bring the hands together, click the right stick: the web line appears at
+   once, with no leftover swinging line. Log: `web connect: a web line takes the webs ...` when a fade was cut.
+6. Watch for any web drawn through a wall while fading, or a frozen line.
