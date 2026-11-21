@@ -1,4 +1,5 @@
 #include "spidy/aim_steady.hpp"
+#include "spidy/handoff_gap.hpp"
 #include "spidy/finisher_handoff.hpp"
 #include "spidy/air_dodge.hpp"
 #include "spidy/showtime_fan.hpp"
@@ -33841,6 +33842,36 @@ int main() {
                     if (std::abs(yaw) >= 15 && pitch == 0)
                         check((logged > 0) == ((yaw < 0) == (hand == 0)), "the palm side's sign per hand");
                 }
+    });
+    test("handoff head gap: one report per switch with the worst gap, the settled gap and the time over it (H6)", [&] {
+        using namespace spidy::handoff_gap;
+        Watch w;
+        Report r;
+        check(!w.sample(0, .5f, r), "no switch, no window");
+        check(!w.start("land", true, 0, r) && w.active(), "a first switch closes nothing");
+        // A landing: 1.2 m off the head, gliding in over 450 ms at 90 Hz, then settled at 0.10 m.
+        bool done = false;
+        int64_t t = 0;
+        for (int i = 0; i < 100 && !done; ++i) {
+            t = static_cast<int64_t>(i) * 11'111'111;
+            const float ms = static_cast<float>(t) / 1e6f;
+            const float gap = ms < 450.f ? .1f + 1.1f * (1.f - ms / 450.f) : .1f;
+            done = w.sample(t, i == 3 ? -1.f : gap, r);
+        }
+        check(done && !w.active(), "the window closes after a second");
+        check(std::string(r.why) == "land" && r.toAnim, "the switch is named");
+        check(std::abs(r.worst - 1.2f) < .01f && r.worstMs < 1.f, "the worst gap is the first frame's");
+        check(std::abs(r.settled - .1f) < 1e-4f, "settled is the window's end");
+        check(r.unmeasured == 1 && r.frames >= 90, "an unmeasured frame is counted");
+        check(r.overMs > 380.f && r.overMs < 450.f && r.overFrames > 30, "over settled+5 cm until the glide is in");
+        // A second switch inside the window closes the first one.
+        check(!w.start("jump-timer", false, 0, r), "");
+        w.sample(10'000'000, .3f, r);
+        check(w.start("land", true, 20'000'000, r) && std::string(r.why) == "jump-timer" && !r.toAnim &&
+                  std::abs(r.worst - .3f) < 1e-4f,
+              "a new switch reports the open one");
+        Report none;
+        check(w.start("zip", true, 0, none) && none.worst < 0 && none.frames == 0, "nothing measured: worst -1");
     });
     test("locked to arm: a wrist bent toward the palm or the back keeps trusting the solved arm (session 031344)", [&] {
         namespace sa = spherical_aim;

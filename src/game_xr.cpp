@@ -89,6 +89,7 @@
 #include "spidy/diag_log.hpp"
 #include "spidy/ground_state.hpp"
 #include "spidy/head_probe.hpp"
+#include "spidy/handoff_gap.hpp"
 #include "spidy/head_seat.hpp"
 #include "spidy/animated_moves.hpp"
 #include "spidy/animated_steering.hpp"
@@ -1808,6 +1809,8 @@ DWORD WINAPI run(void*) {
         Vec3 cameraBobShift{};
         // The check that keeps that reference seated on the neck over every switch (head_seat.hpp).
         head_seat::Glide animHeadSeat{};
+        handoff_gap::Watch
+            handoffGap; // HANDOFF HEAD GAP (H6): the view against the drawn head after a switch
         int animSeatStateWas = -1;
         uint32_t animSeatActionWas = 0xffffffffu;
         uint32_t animSeatCount{};
@@ -12797,6 +12800,48 @@ DWORD WINAPI run(void*) {
                             hybridShown.valid = true;
                             hybridShown.valid = hybrid_handoff::validShown(hybridShown, eyeBlendNow);
                         }
+                    }
+                    // HANDOFF HEAD GAP (handoff_gap.hpp, H6): for a second after each owner switch, the view
+                    // shown against the head of the body drawn under it - the animation's head (its authored
+                    // head bone) while the animation owns, else SpidyVR's, which is put on the tracked eyes
+                    // (what is left of that: the body's head residual). One diag line per switch.
+                    if (values.animatedHybrid && values.animatedMoves && !flatScreen) {
+                        handoff_gap::Report gapReport;
+                        bool gapDone = false;
+                        if (hybridOwner.enterVr || hybridOwner.enterAnim)
+                            gapDone = handoffGap.start(
+                                hybridOwner.enterAnim ? hybrid_owner::enterAnimName(hybridOwner.lastEnterAnim)
+                                                      : hybrid_owner::enterVrName(hybridOwner.lastEnterVr),
+                                hybridOwner.enterAnim, eyeBlendNow, gapReport);
+                        if (!gapDone && handoffGap.active()) {
+                            float gap = -1.f;
+                            if (hybridShown.valid) {
+                                const Vec3 shownAt = hybrid_handoff::shownCentre(hybridShown);
+                                Mat4 drawnHead{};
+                                if (yieldAnim) {
+                                    if (game_fp::heroHead(drawnHead))
+                                        gap = length(shownAt -
+                                                     Vec3{drawnHead[12], drawnHead[13], drawnHead[14]});
+                                } else if (motion.active) {
+                                    const Vec3 tracked{(motion.eyes[0][12] + motion.eyes[1][12]) * .5f,
+                                                       (motion.eyes[0][13] + motion.eyes[1][13]) * .5f,
+                                                       (motion.eyes[0][14] + motion.eyes[1][14]) * .5f};
+                                    const float residual = native_body::status().headError;
+                                    gap = length(shownAt - tracked) + (residual > 0.f ? residual : 0.f);
+                                }
+                                if (!std::isfinite(gap))
+                                    gap = -1.f;
+                            }
+                            gapDone = handoffGap.sample(eyeBlendNow, gap, gapReport);
+                        }
+                        if (gapDone)
+                            diag_log::writef(
+                                "handoff head gap: %s %s worst %.2f m at %.0f ms, settled %.2f m, over "
+                                "settled+%.0f cm for %d frames (%.0f ms), %d of %d frames unmeasured",
+                                gapReport.toAnim ? "vr->anim" : "anim->vr", gapReport.why, gapReport.worst,
+                                gapReport.worstMs, gapReport.settled, handoff_gap::overMetres * 100.f,
+                                gapReport.overFrames, gapReport.overMs, gapReport.unmeasured,
+                                gapReport.frames);
                     }
                     // HYBRID hands use the very same reference/turn as the eyes.
                     // Publish with the body command under commandLock; the pose job
