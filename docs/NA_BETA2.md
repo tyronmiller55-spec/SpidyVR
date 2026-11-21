@@ -1,7 +1,7 @@
 # 0.8.7-na-beta2: headset checklist
 
-A test build for the owner (branch `feat/087-beta2`, from `feat/087-beta1` 9e8d7cb). It is **not** the testers'
-CURRENT: that stays [0.8.7-na-beta1](NA_BETA1.md) until the owner asks. What changed: [CHANGELOG.md](CHANGELOG.md).
+The testers' **CURRENT** Native Animation build since Nov 21 (branch `feat/087-beta2`, from `feat/087-beta1`
+9e8d7cb), after the owner's Nov 21 session; it replaces [0.8.7-na-beta1](NA_BETA1.md). What changed: [CHANGELOG.md](CHANGELOG.md).
 Every feature stays on; settings files from before take migration revision 15 (AIR DODGE, SHOWTIME RAY FAN and
 STICKY HANDSTANDS come on once; a 0 chosen after it stays) and 16 (FULL-LENGTH SWING LINES, Nov 20). No existing numeric default changed; WALL JUMP SOUND
 stays SOUND A. No new game address: everything below reuses hooks already in [REFERENCE.md](REFERENCE.md) and
@@ -83,3 +83,11 @@ stays SOUND A. No new game address: everything below reuses hooks already in [RE
 - Air dodge holds B back for up to 50 ms in SpidyVR's air while it waits for A, X or Y.
 - Whether the point jump's sounds are audible in the headset is not proven by the log; only that the game's
   sound call returned a sound.
+
+## Zip checklist
+
+- Built by Python (`shutil.make_archive`) from the CI artifact of the commit, never the zip CLI.
+- Name `Spidy-0.8.7-na-beta2-win64-<sha7>.zip`; top folder `Spidy-0.8.7-player-torso-<sha7>/`.
+- The launcher header reads 0.8.7-na-beta2; the diag log's build line names the commit.
+- Defaults: every beta2 feature on (revisions 15 and 16; a saved off stays off); LOG LEVEL 1; X and Y instant;
+  wall jump sound unchanged (SOUND A).

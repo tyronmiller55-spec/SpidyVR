@@ -21,7 +21,7 @@ SPIDY - VR for Marvel's Spider-Man Remastered
 ## SpidyVR Native Animation community build
 
 This build is a community layer on **Ilya Mezerowsky's SpidyVR 0.8.7**. The testers'
-**CURRENT** package is **0.8.7-na-beta1**, from
+**CURRENT** package is **0.8.7-na-beta2**, from
 [SpidyVR-NativeAnimation Releases](https://github.com/tyronmiller55-spec/SpidyVR-NativeAnimation/releases/latest).
 Inspired by **vrfloofy's first-person mod**: keep Insomniac's animation suite while
 SpidyVR controls and your tracked arms sit on top. GPL-3.0. Not an official Marvel

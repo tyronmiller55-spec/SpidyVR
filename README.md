@@ -5,12 +5,12 @@ Insomniac's original animation suite keeps playing while SpidyVR controls,
 your headset and controller-tracked arms are layered over it. Inspired by
 **vrfloofy's first-person mod**. GPL-3.0; not an official Marvel or Insomniac product.
 
-The testers' **CURRENT** build is **0.8.7-na-beta1**, from the Releases page of
+The testers' **CURRENT** build is **0.8.7-na-beta2**, from the Releases page of
 [SpidyVR-NativeAnimation](https://github.com/tyronmiller55-spec/SpidyVR-NativeAnimation/releases/latest).
 Open **Spidy Launcher.exe** and select **Native Animation**, between Options and
 Controls. The headset has the same settings under the **NA ·** tabs. New
 installations start in the recommended mode, with the current features on so you
-can try them; existing saved settings are migrated once (revision 14). [Player
+can try them; existing saved settings are migrated once (revision 16). [Player
 guide](docs/PLAYERS.md). The **NA · HELP** tab (the same pages as the launcher's
 Help and [docs/NA_HELP.md](docs/NA_HELP.md)) says what to try and how to report
 it.
@@ -20,10 +20,20 @@ https://github.com/tyronmiller55-spec/SpidyVR . The original Spidy launcher name
 author credits, Discord and Ko-fi links are retained; Native Animation bugs do
 not belong in upstream Spidy's bug tracker. Source is provided under GPL-3.0.
 
-Windows package: **Spidy-0.8.7-na-beta1-win64-<commit>.zip** (version **0.8.7-na-beta1**). Extract into a
+Windows package: **Spidy-0.8.7-na-beta2-win64-<commit>.zip** (version **0.8.7-na-beta2**). Extract into a
 writable folder outside the game install. Never copy the mod into the game's folder.
 
-**0.8.7-na-beta1** (CURRENT, Nov 19): every Native Animation setting sits in the headset menu's **NA ·** tabs
+**0.8.7-na-beta2** (CURRENT, Nov 21): point jumps play the game's whole jump sound set; Y+B finishers stay the
+game's own and a grip no longer cancels one; **air dodge on B** in SpidyVR's air (the left stick picks the way;
+A+B, X+B and Y+B keep their chords); a **Showtime ray fan** that pulls the camera in before walls and trails less
+at speed; **sticky handstands** that survive short tracking drops; wrist shooters LOCKED TO ARM that stay on the
+forearm when the wrist bends back and offset toward the palm; and **full-length swing lines** that keep their
+length as slack (reeling shortens them; a toggle in NA · WEB SHOOTERS; looks only). All features stay on for
+testing (revisions 15 and 16; a saved off stays off). Known issues: wrist shooters are not yet perfectly aligned,
+the head can briefly part from the neck during some handoffs, and handstands rarely catch. Headset checklist:
+[docs/NA_BETA2.md](docs/NA_BETA2.md).
+
+**0.8.7-na-beta1** (Nov 19): every Native Animation setting sits in the headset menu's **NA ·** tabs
 (CORE, CAMERA, HANDOFF, BODY & LEGS, KICKS & COMBAT, WEB SHOOTERS, POINT JUMP, SHOWTIME) and **NA · HELP**.
 New in play: Spidey's own jump grunt on point jumps, ground flips and handstand leaps, a WALL JUMP SOUND
 choice, louder hits, air kicks that find the enemy your punches are locked on, earlier upright landings,

@@ -3,8 +3,8 @@
 Every build, newest first, with what changed, why, and what was measured.
 Per-check results are in [VALIDATION.md](VALIDATION.md).
 
-**0.8.7-na-beta2 (November 19, branch feat/087-beta2 from 9e8d7cb): the owner's t79u pass,** a test build
-([headset checklist](NA_BETA2.md)); 0.8.7-na-beta1 stays the testers' CURRENT. One change per commit, every
+**0.8.7-na-beta2 (November 19-21, branch feat/087-beta2 from 9e8d7cb): the owner's t79u pass,** now the testers'
+**CURRENT** after the owner's Nov 21 session (t86u: "it feels good, the polish is there") ([headset checklist](NA_BETA2.md)). One change per commit, every
 feature on, migration rev 15 (AIR DODGE, SHOWTIME RAY FAN and STICKY HANDSTANDS come on once). No existing
 numeric default changed, WALL JUMP SOUND stays SOUND A, and no new game address.
 
@@ -43,9 +43,16 @@ numeric default changed, WALL JUMP SOUND stays SOUND A, and no new game address.
   the swing's physics is unchanged. Not over edges, in flight, on a grab's tether or with one web in both hands.
   Log: `swing line: L caught|reel drawn X m, line Y m (slack S m), swing rope R m, reeled in N m, laid by ...`.
 - **NA Help** pages for each, **version** 0.8.7-na-beta2 (the version resource stays 0.8.7).
+- **Locked to the forearm, wrist bends keep the web on the real arm (Nov 20, afe6a39).** The Nov 20 session
+  (d482497) showed the palm side right on both hands, but a normal wrist bend cut the solved arm's trust to
+  0.14-0.30, so the web followed the learned forearm that turns with the hand; bent back past 60 deg the left
+  web fell to the controller (reach-around) in 50 of 75 samples. Trust is now judged across the bend only, and
+  bent back the reach-around ignores the bend (core test, session 031344).
+- **Known issues at CURRENT:** wrist shooters still not perfectly aligned; the head can briefly part from the
+  neck during some handoffs; handstands rarely catch; the game may report 0xC0000409 as it exits.
 
 **0.8.7-na-beta1 (November 19, branch feat/087-beta1 from 966a812): the beta polish pass,**
-now the testers' **CURRENT** after the owner's Nov 19 session on `81fc830`
+the testers' CURRENT until Nov 21 after the owner's Nov 19 session on `81fc830`
 ([headset and zip checklist](NA_BETA1.md)). One change per commit; the owner's decisions
 D1-D11. Settings files from before get migration rev 14: features that were on in that session
 and off by default come on once (Showtime, AUTO: FINISHERS, AUTO: DODGES at PERFECT ONLY, air kicks,

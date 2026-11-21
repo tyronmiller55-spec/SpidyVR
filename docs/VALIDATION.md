@@ -1,5 +1,16 @@
 # Validation — 2026-10-27
 
+## November 21: 0.8.7-na-beta2 becomes CURRENT (feat/087-beta2, session game-vr-20261121-080924)
+
+The owner's session of about 41 minutes from 8:09 AM PT Nov 21 (stamp `game-vr-20261121-080924`); its build
+line reads `0.8.7-na-beta2 (commit d48249762e)`, run from the `Spidy-0.8.7-player-torso-d482497` folder. He
+reported "it feels good, the polish is there" and asked for beta2 to become CURRENT (t86u). The CURRENT package
+is the branch tip, which adds to d482497 the full-length swing lines (ab3c566, a looks-only toggle), the
+shooter check log line (4748216) and the forearm trust fix (afe6a39, tested by core tests against the Nov 20
+session 031344, not yet in a headset). Open at CURRENT, per the owner: wrist shooters still do not align, and
+during some handoffs frames of the body without the head on the neck can be seen. The session ended in the
+game's 0xC0000409. Log: `/workspace/playtest-na-beta2/`.
+
 ## November 19: 0.8.7-na-beta2 (feat/087-beta2, test build)
 
 No new game address. AIR DODGE reuses the swing's point-jump path (`Swing::step`, the module's own exports
