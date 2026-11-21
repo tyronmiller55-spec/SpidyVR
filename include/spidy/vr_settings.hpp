@@ -798,6 +798,13 @@ struct Values {
     int showtimeAutoStrikeCooldownMs = 0;
     int showtimeAutoDodgeEvery = 1;
     int showtimeAutoDodgeCooldownMs = 0;
+    // DOUBLE-TAP A: UPSIDE DOWN (beta3b; the owner, Nov 21 t88u: "flip Spidey perfectly upside down by double tapping
+    // A. I can hold on the double tap to stay inverted"): with REALISTIC FLIPS, a second A within AIR FLIP DOUBLE TAP MS
+    // in SpidyVR's air turns him upside down (the A upright's turn, mirrored), and held keeps him there until let go,
+    // as a held single A keeps him upright. The first A still begins the upright at once. Off: A only rights him.
+    bool airFlipDoubleTap = true;
+    // (ms, 150 to 600) the double tap's window, from the first press to the second
+    int airFlipDoubleTapMs = 300;
     // BETA3 SETTINGS END
     // HERO ATTACK SOUND (beta polish A2; attack_sound, spidy_vr.ini only, no menu row): one of the game's sounds played
     // on Spidey as a punch is thrown or a kick starts (at most one a hand every 250 ms, hit_sound.hpp): the id's 32

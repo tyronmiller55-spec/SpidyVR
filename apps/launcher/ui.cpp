@@ -2923,6 +2923,32 @@ void App::options(ImVec2 origin, ImVec2 size) {
                        "How long A in the air takes to bring you upright, smoothly with no jerk at either end. "
                        "Needs Realistic flips. 1 second by default.",
                        S(150), [&] { tabCombo("##aircorrect", Item::airCorrect); });
+            // DOUBLE-TAP A: UPSIDE DOWN (0.8.7-na-beta3b; the owner, Nov 21 t88u).
+            settingOption(Item::none, "Double-tap A: upside down",
+                       "In the air, tap A twice quickly: you turn upside down as smoothly as A rights you; hold the "
+                       "second A to stay upside down until you let go (a held single A keeps you upright). One A still "
+                       "rights you at once. Needs Realistic flips. On by default.",
+                       S(42), [&] {
+                           bool on = tabOnly_.airFlipDoubleTap;
+                           if (toggle("##airflipdoubletap", &on)) {
+                               tabOnly_.airFlipDoubleTap = on;
+                               tabChanged = true;
+                           }
+                       });
+            settingOption(Item::none, "Double-tap window",
+                       "How quickly the second A must follow the first. Default: 300 ms.",
+                       S(150), [&] {
+                           int value = tabOnly_.airFlipDoubleTapMs;
+                           ImGui::PushFont(fonts_.semibold, 14);
+                           if (slider("##airflipdoubletapms", &value, 150, 600, "%d ms")) {
+                               value = std::clamp((value - 150 + 12) / 25 * 25 + 150, 150, 600);
+                               if (value != tabOnly_.airFlipDoubleTapMs) {
+                                   tabOnly_.airFlipDoubleTapMs = value;
+                                   tabChanged = true;
+                               }
+                           }
+                           ImGui::PopFont();
+                       });
             settingOption(Item::directionalFlips, "Directional flips",
                        "Standing, hold the left stick to a side, ahead or back and tap A (let go within 0.18 s): a side "
                        "flip, front flip or backflip that way. Holding A is still the normal jump. On by default.",

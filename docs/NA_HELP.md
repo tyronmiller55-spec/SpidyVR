@@ -16,7 +16,7 @@ A jumps: the game's own jump. Hold A to charge it. A + B together (or hold B, th
 
 ## FLIPS (A TAPS)
 
-Hold the left stick a way and tap A (under 180 ms): a flip that way. Right stick flicked down then A: backflip; flicked up then A: front flip. Works in fights and with every flip mode (VR FLIPS tab).
+Hold the left stick a way and tap A (under 180 ms): a flip that way. Right stick flicked down then A: backflip; flicked up then A: front flip. Works in fights and with every flip mode (VR FLIPS tab). In the air, A rights you; tap A twice to turn upside down instead. Hold the A: stay upright (one A) or upside down (two) until you let go.
 
 ## FLIP BREAK & GRIP CANCEL
 

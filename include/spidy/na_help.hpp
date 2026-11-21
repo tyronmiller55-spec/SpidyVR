@@ -37,6 +37,8 @@ inline constexpr Page pages[] = {
     {"FLIPS (A TAPS)", "FLIPS (A TAPS)", "Hold the left stick a way and tap A (under 180 ms): a flip that way."},
     {"FLIPS (A TAPS)", "  (2) FRONT AND BACK", "Right stick flicked down then A: backflip; flicked up then A: front flip."},
     {"FLIPS (A TAPS)", "  (3) WHERE", "Works in fights and with every flip mode (VR FLIPS tab)."},
+    {"FLIPS (A TAPS)", "  (4) UPSIDE DOWN", "In the air, A rights you; tap A twice to turn upside down instead."},
+    {"FLIPS (A TAPS)", "  (5) HOLD", "Hold the A: stay upright (one A) or upside down (two) until you let go."},
 
     {"FLIP BREAK & GRIP CANCEL", "FLIP BREAK & GRIP CANCEL",
      "In a game jump or move, tilt the left stick to break into SpidyVR's air."},

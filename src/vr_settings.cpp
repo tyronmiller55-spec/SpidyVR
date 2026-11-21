@@ -1328,6 +1328,7 @@ Values sanitized(Values v) {
     v.handstandGraceAfterMs = std::clamp(v.handstandGraceAfterMs, 100, 1000);
     v.handstandGraceBeforeMs = std::clamp(v.handstandGraceBeforeMs, 0, 1000);
     v.handoffPlaceCm = std::clamp(v.handoffPlaceCm, 0, 2000);
+    v.airFlipDoubleTapMs = std::clamp(v.airFlipDoubleTapMs, 150, 600);
     v.showtimeAutoFinisherEvery = std::clamp(v.showtimeAutoFinisherEvery, 1, 10);
     v.showtimeAutoStrikeEvery = std::clamp(v.showtimeAutoStrikeEvery, 1, 10);
     v.showtimeAutoDodgeEvery = std::clamp(v.showtimeAutoDodgeEvery, 1, 10);
@@ -3281,6 +3282,8 @@ constexpr TabOnly tabOnly[] = {
     {"showtime_auto_strike_cooldown_ms", nullptr, &Values::showtimeAutoStrikeCooldownMs},
     {"showtime_auto_dodge_every", nullptr, &Values::showtimeAutoDodgeEvery},
     {"showtime_auto_dodge_cooldown_ms", nullptr, &Values::showtimeAutoDodgeCooldownMs},
+    {"air_flip_double_tap", &Values::airFlipDoubleTap, nullptr},
+    {"air_flip_double_tap_ms", nullptr, &Values::airFlipDoubleTapMs},
     {"log_level", nullptr, &Values::logLevel},
     {"movement_defaults", nullptr, &Values::movementDefaults},
 };
@@ -3493,6 +3496,10 @@ Values withMovementDefaults(Values v, std::string_view text) {
         // Revision 18 (0.8.7-na-beta3b; the owner, Nov 21 t88u: separate toggles): beta3's one switch for finishers
         // and strikes, saved off, turns both of the new switches off.
         v.showtimeAutoFinisher = v.showtimeAutoStrike = false;
+    }
+    if (seen < 18) {
+        // Revision 18 (beta3b, t88u): DOUBLE-TAP A: UPSIDE DOWN comes on once. A new key; a 0 chosen after it stays.
+        v.airFlipDoubleTap = true;
     }
     v.movementDefaults = movementDefaultsRevision;
     return sanitized(v);

@@ -1,5 +1,7 @@
 #include "spidy/aim_steady.hpp"
 #include "spidy/handoff_gap.hpp"
+#include "spidy/air_flip_tap.hpp"
+#include "spidy/realistic_flip.hpp"
 #include "spidy/finisher_handoff.hpp"
 #include "spidy/air_dodge.hpp"
 #include "spidy/showtime_fan.hpp"
@@ -25612,6 +25614,8 @@ int main() {
                   "showtime_auto_strike_cooldown_ms=0\n"
                   "showtime_auto_dodge_every=1\n"
                   "showtime_auto_dodge_cooldown_ms=0\n"
+                  "air_flip_double_tap=1\n"
+                  "air_flip_double_tap_ms=300\n"
                   "log_level=1\n"
                   "movement_defaults=18\n",
               "the defaults' text");
@@ -33988,6 +33992,136 @@ int main() {
         check(both.event(6000, 2, 5000) == AutoGate::Result::fire, "held back, the first after the wait goes out");
         check(AutoGate{}.event(0, 0, -5) == AutoGate::Result::fire, "nonsense settings: every one");
     });
+    test("double-tap A: one A rights at once, a second within the window turns upside down, held stays, let go is free (beta3b)", [&] {
+        using namespace air_flip_tap;
+        const float dt = 1.f / 90;
+        Params p;
+        const auto run = [&](Tap& t, bool a, bool air = true, bool b = false) { return t.update({a, air, b, dt}, p); };
+        // A single A: a press, not a double tap, from its first frame (no wait).
+        Tap one;
+        auto o = run(one, true);
+        check(o.press && !o.doubleTap && !o.inverted, "a single A is the upright at once");
+        // Tap, let go, tap again 200 ms after the first: upside down; held: holding; let go: free.
+        Tap two;
+        run(two, true);
+        for (int i = 0; i < 8; ++i)
+            run(two, false);
+        for (int i = 0; i < 9; ++i)
+            run(two, false);
+        o = run(two, true); // 18 frames = 200 ms after the first press
+        check(o.press && o.doubleTap && o.inverted && o.holding, "the second tap within 300 ms: upside down, held");
+        for (int i = 0; i < 90; ++i)
+            o = run(two, true);
+        check(o.inverted && o.holding, "held a second: still locked upside down");
+        o = run(two, false);
+        check(o.inverted && !o.holding, "let go: the hold is over");
+        // A third tap right after: upright again, and the first of a new pair.
+        o = run(two, true);
+        check(o.press && !o.doubleTap && !o.inverted, "a third tap is a single A");
+        // Too slow: 400 ms apart is two single A's.
+        Tap slow;
+        run(slow, true);
+        for (int i = 0; i < 35; ++i)
+            run(slow, false);
+        o = run(slow, true);
+        check(!o.doubleTap && !o.inverted, "400 ms apart is not a double tap");
+        // B down with the second A: the point jump's chord, not a double tap.
+        Tap chord;
+        run(chord, true);
+        run(chord, false);
+        o = run(chord, true, true, true);
+        check(!o.doubleTap, "A+B is the point jump");
+        // A jump from the ground and a tap in the air: the first press was not from the air.
+        Tap jump;
+        run(jump, true, false);
+        run(jump, false, true);
+        o = run(jump, true);
+        check(o.press && !o.doubleTap, "a ground jump's A does not count");
+        // Off: never upside down.
+        Params off;
+        off.enabled = false;
+        Tap no;
+        no.update({true, true, false, dt}, off);
+        no.update({false, true, false, dt}, off);
+        check(!no.update({true, true, false, dt}, off).doubleTap, "off: no double tap");
+    });
+    test("double-tap A: the upside-down turn is the upright's mirror, same smoothing, held in place, heading kept (beta3b)", [&] {
+        RealisticFlipSettings s;
+        s.enabled = true;
+        s.levelMs = 1000;
+        const float dt = 1.f / 90;
+        const auto upOf = [](const RealisticFlip& f) { return f.orientation().rotate({0, 1, 0}); };
+        const auto fwdOf = [](const RealisticFlip& f) { return f.orientation().rotate({0, 0, -1}); };
+        RealisticFlight still;
+        still.valid = true;
+        // Upright, a double tap's press held: a full half turn over 1 s (the share of a half turn, as the upright).
+        RealisticFlip f;
+        RealisticControls c;
+        c.brake = c.invert = true;
+        float worstStep = 0;
+        Vec3 last = upOf(f);
+        bool halfway = false;
+        for (int i = 0; i < 89; ++i) {
+            f.update(still, true, false, 0, dt, s, c);
+            worstStep = (std::max)(worstStep, length(upOf(f) - last));
+            last = upOf(f);
+            if (i == 44)
+                halfway = std::abs(upOf(f).y) < .2f && f.inverting();
+        }
+        check(halfway, "half way over at half the second (the min-jerk turn's middle)");
+        for (int i = 0; i < 3; ++i)
+            f.update(still, true, false, 0, dt, s, c);
+        check(upOf(f).y < -.9999f, "upside down after a second");
+        check(fwdOf(f).z < -.999f, "still facing the way he did (a roll about his forward)");
+        check(worstStep < .075f, "smooth: no frame jumps (the min-jerk peak, 1.875 pi rad/s, is .065 a frame)");
+        // Held: stays exactly upside down, whatever the flight does.
+        RealisticFlight pulled = still;
+        pulled.attached = true;
+        pulled.pull = {1, 0, 0};
+        pulled.velocity = {10, 0, 0};
+        for (int i = 0; i < 90; ++i)
+            f.update(pulled, true, false, 0, dt, s, c);
+        check(upOf(f).y < -.9999f && f.inverting(), "held: locked upside down");
+        // Let go: free again (the hold is over; the flight turns him).
+        c.brake = c.invert = false;
+        f.update(pulled, true, false, 0, dt, s, c);
+        check(!f.inverting(), "let go: no longer held upside down");
+        // A single A from there rights him as before.
+        c.brake = true;
+        for (int i = 0; i < 100; ++i)
+            f.update(still, true, false, 0, dt, s, c);
+        check(upOf(f).y > .9999f, "a single A rights him");
+        // The redirect: an upright 0.15 s in, then the second tap: from where it got to, on to upside down, no jump.
+        RealisticFlip r;
+        RealisticControls one;
+        one.brake = true;
+        const float tilt = 1.2f;
+        // Start leaning (a manual spin of 1.2 rad/s for a second), then A for 0.15 s, let go, and the second tap.
+        RealisticControls spin;
+        spin.manualActive = true;
+        spin.manualAngular = {tilt, 0, 0};
+        for (int i = 0; i < 90; ++i)
+            r.update(still, true, false, 0, dt, s, spin);
+        const float startUp = upOf(r).y;
+        check(startUp < .6f, "the lean for the redirect");
+        for (int i = 0; i < 14; ++i)
+            r.update(still, true, false, 0, dt, s, one);
+        r.update(still, true, false, 0, dt, s, {}); // let go between the taps
+        RealisticControls second;
+        second.brake = second.invert = true;
+        Vec3 before = upOf(r);
+        float jump = 0;
+        for (int i = 0; i < 120; ++i) {
+            r.update(still, true, false, 0, dt, s, second);
+            jump = (std::max)(jump, length(upOf(r) - before));
+            before = upOf(r);
+        }
+        check(upOf(r).y < -.9999f && jump < .075f, "redirected smoothly to upside down");
+        // Mirror: from 60 degrees over, the inverted target is the shortest turn to straight down.
+        const Quat over = Quat::around({1, 0, 0}, 2.1f);
+        const Quat target = RealisticFlip::invertedTarget(over);
+        check(target.rotate({0, 1, 0}).y < -.9999f, "the inverted target puts his up straight down");
+    });
     test("beta3 switches: on by default, on once for an older file (revision 17), and a 0 chosen after it stays", [&] {
         using vr_settings::Values, vr_settings::withMovementDefaults, vr_settings::withTabOnly, vr_settings::tabOnlyText;
         const Values d{};
@@ -33999,6 +34133,7 @@ int main() {
                   d.showtimeAutoStrikeEvery == 1 && d.showtimeAutoDodgeEvery == 1 && d.showtimeAutoFinisherCooldownMs == 0 &&
                   d.showtimeAutoStrikeCooldownMs == 0 && d.showtimeAutoDodgeCooldownMs == 0,
               "AUTO: FINISHERS and STRIKES on, every one, no cooldown");
+        check(d.airFlipDoubleTap && d.airFlipDoubleTapMs == 300, "DOUBLE-TAP A: on, 300 ms");
         // BETA3 DEFAULT CHECKS END
         Values off{};
         off.handoffHeadFirst = false;
@@ -34006,6 +34141,7 @@ int main() {
         off.headSeatPull = false;
         off.handstandTipInDeg = 120;
         off.showtimeAutoFinisher = off.showtimeAutoStrike = false;
+        off.airFlipDoubleTap = false;
         // BETA3 OFF END
         std::string base = tabOnlyText(off);
         base = base.substr(0, base.find("movement_defaults="));
@@ -34028,6 +34164,7 @@ int main() {
         check(both.showtimeAutoFinisher && both.showtimeAutoStrike, "a saved 1 turned one off");
         const std::string later = "showtime_auto_finisher_strike=0\nshowtime_auto_strike=1\nmovement_defaults=18\n";
         check(withMovementDefaults(withTabOnly({}, later), later).showtimeAutoStrike, "revision 18 ran twice");
+        check(migrated.airFlipDoubleTap, "an older file did not get DOUBLE-TAP A");
         // BETA3 MIGRATED END
         const std::string chosen = base + "movement_defaults=18\n";
         const Values kept = withMovementDefaults(withTabOnly({}, chosen), chosen);
@@ -34036,6 +34173,7 @@ int main() {
         check(!kept.headSeatPull, "HEAD SEAT PULL: a 0 chosen after revision 17 moved");
         check(kept.handstandTipInDeg == 120, "a 120 tip-in chosen after revision 17 moved");
         check(!kept.showtimeAutoFinisher && !kept.showtimeAutoStrike, "AUTO: FINISHERS/STRIKES: a 0 chosen after it moved");
+        check(!kept.airFlipDoubleTap, "DOUBLE-TAP A: a 0 chosen after revision 18 moved");
         // BETA3 KEPT END
     });
     test("handoff head gap: one report per switch with the worst gap, the settled gap and the time over it (H6)", [&] {

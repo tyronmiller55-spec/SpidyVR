@@ -26,6 +26,11 @@ struct RealisticFlipSettings {
     // heading. It was error / 0.18 s at up to `speed` degrees a second with a hard start (about 0.5 s for a full flip).
     // A small tilt takes less (the angle's share of a half turn, never under 30% of this).
     int levelMs = 1000;
+    // DOUBLE-TAP A: UPSIDE DOWN (air_flip_double_tap / _ms, beta3b; air_flip_tap.hpp): a double tap of A in
+    // the air turns him upside down instead, the same turn as the upright's mirrored, held the same way. Off
+    // here; the settings set it.
+    bool doubleTapInvert = false;
+    int doubleTapMs = 300;
     bool operator==(const RealisticFlipSettings&) const = default;
 };
 struct RealisticFlight {
@@ -76,6 +81,8 @@ inline Vec3 legTurnVector(Quat head, float pitch, float roll) {
 }
 struct RealisticControls {
     bool brake{};
+    // DOUBLE-TAP A (air_flip_tap.hpp): this press of the brake turns him upside down, not upright.
+    bool invert{};
     Vec3 manualAngular{}; // tracking-local left-stick angular velocity
     bool manualActive{};
 };
@@ -132,7 +139,7 @@ class RealisticFlip {
     Quat tilt_{}, levelTarget_{}, levelFrom_{};
     float levelAge_{}, levelSeconds_ = 1.f;
     Vec3 angular_{}, momentum_{}, averageVelocity_{}, lastPull_{0, 1, 0};
-    bool attached_{}, sampled_{}, airborne_{}, leveling_{}, brakeHeld_{};
+    bool attached_{}, sampled_{}, airborne_{}, leveling_{}, brakeHeld_{}, inverting_{};
     float missingTime_{}, lastRadius_ = 20, poseInertia_ = 1;
     static Quat unit(Quat q) {
         const float n = std::sqrt(q.x * q.x + q.y * q.y + q.z * q.z + q.w * q.w);
@@ -164,6 +171,22 @@ class RealisticFlip {
     }
     bool recovering() const {
         return leveling_;
+    }
+    // DOUBLE-TAP A: the turn in force (or the hold) is toward upside down.
+    bool inverting() const {
+        return (leveling_ || brakeHeld_) && inverting_;
+    }
+    // The upside-down mirror of the upright turn's target: from far over, the shortest turn that puts his up
+    // straight down (as the upright's puts it straight up); from nearer upright, where that turn would be no
+    // clear thing, the upright target rolled half a turn about his own forward, so he faces the way he did
+    // (the heading is the headset's; nothing here turns the view's yaw).
+    static Quat invertedTarget(Quat tilt) {
+        tilt = unit(tilt);
+        const Vec3 up = tilt.rotate({0, 1, 0});
+        if (up.y < .5f)
+            return unit(arc(up, {0, -1, 0}) * tilt);
+        const Quat upright = unit(arc(up, {0, 1, 0}) * tilt);
+        return unit(upright * Quat::around({0, 0, -1}, 3.14159265f));
     }
     bool level() const {
         return std::abs(tilt_.w) > .99999f;
@@ -224,7 +247,9 @@ class RealisticFlip {
         const float rate = manual ? std::max(autoRate, length(controls.manualAngular)) : autoRate;
         const bool brake = controls.brake && settings.airBrake;
         if (brake && !brakeHeld_) {
-            levelTarget_ = unit(arc(tilt_.rotate({0, 1, 0}), {0, 1, 0}) * tilt_);
+            inverting_ = controls.invert;
+            levelTarget_ =
+                inverting_ ? invertedTarget(tilt_) : unit(arc(tilt_.rotate({0, 1, 0}), {0, 1, 0}) * tilt_);
             levelFrom_ = tilt_;
             levelAge_ = 0;
             // The angle's share of a half turn, so a small tilt does not take a second.

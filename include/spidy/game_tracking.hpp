@@ -1,4 +1,5 @@
 #pragma once
+#include "air_flip_tap.hpp"
 #include "head_clearance.hpp"
 #include "hand_collision.hpp"
 #include "handstand.hpp"
@@ -362,6 +363,14 @@ class GameTrackingRig {
         groundFlipOff_ = off;
     }
     // How many ground flips' spins were let go into the air, and how many ran out on the ground.
+    // DOUBLE-TAP A: double taps that turned him upside down, and whether one is held now (locked upside
+    // down).
+    unsigned airFlipInverts() const {
+        return airFlipInverts_;
+    }
+    bool airFlipHolding() const {
+        return airFlipHolding_;
+    }
     unsigned groundFlipsReleased() const {
         return groundFlipsReleased_;
     }
@@ -607,6 +616,10 @@ class GameTrackingRig {
     RealisticFlip automatic_{};
     AutomaticHandMotion automaticHands_{};
     bool automaticStickReady_{}, automaticBrakeHeld_{}, automaticBrakeFromAir_{};
+    // DOUBLE-TAP A: UPSIDE DOWN (air_flip_tap.hpp): which way A's turn goes, and how many went upside down.
+    air_flip_tap::Tap airFlipTap_{};
+    unsigned airFlipInverts_{};
+    bool airFlipHolding_{};
     Rig rig_{};
     FlipMotion flip_{};
     Pose lastHead_{};

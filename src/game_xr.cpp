@@ -1117,10 +1117,10 @@ bool writeTabOnly(const std::string& text) {
 }
 // REALISTIC FLIPS and the rows under it, as the rig takes them.
 RealisticFlipSettings realisticFlips(const vr_settings::Values& v) {
-    return {v.realisticFlips,         v.automaticReleaseFlip,  v.automaticStrength,
-            v.automaticSpeed,         v.automaticMinimumSpeed, v.automaticResponse,
-            v.automaticHandStrength,  v.automaticFalloff,      v.automaticHandThreshold,
-            v.automaticAirBrake,      v.automaticCombat,       v.airCorrectMs};
+    return {v.realisticFlips,         v.automaticReleaseFlip, v.automaticStrength,     v.automaticSpeed,
+            v.automaticMinimumSpeed,  v.automaticResponse,    v.automaticHandStrength, v.automaticFalloff,
+            v.automaticHandThreshold, v.automaticAirBrake,    v.automaticCombat,       v.airCorrectMs,
+            v.airFlipDoubleTap,       v.airFlipDoubleTapMs};
 }
 DWORD WINAPI run(void*) {
     bool nativeStarted = false, gpuStarted = false, raysStarted = false, swingStarted = false, websStarted = false,
@@ -1579,6 +1579,9 @@ DWORD WINAPI run(void*) {
         ground_flip::TapTrigger groundFlipTap; // side flips: a directional A tap
         bool torsoChannelLogged{}; // TORSO CHANNEL (J1): last logged on/off
         unsigned groundFlips{}, groundFlipDenied{}, groundFlipRefused{}, groundFlipReleasedSeen{}, groundFlipLapsedSeen{};
+        // DOUBLE-TAP A: UPSIDE DOWN: the rig's count logged, and whether a hold was on.
+        unsigned airFlipInvertSeen{};
+        bool airFlipHoldWas{};
         uint64_t actionFrameFloor{};
         uint64_t cancellationSerialFloor{};
         bool animatedOnlyHeldWas{};
@@ -3953,6 +3956,18 @@ DWORD WINAPI run(void*) {
                         if (rig.groundFlipsReleased() != groundFlipReleasedSeen) {
                             groundFlipReleasedSeen = rig.groundFlipsReleased();
                             diag_log::write("ground flip: off the ground, the spin is the flips' now");
+                        }
+                        // DOUBLE-TAP A: UPSIDE DOWN (air_flip_double_tap).
+                        if (rig.airFlipInverts() != airFlipInvertSeen) {
+                            airFlipInvertSeen = rig.airFlipInverts();
+                            diag_log::writef(
+                                "air flip: double tap A, turning upside down over up to %d ms, #%u",
+                                values.airCorrectMs, airFlipInvertSeen);
+                        }
+                        if (rig.airFlipHolding() != airFlipHoldWas) {
+                            airFlipHoldWas = rig.airFlipHolding();
+                            if (!airFlipHoldWas)
+                                diag_log::write("air flip: A let go, free again (upside down hold over)");
                         }
                         if (rig.groundFlipsLapsed() != groundFlipLapsedSeen) {
                             groundFlipLapsedSeen = rig.groundFlipsLapsed();

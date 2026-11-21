@@ -808,6 +808,10 @@ int main() {
                 continue;
             if (key == "swing_line_full_length")
                 continue;
+            if (key == "air_flip_double_tap_ms")
+                continue;
+            if (key == "air_flip_double_tap")
+                continue;
             if (key.rfind("showtime_auto_finisher", 0) == 0 || key.rfind("showtime_auto_strike", 0) == 0 ||
                 key.rfind("showtime_auto_dodge_", 0) == 0)
                 continue;
