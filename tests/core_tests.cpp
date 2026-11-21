@@ -25586,7 +25586,7 @@ int main() {
                   "handstand_grace_before_ms=300\n"
                   "handstand_grace_after_ms=400\n"
                   "handstand_tip_in=1\n"
-                  "handstand_tip_in_deg=120\n"
+                  "handstand_tip_in_deg=60\n"
                   "handstand_tip_in_reach_cm=200\n"
                   "marker_twist_steady=1\n"
                   "marker_turn_rate_dps=360\n"
@@ -25602,6 +25602,7 @@ int main() {
                   "head_seat_pull=1\n"
                   "head_seat_pull_cm=5\n"
                   "head_seat_pull_cm_s=50\n"
+                  "handstand_catch_deg=60\n"
                   "log_level=1\n"
                   "movement_defaults=17\n",
               "the defaults' text");
@@ -33914,11 +33915,13 @@ int main() {
         check(d.handoffHeadFirst, "HANDOFF HEAD FIRST is on by default");
         check(d.landingViewSnap && d.landingViewSnapCm == 15 && d.landingViewSnapMs == 120, "LANDING VIEW SNAP: on, 15 cm, 120 ms");
         check(d.headSeatPull && d.headSeatPullCm == 5 && d.headSeatPullCmS == 50, "HEAD SEAT PULL: on, 5 cm, 50 cm/s");
+        check(d.handstandCatchDeg == 60 && d.handstandTipInDeg == 60, "HANDSTAND: catch and tip-in from 60 deg");
         // BETA3 DEFAULT CHECKS END
         Values off{};
         off.handoffHeadFirst = false;
         off.landingViewSnap = false;
         off.headSeatPull = false;
+        off.handstandTipInDeg = 120;
         // BETA3 OFF END
         std::string base = tabOnlyText(off);
         base = base.substr(0, base.find("movement_defaults="));
@@ -33927,12 +33930,16 @@ int main() {
         check(migrated.handoffHeadFirst, "an older file did not get HANDOFF HEAD FIRST");
         check(migrated.landingViewSnap, "an older file did not get LANDING VIEW SNAP");
         check(migrated.headSeatPull, "an older file did not get HEAD SEAT PULL");
+        check(migrated.handstandTipInDeg == 60, "a saved 120 tip-in did not become 60");
+        const std::string tuned = "handstand_tip_in_deg=130\nmovement_defaults=16\n";
+        check(withMovementDefaults(withTabOnly({}, tuned), tuned).handstandTipInDeg == 130, "a tuned tip-in angle moved");
         // BETA3 MIGRATED END
         const std::string chosen = base + "movement_defaults=17\n";
         const Values kept = withMovementDefaults(withTabOnly({}, chosen), chosen);
         check(!kept.handoffHeadFirst, "a 0 chosen after revision 17 moved");
         check(!kept.landingViewSnap, "LANDING VIEW SNAP: a 0 chosen after revision 17 moved");
         check(!kept.headSeatPull, "HEAD SEAT PULL: a 0 chosen after revision 17 moved");
+        check(kept.handstandTipInDeg == 120, "a 120 tip-in chosen after revision 17 moved");
         // BETA3 KEPT END
     });
     test("handoff head gap: one report per switch with the worst gap, the settled gap and the time over it (H6)", [&] {

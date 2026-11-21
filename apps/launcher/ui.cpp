@@ -2895,6 +2895,27 @@ void App::options(ImVec2 origin, ImVec2 size) {
                 "re-placing your hands and head together is no loss, and once caught the hands may lift a "
                 "little higher and for 0.15 s before it ends. Your arms still have to be up. On by default.",
                 S(42), [&] { tabToggle("##handstandsticky", Item::handstandSticky); });
+            // HANDSTAND ENTRY ANGLE (0.8.7-na-beta3): the catch and the tip-in angles, 5 degree steps.
+            const auto degreeSlider = [&](const char* id, int& field, int lowest, int highest) {
+                int value = field;
+                ImGui::PushFont(fonts_.semibold, 14);
+                if (slider(id, &value, lowest, highest, "%d deg")) {
+                    value = std::clamp((value - lowest + 2) / 5 * 5 + lowest, lowest, highest);
+                    if (value != field) {
+                        field = value;
+                        tabChanged = true;
+                    }
+                }
+                ImGui::PopFont();
+            };
+            settingOption(Item::none, "Catch angle",
+                "How far upside down you must be for your palms on the floor to catch a handstand (45 to 150). "
+                "60 by default (100 before beta3). Needs Realistic flips.",
+                S(150), [&] { degreeSlider("##handstandcatchdeg", tabOnly_.handstandCatchDeg, 45, 150); });
+            settingOption(Item::none, "Tip-in angle",
+                "Upside down at least this far with your hands over your head, you are tipped into the handstand "
+                "from up to 2 m (45 to 180). 60 by default (120 before beta3).",
+                S(150), [&] { degreeSlider("##handstandtipindeg", tabOnly_.handstandTipInDeg, 45, 180); });
         });
         // BODY & LEGS / KICKS & COMBAT (beta polish M4): the NA rows that lived on MOVEMENT and FLIPS.
         group(legsPage, 0, "Flips (Native Animation)", [&] {

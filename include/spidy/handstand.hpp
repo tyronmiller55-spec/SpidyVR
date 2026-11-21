@@ -178,7 +178,11 @@ template <class V> Params paramsOf(const V& v) {
     p.armsGraceBefore = std::clamp(v.handstandGraceBeforeMs, 0, 1000) / 1000.f;
     p.touchdownGrace = std::clamp(v.handstandGraceAfterMs, 100, 1000) / 1000.f;
     p.tipIn = v.handstandTipIn;
-    p.tipInDegrees = static_cast<float>(std::clamp(v.handstandTipInDeg, 100, 180));
+    // HANDSTAND ENTRY ANGLE (beta3; the owner, Nov 21: "Lower the handstand tip-in angle too"): the catch and
+    // the tip-in from 60 degrees inverted by default (100 and 120 before), so a handstand starts well before
+    // upside down.
+    p.tipInDegrees = static_cast<float>(std::clamp(v.handstandTipInDeg, 45, 180));
+    p.catchDegrees = static_cast<float>(std::clamp(v.handstandCatchDeg, 45, 150));
     p.tipInReach = std::clamp(v.handstandTipInReachCm, 60, 300) / 100.f;
     // STICKY HANDSTANDS (above): the wider entry and the longer holds, from the settings.
     p.sticky = v.handstandSticky;

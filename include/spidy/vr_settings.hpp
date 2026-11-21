@@ -780,6 +780,9 @@ struct Values {
     int headSeatPullCm = 5; // (cm, 0 to 20) how far off the neck the view may lean before the pull
     // (cm/s, 5 to 200) the pull at most
     int headSeatPullCmS = 50;
+    // HANDSTAND CATCH ANGLE (beta3; the owner, Nov 21: "Lower the handstand tip-in angle too"): inverted at least this
+    // far (degrees, 45 to 150) for a touchdown on the palms to catch; 100 before (hardcoded). A new key, default 60.
+    int handstandCatchDeg = 60;
     // BETA3 SETTINGS END
     // HERO ATTACK SOUND (beta polish A2; attack_sound, spidy_vr.ini only, no menu row): one of the game's sounds played
     // on Spidey as a punch is thrown or a kick starts (at most one a hand every 250 ms, hit_sound.hpp): the id's 32
@@ -911,10 +914,10 @@ struct Values {
     int handstandGraceBeforeMs = 300;
     int handstandGraceAfterMs = 400;
     // HANDSTAND TIP-IN (the owner, Nov 17: "tip the player into the handstand when it's clear they're attempting one"):
-    // inverted at least handstand_tip_in_deg (120), not spinning, the hands over the head (now or in the grace): the catch takes
+    // inverted at least handstand_tip_in_deg (60; 120 before beta3), not spinning, the hands over the head (now or in the grace): the catch takes
     // the palms from up to handstand_tip_in_reach_cm (200) over the floor with no hold wait, and sets them down.
     bool handstandTipIn = true;
-    int handstandTipInDeg = 120;
+    int handstandTipInDeg = 60; // 45 to 180; 120 until 0.8.7-na-beta3 (revision 17 moves a saved 120 to 60)
     int handstandTipInReachCm = 200;
     // MARKER TWIST STEADY (the owner, Nov 17: "reaching around to fire webs causes the marker to jump ... loosen up that
     // twisting"): the arm line is smoothed in the world, carried with the controller's pointing, so a twist of the hand no longer

@@ -56,7 +56,7 @@ HAND GRAB: a palm on an enemy or prop holds it. Heavies and bosses resist throws
 
 ## HANDSTAND
 
-Fall inverted onto both palms (REALISTIC FLIPS on): you balance on your hands. Lean to walk, push off to leap, let go or lean past FALL ANGLE to drop. BALANCE ASSIST steadies you; SWAY TIME is how long you may be off balance. STICKY HANDSTANDS: easier to catch (arms still up), short tracking drops held.
+Fall inverted onto both palms (REALISTIC FLIPS on): you balance on your hands. Lean to walk, push off to leap, let go or lean past FALL ANGLE to drop. BALANCE ASSIST steadies you; SWAY TIME is how long you may be off balance. STICKY HANDSTANDS: easier to catch (arms still up), short tracking drops held. CATCH ANGLE and TIP-IN ANGLE: from 60 deg upside down now (100 and 120 before).
 
 ## SHOWTIME
 

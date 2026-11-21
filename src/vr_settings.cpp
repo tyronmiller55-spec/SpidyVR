@@ -1324,10 +1324,11 @@ Values sanitized(Values v) {
     v.markerSwitchHoldMs = std::clamp(v.markerSwitchHoldMs, 0, 500);
     v.markerTurnRateDps = std::clamp(v.markerTurnRateDps, 0, 2000);
     v.handstandTipInReachCm = std::clamp(v.handstandTipInReachCm, 60, 300);
-    v.handstandTipInDeg = std::clamp(v.handstandTipInDeg, 100, 180);
+    v.handstandTipInDeg = std::clamp(v.handstandTipInDeg, 45, 180);
     v.handstandGraceAfterMs = std::clamp(v.handstandGraceAfterMs, 100, 1000);
     v.handstandGraceBeforeMs = std::clamp(v.handstandGraceBeforeMs, 0, 1000);
     v.handoffPlaceCm = std::clamp(v.handoffPlaceCm, 0, 2000);
+    v.handstandCatchDeg = std::clamp(v.handstandCatchDeg, 45, 150);
     v.headSeatPullCmS = std::clamp(v.headSeatPullCmS, 5, 200);
     v.headSeatPullCm = std::clamp(v.headSeatPullCm, 0, 20);
     v.landingViewSnapMs = std::clamp(v.landingViewSnapMs, 40, 400);
@@ -3265,6 +3266,7 @@ constexpr TabOnly tabOnly[] = {
     {"head_seat_pull", &Values::headSeatPull, nullptr},
     {"head_seat_pull_cm", nullptr, &Values::headSeatPullCm},
     {"head_seat_pull_cm_s", nullptr, &Values::headSeatPullCmS},
+    {"handstand_catch_deg", nullptr, &Values::handstandCatchDeg},
     {"log_level", nullptr, &Values::logLevel},
     {"movement_defaults", nullptr, &Values::movementDefaults},
 };
@@ -3463,6 +3465,9 @@ Values withMovementDefaults(Values v, std::string_view text) {
         v.handoffHeadFirst = true;
         v.landingViewSnap = true;
         v.headSeatPull = true;
+        // HANDSTAND ENTRY ANGLE: the tip-in from 60 degrees; a saved 120 was the old default, another number a choice.
+        if (v.handstandTipInDeg == 120)
+            v.handstandTipInDeg = 60;
         // BETA3 MIGRATION END
     }
     v.movementDefaults = movementDefaultsRevision;

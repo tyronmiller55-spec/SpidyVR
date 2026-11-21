@@ -957,8 +957,8 @@ int main() {
         const Params P = paramsOf(d);
         check(d.handstandReachCm == 160 && std::abs(P.touchdownReach - 1.6f) < 1e-6f &&
                   std::abs(P.armsGraceBefore - .3f) < 1e-6f && std::abs(P.touchdownGrace - .4f) < 1e-6f && P.tipIn &&
-                  P.tipInDegrees == 120.f && std::abs(P.tipInReach - 2.f) < 1e-6f,
-              "the defaults: 1.6 m reach, 300 ms before, 400 ms after, tip-in from 120 deg within 2 m");
+                  P.tipInDegrees == 60.f && P.catchDegrees == 60.f && std::abs(P.tipInReach - 2.f) < 1e-6f,
+              "the defaults: 1.6 m reach, 300 ms before, 400 ms after, catch and tip-in from 60 deg within 2 m");
         const auto attempt = [](float degrees, float palmsUp, float armsY, bool air) {
             auto in = inverted();
             const float r = degrees * 3.14159265f / 180.f;
@@ -1010,23 +1010,26 @@ int main() {
                   "the window closes with every failing gate");
         }
         // A hold made in the air counts at once below the tip-in's angle.
+        // (The tip-in's angle at its old 120 here: 110 is below it; the default is 60 since beta3.)
+        Params below = P;
+        below.tipInDegrees = 120.f;
         {
             Handstand h;
             for (int i = 0; i < 18; ++i)
-                h.update(attempt(110, 0, .25f, true), P);
-            const auto o = h.update(attempt(110, 1.5f, .25f, false), P);
+                h.update(attempt(110, 0, .25f, true), below);
+            const auto o = h.update(attempt(110, 1.5f, .25f, false), below);
             check(o.caughtNow && !o.tipIn, "110 deg, hands held up in the air, palms 1.5 m: caught with no wait");
         }
         // Raised only at the touchdown, below the tip-in's angle: the 0.12 s hold, then the catch.
         {
             Handstand h;
             for (int i = 0; i < 18; ++i)
-                h.update(attempt(110, 0, -.3f, true), P);
-            auto o = h.update(attempt(110, 1.5f, .25f, false), P);
+                h.update(attempt(110, 0, -.3f, true), below);
+            auto o = h.update(attempt(110, 1.5f, .25f, false), below);
             check(!o.caughtNow && o.refused == Refusal::none, "hands up at the touchdown: the hold first");
             int frames = 1;
             for (; frames < 40 && !o.caughtNow; ++frames)
-                o = h.update(attempt(110, 1.5f, .25f, false), P);
+                o = h.update(attempt(110, 1.5f, .25f, false), below);
             check(o.caughtNow && frames * dt >= .12f, "then the catch");
         }
         // TIP-IN: clearly attempting (150 deg, hands over the head), palms 1.9 m up: tipped in at once.
@@ -1085,7 +1088,7 @@ int main() {
                   "a tuned reach stays");
             const auto r = vr_settings::withTabOnly({}, "handstand_tip_in=0\nhandstand_tip_in_deg=20\n"
                                                         "handstand_grace_before_ms=5000\nhandstand_grace_after_ms=10\n");
-            check(!r.handstandTipIn && r.handstandTipInDeg == 100 && r.handstandGraceBeforeMs == 1000 &&
+            check(!r.handstandTipIn && r.handstandTipInDeg == 45 && r.handstandGraceBeforeMs == 1000 &&
                       r.handstandGraceAfterMs == 100,
                   "the ini keys read, clamped");
         }

@@ -76,6 +76,7 @@ inline constexpr Page pages[] = {
     {"HANDSTAND", "  (2) MOVING", "Lean to walk, push off to leap, let go or lean past FALL ANGLE to drop."},
     {"HANDSTAND", "  (3) TUNING", "BALANCE ASSIST steadies you; SWAY TIME is how long you may be off balance."},
     {"HANDSTAND", "  (4) STICKY", "STICKY HANDSTANDS: easier to catch (arms still up), short tracking drops held."},
+    {"HANDSTAND", "  (5) ANGLES", "CATCH ANGLE and TIP-IN ANGLE: from 60 deg upside down now (100 and 120 before)."},
 
     {"SHOWTIME", "SHOWTIME", "SHOWTIME: hold X + B for 200 ms to step outside Spider-Man."},
     {"SHOWTIME", "  (2) ORBIT", "The right stick orbits; let go to return. WATCH ONLY keeps your hands still."},

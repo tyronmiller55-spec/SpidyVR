@@ -808,6 +808,8 @@ int main() {
                 continue;
             if (key == "swing_line_full_length")
                 continue;
+            if (key == "handstand_catch_deg")
+                continue;
             if (key == "head_seat_pull_cm_s")
                 continue;
             if (key == "head_seat_pull_cm")
