@@ -814,6 +814,11 @@ struct Values {
     // SECOND HAND: a web the other hand takes hold of keeps its full-length line (the slack on the upper hand's run);
     // hand-over-hand climbing takes line in one-for-one, as the reel. Off: one web in both hands is drawn taut.
     bool webSharedSlack = true;
+    // PHYSICS UNTIL FADE: a full-length line let go of swings free from where it sticks for WEB FADE MS, then
+    // dissolves as before. A new web from that rope ends it at once. Off: it dissolves on the let-go frame.
+    bool webFadePhysics = true;
+    // (ms, 300 to 3000) how long a let-go line swings before it dissolves
+    int webFadeMs = 1200;
     // BETA3 SETTINGS END
     // HERO ATTACK SOUND (beta polish A2; attack_sound, spidy_vr.ini only, no menu row): one of the game's sounds played
     // on Spidey as a punch is thrown or a kick starts (at most one a hand every 250 ms, hit_sound.hpp): the id's 32

@@ -3317,6 +3317,10 @@ void App::options(ImVec2 origin, ImVec2 size) {
                    S(42), [&] { flagToggle("##webwrapslack", tabOnly_.webWrapSlack); });
             settingOption(Item::none, "Second hand", "A web your other hand takes keeps its line; climbing hand over hand takes line in. Default: on.",
                    S(42), [&] { flagToggle("##websharedslack", tabOnly_.webSharedSlack); });
+            settingOption(Item::none, "Physics until fade", "A line you let go of swings free from where it sticks, then dissolves. Default: on.",
+                   S(42), [&] { flagToggle("##webfadephysics", tabOnly_.webFadePhysics); });
+            settingOption(Item::none, "Fade time", "How long a let-go line swings before it dissolves. Default: 1200 ms.",
+                   S(150), [&] { fineSlider("##webfadems", tabOnly_.webFadeMs, 300, 3000, 100, "%d ms", nullptr); });
             // BETA3C LAUNCHER END
         });
         // NA HELP (beta polish M5): the same pages as the game's NA · HELP tab (na_help.hpp), a card per topic.

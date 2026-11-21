@@ -2108,6 +2108,13 @@ DWORD WINAPI run(void*) {
             bool shared{};
         };
         SwingLineLast swingLineLast[2]{};
+        struct SwingFade {
+            int64_t key{};
+            unsigned from{};
+            Vec3 anchor{}, runEnd{};
+            native_webs::Bent edges{};
+        };
+        SwingFade swingFades[2]{};
         // Which of the game's two ropes draws which hand's web (one web in
         // both hands has one rope), and when a free hand last came onto the
         // other hand's web (a tick says a press there takes hold of it).
@@ -7998,10 +8005,72 @@ DWORD WINAPI run(void*) {
                                     sl.grounded = swingState.grounded != 0;
                                     sl.beyond = beyond;
                                     sl.most = std::max(room, 0);
+                                    // Let go of (no web on this rope now, or another): the line's account,
+                                    // then PHYSICS UNTIL FADE - it swings free from where it sticks while the
+                                    // rope is not wanted, until WEB FADE MS, a new web, or a stick-click line
+                                    // (CONNECT HANDOFF).
+                                    if (!drawn && last.drawn &&
+                                        (hand.attached != 1 || hand.attachedAt != last.key)) {
+                                        const bool free = hand.attached == 0 && !trail;
+                                        const bool fades = values.webFadePhysics && free &&
+                                                           native_webs::drawsHeld() && line.release();
+                                        diag_log::writef(
+                                            "swing line: %c let go: drawn %.1f m, most slack %.1f m, "
+                                            "most pull %.2f m/s^2 (pulling %.1f s)%s%s; %s",
+                                            last.from ? 'R' : 'L', last.drawnM, last.peakSlack, last.peakPull,
+                                            last.pulledSeconds, last.climbed > .05f ? ", climbed in" : "",
+                                            last.edgeCount ? ", round edges" : "",
+                                            fades   ? "it swings free until it fades"
+                                            : !free ? "its rope is wanted"
+                                                    : "it dissolves now");
+                                        if (fades)
+                                            swingFades[i] = {last.key, last.from, last.anchor, last.runEnd,
+                                                             last.edges};
+                                        last = {};
+                                    }
                                     if (!drawn)
                                         last.drawn = false; // drawn no more on this web: not a line to let go
+                                    if (line.fading()) {
+                                        auto& fade = swingFades[i];
+                                        const float age = line.fadeAge();
+                                        const char* why = hand.attached != 0                 ? "a new web"
+                                                          : age * 1000.f >= values.webFadeMs ? "faded"
+                                                          : !values.webFadePhysics           ? "switched off"
+                                                                                             : nullptr;
+                                        if (why) {
+                                            diag_log::writef("web fade: %c dissolves after %.0f ms (%s)",
+                                                             fade.from ? 'R' : 'L', age * 1000.f, why);
+                                            line.stop();
+                                        } else {
+                                            const int roomFade = static_cast<int>(native_webs::maxRopeBends) -
+                                                                 static_cast<int>(fade.edges.count);
+                                            const auto f = line.fade(fade.runEnd, frame.seconds, roomFade);
+                                            if (line.fading()) {
+                                                hand.attached = 1;
+                                                hand.tracked = 1;
+                                                hand.attachedAt = fade.key;
+                                                hand.anchor = fade.anchor;
+                                                hand.wrist = line.freeEnd();
+                                                uint32_t n = 0;
+                                                for (int k = 0; k < f.count && n < native_webs::maxRopeBends;
+                                                     ++k)
+                                                    bent[i].points[n++] = f.points[k];
+                                                for (uint32_t k = 0;
+                                                     k < fade.edges.count && n < native_webs::maxRopeBends;
+                                                     ++k)
+                                                    bent[i].points[n++] = fade.edges.points[k];
+                                                bent[i].count = n;
+                                            } else {
+                                                diag_log::writef(
+                                                    "web fade: %c dissolves after %.0f ms (unsound)",
+                                                    fade.from ? 'R' : 'L', age * 1000.f);
+                                            }
+                                        }
+                                    }
                                     const float drawnBefore = line.drawnLength().drawn();
-                                    const auto out = line.update(sl, hand.wrist, runEnd, frame.seconds);
+                                    swing_line::Line::Out out;
+                                    if (!line.fading())
+                                        out = line.update(sl, hand.wrist, runEnd, frame.seconds);
                                     if (drawn) {
                                         uint32_t n = 0;
                                         for (int k = 0; k < out.count && n < native_webs::maxRopeBends; ++k)

@@ -1328,6 +1328,7 @@ Values sanitized(Values v) {
     v.handstandGraceAfterMs = std::clamp(v.handstandGraceAfterMs, 100, 1000);
     v.handstandGraceBeforeMs = std::clamp(v.handstandGraceBeforeMs, 0, 1000);
     v.handoffPlaceCm = std::clamp(v.handoffPlaceCm, 0, 2000);
+    v.webFadeMs = std::clamp(v.webFadeMs, 300, 3000);
     v.airFlipDoubleTapMs = std::clamp(v.airFlipDoubleTapMs, 150, 600);
     v.showtimeAutoFinisherEvery = std::clamp(v.showtimeAutoFinisherEvery, 1, 10);
     v.showtimeAutoStrikeEvery = std::clamp(v.showtimeAutoStrikeEvery, 1, 10);
@@ -3286,6 +3287,8 @@ constexpr TabOnly tabOnly[] = {
     {"air_flip_double_tap_ms", nullptr, &Values::airFlipDoubleTapMs},
     {"web_wrap_slack", &Values::webWrapSlack, nullptr},
     {"web_shared_slack", &Values::webSharedSlack, nullptr},
+    {"web_fade_physics", &Values::webFadePhysics, nullptr},
+    {"web_fade_ms", nullptr, &Values::webFadeMs},
     {"log_level", nullptr, &Values::logLevel},
     {"movement_defaults", nullptr, &Values::movementDefaults},
 };
@@ -3508,6 +3511,7 @@ Values withMovementDefaults(Values v, std::string_view text) {
         // switches come on once. New keys; a 0 chosen after this revision stays.
         v.webWrapSlack = true;
         v.webSharedSlack = true;
+        v.webFadePhysics = true;
         // BETA3C MIGRATION END
     }
     v.movementDefaults = movementDefaultsRevision;

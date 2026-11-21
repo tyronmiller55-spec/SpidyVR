@@ -71,6 +71,7 @@ inline constexpr Page pages[] = {
     {"WEBS & WEB CANCEL", "  (4) SWING LINES", "FULL-LENGTH SWING LINES: webs keep their length, slack hangs; the reel shortens."},
     {"WEBS & WEB CANCEL", "  (5) WRAP SLACK", "WRAP SLACK: round edges a line keeps its slack, hung before the first edge."},
     {"WEBS & WEB CANCEL", "  (6) SECOND HAND", "SECOND HAND: the web in both hands keeps its line; climbing takes it in."},
+    {"WEBS & WEB CANCEL", "  (7) UNTIL FADE", "PHYSICS UNTIL FADE: a let-go line swings free 1.2 s, then dissolves."},
 
     {"HAND GRAB", "HAND GRAB", "HAND GRAB: a palm on an enemy or prop holds it."},
     {"HAND GRAB", "  (2) HEAVIES", "Heavies and bosses resist throws unless stunned or webbed up (open)."},

@@ -141,6 +141,7 @@ class Line {
     };
     Out update(const Input& in, Vec3 wrist, Vec3 anchor, float seconds) {
         Out o;
+        fading_ = false;
         o.distance = finite(wrist) && finite(anchor) ? length(anchor - wrist) : -1.f;
         const float beyond = std::isfinite(in.beyond) ? std::max(in.beyond, 0.f) : 0.f;
         Input given = in;
@@ -149,14 +150,27 @@ class Line {
         const float dt = std::isfinite(seconds) ? std::clamp(seconds, 0.f, .1f) : 0.f;
         if (!in.enabled || !in.attached || o.distance < 0) {
             rope_.reset();
+            age_ = 0;
+            laid_ = 0;
             return o;
         }
-        if (o.change.attached)
+        if (o.change.attached) {
             rope_.reset();
+            age_ = 0;
+            lastWrist_ = wrist;
+            handVelocity_ = {};
+        }
+        if (dt > 0 && finite(lastWrist_)) {
+            const Vec3 v = (wrist - lastWrist_) * (1.f / dt);
+            handVelocity_ = finite(v) && length(v) < 60.f ? v : Vec3{};
+        }
+        lastWrist_ = wrist;
+        age_ += dt;
         const float slack = o.drawn - (o.distance + beyond);
         o.slack = std::max(slack, 0.f);
         // Past maxSlack the rope is drawn maxSlack longer than the line (the rest is not drawn).
         const float laid = o.distance + std::clamp(slack, 0.f, maxSlack);
+        laid_ = laid;
         if (!rope_.started())
             rope_.configure(config());
         tether::Rope::Frame f;
@@ -176,6 +190,77 @@ class Line {
             o.count = sagPoints(wrist, anchor, o.drawn - beyond, most, o.points);
         return o;
     }
+    // PHYSICS UNTIL FADE (beta3c, web_fade_physics): the web was let go of. Its wrist end comes free with the
+    // hand's last velocity and swings on the rope from `anchor` (gravity, still air), the rope laying the
+    // line between, until the caller lets it dissolve. Call release() once on the let-go frame, then fade()
+    // each frame.
+    bool release() {
+        if (!rope_.started() || !(laid_ > 0) || !finite(lastWrist_))
+            return false;
+        fading_ = true;
+        freeEnd_ = lastWrist_;
+        freeVelocity_ = handVelocity_;
+        fadeAge_ = 0;
+        return true;
+    }
+    bool fading() const {
+        return fading_;
+    }
+    float fadeAge() const {
+        return fadeAge_;
+    }
+    Out fade(Vec3 anchor, float seconds, int most = tether::maxDrawn) {
+        Out o;
+        if (!fading_ || !finite(anchor)) {
+            stop();
+            return o;
+        }
+        const float dt = std::isfinite(seconds) ? std::clamp(seconds, 0.f, .1f) : 0.f;
+        fadeAge_ += dt;
+        // The free end: a particle on the rope's length from the anchor.
+        freeVelocity_ += Vec3{0, -config().gravity, 0} * dt;
+        freeVelocity_ = freeVelocity_ * std::exp(-config().damping * dt);
+        freeEnd_ += freeVelocity_ * dt;
+        const Vec3 out = freeEnd_ - anchor;
+        const float reach = length(out);
+        if (reach > laid_ && reach > 1e-4f) {
+            const Vec3 dir = out / reach;
+            freeEnd_ = anchor + dir * laid_;
+            const float away = dot(freeVelocity_, dir);
+            if (away > 0)
+                freeVelocity_ -= dir * away;
+        }
+        if (!finite(freeEnd_) || !finite(freeVelocity_)) {
+            stop();
+            return o;
+        }
+        tether::Rope::Frame f;
+        f.dt = dt;
+        f.hand = freeEnd_;
+        f.handVelocity = freeVelocity_;
+        f.end = anchor;
+        f.length = laid_;
+        const auto r = rope_.step(f);
+        o.distance = length(anchor - freeEnd_);
+        o.drawn = laid_;
+        o.slack = std::max(laid_ - o.distance, 0.f);
+        const int n = std::clamp(most, 0, tether::maxDrawn);
+        if (n > 0 && laid_ - o.distance > minSlack && (r.active || r.asleep)) {
+            o.count = rope_.draw(o.points, n);
+            o.simulated = o.count > 0;
+        }
+        return o;
+    }
+    // Where the let-go web's wrist end is now (fade()).
+    Vec3 freeEnd() const {
+        return freeEnd_;
+    }
+    void stop() {
+        fading_ = false;
+        rope_.reset();
+        laid_ = 0;
+        age_ = 0;
+    }
     const DrawnLength& drawnLength() const {
         return length_;
     }
@@ -189,5 +274,8 @@ class Line {
   private:
     DrawnLength length_;
     tether::Rope rope_;
+    bool fading_{};
+    float age_{}, laid_{}, fadeAge_{};
+    Vec3 lastWrist_{}, handVelocity_{}, freeEnd_{}, freeVelocity_{};
 };
 } // namespace spidy::swing_line

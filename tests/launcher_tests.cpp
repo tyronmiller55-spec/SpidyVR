@@ -808,6 +808,10 @@ int main() {
                 continue;
             if (key == "swing_line_full_length")
                 continue;
+            if (key == "web_fade_ms")
+                continue;
+            if (key == "web_fade_physics")
+                continue;
             if (key == "web_shared_slack")
                 continue;
             if (key == "web_wrap_slack")

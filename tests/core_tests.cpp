@@ -25619,6 +25619,8 @@ int main() {
                   "air_flip_double_tap_ms=300\n"
                   "web_wrap_slack=1\n"
                   "web_shared_slack=1\n"
+                  "web_fade_physics=1\n"
+                  "web_fade_ms=1200\n"
                   "log_level=1\n"
                   "movement_defaults=19\n",
               "the defaults' text");
@@ -33901,6 +33903,36 @@ int main() {
         in.ropeLength = 9.f;
         check(std::abs(d.update(in) - 11.f) < 1e-3f, "the climb did not take line in");
     });
+    test("webs across the game: a let-go line swings free from where it sticks, within its length, until stopped", [&] {
+        namespace sl = swing_line;
+        sl::Line line;
+        const Vec3 anchor{0, 20, 0};
+        sl::Input in{true, true, 5, 0, 20.f, false, false};
+        check(!line.release(), "released with no line");
+        line.update(in, {20, 20, 0}, anchor, 1.f / 72);
+        for (int i = 0; i < 72; ++i)
+            line.update(in, {10.f + i * .05f, 20, 0}, anchor, 1.f / 72);
+        check(line.release() && line.fading(), "the let-go line did not start its fade");
+        const Vec3 start = line.freeEnd();
+        float lowest = start.y, farthest = 0;
+        sl::Line::Out o;
+        for (int i = 0; i < 72; ++i) {
+            o = line.fade(anchor, 1.f / 72);
+            lowest = std::min(lowest, line.freeEnd().y);
+            farthest = std::max(farthest, length(line.freeEnd() - anchor));
+        }
+        check(lowest < start.y - 1.f, "the free end does not fall");
+        check(farthest <= 20.f + 1e-2f, "the free end left the rope's length");
+        check(std::abs(line.fadeAge() - 1.f) < 1e-3f, "the fade's age");
+        check(finite(line.freeEnd()) && o.drawn > 0, "the fade's line");
+        line.stop();
+        check(!line.fading() && line.fade(anchor, 1.f / 72).count == 0, "stopped: still fading");
+        // A new web (update) ends a fade.
+        line.update(in, {20, 20, 0}, anchor, 1.f / 72);
+        check(line.release(), "the second release");
+        line.update(in, {20, 20, 0}, anchor, 1.f / 72);
+        check(!line.fading(), "a new web did not end the fade");
+    });
     test("shooter check: the logged forearm sign and the palm-side rule read the same palm, both hands", [&] {
         const float d2r = 3.14159265f / 180;
         for (int hand = 0; hand < 2; ++hand)
@@ -34190,6 +34222,7 @@ int main() {
         check(d.airFlipDoubleTap && d.airFlipDoubleTapMs == 300, "DOUBLE-TAP A: on, 300 ms");
         check(d.webWrapSlack, "WRAP SLACK: on");
         check(d.webSharedSlack, "SECOND HAND: on");
+        check(d.webFadePhysics && d.webFadeMs == 1200, "PHYSICS UNTIL FADE: on, 1200 ms");
         // BETA3 DEFAULT CHECKS END
         Values off{};
         off.handoffHeadFirst = false;
@@ -34200,6 +34233,7 @@ int main() {
         off.airFlipDoubleTap = false;
         off.webWrapSlack = false;
         off.webSharedSlack = false;
+        off.webFadePhysics = false;
         // BETA3 OFF END
         std::string base = tabOnlyText(off);
         base = base.substr(0, base.find("movement_defaults="));
@@ -34227,6 +34261,7 @@ int main() {
         const Values webs = withMovementDefaults(withTabOnly({}, rev18), rev18);
         check(webs.webWrapSlack, "a revision 18 file did not get WRAP SLACK");
         check(webs.webSharedSlack, "a revision 18 file did not get SECOND HAND");
+        check(webs.webFadePhysics, "a revision 18 file did not get PHYSICS UNTIL FADE");
         check(!webs.airFlipDoubleTap, "revision 18 ran again");
         // BETA3 MIGRATED END
         const std::string chosen = base + "movement_defaults=19\n";
@@ -34239,6 +34274,7 @@ int main() {
         check(!kept.airFlipDoubleTap, "DOUBLE-TAP A: a 0 chosen after revision 18 moved");
         check(!kept.webWrapSlack, "WRAP SLACK: a 0 chosen after revision 19 moved");
         check(!kept.webSharedSlack, "SECOND HAND: a 0 chosen after revision 19 moved");
+        check(!kept.webFadePhysics, "PHYSICS UNTIL FADE: a 0 chosen after revision 19 moved");
         // BETA3 KEPT END
     });
     test("handoff head gap: one report per switch with the worst gap, the settled gap and the time over it (H6)", [&] {
