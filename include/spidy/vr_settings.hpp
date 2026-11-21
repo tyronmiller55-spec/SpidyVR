@@ -819,6 +819,9 @@ struct Values {
     bool webFadePhysics = true;
     // (ms, 300 to 3000) how long a let-go line swings before it dissolves
     int webFadeMs = 1200;
+    // CONNECT HANDOFF: a web line or web tie made with the stick click (or a zip to a line) takes the hands' webs at
+    // once: no let-go line keeps swinging in the way of its rope. Off: fading lines stay until their time is up.
+    bool webConnectHandoff = true;
     // BETA3 SETTINGS END
     // HERO ATTACK SOUND (beta polish A2; attack_sound, spidy_vr.ini only, no menu row): one of the game's sounds played
     // on Spidey as a punch is thrown or a kick starts (at most one a hand every 250 ms, hit_sound.hpp): the id's 32

@@ -48,7 +48,7 @@ X sends the game's LB + RB where the game shows it: throw, pick up, rip. X and Y
 
 ## WEBS & WEB CANCEL
 
-Shoot a web on the ground or a perch to cancel the animation into SpidyVR. Not in fights, cutscenes, dodges or your own wall run. A zip cancels at once. Y + X cuts a zip. SHOOTERS: LOCKED TO ARM fires from your wrist. FULL-LENGTH SWING LINES: webs keep their length, slack hangs; the reel shortens. WRAP SLACK: round edges a line keeps its slack, hung before the first edge. SECOND HAND: the web in both hands keeps its line; climbing takes it in. PHYSICS UNTIL FADE: a let-go line swings free 1.2 s, then dissolves.
+Shoot a web on the ground or a perch to cancel the animation into SpidyVR. Not in fights, cutscenes, dodges or your own wall run. A zip cancels at once. Y + X cuts a zip. SHOOTERS: LOCKED TO ARM fires from your wrist. FULL-LENGTH SWING LINES: webs keep their length, slack hangs; the reel shortens. WRAP SLACK: round edges a line keeps its slack, hung before the first edge. SECOND HAND: the web in both hands keeps its line; climbing takes it in. PHYSICS UNTIL FADE: a let-go line swings free 1.2 s, then dissolves. A stick-click web line or tie takes the hands' webs at once (CONNECT HANDOFF).
 
 ## HAND GRAB
 

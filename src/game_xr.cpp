@@ -2115,6 +2115,7 @@ DWORD WINAPI run(void*) {
             native_webs::Bent edges{};
         };
         SwingFade swingFades[2]{};
+        uint32_t webTieCountSeen{}, webLineCountSeen{};
         // Which of the game's two ropes draws which hand's web (one web in
         // both hands has one rope), and when a free hand last came onto the
         // other hand's web (a tick says a press there takes hold of it).
@@ -7878,6 +7879,22 @@ DWORD WINAPI run(void*) {
                             native_webs::Request webs;
                             native_webs::Bent bent[2]{};
                             bool swingLineSeen[2]{};
+                            // CONNECT HANDOFF (beta3c): a web line or a web tie made this frame (the stick
+                            // click, docs/WEB-LINE.md), or a zip to a line, takes the hands' webs: no let-go
+                            // line keeps swinging on a rope it needs.
+                            const bool connectNow =
+                                values.webConnectHandoff &&
+                                (tieState.count > webTieCountSeen || lineState.count > webLineCountSeen ||
+                                 (values.webLines && lineState.phase == 1 && lineState.zipKey != 0));
+                            if (connectNow && (swingLines[0].fading() || swingLines[1].fading()))
+                                diag_log::writef(
+                                    "web connect: %s takes the webs; %d let-go line(s) hand over",
+                                    lineState.phase == 1 && lineState.zipKey ? "a zip to a line"
+                                    : tieState.count > webTieCountSeen       ? "a web tie"
+                                                                             : "a web line",
+                                    (swingLines[0].fading() ? 1 : 0) + (swingLines[1].fading() ? 1 : 0));
+                            webTieCountSeen = tieState.count;
+                            webLineCountSeen = lineState.count;
                             webs.feet = motion.anchor;
                             for (unsigned i = 0; i < 2; ++i) {
                                 auto& hand = webs.hands[i];
@@ -8012,7 +8029,7 @@ DWORD WINAPI run(void*) {
                                     if (!drawn && last.drawn &&
                                         (hand.attached != 1 || hand.attachedAt != last.key)) {
                                         const bool free = hand.attached == 0 && !trail;
-                                        const bool fades = values.webFadePhysics && free &&
+                                        const bool fades = values.webFadePhysics && free && !connectNow &&
                                                            native_webs::drawsHeld() && line.release();
                                         diag_log::writef(
                                             "swing line: %c let go: drawn %.1f m, most slack %.1f m, "
@@ -8020,9 +8037,10 @@ DWORD WINAPI run(void*) {
                                             last.from ? 'R' : 'L', last.drawnM, last.peakSlack, last.peakPull,
                                             last.pulledSeconds, last.climbed > .05f ? ", climbed in" : "",
                                             last.edgeCount ? ", round edges" : "",
-                                            fades   ? "it swings free until it fades"
-                                            : !free ? "its rope is wanted"
-                                                    : "it dissolves now");
+                                            fades        ? "it swings free until it fades"
+                                            : connectNow ? "a stick-click line took it"
+                                            : !free      ? "its rope is wanted"
+                                                         : "it dissolves now");
                                         if (fades)
                                             swingFades[i] = {last.key, last.from, last.anchor, last.runEnd,
                                                              last.edges};
@@ -8033,7 +8051,8 @@ DWORD WINAPI run(void*) {
                                     if (line.fading()) {
                                         auto& fade = swingFades[i];
                                         const float age = line.fadeAge();
-                                        const char* why = hand.attached != 0                 ? "a new web"
+                                        const char* why = hand.attached != 0 ? "a new web"
+                                                          : connectNow       ? "a stick-click line"
                                                           : age * 1000.f >= values.webFadeMs ? "faded"
                                                           : !values.webFadePhysics           ? "switched off"
                                                                                              : nullptr;

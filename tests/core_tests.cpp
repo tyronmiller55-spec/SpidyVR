@@ -25621,6 +25621,7 @@ int main() {
                   "web_shared_slack=1\n"
                   "web_fade_physics=1\n"
                   "web_fade_ms=1200\n"
+                  "web_connect_handoff=1\n"
                   "log_level=1\n"
                   "movement_defaults=19\n",
               "the defaults' text");
@@ -34223,6 +34224,7 @@ int main() {
         check(d.webWrapSlack, "WRAP SLACK: on");
         check(d.webSharedSlack, "SECOND HAND: on");
         check(d.webFadePhysics && d.webFadeMs == 1200, "PHYSICS UNTIL FADE: on, 1200 ms");
+        check(d.webConnectHandoff, "CONNECT HANDOFF: on");
         // BETA3 DEFAULT CHECKS END
         Values off{};
         off.handoffHeadFirst = false;
@@ -34234,6 +34236,7 @@ int main() {
         off.webWrapSlack = false;
         off.webSharedSlack = false;
         off.webFadePhysics = false;
+        off.webConnectHandoff = false;
         // BETA3 OFF END
         std::string base = tabOnlyText(off);
         base = base.substr(0, base.find("movement_defaults="));
@@ -34262,6 +34265,7 @@ int main() {
         check(webs.webWrapSlack, "a revision 18 file did not get WRAP SLACK");
         check(webs.webSharedSlack, "a revision 18 file did not get SECOND HAND");
         check(webs.webFadePhysics, "a revision 18 file did not get PHYSICS UNTIL FADE");
+        check(webs.webConnectHandoff, "a revision 18 file did not get CONNECT HANDOFF");
         check(!webs.airFlipDoubleTap, "revision 18 ran again");
         // BETA3 MIGRATED END
         const std::string chosen = base + "movement_defaults=19\n";
@@ -34275,6 +34279,7 @@ int main() {
         check(!kept.webWrapSlack, "WRAP SLACK: a 0 chosen after revision 19 moved");
         check(!kept.webSharedSlack, "SECOND HAND: a 0 chosen after revision 19 moved");
         check(!kept.webFadePhysics, "PHYSICS UNTIL FADE: a 0 chosen after revision 19 moved");
+        check(!kept.webConnectHandoff, "CONNECT HANDOFF: a 0 chosen after revision 19 moved");
         // BETA3 KEPT END
     });
     test("handoff head gap: one report per switch with the worst gap, the settled gap and the time over it (H6)", [&] {

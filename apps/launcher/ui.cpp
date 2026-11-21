@@ -3321,6 +3321,8 @@ void App::options(ImVec2 origin, ImVec2 size) {
                    S(42), [&] { flagToggle("##webfadephysics", tabOnly_.webFadePhysics); });
             settingOption(Item::none, "Fade time", "How long a let-go line swings before it dissolves. Default: 1200 ms.",
                    S(150), [&] { fineSlider("##webfadems", tabOnly_.webFadeMs, 300, 3000, 100, "%d ms", nullptr); });
+            settingOption(Item::none, "Connect handoff", "A web line or web tie made with the stick click takes the hands' webs at once. Default: on.",
+                   S(42), [&] { flagToggle("##webconnecthandoff", tabOnly_.webConnectHandoff); });
             // BETA3C LAUNCHER END
         });
         // NA HELP (beta polish M5): the same pages as the game's NA · HELP tab (na_help.hpp), a card per topic.

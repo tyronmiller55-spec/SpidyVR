@@ -3289,6 +3289,7 @@ constexpr TabOnly tabOnly[] = {
     {"web_shared_slack", &Values::webSharedSlack, nullptr},
     {"web_fade_physics", &Values::webFadePhysics, nullptr},
     {"web_fade_ms", nullptr, &Values::webFadeMs},
+    {"web_connect_handoff", &Values::webConnectHandoff, nullptr},
     {"log_level", nullptr, &Values::logLevel},
     {"movement_defaults", nullptr, &Values::movementDefaults},
 };
@@ -3512,6 +3513,7 @@ Values withMovementDefaults(Values v, std::string_view text) {
         v.webWrapSlack = true;
         v.webSharedSlack = true;
         v.webFadePhysics = true;
+        v.webConnectHandoff = true;
         // BETA3C MIGRATION END
     }
     v.movementDefaults = movementDefaultsRevision;
