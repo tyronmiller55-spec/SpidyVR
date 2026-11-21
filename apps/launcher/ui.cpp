@@ -3147,6 +3147,16 @@ void App::options(ImVec2 origin, ImVec2 size) {
                    "Hold X+B: you step outside by hand (the default). Auto only: the chord does nothing and X and B "
                    "are the game's as always; only the automatic moments below take the camera out.",
                    S(150), [&] { tabCombo("##showtimechord", Item::showtimeChord); });
+            settingOption(Item::none, "Auto: finishers and strikes",
+                   "The camera steps outside on its own when the game's Y+B finisher starts or a web strike flies, "
+                   "and comes back the usual way 0.3 s after it ends. Needs Showtime. On by default.",
+                   S(42), [&] {
+                       bool on = tabOnly_.showtimeAutoFinisherStrike;
+                       if (toggle("##showtimeautofinisherstrike", &on)) {
+                           tabOnly_.showtimeAutoFinisherStrike = on;
+                           tabChanged = true;
+                       }
+                   });
             settingOption(Item::showtimeAutoDodge, "Auto: dodges",
                    "The camera steps outside by itself for a dodge and comes back 0.3 s after it ends (and not "
                    "while you hold X+B). Perfect only: just the dodge the game slows time for. All: every dodge. "

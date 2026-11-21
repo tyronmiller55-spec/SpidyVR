@@ -148,7 +148,7 @@ class Fade {
 };
 
 // ---- The machine ----
-enum class Why : uint8_t { none, chord, finisher, dodge };
+enum class Why : uint8_t { none, chord, finisher, dodge, strike };
 inline const char* whyName(Why w) {
     switch (w) {
     case Why::chord:
@@ -157,6 +157,8 @@ inline const char* whyName(Why w) {
         return "finisher";
     case Why::dodge:
         return "dodge";
+    case Why::strike:
+        return "web strike";
     default:
         return "none";
     }
@@ -357,8 +359,12 @@ class Latch {
 class Auto {
   public:
     static constexpr float tailSeconds = .3f, giveUpSeconds = .5f, capSeconds = 4.f;
-    void trigger(Why why) {
+    // AUTO: FINISHERS AND STRIKES (showtime_auto_finisher_strike, 0.8.7-na-beta3): a Y+B finisher plays up
+    // to 6.3 s (the Nov 19-21 logs), so its moment may last this long; the tail and the give-up are the same.
+    static constexpr float finisherCapSeconds = 10.f;
+    void trigger(Why why, float cap = capSeconds) {
         why_ = why;
+        cap_ = std::isfinite(cap) && cap > 0.f ? cap : capSeconds;
         on_ = true;
         t_ = tail_ = 0;
         seen_ = false;
@@ -379,7 +385,7 @@ class Auto {
                 return false;
             }
         }
-        if (t_ > capSeconds) {
+        if (t_ > cap_) {
             on_ = false;
             return false;
         }
@@ -397,9 +403,25 @@ class Auto {
 
   private:
     Why why_ = Why::dodge;
-    float t_{}, tail_{};
+    float t_{}, tail_{}, cap_ = capSeconds;
     bool on_{}, seen_{};
 };
+
+// What keeps an automatic moment going (Auto::update's `live`): the dodge while it dodges, the game's
+// finisher while its scene plays (finisher_handoff::Watch::active), a web strike while SpidyVR's WebStrike is
+// not idle.
+inline bool autoLive(Why why, bool dodging, bool finisher, bool strike) {
+    switch (why) {
+    case Why::dodge:
+        return dodging;
+    case Why::finisher:
+        return finisher;
+    case Why::strike:
+        return strike;
+    default:
+        return false;
+    }
+}
 
 // ---- The outside camera's frame ----
 // The level frame game_fp hands the eyes (game_fp.cpp cameraFrame's layout: columns right, down, forward, position; the game's

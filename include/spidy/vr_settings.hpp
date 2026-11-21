@@ -783,6 +783,11 @@ struct Values {
     // HANDSTAND CATCH ANGLE (beta3; the owner, Nov 21: "Lower the handstand tip-in angle too"): inverted at least this
     // far (degrees, 45 to 150) for a touchdown on the palms to catch; 100 before (hardcoded). A new key, default 60.
     int handstandCatchDeg = 60;
+    // SHOWTIME AUTO: FINISHERS AND STRIKES (beta3; the owner, Nov 21 t87u: "activate Showtime during finishers and web
+    // strikes"): Showtime's camera steps out when the game's Y+B finisher starts (finisher_handoff's scene detection)
+    // or a web strike opens (SpidyVR's WebStrike), and back through the normal exit 0.3 s after it ends (a finisher
+    // at most 10 s, a strike 4 s). Needs SHOWTIME. Off: as beta2.
+    bool showtimeAutoFinisherStrike = true;
     // BETA3 SETTINGS END
     // HERO ATTACK SOUND (beta polish A2; attack_sound, spidy_vr.ini only, no menu row): one of the game's sounds played
     // on Spidey as a punch is thrown or a kick starts (at most one a hand every 250 ms, hit_sound.hpp): the id's 32

@@ -3,6 +3,7 @@
 #include "spidy/finisher_handoff.hpp"
 #include "spidy/air_dodge.hpp"
 #include "spidy/showtime_fan.hpp"
+#include "spidy/showtime.hpp"
 #include "spidy/showtime_rig.hpp"
 #include "spidy/handstand.hpp"
 #include "spidy/spherical_aim.hpp"
@@ -25603,6 +25604,7 @@ int main() {
                   "head_seat_pull_cm=5\n"
                   "head_seat_pull_cm_s=50\n"
                   "handstand_catch_deg=60\n"
+                  "showtime_auto_finisher_strike=1\n"
                   "log_level=1\n"
                   "movement_defaults=17\n",
               "the defaults' text");
@@ -33909,6 +33911,48 @@ int main() {
         const float m = pull(g, r3, {.5f, 0, 0}, .1f, .05f, .5f);
         check(std::abs(m - .05f) < 1e-5f && std::abs(r3.position.x - .05f) < 1e-5f, "at most the rate");
     });
+    test("showtime auto finishers and strikes: a finisher's moment outlasts 4 s, a strike's ends 0.3 s after it (beta3)", [&] {
+        using namespace showtime;
+        check(std::string(whyName(Why::strike)) == "web strike" && std::string(whyName(Why::finisher)) == "finisher",
+              "the moments' names");
+        check(autoLive(Why::finisher, false, true, false) && !autoLive(Why::finisher, true, false, true) &&
+                  autoLive(Why::strike, false, false, true) && !autoLive(Why::strike, true, true, false) &&
+                  autoLive(Why::dodge, true, false, false) && !autoLive(Why::chord, true, true, true),
+              "each moment lives on its own signal");
+        // A 6.3 s finisher (the longest in the Nov 19-21 logs) at 90 Hz: out all through, out 0.3 s after.
+        Auto a;
+        a.trigger(Why::finisher, Auto::finisherCapSeconds);
+        const float dt = 1.f / 90;
+        int out = 0, frames = 0;
+        for (; frames < 90 * 8; ++frames) {
+            const float t = frames * dt;
+            if (!a.update(dt, autoLive(a.why(), false, t < 6.3f, false)))
+                break;
+            ++out;
+        }
+        check(out * dt > 6.5f && out * dt < 6.7f, "the finisher's camera came back early or late");
+        // The 4 s cap stays for the others: a dodge held 6 s comes back at 4 s.
+        Auto d;
+        d.trigger(Why::dodge);
+        int dodgeOut = 0;
+        while (d.update(dt, true) && dodgeOut < 900)
+            ++dodgeOut;
+        check(dodgeOut * dt > 3.9f && dodgeOut * dt < 4.1f, "the dodge cap");
+        // A web strike 0.4 s in flight: out for it and 0.3 s after.
+        Auto s;
+        s.trigger(Why::strike);
+        int strikeOut = 0;
+        for (int i = 0; i < 200 && s.update(dt, autoLive(s.why(), false, false, i * dt < .4f)); ++i)
+            ++strikeOut;
+        check(strikeOut * dt > .65f && strikeOut * dt < .75f, "the strike's tail");
+        // A strike that never shows as flying gives up after 0.5 s and the tail.
+        Auto g;
+        g.trigger(Why::strike);
+        int given = 0;
+        while (g.update(dt, false) && given < 900)
+            ++given;
+        check(given * dt > .75f && given * dt < .85f, "the give-up");
+    });
     test("beta3 switches: on by default, on once for an older file (revision 17), and a 0 chosen after it stays", [&] {
         using vr_settings::Values, vr_settings::withMovementDefaults, vr_settings::withTabOnly, vr_settings::tabOnlyText;
         const Values d{};
@@ -33916,12 +33960,14 @@ int main() {
         check(d.landingViewSnap && d.landingViewSnapCm == 15 && d.landingViewSnapMs == 120, "LANDING VIEW SNAP: on, 15 cm, 120 ms");
         check(d.headSeatPull && d.headSeatPullCm == 5 && d.headSeatPullCmS == 50, "HEAD SEAT PULL: on, 5 cm, 50 cm/s");
         check(d.handstandCatchDeg == 60 && d.handstandTipInDeg == 60, "HANDSTAND: catch and tip-in from 60 deg");
+        check(d.showtimeAutoFinisherStrike, "AUTO: FINISHERS AND STRIKES is on by default");
         // BETA3 DEFAULT CHECKS END
         Values off{};
         off.handoffHeadFirst = false;
         off.landingViewSnap = false;
         off.headSeatPull = false;
         off.handstandTipInDeg = 120;
+        off.showtimeAutoFinisherStrike = false;
         // BETA3 OFF END
         std::string base = tabOnlyText(off);
         base = base.substr(0, base.find("movement_defaults="));
@@ -33933,6 +33979,7 @@ int main() {
         check(migrated.handstandTipInDeg == 60, "a saved 120 tip-in did not become 60");
         const std::string tuned = "handstand_tip_in_deg=130\nmovement_defaults=16\n";
         check(withMovementDefaults(withTabOnly({}, tuned), tuned).handstandTipInDeg == 130, "a tuned tip-in angle moved");
+        check(migrated.showtimeAutoFinisherStrike, "an older file did not get AUTO: FINISHERS AND STRIKES");
         // BETA3 MIGRATED END
         const std::string chosen = base + "movement_defaults=17\n";
         const Values kept = withMovementDefaults(withTabOnly({}, chosen), chosen);
@@ -33940,6 +33987,7 @@ int main() {
         check(!kept.landingViewSnap, "LANDING VIEW SNAP: a 0 chosen after revision 17 moved");
         check(!kept.headSeatPull, "HEAD SEAT PULL: a 0 chosen after revision 17 moved");
         check(kept.handstandTipInDeg == 120, "a 120 tip-in chosen after revision 17 moved");
+        check(!kept.showtimeAutoFinisherStrike, "AUTO: FINISHERS AND STRIKES: a 0 chosen after revision 17 moved");
         // BETA3 KEPT END
     });
     test("handoff head gap: one report per switch with the worst gap, the settled gap and the time over it (H6)", [&] {

@@ -3267,6 +3267,7 @@ constexpr TabOnly tabOnly[] = {
     {"head_seat_pull_cm", nullptr, &Values::headSeatPullCm},
     {"head_seat_pull_cm_s", nullptr, &Values::headSeatPullCmS},
     {"handstand_catch_deg", nullptr, &Values::handstandCatchDeg},
+    {"showtime_auto_finisher_strike", &Values::showtimeAutoFinisherStrike, nullptr},
     {"log_level", nullptr, &Values::logLevel},
     {"movement_defaults", nullptr, &Values::movementDefaults},
 };
@@ -3465,6 +3466,7 @@ Values withMovementDefaults(Values v, std::string_view text) {
         v.handoffHeadFirst = true;
         v.landingViewSnap = true;
         v.headSeatPull = true;
+        v.showtimeAutoFinisherStrike = true;
         // HANDSTAND ENTRY ANGLE: the tip-in from 60 degrees; a saved 120 was the old default, another number a choice.
         if (v.handstandTipInDeg == 120)
             v.handstandTipInDeg = 60;

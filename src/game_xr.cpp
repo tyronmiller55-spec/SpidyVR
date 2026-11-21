@@ -2852,9 +2852,14 @@ DWORD WINAPI run(void*) {
                     // (swallowX/swallowB), and while the camera is out the hands start nothing new (WATCH ONLY). It never writes the
                     // view heading: see the header.
                     {
-                        const bool stOk = values.showtime && values.body && !flatScreen && viewing && gameplay &&
-                                          motion.active && spiderMan && !calibrationInput && !phone.open() &&
-                                          !padLayer.latched();
+                        // AUTO: FINISHERS AND STRIKES (showtime_auto_finisher_strike): the game's finisher is
+                        // a scene, not play, so while its automatic moment lasts (and the 0.3 s tail after)
+                        // that is in play too.
+                        const bool stAutoScene = values.showtimeAutoFinisherStrike && showtimeAuto.on() &&
+                                                 showtimeAuto.why() == showtime::Why::finisher;
+                        const bool stOk = values.showtime && values.body && !flatScreen && viewing &&
+                                          (gameplay || stAutoScene) && motion.active && spiderMan &&
+                                          !calibrationInput && !phone.open() && !padLayer.latched();
                         const bool stFree = !gadgetWheel.open() &&
                                             !(namedPress.claimed() &
                                               (game_pad::NamedPress::controlX | game_pad::NamedPress::controlB));
@@ -2886,8 +2891,14 @@ DWORD WINAPI run(void*) {
                         mi.fadeSeconds = static_cast<float>(values.showtimeFadeMs) / 1000.f;
                         // LATCH (off by default): a double press keeps the camera out after the let-go.
                         bool stWant = showtimeLatch.update(values.showtimeLatch == 1, showtimeChordOut.active, frame.seconds);
-                        // AUTO: DODGES (triggered below where a dodge starts): the camera is out while the moment lasts and 0.3 s after.
-                        const bool stAuto = stOk && showtimeAuto.update(frame.seconds, dodging);
+                        // AUTO: DODGES (triggered below where a dodge starts): the camera is out while the
+                        // moment lasts and 0.3 s after. AUTO: FINISHERS AND STRIKES: a finisher while its
+                        // scene plays, a web strike while it flies (both last frame's: read further on).
+                        const bool stAuto =
+                            stOk &&
+                            showtimeAuto.update(frame.seconds,
+                                                showtime::autoLive(showtimeAuto.why(), dodging,
+                                                                   finisherWatch.active(), strikeUnderWay));
                         mi.wantOut = stWant || stAuto;
                         mi.wantWhy = stWant || !stAuto ? showtime::Why::chord : showtimeAuto.why();
                         mi.allowed = stOk;
@@ -2946,8 +2957,10 @@ DWORD WINAPI run(void*) {
                             showtimeStickX = frame.hands[1].stickX;
                             showtimeStickY = frame.hands[1].stickY;
                             const bool keep = values.showtimeWhile == 1;
-                            if (!keep && showtimeWhy != showtime::Why::dodge) {
-                                // (an automatic dodge keeps its own B and A until they are let go of)
+                            if (!keep && showtimeWhy != showtime::Why::dodge &&
+                                showtimeWhy != showtime::Why::strike) {
+                                // (an automatic dodge or web strike keeps its own B and A until they are let
+                                // go of)
                                 frame.jump = false;
                                 frame.buttons &= ~static_cast<uint32_t>(buttonA | buttonB);
                             }
@@ -5100,10 +5113,15 @@ DWORD WINAPI run(void*) {
                         message(3, 0, text);
                         // FINISHERS ON Y+B (finisher_handoff.hpp): a scene in a fight within 1.5 s of Y+B is
                         // the game's own finisher. SpidyVR leaves it to the game: the animation keeps the
-                        // body, and the grip cancel waits until it ends. AUTO: FINISHERS (Showtime's camera
-                        // on one) is still log only.
+                        // body, and the grip cancel waits until it ends. AUTO: FINISHERS AND STRIKES (beta3,
+                        // showtime_auto_finisher_strike): Showtime's camera is out while it plays.
                         if (fpScene) {
                             const auto fin = finisherWatch.started(fightLately);
+                            const bool finAuto =
+                                fin.finisher && values.showtime && values.showtimeAutoFinisherStrike;
+                            if (finAuto)
+                                showtimeAuto.trigger(showtime::Why::finisher,
+                                                     showtime::Auto::finisherCapSeconds);
                             if (fin.finisher)
                                 diag_log::writef(
                                     "finisher: the game's own finisher on Y+B (%s%.0f ms before the scene, Y "
@@ -5112,7 +5130,8 @@ DWORD WINAPI run(void*) {
                                     "takes nothing back until it ends%s",
                                     fin.named ? "the prompt's Y+B " : "", fin.since * 1000.f,
                                     fin.gap * 1000.f, game_fp::onCamera() ? "on" : "off",
-                                    values.showtime && values.showtimeAutoFinish
+                                    finAuto ? "; Showtime's camera out for it (AUTO: FINISHERS AND STRIKES)"
+                                    : values.showtime && values.showtimeAutoFinish
                                         ? "; AUTO: FINISHERS is log only"
                                         : "");
                             else
@@ -7314,6 +7333,15 @@ DWORD WINAPI run(void*) {
                                 strikes.phase == static_cast<uint32_t>(WebStrike::Phase::Flying) &&
                                 strikes.hand == static_cast<uint32_t>(WebStrike::diveHand);
                             if (strikes.opened > strikesBefore && input.focused) {
+                                // AUTO: FINISHERS AND STRIKES (beta3): Showtime's camera out while the strike
+                                // flies (a finisher's moment is not cut short by one).
+                                if (values.showtime && values.showtimeAutoFinisherStrike &&
+                                    !(showtimeAuto.on() && showtimeAuto.why() == showtime::Why::finisher)) {
+                                    if (!showtimeAuto.on())
+                                        diag_log::writef("showtime: auto (web strike #%llu)",
+                                                         static_cast<unsigned long long>(strikes.opened));
+                                    showtimeAuto.trigger(showtime::Why::strike);
+                                }
                                 // Off to him: a tick in both hands, and the rush. A
                                 // dive's is harder, and the last of its way slows.
                                 runtime.haptic(0, diving ? .7f : .35f, diving ? .08f : .05f);
