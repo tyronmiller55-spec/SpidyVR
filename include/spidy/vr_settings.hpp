@@ -302,7 +302,7 @@ struct Values {
     // from before it gets RUN CURVE on and EARLY JUMP QUICK TAP once (the
     // user: "movement fixes will be defaults"); after that the player's own
     // choice stands. Not a row. movement_defaults.
-    int movementDefaults = 21; // movementDefaultsRevision: a new file has seen them
+    int movementDefaults = 22; // movementDefaultsRevision: a new file has seen them
     // SOFT LANDING (the tab's SOFT LANDING; Swing::allowSoftLanding,
     // run_update::softLandVertical): a fall the swing flies, with no web
     // holding, eases to 9 m/s down over its last 3 m (or 0.35 s), its speed
@@ -878,6 +878,14 @@ struct Values {
     // fling on you shrink and a trailing line lags less, its weight still hangs and the rope still moves. 100 is
     // beta3d's.
     int swingRopeDragPct = 100;
+    // KICK LUNGE (0.8.7-na-beta3f; the owner, Nov 22 t96u: "let's start to work on kicks"; air_kick.hpp
+    // Config::lungeReach): an air kick (AIR KICKS, legs engaged) at an enemy up to kick_lunge_reach_cm past
+    // the leg's reach carries you at him - the kick's window closes the gap, at most 12 m/s - and a blow off
+    // it stops you at him. In the air only, SpidyVR's body; standing kicks are unchanged. The beta3b and
+    // beta3c logs: 11 kicks, no enemy in the leg's reach once. Off: the leg's reach only, as beta3e.
+    bool kickLunge = true;
+    // (cm, 0 to 400) KICK LUNGE's reach past the leg's (1.55 m with the air's lunge). 250 by default.
+    int kickLungeReachCm = 250;
     // BETA3 SETTINGS END
     // HERO ATTACK SOUND (beta polish A2; attack_sound, spidy_vr.ini only, no menu row): one of the game's sounds played
     // on Spidey as a punch is thrown or a kick starts (at most one a hand every 250 ms, hit_sound.hpp): the id's 32
@@ -1426,7 +1434,7 @@ std::string tabOnlyText(const Values&);
 // key, or whose value is no whole number, is passed over.
 Values withTabOnly(Values, std::string_view text);
 // The movement defaults' revision (Values::movementDefaults) this build has.
-inline constexpr int movementDefaultsRevision = 21;
+inline constexpr int movementDefaultsRevision = 22;
 // November 12 movement cleanup: a settings file (that text) older than
 // movementDefaultsRevision gets the new movement defaults once - RUN CURVE
 // on, EARLY JUMP at least QUICK TAP - and is marked as having seen them; a

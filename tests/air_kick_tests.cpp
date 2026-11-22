@@ -596,6 +596,51 @@ int main() {
         Kick g;
         check(g.ask(fa, {Gesture::dive, 1, 30, .9f}).target == 5 && !g.lockAimed(), "the gaze's enemy comes first");
     }
+    // KICK LUNGE (beta3f; the beta3b and beta3c logs: 11 kicks, none with an enemy in the leg's reach): off
+    // the ground, an enemy up to lungeReach past the leg is the target and the kick carries the body at him;
+    // off (0), beta3e's reach; standing, never.
+    {
+        const Kick::Target far[] = {enemy(5, Vec3{0, 10, -3.5f})};
+        Kick off;
+        const auto o0 = off.ask(frame(far), {Gesture::dive, 1, 30, .9f});
+        check(o0.target == 0 && !off.lunged() && o0.lungeSpeed == 0,
+              "off: 3.5 m is out of the leg's reach (beta3e)");
+        Config lc;
+        lc.lungeReach = 2.5f;
+        Kick k(lc);
+        const auto o = k.ask(frame(far), {Gesture::dive, 1, 30, .9f});
+        check(o.target == 5 && k.lunged(), "on: 3.5 m ahead is the lunge's");
+        check(o.lungeWay.z < -.9f && o.lungeSpeed > 1.f && o.lungeSpeed <= lc.lungeSpeed && o.lungeGap > 1.f,
+              "the lunge goes at him, as fast as the window needs, at most its cap");
+        // Carried along the lunge, the foot lands within the kick's window.
+        auto f = frame(far);
+        Vec3 feet = f.feet;
+        bool hit = false;
+        for (int i = 0; i < 60 && !hit && k.busy(); ++i) {
+            feet = feet + o.lungeWay * (o.lungeSpeed / 90.f);
+            f.feet = feet;
+            f.seconds = 1.f / 90;
+            hit = k.update(f).event == Kick::Event::hit;
+        }
+        check(hit, "the lunge did not bring the foot onto him");
+        // Within the leg's reach: no lunge (the kick as before).
+        const Kick::Target close[] = {enemy(6, Vec3{0, 10, -1.2f})};
+        Kick c(lc);
+        const auto oc = c.ask(frame(close), {Gesture::dive, 1, 30, .9f});
+        check(oc.target == 6 && !c.lunged() && oc.lungeSpeed == 0, "in reach: no lunge");
+        // Past the lunge's reach: none.
+        const Kick::Target beyond[] = {enemy(7, Vec3{0, 10, -6.f})};
+        Kick b(lc);
+        check(b.ask(frame(beyond), {Gesture::dive, 1, 30, .9f}).target == 0 && !b.lunged(),
+              "6 m: past the lunge");
+        // Standing (GROUND KICKS): never a lunge.
+        auto g = frame(far);
+        g.grounded = true;
+        g.ground = true;
+        Kick s(lc);
+        const auto og = s.ask(g, {Gesture::freeform, 1, 0, .9f});
+        check(og.event == Kick::Event::started && og.target == 0 && !s.lunged(), "a standing kick lunged");
+    }
     // KICK FLICK MISSES: a slow push and a short one are logged with why; a flick and a resting thumb are not.
     {
         FlickWatch w;

@@ -3368,6 +3368,15 @@ void App::options(ImVec2 origin, ImVec2 size) {
                    S(150), [&] { fineSlider("##wallslidefriction", tabOnly_.wallSlideFriction, 0, 100, 5, "%d%%", "Free"); });
             // BETA3E LAUNCHER END
         });
+        // KICKS (0.8.7-na-beta3f): the air kick's lunge and the kicks' feel, each on by default for testing. The same
+        // spidy_vr.ini keys as the game's NA tabs.
+        group(kicksPage, 0, "Kicks (beta3f)", [&] {
+            settingOption(Item::none, "Kick lunge", "Changes the feel of air kicks: kick at an enemy a little out of your leg's reach and you fly at him to land it, stopping at him on the blow. In the air only; standing kicks are unchanged. Off: the leg's reach only, as before. Default: on.",
+                   S(42), [&] { flagToggle("##kicklunge", tabOnly_.kickLunge); });
+            settingOption(Item::none, "Kick lunge reach", "How far past your leg's reach an enemy may be for the lunge. Default: 250 cm.",
+                   S(150), [&] { fineSlider("##kicklungereach", tabOnly_.kickLungeReachCm, 0, 400, 10, "%d cm", "Leg only"); });
+            // BETA3F LAUNCHER END
+        });
         // NA HELP (beta polish M5): the same pages as the game's NA · HELP tab (na_help.hpp), a card per topic.
         const int helpPage = static_cast<int>(Category::help);
         static const std::vector<std::pair<const char*, std::string>> helpTopics = [] {

@@ -883,6 +883,19 @@ class Swing {
     std::uint32_t airDodges() const {
         return airDodges_;
     }
+    // KICK LUNGE (air_kick.hpp, beta3f): on the next step, in the air only (off the ground and off Spidy's
+    // wall), his velocity toward `way` (unit) rises to `speed` if it is less; the rest of it is kept. Dropped
+    // there if he is on either.
+    void kickLunge(Vec3 way, float speed) {
+        if (finite(way) && length(way) > .5f && std::isfinite(speed) && speed > .1f) {
+            kickLungeQueued_ = true;
+            kickLungeWay_ = normalized(way);
+            kickLungeSpeed_ = std::min(speed, 20.f);
+        }
+    }
+    std::uint32_t kickLunges() const {
+        return kickLunges_;
+    }
     // MANUAL SWING KICK (swing_kick.hpp): the assist for the steps to come, set again every native step
     // (off by itself when not). While on, in the air, each ready web's length moves toward the aim's
     // distance from its anchor (at most ropeMetres from its length when the assist began, ropeRate m/s)
@@ -1120,6 +1133,11 @@ class Swing {
     bool airDodgeQueued_{};
     Vec3 airDodgeVelocity_{};
     std::uint32_t airDodges_{};
+    // KICK LUNGE: a lunge waiting for the next step, and those made.
+    bool kickLungeQueued_{};
+    Vec3 kickLungeWay_{};
+    float kickLungeSpeed_{};
+    std::uint32_t kickLunges_{};
     // MANUAL SWING KICK: the assist in force, the ropes' lengths when it began, what it has done, and a
     // blow's recoil waiting.
     KickAssist kick_{};

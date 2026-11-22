@@ -49,6 +49,7 @@ inline constexpr Page pages[] = {
     {"AIR KICKS", "  (2) THE FLICK", "From under 0.35 to past 0.75 within 150 ms; a slower push poses the legs."},
     {"AIR KICKS", "  (3) DIRECTIONS", "Up: dive. Up-left/right: one-leg dive. Quarter circle to the top: roundhouse."},
     {"AIR KICKS", "  (4) AIM", "Other flicks: a quick kick. Kicks aim where you look (AIR KICK AIM, 40 deg)."},
+    {"AIR KICKS", "  (5) KICK LUNGE", "An enemy up to 2.5 m past your leg: you fly at him and stop on the blow."},
 
     {"GROUND KICKS", "GROUND KICKS", "Standing or walking (under 3 m/s), hold Y + X and flick the right stick:"},
     {"GROUND KICKS", "  (2) DIRECTIONS", "up a front kick, sideways a side kick, a half circle across the bottom a sweep."},

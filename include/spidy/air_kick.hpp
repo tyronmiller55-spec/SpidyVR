@@ -107,6 +107,15 @@ struct Config {
     // ENEMY LIMB ZONES (R1, enemy_joints.hpp): the legs and the arms from an enemy's shin and forearm joints
     // (a Target's joints); off, the legs are the capsule's band and there is no arms zone.
     bool limbZones = false;
+    // KICK LUNGE (beta3f, kick_lunge / kick_lunge_reach_cm; the owner, Nov 22 t96u: "let's start to work on
+    // kicks"). The beta3b and beta3c logs: 11 kicks, none with an enemy in the leg's reach (1.15 m and the
+    // 0.4 m lunge modelled), so none landed. Off the ground, an enemy up to lungeReach metres past that reach
+    // (in the gaze cone, in front, or the punches' lock, as before) is the target too, and the kick carries
+    // the body at him: the velocity toward him rises to what closes the gap within the kick's window, at most
+    // lungeSpeed m/s (what he already has toward him is kept, the rest of his motion too). A blow off a lunge
+    // keeps lungeKeep of the velocity (he stops at the enemy rather than flying through). 0: off, the leg's
+    // reach only (beta3e).
+    float lungeReach = 0.f, lungeSpeed = 12.f, lungeKeep = .4f;
 };
 // The same, standing: no lunge.
 inline Config standingConfig(Config c) {
@@ -540,6 +549,10 @@ class Kick {
         bool fly{}, lost{};
         bool byJoints{}; // the zone (the hit's, or the one asked for) came from his joints, not the bands
         Vec3 point{}, way{}, enemy{};
+        // KICK LUNGE (a start): the way to carry the body (unit) and the speed toward him, and the gap past
+        // the foot's reach it closes (metres); a zero way: no lunge.
+        Vec3 lungeWay{};
+        float lungeSpeed{}, lungeGap{};
     };
     explicit Kick(Config c = {}) : config_(c) {}
     const Config& config() const {
@@ -587,6 +600,10 @@ class Kick {
     // KICK LOCK TARGET: the fallback's target is the punches' lock.
     bool lockAimed() const {
         return lockAimed_;
+    }
+    // KICK LUNGE: the running kick carries the body at its target.
+    bool lunged() const {
+        return lunged_;
     }
     Vec3 foot() const {
         return lastFoot_;
@@ -637,6 +654,11 @@ class Kick {
         if (c.limbZones && zones == 7u)
             zones |= 8u;
         bool askedByJoints = false;
+        // KICK LUNGE: off the ground only, and never a sweep.
+        const float lungeReach = !f.grounded && gesture_ != Gesture::sweep && std::isfinite(c.lungeReach)
+                                     ? std::clamp(c.lungeReach, 0.f, 6.f)
+                                     : 0.f;
+        lunged_ = false;
         for (const auto& t : f.targets) {
             for (int z = 0; z < (c.limbZones ? 4 : 3); ++z) {
                 if (!(zones & (1u << z)))
@@ -646,7 +668,8 @@ class Kick {
                     continue;
                 bool byJoints = false;
                 const Vec3 p = zonePoint(t.feet, t.height, static_cast<Zone>(z), t.joints, c.limbZones, gazeRef(t), &byJoints);
-                if (length(p - pelvis) > (gesture_ == Gesture::sweep ? c.sweepReach + c.footRadius : c.reach + c.lunge) +
+                if (length(p - pelvis) > (gesture_ == Gesture::sweep ? c.sweepReach + c.footRadius
+                                                                     : c.reach + c.lunge + lungeReach) +
                                              t.radius)
                     continue;
                 float w = gazeWeight(gaze_, eye_, p, c);
@@ -679,7 +702,7 @@ class Kick {
                 bool byJoints = false;
                 const Vec3 p = zonePoint(t.feet, t.height, z, t.joints, c.limbZones, gazeRef(t), &byJoints);
                 const float d = length(p - pelvis);
-                if (!(d <= c.reach + c.lunge + t.radius + c.frontSlack) || d >= nearest)
+                if (!(d <= c.reach + c.lunge + lungeReach + t.radius + c.frontSlack) || d >= nearest)
                     continue;
                 const Vec3 to{p.x - pelvis.x, 0, p.z - pelvis.z};
                 const float lt = length(to);
@@ -710,7 +733,7 @@ class Kick {
                                                                                           : Zone::legs;
                 bool byJoints = false;
                 const Vec3 p = zonePoint(t.feet, t.height, z, t.joints, c.limbZones, gazeRef(t), &byJoints);
-                if (!(length(p - pelvis) <= c.reach + c.lunge + t.radius + c.frontSlack))
+                if (!(length(p - pelvis) <= c.reach + c.lunge + lungeReach + t.radius + c.frontSlack))
                     break;
                 target_ = t.id;
                 zone_ = z;
@@ -721,6 +744,30 @@ class Kick {
                     gaze_ = normalized(line);
                 break;
             }
+        }
+        // KICK LUNGE: an enemy past the foot's reach - the body goes at him, the kick along the line to him.
+        if (lungeReach > 0 && target_ != 0) {
+            for (const auto& t : f.targets) {
+                if (t.id != target_)
+                    continue;
+                const Vec3 p = zonePoint(t.feet, t.height, zone_, t.joints, c.limbZones, gazeRef(t));
+                const float full = reachAt(gesture_, extendOf(gesture_, c), c);
+                const float gap = length(p - pelvis) - t.radius - full * .8f;
+                if (gap > .05f && finite(p - pelvis)) {
+                    out.lungeWay = normalized(p - pelvis);
+                    out.lungeSpeed =
+                        std::min(gap / std::max(windowOf(gesture_, c), .05f),
+                                 std::isfinite(c.lungeSpeed) ? std::clamp(c.lungeSpeed, 0.f, 20.f) : 0.f);
+                    out.lungeGap = gap;
+                    lunged_ = out.lungeSpeed > .1f;
+                    const Vec3 line = p - eye_;
+                    if (lunged_ && finite(line) && length(line) > 1e-3f)
+                        gaze_ = normalized(line);
+                }
+                break;
+            }
+            if (!lunged_)
+                out.lungeWay = {};
         }
         out.event = Event::started;
         out.target = target_;
@@ -829,6 +876,6 @@ class Kick {
     Zone zone_ = Zone::chest;
     std::uint64_t target_{};
     Vec3 gaze_{0, 0, -1}, eye_{}, lastFoot_{};
-    bool footSet_{}, hit_{}, startedGrounded_{}, fallback_{}, lockAimed_{};
+    bool footSet_{}, hit_{}, startedGrounded_{}, fallback_{}, lockAimed_{}, lunged_{};
 };
 } // namespace spidy::air_kick

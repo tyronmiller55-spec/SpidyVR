@@ -1683,6 +1683,9 @@ void visit(const native_rays::QueryContext& world) {
         // their own setting.
         const bool readJoints = (ask.flags & 8u) != 0;
         ac.limbZones = readJoints && (ask.flags & 16u) != 0;
+        // KICK LUNGE (beta3f; flags bit 5, kick_lunge_reach_cm): off, the leg's reach only (beta3e).
+        ac.lungeReach =
+            (ask.flags & 32u) ? static_cast<float>(std::min<uint32_t>(ask.lungeCm, 400)) / 100.f : 0.f;
         airKickState.configure(ac);
         const float scale = game_punch::worldScale();
         air_kick::Kick::Frame af;
@@ -1754,9 +1757,21 @@ void visit(const native_rays::QueryContext& world) {
             live.point.y = ao.point.y;
             live.point.z = ao.point.z;
         };
+        // THE KICK'S OUTCOME (beta3f): who was there to kick, for the log.
+        if (ao.event != Event::none) {
+            live.enemies = static_cast<uint32_t>(count);
+            live.nearest = count ? length(targets[0].feet - at) : 0.f;
+        }
         if (ao.event == Event::started) {
             live.started = live.started + 1;
             account();
+            // KICK LUNGE: the body goes at him (the solver's next step, in the air only).
+            live.lungeSpeed = ao.lungeSpeed;
+            live.lungeGap = ao.lungeGap;
+            if (airKickState.lunged()) {
+                solver.kickLunge(ao.lungeWay, ao.lungeSpeed / std::max(scale, .05f));
+                live.lunges = live.lunges + 1;
+            }
             // How the target was found: bit 2 the nearest in front (KICK TARGET FALLBACK), bit 3 the punches' lock.
             live.reserved = (live.reserved & ~12u) | (airKickState.fallback() && !airKickState.lockAimed() ? 4u : 0u) |
                             (airKickState.lockAimed() ? 8u : 0u);
@@ -1775,6 +1790,9 @@ void visit(const native_rays::QueryContext& world) {
             if (ao.event == Event::hit)
                 blow = game_punch::kickHit(ao.target, ao.point, ao.way, ao.strength, ao.fly, ao.enemy, at,
                                            body.grounded != 0);
+            // KICK LUNGE: a blow off a lunge stops him at the enemy (he keeps lungeKeep of his velocity).
+            if (blow && airKickState.lunged())
+                solver.kickRecoil(ac.lungeKeep);
             account();
             if (blow) {
                 live.hits = live.hits + 1;

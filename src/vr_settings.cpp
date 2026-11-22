@@ -1329,6 +1329,7 @@ Values sanitized(Values v) {
     v.handstandGraceBeforeMs = std::clamp(v.handstandGraceBeforeMs, 0, 1000);
     v.handoffPlaceCm = std::clamp(v.handoffPlaceCm, 0, 2000);
     v.swingRopeDragPct = std::clamp(v.swingRopeDragPct, 0, 300);
+    v.kickLungeReachCm = std::clamp(v.kickLungeReachCm, 0, 400);
     v.swingRopeWeightPct = std::clamp(v.swingRopeWeightPct, 0, 300);
     v.wallSlideFriction = std::clamp(v.wallSlideFriction, 0, 100);
     v.swingReelOutSpeed = std::clamp(v.swingReelOutSpeed, 50, 1500);
@@ -3135,7 +3136,8 @@ constexpr TabOnly tabOnly[] = {
     {"swing_kick_grunt", &Values::swingKickGrunt, nullptr},
     {"wall_brake", &Values::wallBrake, nullptr},
     {"grip_fling", &Values::gripFling, nullptr},
-    {"grip_stop_pct", nullptr, &Values::wallBrakeMuPct}, // was wall_brake_mu_pct (90): a renamed key takes the new default
+    {"grip_stop_pct", nullptr,
+     &Values::wallBrakeMuPct}, // was wall_brake_mu_pct (90): a renamed key takes the new default
     {"grip_fling_gain_pct", nullptr, &Values::gripFlingGainPct},
     {"grip_fling_max", nullptr, &Values::gripFlingMax},
     {"hand_grab", &Values::handGrab, nullptr},
@@ -3312,6 +3314,8 @@ constexpr TabOnly tabOnly[] = {
     {"wall_slide_friction", nullptr, &Values::wallSlideFriction},
     {"swing_rope_weight_pct", nullptr, &Values::swingRopeWeightPct},
     {"swing_rope_drag_pct", nullptr, &Values::swingRopeDragPct},
+    {"kick_lunge", &Values::kickLunge, nullptr},
+    {"kick_lunge_reach_cm", nullptr, &Values::kickLungeReachCm},
     {"log_level", nullptr, &Values::logLevel},
     {"movement_defaults", nullptr, &Values::movementDefaults},
 };
@@ -3562,6 +3566,13 @@ Values withMovementDefaults(Values v, std::string_view text) {
         // revision stays. ROPE DRAG is new at beta3d's 100%.
         v.swingRopeWeightPct = 200;
         // BETA3E MIGRATION END
+    }
+    if (seen < 22) {
+        // Revision 22 (0.8.7-na-beta3f; the owner, Nov 22 t96u: "let's start to work on kicks. I'll test them
+        // next build"): KICK LUNGE comes on once (a new key, all features on for testing); a 0 chosen after
+        // this revision stays.
+        v.kickLunge = true;
+        // BETA3F MIGRATION END
     }
     v.movementDefaults = movementDefaultsRevision;
     return sanitized(v);

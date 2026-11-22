@@ -10496,6 +10496,31 @@ int main() {
         z.predictNativeStep(1.f/60,in,w,standing);
         check(!z.pointJumps(),"an empty launch");
     });
+    test("KICK LUNGE: the swing carries the body at the kick's enemy in the air only, keeping the rest of its motion", [] {
+        TestWorld w;w.enabled=false;
+        Input in;
+        // In the air, falling: toward him (-z) rises to the lunge's 10 m/s; the fall and the side are kept.
+        Swing air(inert());
+        air.kickLunge({0,0,-1},10);
+        const auto out=air.predictNativeStep(1.f/90,in,w,{{0,5,0},{2,-3,-1},false});
+        check(air.kickLunges()==1,"no lunge in the air");
+        near(out.velocity.z,-10,.2f);near(out.velocity.x,2,.05f);check(out.velocity.y<-2.5f,"the fall was lost");
+        // Already faster at him: nothing taken away.
+        Swing fast(inert());
+        fast.kickLunge({0,0,-1},6);
+        const auto quick=fast.predictNativeStep(1.f/90,in,w,{{0,5,0},{0,0,-12},false});
+        near(quick.velocity.z,-12,.2f);
+        // On the ground: dropped, and not later in the air.
+        Swing ground(inert());
+        ground.kickLunge({0,0,-1},10);
+        ground.predictNativeStep(1.f/90,in,w,{{0,0,0},{},true});
+        ground.predictNativeStep(1.f/90,in,w,{{0,5,0},{},false});
+        check(!ground.kickLunges(),"a lunge off the ground");
+        // An empty way or speed is none.
+        Swing z(inert());z.kickLunge({0,0,0},10);z.kickLunge({0,0,-1},0);z.kickLunge({NAN,0,-1},5);
+        z.predictNativeStep(1.f/90,in,w,{{0,5,0},{},false});
+        check(!z.kickLunges(),"an empty lunge");
+    });
     test("POINT JUMP CANCELS WALL GRABS: off the game's own wall crawl when asked so, never otherwise", [] {
         TestWorld w;w.enabled=false;
         // The game holds him on its wall (supportSurface: its crawl's normal), off the ground in its run.
@@ -25472,7 +25497,7 @@ int main() {
                   "the movement defaults overrode a choice made after them");
             check(withMovementDefaults(withTabOnly({}, ""), "").runCurve,
                   "no file: not the movement defaults");
-            check(tabOnlyText(migrated).find("movement_defaults=21\n") != std::string::npos,
+            check(tabOnlyText(migrated).find("movement_defaults=22\n") != std::string::npos,
                   "the migration is not remembered");
         }
         {
@@ -25972,8 +25997,10 @@ int main() {
                   "wall_slide_friction=50\n"
                   "swing_rope_weight_pct=200\n"
                   "swing_rope_drag_pct=100\n"
+                  "kick_lunge=1\n"
+                  "kick_lunge_reach_cm=250\n"
                   "log_level=1\n"
-                  "movement_defaults=21\n",
+                  "movement_defaults=22\n",
               "the defaults' text");
         Values changed = defaults;
         changed.recordingFov = 140;
@@ -34736,6 +34763,7 @@ int main() {
         check(d.pointJumpWallCancel, "POINT JUMP CANCELS WALL GRABS: on");
         check(d.wallGripToStick && d.wallSlideFriction == 50, "GRIP TO STICK: on, 50% friction");
         check(d.swingRopeWeightPct == 200 && d.swingRopeDragPct == 100, "ROPE WEIGHT 200%, ROPE DRAG 100%");
+        check(d.kickLunge && d.kickLungeReachCm == 250, "KICK LUNGE: on, 250 cm");
         // BETA3 DEFAULT CHECKS END
         Values off{};
         off.handoffHeadFirst = false;
@@ -34754,6 +34782,7 @@ int main() {
         off.swingAirPhysics = false;
         off.pointJumpWallCancel = false;
         off.wallGripToStick = false;
+        off.kickLunge = false;
         // BETA3 OFF END
         std::string base = tabOnlyText(off);
         base = base.substr(0, base.find("movement_defaults="));
@@ -34799,8 +34828,13 @@ int main() {
         check(walls.swingRopeWeightPct == 200 && walls.swingRopeDragPct == 100,
               "a revision 20 file did not get ROPE WEIGHT 200% and ROPE DRAG 100%");
         // BETA3E MIGRATED END
+        const std::string rev21 = base + "movement_defaults=21\n";
+        const Values kicks = withMovementDefaults(withTabOnly({}, rev21), rev21);
+        check(kicks.kickLunge && kicks.kickLungeReachCm == 250, "a revision 21 file did not get KICK LUNGE");
+        check(!kicks.pointJumpWallCancel, "revision 21 ran again");
+        // BETA3F MIGRATED END
         // BETA3 MIGRATED END
-        const std::string chosen = base + "movement_defaults=21\n";
+        const std::string chosen = base + "movement_defaults=22\n";
         const Values kept = withMovementDefaults(withTabOnly({}, chosen), chosen);
         check(!kept.handoffHeadFirst, "a 0 chosen after revision 17 moved");
         check(!kept.landingViewSnap, "LANDING VIEW SNAP: a 0 chosen after revision 17 moved");
@@ -34818,6 +34852,7 @@ int main() {
         check(!kept.swingAirPhysics, "AIR PHYSICS WHILE SWINGING: a 0 chosen after revision 20 moved");
         check(!kept.pointJumpWallCancel, "POINT JUMP CANCELS WALL GRABS: a 0 chosen after revision 21 moved");
         check(!kept.wallGripToStick, "GRIP TO STICK: a 0 chosen after revision 21 moved");
+        check(!kept.kickLunge, "KICK LUNGE: a 0 chosen after revision 22 moved");
         // BETA3 KEPT END
     });
     test("showtime auto: a Y+B finisher's scene (no play, the tracking rig off) lets the camera out", [&] {

@@ -3647,7 +3647,10 @@ DWORD WINAPI run(void*) {
                         ask.serial = airSerial;
                         ask.flags = (values.kicks ? 1u : 0u) | (legHoldOut.engaged ? 2u : 0u) |
                                     (values.groundKicks ? 4u : 0u) | (values.enemyJoints ? 8u : 0u) |
-                                    (values.enemyJoints && values.enemyLimbZones ? 16u : 0u);
+                                    (values.enemyJoints && values.enemyLimbZones ? 16u : 0u) |
+                                    (values.kickLunge ? 32u : 0u);
+                        // KICK LUNGE (beta3f): its reach past the leg's.
+                        ask.lungeCm = static_cast<uint32_t>(std::clamp(values.kickLungeReachCm, 0, 400));
                         ask.gesture = static_cast<uint32_t>(flick.gesture);
                         ask.side = flick.side;
                         ask.angle = flick.angle;
@@ -7375,6 +7378,19 @@ DWORD WINAPI run(void*) {
                                 const auto gesture = airGesture;
                                 if (what == 1)
                                     attackSound(values.attackSound, 2); // HERO ATTACK SOUND: a kick starts
+                                const bool lunging = what == 1 && al->lungeSpeed > .1f;
+                                // THE KICK'S OUTCOME (beta3f): who was there to kick.
+                                char around[96] = "";
+                                if (al->enemies == 0)
+                                    std::snprintf(around, sizeof around, "; no enemy in a fight");
+                                else
+                                    std::snprintf(around, sizeof around, "; %u in the fight, nearest %.1f m",
+                                                  static_cast<unsigned>(al->enemies), al->nearest);
+                                char lunge[96] = "";
+                                if (lunging)
+                                    std::snprintf(lunge, sizeof lunge,
+                                                  " lunge %.1f m at %.1f m/s (lunges %u)", al->lungeGap,
+                                                  al->lungeSpeed, static_cast<unsigned>(al->lunges));
                                 if (what == 1 && kickBusyRefused) {
                                     diag_log::writef("kick: %u more gestures refused while the last kick ran",
                                                      kickBusyRefused);
@@ -7384,12 +7400,14 @@ DWORD WINAPI run(void*) {
                                     kickBusyLogged) {
                                     ++kickBusyRefused; // stacked gestures: the first is logged, the rest counted
                                 } else if (what == 1)
-                                    diag_log::writef("kick: %s start zone=%s target=%llu aim=%s",
-                                                     air_kick::gestureName(gesture), air_kick::zoneName(zone), who,
-                                                     !who                     ? "none (no enemy in reach)"
-                                                     : (al->reserved & 8u)    ? "punch lock"
-                                                     : (al->reserved & 4u)    ? "nearest in front"
-                                                                              : "gaze");
+                                    diag_log::writef("kick: %s start zone=%s target=%llu aim=%s%s%s",
+                                                     air_kick::gestureName(gesture), air_kick::zoneName(zone),
+                                                     who,
+                                                     !who                  ? "none (no enemy in reach)"
+                                                     : (al->reserved & 8u) ? "punch lock"
+                                                     : (al->reserved & 4u) ? "nearest in front"
+                                                                           : "gaze",
+                                                     lunge, !who ? around : "");
                                 else if (what == 2)
                                     diag_log::writef("kick: %s hit foot=%.1f zone=%s (%s) strength=%.2f target=%llu "
                                                      "(started %u, hits %u, flies %u, misses %u; zones by joints %u)",
@@ -7398,9 +7416,9 @@ DWORD WINAPI run(void*) {
                                                      al->strength, who, al->started, al->hits, al->flies,
                                                      al->misses, al->jointZones);
                                 else if (what == 3)
-                                    diag_log::writef("kick: %s miss (started %u, hits %u, misses %u)",
+                                    diag_log::writef("kick: %s miss (started %u, hits %u, misses %u%s)",
                                                      air_kick::gestureName(gesture), al->started, al->hits,
-                                                     al->misses);
+                                                     al->misses, around);
                                 else if (what == 4)
                                     diag_log::writef("kick: refused (%s)",
                                                      air_kick::refusalName(

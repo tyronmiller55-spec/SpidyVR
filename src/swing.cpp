@@ -971,6 +971,7 @@ void Swing::reset(Body b) {
     pointJumpVelocity_ = {};
     airDodgeQueued_ = false;
     airDodgeVelocity_ = {};
+    kickLungeQueued_ = false;
     flingQueued_ = false;
     gripHands_ = {};
     gripHave_ = {};
@@ -1765,6 +1766,17 @@ void Swing::step(float dt, const Input& in, const WorldQueries& world, const Wor
             ++airDodges_;
         }
         airDodgeQueued_ = false;
+    }
+    if (kickLungeQueued_) {
+        // KICK LUNGE (air_kick.hpp): in the air only; at him at no less than the lunge's speed.
+        if (!body_.grounded && !wall_.on) {
+            const float along = dot(body_.velocity, kickLungeWay_);
+            if (along < kickLungeSpeed_)
+                body_.velocity =
+                    limited(body_.velocity + kickLungeWay_ * (kickLungeSpeed_ - along), config_.maxSpeed);
+            ++kickLunges_;
+        }
+        kickLungeQueued_ = false;
     }
     if (flingQueued_) {
         // GRIP FLING (grip.hpp): the pull let go of launches him the other way, from the ground, a wall or
