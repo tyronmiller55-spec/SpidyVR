@@ -8,6 +8,11 @@
 > [beta3c section](#beta3c-webs-across-the-game-and-rope-physics) below. Full-length swing lines now work round
 > edges, in both hands and while climbing, swing free until they fade, and hand over to stick-click web lines. A
 > new switch (on, 100%) makes the hanging line really pull on the swing. Settings revision 19.
+>
+> **Build beta3e** (same version; package `Spidy-0.8.7-na-beta3e-win64-<commit>.zip`): adds the
+> [beta3e section](#beta3e-point-jump-off-wall-grabs-grip-to-stick-rope-weight-and-drag) below. The point jump
+> cancels wall grabs, walls no longer stick you until you grip them, and the swing line gets weight and drag
+> sliders. Settings revision 21.
 
 A **test build** (branch `feat/087-beta3`, from `feat/087-beta2` 1418992). The testers' **CURRENT** build stays
 [0.8.7-na-beta2](NA_BETA2.md) until this one is played. What changed: [CHANGELOG.md](CHANGELOG.md).
@@ -258,3 +263,136 @@ A new `showtime: auto (<kind>) held back: <reason>` line names whatever takes an
    - Press B on a swing for the air dodge.
    - Swing down to the ground: the landing should upright you like a fall does.
    - With the switch off, the swing should feel exactly like beta3c.
+
+## beta3e: point jump off wall grabs, grip to stick, rope weight and drag
+
+The owner, Nov 22 t94u: "I want point jump to cancel wall grabs. I want to remove the auto wall stick so that I can
+slide on walls; in order to stick and crawl I need to grip the wall, then I can crawl as normal. I want a weight
+slider for the webs, right now they're so light I can't control the swing. A drag slider and a weight slider
+alongside the pull strength. Reducing drag should reduce the effect of slack while swinging, but still allow for
+the physics."
+
+Settings revision 21: POINT JUMP CANCELS WALL GRABS and GRIP TO STICK come on once, and ROPE WEIGHT starts at
+200%. A value chosen after revision 21 stays. No existing numeric default changed, and no game address is new.
+Grip to stick uses a new side channel between SpidyVR's own modules (`SpidyWallStick` / `SpidyWallStickLive`, the
+same pattern as `SpidyReelOut`). The point jump's side channel (`PointJumpAsk`) is now version 2, with one flag.
+
+| Key | Default | What |
+| --- | --- | --- |
+| `point_jump_wall_cancel` | 1 | A+B on a wall fires the point jump off it. On SpidyVR's wall, a grip held (hand climbing's hold, the wall brake) no longer cancels the charge, so the jump detaches you from the grab. On the game's own wall crawl or wall run, the point jump is no longer refused as "game crawl": it launches out along the crawl's normal and the owner switch takes the body, as from the ground. It plays the point jump's sounds. Off: exactly beta3d. |
+| `wall_grip_to_stick` | 1 | **Feel change.** Hitting one of SpidyVR's walls in the air no longer sticks you. You slide down and along it with friction, keeping your speed. Squeeze a grip with your palm on the wall to stick; then the stick crawls as before. Off: exactly beta3d (every wall holds at once). |
+| `wall_slide_friction` | 50 | (0 to 100 %) the slide's friction as a share of gravity. 0 slides freely; at 50 you slide down a wall at half of gravity; 100 holds a body at rest (a moving one slows to a stop). |
+| `swing_rope_weight_pct` | 200 | (0 to 300 %) the swing line's mass, for both the drawn rope sim and its pull on you. 100 is beta3d's line. |
+| `swing_rope_drag_pct` | 100 | (0 to 300 %) the air drag on the swing line. 100 is beta3d's line. Lower drag means the slack tugs and flings you less, while the rope still swings and hangs. |
+
+Launcher: the Web shooters page's "Webs across the game (beta3c)" card has Rope weight and Rope drag under Rope
+pull strength. The Legs page has a new card, "Walls (beta3e)", under Grip and tethers. NA HELP: JUMPS & POINT JUMP
+(3) ON A WALL, HAND GRAB (4) GRIP TO STICK and (5) STICK, CRAWL, WEBS & WEB CANCEL (12) ROPE WEIGHT and (13) ROPE
+DRAG.
+
+### How walls attach, and what grip to stick changes
+
+There are two kinds of wall, as `game_swing::Surface` reports them:
+
+- **SpidyVR's own wall** (`Surface::wall`, `Swing::wall_`). Until beta3e, `Swing::senseWall` joined any steep, fixed
+  wall the body met in the air: head on, grazing, or pushed at with the stick (`joinWall`). From then on
+  `wallMotion` held the body. Gravity did not pull along the wall, and the stick walked it at once. That join is
+  the "auto wall stick". The hybrid owner's rule "midair animation + Spidy wall -> VR wall run" hands such a wall
+  to SpidyVR.
+- **The game's own wall crawl and wall run** (`Surface::game`, mover flag `0x80`). The game attaches the hero
+  itself, while the animation owns the body or from its own crawl. The swing only reports it (`gameHoldsWall`,
+  `supportSurface`) and takes no wall from inside it. The hybrid owner's rule "game crawl -> ANIM" (and
+  `EnterAnim::mount`) is the earlier "a jump that becomes a wall crawl returns to ANIM" rule.
+  [REFERENCE.md](REFERENCE.md) and [VALIDATION.md](VALIDATION.md) ("Stop on any wall and the game's own crawl takes
+  you") have no hook that stops the game attaching, so **beta3e cannot stop the game's own wall crawl or wall run
+  from taking you.** That stays game-native: a jump the animation owns can still end on the game's crawl. The
+  point jump now gets you off it (above).
+
+Grip to stick changes SpidyVR's own wall only (`include/spidy/wall_slide.hpp`):
+
+- The join still happens, and its speed is kept as before (`wallCarry`). The wall is marked not stuck
+  (`WallHold::stuck`).
+- While not stuck, `wallMotion` slides the body. Each step adds gravity's part along the wall, and friction
+  (`wall_slide_friction` of gravity) takes speed off against the slide, never past a stop. The stick does not
+  crawl. The wall jump (A), webs and the point jump work as before.
+- What sticks it:
+  - Hand climbing's hold (`climbInputs`: a grip with the palm at the wall and pointing at it). The WALL BRAKE then
+    slows the slide as before.
+  - With hand climbing off, or the stick pushed, the same palm test with the grip squeezed past 0.65. This catches
+    the slide at once, as hand climbing's hold does.
+  - A mount, which is the walk onto SpidyVR's wall from the game's crawl or the walked mount. The player asked for
+    the crawl.
+  - A wall the body was stuck to and lost by itself (the next face of a shaft, past a gap, round a corner, within
+    0.6 s with no jump between). A crawl keeps crawling.
+- Once stuck, everything is beta3d: the stick crawls, and the body rests without input.
+- The log shows `grip to stick: onto a wall sliding at X m/s, #N`, `grip to stick: stuck to the wall (Y m/s along
+  it), #N` and `grip to stick: off the wall still sliding`.
+
+Limits:
+
+- The game's own crawl and wall run are untouched, as described above.
+- In the WALLS mode "pressed" (`walls=4`), the swing presses the body into the wall so that the game grasps it. That
+  grasp is the game's.
+- The palm test needs a tracked hand at the wall (within 0.18 m of its face, pointing at it), the same as hand
+  climbing.
+
+### Point jump off a wall grab
+
+- The charge's grip cancel ("A grip cancels a charge") stands down while the body is on a wall. Before, a hand
+  holding the wall cancelled every chord: the beta3b log shows `point jump: charge cancelled (grip) after 0 ms` again
+  and again.
+- On SpidyVR's wall the swing already launched a point jump off it (`leaveWall`, then the wall-jump pause so the
+  same wall does not take you back at once). The climbing hands let go with it.
+- On the game's own wall crawl or run, XR now counts it as contact. The jump's normal is the crawl's
+  (`SpidySwingData.wallNormal`), and the ask carries flag 1. The swing takes the launch there even where the body
+  does not stand (`supportSurface`). The hybrid owner's point jump switch hands the body to SpidyVR, as for a jump
+  off the ground.
+- The log shows `point jump: cancels the wall grab (wall | game wall)` before the usual `point jump:` lines.
+- Not validated in the headset: whether the game lets go of its crawl cleanly when SpidyVR takes the body there.
+  Tell us if he sticks, snaps back or turns oddly.
+- Found while checking: all 5 `point jump: denied game crawl` lines in the beta3b log came while the game's
+  floor-crawl flag was on (`Surface::floor`, "wall 0->3" with "game ground 1->0" just before, lit by ordinary
+  ground moves and fights), not on a wall. That refusal is unchanged in beta3e. Tell us if A+B on a rooftop or in
+  a fight sometimes does nothing.
+
+### Rope weight and drag
+
+Both act on the drawn rope (`swing_line::Line`'s 24-particle sim) and on the pull it puts on you (the rope physics
+`SpidyRopePull`) in the same way. 100% and 100% is exactly beta3d.
+
+- **Weight** scales the line's mass (`massPerMetre`). Its hanging weight and the momentum its slack carries both
+  scale with it, and so does the pull's cap past 100% (2.5 m/s^2 a hand at 100%, 5 at 200%). The sim's air
+  damping is divided by it: a heavier line is slowed less by the air, so it hangs and keeps swinging with what it
+  had. 200% by default because the owner found the line too light to steer by. At twice the mass the line pulls
+  about twice as hard, and its momentum carries through the swing instead of dying in the air, so there is more
+  to lean on. Your input doesn't change.
+- **Drag** scales the sim's air damping and the momentum part of the pull: the tug and fling of a trailing or
+  whipping slack. The hanging weight stays. At 0% the slack's tug is gone, and the rope still swings and hangs (a
+  floor of damping keeps it stable).
+
+Unit tests: drag 0 gives a smaller pull while the rope still moves, and keeps the hanging weight; 200% pulls much
+harder under its own cap; a heavier line keeps swinging longer after the hand stops; 1 and 1 are the combat
+rope's damping and mass.
+
+### beta3e checklist
+
+1. **Point jump off a wall.**
+   - On a wall, hold a grip on it (hand climbing) and press A+B: the charge should build (no `charge cancelled
+     (grip)`) and the jump should take you off the wall with its sounds.
+   - On the game's own wall crawl, A+B should launch you out of it. Log: `point jump: cancels the wall grab (game
+     wall)`. Say whether he leaves the wall cleanly.
+   - With `point_jump_wall_cancel=0`, both should be as in beta3d.
+2. **Grip to stick.**
+   - Swing or jump into a wall: you should slide down and along it, keeping your speed. Log: `grip to stick: onto a
+     wall sliding`.
+   - Squeeze a grip with your palm on the wall: you should stop and stick. Then crawl with the stick as usual. Log:
+     `grip to stick: stuck to the wall`.
+   - Wall jump (A) and webs while sliding should work.
+   - Try friction 20, 50 and 80.
+   - With the switch off, walls should hold you at once, as in beta3d.
+   - Note any time the game's own crawl still takes you: that is the game's.
+3. **Rope weight and drag.**
+   - Swing with weight 100, 200 and 300: heavier should hang lower and carry the swing more. Say which helps you
+     control it.
+   - Lower drag (50, 0): the slack should tug you less, and the line should still swing.
+   - The log's `rope pull: on (strength S%, weight W%, drag D%, ...)` line shows the values.

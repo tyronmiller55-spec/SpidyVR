@@ -3,6 +3,24 @@
 Every build, newest first, with what changed, why, and what was measured.
 Per-check results are in [VALIDATION.md](VALIDATION.md).
 
+**0.8.7-na-beta3, build beta3e (November 22, the owner's t94u):** the same version, a fifth test package
+([checklist](NA_BETA3.md#beta3e-point-jump-off-wall-grabs-grip-to-stick-rope-weight-and-drag)); migration rev 21.
+
+- **Point jump cancels wall grabs** (`point_jump_wall_cancel=1`). On a wall, a grip no longer cancels the point
+  jump's charge, and A+B fires the jump off the wall grab with its sounds. On the game's own wall crawl or run, the
+  jump is no longer refused: the swing takes it there (`PointJumpAsk` version 2, flag 1) and the owner switch hands
+  the body to SpidyVR. Off: exactly beta3d.
+- **Grip to stick** (feel change; `wall_grip_to_stick=1`, `wall_slide_friction=50`). SpidyVR's own walls no longer
+  hold the body the moment it meets them. It slides down and along with friction, keeping its speed, until a grip
+  with the palm at the wall (hand climbing's hold, or the same palm test with it off) sticks it. A mount, or a
+  stuck wall carried over a gap or corner, sticks at once. New `wall_slide.hpp` and the `SpidyWallStick` side
+  channel. The game's own wall crawl and wall run are game-native and unchanged: no validated hook stops them.
+  Off: exactly beta3d.
+- **Rope weight and drag** (`swing_rope_weight_pct=200`, `swing_rope_drag_pct=100`). Both act on the swing line's
+  sim and its pull alike. Weight scales the line's mass, its pull and cap, and divides the sim's air damping.
+  Drag scales the damping and the slack's tug and fling. 100/100 is exactly beta3d; weight 200 makes the line
+  heavier.
+
 **0.8.7-na-beta3, build beta3d (November 21, the owner's t93u):** the same version, a fourth test package
 ([checklist](NA_BETA3.md#beta3d-showtime-strikes-vs-punches-finishers-fixed-reel-out-air-physics-on-a-swing));
 migration rev 20.
