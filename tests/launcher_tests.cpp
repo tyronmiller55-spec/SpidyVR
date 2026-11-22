@@ -808,6 +808,10 @@ int main() {
                 continue;
             if (key == "swing_line_full_length")
                 continue;
+            if (key == "wall_slide_friction")
+                continue;
+            if (key == "wall_grip_to_stick")
+                continue;
             if (key == "point_jump_wall_cancel")
                 continue;
             if (key == "swing_air_physics")

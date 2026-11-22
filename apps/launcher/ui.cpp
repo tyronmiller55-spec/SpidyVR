@@ -3358,6 +3358,10 @@ void App::options(ImVec2 origin, ImVec2 size) {
         group(legsPage, 0, "Walls (beta3e)", [&] {
             settingOption(Item::none, "Point jump cancels wall grabs", "A + B on a wall fires the point jump off it: a grip held on the wall no longer cancels the charge, and the game's own wall crawl lets you go. Default: on.",
                    S(42), [&] { flagToggle("##pointjumpwallcancel", tabOnly_.pointJumpWallCancel); });
+            settingOption(Item::none, "Grip to stick", "Changes the feel: hitting a wall no longer sticks you to it. You slide down and along it with friction, keeping your speed; squeeze a grip with your palm on the wall to stick, then crawl as usual. The game's own wall crawl is unchanged. Off: walls hold you at once, as before. Default: on.",
+                   S(42), [&] { flagToggle("##wallgriptostick", tabOnly_.wallGripToStick); });
+            settingOption(Item::none, "Wall slide friction", "How hard a wall you slide on holds you back, as a share of gravity: 0% slides freely, 100% stops you. Default: 50%.",
+                   S(150), [&] { fineSlider("##wallslidefriction", tabOnly_.wallSlideFriction, 0, 100, 5, "%d%%", "Free"); });
             // BETA3E LAUNCHER END
         });
         // NA HELP (beta polish M5): the same pages as the game's NA · HELP tab (na_help.hpp), a card per topic.

@@ -81,6 +81,8 @@ inline constexpr Page pages[] = {
     {"HAND GRAB", "HAND GRAB", "HAND GRAB: a palm on an enemy or prop holds it."},
     {"HAND GRAB", "  (2) HEAVIES", "Heavies and bosses resist throws unless stunned or webbed up (open)."},
     {"HAND GRAB", "  (3) TIRING", "Shield guards and bosses tire your hand 3x faster; an open enemy is free."},
+    {"HAND GRAB", "  (4) GRIP TO STICK", "GRIP TO STICK: walls no longer stick you; you slide down them with friction."},
+    {"HAND GRAB", "  (5) STICK, CRAWL", "Squeeze a grip with your palm on the wall to stick, then crawl as usual. 50%."},
 
     {"HANDSTAND", "HANDSTAND", "Fall inverted onto both palms (REALISTIC FLIPS on): you balance on your hands."},
     {"HANDSTAND", "  (2) MOVING", "Lean to walk, push off to leap, let go or lean past FALL ANGLE to drop."},

@@ -49,6 +49,7 @@ __declspec(dllexport) AirKickLive SpidyAirKickLive;
 __declspec(dllexport) SwingCostLive SpidySwingCostLive;
 // JUMP PULL's account (JumpPullLive), for XR's log.
 __declspec(dllexport) JumpPullLive SpidyJumpPullLive;
+__declspec(dllexport) WallStickLive SpidyWallStickLive;
 // Where the window's longest visit went (SwingCostSections), beside it.
 __declspec(dllexport) SwingCostSections SpidySwingCostSections;
 // The punch scan's parts and the target scan's cost (SwingScanCost), on the same window.
@@ -380,6 +381,10 @@ ULONGLONG ropePullAt{};
 SRWLOCK reelOutLock = SRWLOCK_INIT;
 ReelOutAsk reelOutAsk{};
 ULONGLONG reelOutAt{};
+// GRIP TO STICK (SpidyWallStick, beta3e): XR's latest ask (every frame) and when it came.
+SRWLOCK wallStickLock = SRWLOCK_INIT;
+WallStickAsk wallStickAsk{};
+ULONGLONG wallStickAt{};
 // GRIP ACROSS THE GAME (SpidySwingGrip, grip.hpp): the latest settings (the swing's step applies them).
 SRWLOCK gripLock = SRWLOCK_INIT;
 GripAsk gripAsk{};
@@ -1854,6 +1859,23 @@ void visit(const native_rays::QueryContext& world) {
             if (now.enabled != rp.enabled || now.tapSeconds != rp.tapSeconds || now.speed != rp.speed)
                 solver.reelOut(rp);
         }
+        // GRIP TO STICK (beta3e): the switch and the slide's friction, while XR sends them (200 ms at most
+        // old), and the account.
+        {
+            AcquireSRWLockShared(&wallStickLock);
+            const WallStickAsk ws = wallStickAsk;
+            const bool fresh = GetTickCount64() - wallStickAt <= 200;
+            ReleaseSRWLockShared(&wallStickLock);
+            solver.wallGripToStick(fresh && (ws.flags & 1u), static_cast<int>(ws.frictionPct));
+            volatile WallStickLive& wl = SpidyWallStickLive;
+            const auto& wall = solver.wall();
+            wl.on = solver.wallGripToStickEnabled() ? 1u : 0u;
+            wl.stuck = !wall.on ? 0u : wall.stuck ? 1u : 2u;
+            wl.slides = solver.wallSlides();
+            wl.sticks = solver.wallSticks();
+            const Vec3 v = solver.body().velocity;
+            wl.speed = wall.on && finite(v) ? length(v - wall.normal * dot(v, wall.normal)) : 0.f;
+        }
         volatile JumpPullLive& live = SpidyJumpPullLive;
         const uint64_t target = pick.valid ? pick.id : 0;
         const float added = solver.jumpPullAdded();
@@ -2747,6 +2769,23 @@ extern "C" __declspec(dllexport) DWORD WINAPI SpidyReelOut(void* input) {
     reelOutAsk = a;
     reelOutAt = GetTickCount64();
     ReleaseSRWLockExclusive(&reelOutLock);
+    return 0;
+}
+// GRIP TO STICK (beta3e): XR's ask, every frame. 2001: not a WallStickAsk; 1004: the swing has not started; 0
+// taken. What it did: SpidyWallStickLive.
+extern "C" __declspec(dllexport) DWORD WINAPI SpidyWallStick(void* input) {
+    WallStickAsk a;
+    if (!input || !copy(&a, input, sizeof(a)) || !validWallStick(a))
+        return 2001;
+    AcquireSRWLockShared(&lifecycle);
+    const bool running = started;
+    ReleaseSRWLockShared(&lifecycle);
+    if (!running)
+        return 1004;
+    AcquireSRWLockExclusive(&wallStickLock);
+    wallStickAsk = a;
+    wallStickAt = GetTickCount64();
+    ReleaseSRWLockExclusive(&wallStickLock);
     return 0;
 }
 // GRIP ACROSS THE GAME (grip.hpp): the VR worker's settings. 2001: not a GripAsk; 1004: the swing has not

@@ -52,7 +52,7 @@ Shoot a web on the ground or a perch to cancel the animation into SpidyVR. Not i
 
 ## HAND GRAB
 
-HAND GRAB: a palm on an enemy or prop holds it. Heavies and bosses resist throws unless stunned or webbed up (open). Shield guards and bosses tire your hand 3x faster; an open enemy is free.
+HAND GRAB: a palm on an enemy or prop holds it. Heavies and bosses resist throws unless stunned or webbed up (open). Shield guards and bosses tire your hand 3x faster; an open enemy is free. GRIP TO STICK: walls no longer stick you; you slide down them with friction. Squeeze a grip with your palm on the wall to stick, then crawl as usual. 50%.
 
 ## HANDSTAND
 

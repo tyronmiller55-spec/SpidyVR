@@ -5931,6 +5931,109 @@ int main() {
         check(game_swing::valid(c), "legacy input no longer accepted");
         near(game_swing::input(c).hands[0].wallGrip, 0);
     });
+    test("GRIP TO STICK: a slide's step - gravity along the wall less friction, the speed kept, never past a stop", [] {
+        const Vec3 n{-1, 0, 0};
+        const float g = 9.81f, dt = 1.f / 60;
+        // From rest, half friction: half of gravity down the wall (4.9 m/s after a second).
+        Vec3 v{};
+        for (int i = 0; i < 60; ++i)
+            v = wall_slide::step(v, n, g, .5f, dt);
+        near(v.y, -4.905f, .05f);
+        near(v.x, 0, 1e-5f);
+        near(v.z, 0, 1e-5f);
+        // Full friction holds a body at rest; none falls freely.
+        v = {};
+        for (int i = 0; i < 60; ++i)
+            v = wall_slide::step(v, n, g, 1.f, dt);
+        near(length(v), 0, 1e-5f);
+        v = {};
+        for (int i = 0; i < 60; ++i)
+            v = wall_slide::step(v, n, g, 0.f, dt);
+        near(v.y, -9.81f, .05f);
+        // A run along it keeps its speed (no friction) or slows by friction alone, never turning back.
+        v = {0, 0, -10};
+        for (int i = 0; i < 30; ++i)
+            v = wall_slide::step(v, n, g, 0.f, dt);
+        near(v.z, -10, 1e-4f);
+        v = {0, 0, -10};
+        for (int i = 0; i < 600; ++i)
+            v = wall_slide::step(v, n, g, 1.f, dt);
+        check(v.z <= 0 && v.z > -.01f, "friction turned the run back or never stopped it");
+        // Nothing into or off the wall comes out of a step; bad input is none.
+        v = wall_slide::step({3, 0, -2}, n, g, .5f, dt);
+        near(v.x, 0, 1e-5f);
+        check(finite(wall_slide::step({NAN, 0, 0}, n, g, .5f, dt)), "a NaN slide");
+        // A stuck wall carries to the next only when lost by itself, soon.
+        check(wall_slide::carries(true, .1f, 5.f), "a wall past a gap did not carry");
+        check(!wall_slide::carries(true, .1f, .1f), "a wall jump carried the stick");
+        check(!wall_slide::carries(true, 1.f, 5.f), "a wall long gone carried");
+        check(!wall_slide::carries(false, .1f, 5.f), "a slide carried a stick");
+    });
+    test("GRIP TO STICK: a wall met in the air slides the body until a palm grips it, then holds and crawls", [] {
+        constexpr float dt = 1.f / 60;
+        for (const bool climb : {false, true}) {
+            Building w;
+            Swing s(walled());
+            s.allowHandClimb(climb);
+            s.wallGripToStick(true, 50);
+            Input in;
+            Body body{{3.5f, 20, 0}, {10, 0, -10}, false};
+            const auto advance = [&] {
+                const auto motion = s.predictNativeStep(dt, in, w, body);
+                check(motion.valid, "slide prediction failed");
+                body = {motion.target, motion.velocity, false};
+            };
+            float joinedAt{};
+            for (int i = 0; i < 30 && !s.wall().on; ++i)
+                advance();
+            check(s.wall().on && !s.wall().stuck, "the wall did not take the body, sliding");
+            check(s.wallSlides() == 1 && !s.wallSticks(), "the slide was not counted");
+            joinedAt = body.position.y;
+            for (int i = 0; i < 60; ++i)
+                advance();
+            check(s.wall().on && !s.wall().stuck, "the slide let go of the wall or stuck by itself");
+            check(joinedAt - body.position.y > 1.5f, "the body did not slide down the wall");
+            check(body.velocity.z < -1, "the slide lost the run's speed along the wall");
+            near(5 - body.position.x, .9f, .05f);
+            // The stick does not crawl a wall the body slides on.
+            in.move = {0, 0, 1};
+            advance();
+            check(body.velocity.y < -2 && body.velocity.z < 0, "the stick crawled a sliding wall");
+            in.move = {};
+            // A grip with the palm at the wall sticks it.
+            auto& h = in.hands[1];
+            h.tracked = true;
+            h.wallPosition = {4.95f, body.position.y, 0};
+            h.aim.orientation = arc({0, 0, -1}, {1, 0, 0});
+            h.gripRelativeToHead = {.4f, 0, 0};
+            advance();
+            h.wallPosition.y = body.position.y;
+            h.wallGrip = 1;
+            advance();
+            check(s.wall().stuck && s.wallSticks() == 1, "the grip did not stick the body");
+            check(!climb || s.climbingHands() == 2u, "hand climbing did not hold");
+            // Let go: the body stays (the wall's own brake, as beta3d), and the stick crawls it.
+            h.wallGrip = 0;
+            for (int i = 0; i < 240; ++i)
+                advance();
+            check(s.wall().on && s.wall().stuck && length(body.velocity) < .05f, "the stuck body did not come to rest");
+            const float rested = body.position.y;
+            in.move = {1, 0, 0}; // pushed at the wall: up it
+            for (int i = 0; i < 30; ++i)
+                advance();
+            check(body.position.y > rested + .5f, "the stick did not crawl the stuck wall");
+        }
+        // Off: the wall holds at once, as beta3d (no slide, no counts).
+        Building w;
+        Swing off(walled());
+        Input in;
+        Body body{{3.5f, 20, 0}, {10, 0, -10}, false};
+        body = fly(off, w, body, in, 6);
+        check(off.wall().on && !off.wallSlides() && !off.wallSticks(), "off counted a slide");
+        const float y = body.position.y;
+        body = fly(off, w, body, in, 1);
+        check(y - body.position.y < .05f, "off, gravity pulled the body down the wall");
+    });
     test("a body that flies into a wall at an angle runs along it", [] {
         // The wall: x = 5, facing -x. The body's centre keeps 0.9 m off it.
         Building w;Swing s(walled());Input in;
@@ -25845,6 +25948,8 @@ int main() {
                   "swing_reel_out_speed=400\n"
                   "swing_air_physics=1\n"
                   "point_jump_wall_cancel=1\n"
+                  "wall_grip_to_stick=1\n"
+                  "wall_slide_friction=50\n"
                   "log_level=1\n"
                   "movement_defaults=21\n",
               "the defaults' text");
@@ -34520,6 +34625,7 @@ int main() {
         check(d.swingReelOut && d.swingReelOutTapMs == 300 && d.swingReelOutSpeed == 400, "REEL OUT: on, 300 ms, 400 cm/s");
         check(d.swingAirPhysics, "AIR PHYSICS WHILE SWINGING: on");
         check(d.pointJumpWallCancel, "POINT JUMP CANCELS WALL GRABS: on");
+        check(d.wallGripToStick && d.wallSlideFriction == 50, "GRIP TO STICK: on, 50% friction");
         // BETA3 DEFAULT CHECKS END
         Values off{};
         off.handoffHeadFirst = false;
@@ -34537,6 +34643,7 @@ int main() {
         off.swingReelOut = false;
         off.swingAirPhysics = false;
         off.pointJumpWallCancel = false;
+        off.wallGripToStick = false;
         // BETA3 OFF END
         std::string base = tabOnlyText(off);
         base = base.substr(0, base.find("movement_defaults="));
@@ -34578,6 +34685,7 @@ int main() {
         const std::string rev20 = base + "movement_defaults=20\n";
         const Values walls = withMovementDefaults(withTabOnly({}, rev20), rev20);
         check(walls.pointJumpWallCancel, "a revision 20 file did not get POINT JUMP CANCELS WALL GRABS");
+        check(walls.wallGripToStick && walls.wallSlideFriction == 50, "a revision 20 file did not get GRIP TO STICK");
         // BETA3E MIGRATED END
         // BETA3 MIGRATED END
         const std::string chosen = base + "movement_defaults=21\n";
@@ -34597,6 +34705,7 @@ int main() {
         check(!kept.swingReelOut, "REEL OUT: a 0 chosen after revision 20 moved");
         check(!kept.swingAirPhysics, "AIR PHYSICS WHILE SWINGING: a 0 chosen after revision 20 moved");
         check(!kept.pointJumpWallCancel, "POINT JUMP CANCELS WALL GRABS: a 0 chosen after revision 21 moved");
+        check(!kept.wallGripToStick, "GRIP TO STICK: a 0 chosen after revision 21 moved");
         // BETA3 KEPT END
     });
     test("showtime auto: a Y+B finisher's scene (no play, the tracking rig off) lets the camera out", [&] {

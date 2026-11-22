@@ -730,6 +730,10 @@ BridgeCall ropePullCall{};
 // REEL OUT (beta3d): the double tap and hold's settings, sent every frame (SpidyReelOut); none in an older
 // module (no reel out).
 BridgeCall reelOutCall{};
+// GRIP TO STICK (beta3e): the switch and the slide's friction, sent every frame (SpidyWallStick), and the
+// swing's account (SpidyWallStickLive); none in an older module (every wall holds at once).
+BridgeCall wallStickCall{};
+const game_swing::WallStickLive* wallStickLive{};
 const game_swing::JumpPullLive* jumpPullLive{};
 // AIR KICKS' settings and gestures for the swing (SpidyAirKick), and its account (SpidyAirKickLive); none in an
 // older module (no air kicks).
@@ -2137,6 +2141,10 @@ DWORD WINAPI run(void*) {
         bool reelOutTaken{}, reelOutWas[2]{};
         float reelOutFrom[2]{};
         uint32_t reelOutCount{};
+        // GRIP TO STICK (beta3e): the ask's serial, whether the swing took the last one, and the account's
+        // counts and state last logged.
+        uint32_t wallStickSerial{}, wallSlidesSeen{}, wallSticksSeen{}, wallStuckWas{};
+        bool wallStickTaken{};
         // Which of the game's two ropes draws which hand's web (one web in
         // both hands has one rope), and when a free hand last came onto the
         // other hand's web (a tick says a press there takes hold of it).
@@ -7171,6 +7179,39 @@ DWORD WINAPI run(void*) {
                                                                        : "off",
                                                  ask.tapMs, ask.speed);
                             reelOutTaken = taken;
+                        }
+                        // GRIP TO STICK (wall_grip_to_stick, beta3e; wall_slide.hpp): the settings to the
+                        // swing every frame (SpidyWallStick; stale after 200 ms: off), and its slides and
+                        // sticks in the log.
+                        if (wallStickCall) {
+                            game_swing::WallStickAsk ask;
+                            ask.serial = ++wallStickSerial;
+                            ask.flags = values.wallGripToStick ? 1u : 0u;
+                            ask.frictionPct =
+                                static_cast<uint32_t>(std::clamp(values.wallSlideFriction, 0, 100));
+                            const bool taken = wallStickCall(&ask) == 0;
+                            if (taken != wallStickTaken)
+                                diag_log::writef("grip to stick: %s (slide friction %u%%)",
+                                                 !taken                   ? "the swing took no settings"
+                                                 : values.wallGripToStick ? "on: walls slide until a grip"
+                                                                          : "off: walls hold at once",
+                                                 ask.frictionPct);
+                            wallStickTaken = taken;
+                        }
+                        if (const volatile game_swing::WallStickLive* wl = wallStickLive) {
+                            const uint32_t slides = wl->slides, sticks = wl->sticks, stuck = wl->stuck;
+                            const float speed = wl->speed;
+                            if (slides != wallSlidesSeen)
+                                diag_log::writef("grip to stick: onto a wall sliding at %.1f m/s, #%u", speed,
+                                                 slides);
+                            if (sticks != wallSticksSeen)
+                                diag_log::writef("grip to stick: stuck to the wall (%.1f m/s along it), #%u",
+                                                 speed, sticks);
+                            if (stuck == 0 && wallStuckWas == 2)
+                                diag_log::write("grip to stick: off the wall still sliding");
+                            wallSlidesSeen = slides;
+                            wallSticksSeen = sticks;
+                            wallStuckWas = stuck;
                         }
                         for (unsigned i = 0; i < 2; ++i) {
                             const bool out = swingState.status && (swingState.webs[i].attached & 1u) &&
@@ -14695,6 +14736,14 @@ extern "C" __declspec(dllexport) DWORD WINAPI SpidyXrStart(void* input) {
     jumpPullCall = reinterpret_cast<BridgeCall>(GetProcAddress(rays, "SpidyJumpPull"));
     ropePullCall = reinterpret_cast<BridgeCall>(GetProcAddress(rays, "SpidyRopePull"));
     reelOutCall = reinterpret_cast<BridgeCall>(GetProcAddress(rays, "SpidyReelOut"));
+    wallStickCall = reinterpret_cast<BridgeCall>(GetProcAddress(rays, "SpidyWallStick"));
+    wallStickLive =
+        reinterpret_cast<const game_swing::WallStickLive*>(GetProcAddress(rays, "SpidyWallStickLive"));
+    if (const game_swing::WallStickLive expected;
+        wallStickLive &&
+        (wallStickLive->magic != expected.magic || wallStickLive->version != expected.version ||
+         wallStickLive->bytes != expected.bytes))
+        wallStickLive = nullptr;
     jumpPullLive = reinterpret_cast<const game_swing::JumpPullLive*>(GetProcAddress(rays, "SpidyJumpPullLive"));
     if (const game_swing::JumpPullLive expected;
         jumpPullLive && (jumpPullLive->magic != expected.magic || jumpPullLive->version != expected.version ||

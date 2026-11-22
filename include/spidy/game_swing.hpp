@@ -784,6 +784,29 @@ struct ReelOutAsk {
     uint32_t reserved{};
 };
 static_assert(sizeof(ReelOutAsk) == 32);
+// Side channel from XR (GRIP TO STICK, beta3e, wall_grip_to_stick / wall_slide_friction; wall_slide.hpp):
+// sent every frame to SpidyWallStick; an ask older than 200 ms is off. `flags` bit 0: on. `frictionPct`: the
+// slide's friction, 0 to 100 (% of gravity). Not a Command or Settings field: an older module has no export
+// and XR then sends none (every wall holds at once, as before).
+struct WallStickAsk {
+    uint32_t magic = 0x53575753, version = 1, bytes = sizeof(WallStickAsk), serial{};
+    uint32_t flags{}, frictionPct = 50;
+    uint32_t reserved[2]{};
+};
+static_assert(sizeof(WallStickAsk) == 32);
+inline bool validWallStick(const WallStickAsk& a) {
+    return a.magic == 0x53575753 && a.version == 1 && a.bytes == sizeof(WallStickAsk) && !(a.flags & ~1u) &&
+           a.frictionPct <= 100;
+}
+// SpidyWallStickLive: GRIP TO STICK's account for XR's log. `on` whether the switch is in force; `stuck` 1
+// while the body is on SpidyVR's wall and stuck to it, 2 while it slides there, 0 off any; `slides` the walls
+// come onto sliding, `sticks` the walls stuck to (a grip, a mount, carried on), both counting up.
+struct WallStickLive {
+    uint32_t magic = 0x5357534c, version = 1, bytes = sizeof(WallStickLive), on{};
+    uint32_t stuck{}, slides{}, sticks{};
+    float speed{}; // along the wall now (m/s)
+};
+static_assert(sizeof(WallStickLive) == 32);
 // SpidyJumpPullLive: what the pull did. `events` counts up LAST (a pick began, changed or ended); `active` is 1 while a
 // pick is in force; `target` his record, `weight` 0..1, `angleDeg` off the picking line, `distance` to him (m), `added` what
 // this jump has had added (m/s), `byStick` whether the stick's cone picked him. `pulls` counts jumps that were pulled.

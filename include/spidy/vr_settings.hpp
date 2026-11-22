@@ -859,6 +859,15 @@ struct Values {
     // cancels the charge, and the game's own wall crawl or wall run is no longer refused ("game crawl"): the
     // jump takes the body off the game's hold, with its sounds. Off: as beta3d.
     bool pointJumpWallCancel = true;
+    // GRIP TO STICK (0.8.7-na-beta3e; the owner, Nov 22 t94u: "I want to remove the auto wall stick so that I can
+    // slide on walls; in order to stick and crawl I need to grip the wall, then I can crawl as normal"; a feel
+    // change, wall_slide.hpp): a wall of SpidyVR's own met in the air no longer holds the body at once - it slides
+    // down and along it with friction, keeping its speed, until a grip with a palm at the wall sticks it; then the
+    // stick crawls as before. The game's own wall crawl is the game's (no hook). Off: as beta3d.
+    bool wallGripToStick = true;
+    // (%, 0 to 100) GRIP TO STICK's slide: friction as a share of gravity. 0 slides freely; 100 holds a body at
+    // rest (a moving one still slows to a stop).
+    int wallSlideFriction = 50;
     // BETA3 SETTINGS END
     // HERO ATTACK SOUND (beta polish A2; attack_sound, spidy_vr.ini only, no menu row): one of the game's sounds played
     // on Spidey as a punch is thrown or a kick starts (at most one a hand every 250 ms, hit_sound.hpp): the id's 32

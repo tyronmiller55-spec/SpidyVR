@@ -1328,6 +1328,7 @@ Values sanitized(Values v) {
     v.handstandGraceAfterMs = std::clamp(v.handstandGraceAfterMs, 100, 1000);
     v.handstandGraceBeforeMs = std::clamp(v.handstandGraceBeforeMs, 0, 1000);
     v.handoffPlaceCm = std::clamp(v.handoffPlaceCm, 0, 2000);
+    v.wallSlideFriction = std::clamp(v.wallSlideFriction, 0, 100);
     v.swingReelOutSpeed = std::clamp(v.swingReelOutSpeed, 50, 1500);
     v.swingReelOutTapMs = std::clamp(v.swingReelOutTapMs, 150, 600);
     v.showtimeAutoPunchCooldownMs = std::clamp(v.showtimeAutoPunchCooldownMs, 0, 60000);
@@ -3305,6 +3306,8 @@ constexpr TabOnly tabOnly[] = {
     {"swing_reel_out_speed", nullptr, &Values::swingReelOutSpeed},
     {"swing_air_physics", &Values::swingAirPhysics, nullptr},
     {"point_jump_wall_cancel", &Values::pointJumpWallCancel, nullptr},
+    {"wall_grip_to_stick", &Values::wallGripToStick, nullptr},
+    {"wall_slide_friction", nullptr, &Values::wallSlideFriction},
     {"log_level", nullptr, &Values::logLevel},
     {"movement_defaults", nullptr, &Values::movementDefaults},
 };
@@ -3548,6 +3551,9 @@ Values withMovementDefaults(Values v, std::string_view text) {
         // Revision 21 (0.8.7-na-beta3e; the owner, Nov 22 t94u): POINT JUMP CANCELS WALL GRABS comes on once (a
         // new key, all features on for testing); a 0 chosen after this revision stays.
         v.pointJumpWallCancel = true;
+        // GRIP TO STICK comes on once (t94u, a feel change, all features on for testing); a 0 chosen after this
+        // revision stays.
+        v.wallGripToStick = true;
         // BETA3E MIGRATION END
     }
     v.movementDefaults = movementDefaultsRevision;

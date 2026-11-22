@@ -5,6 +5,7 @@
 #include "math.hpp"
 #include "reel_out.hpp"
 #include "swing_kick.hpp"
+#include "wall_slide.hpp"
 #include "web_landing.hpp"
 #include <algorithm>
 #include <cmath>
@@ -333,6 +334,9 @@ struct WallHold {
     Vec3 point{};     // on the wall beside the body
     float distance{}; // the body's centre from the wall
     float seconds{};  // on walls since it came onto one
+    // GRIP TO STICK (beta3e, wall_slide.hpp): a grip (or a mount) holds the
+    // body on this wall; without it, with the switch on, the body slides.
+    bool stuck{};
 };
 enum class EventKind {
     Attach,
@@ -677,6 +681,29 @@ class Swing {
             climbing_ = {};
     }
     bool handClimbEnabled() const { return handClimb_; }
+    // GRIP TO STICK (beta3e, wall_slide.hpp): on, a wall met in the air is no
+    // hold - the body slides down and along it (friction: `frictionPct` of
+    // gravity, 0 to 100) with the speed it had, until a grip with a palm at the
+    // wall sticks it; then the stick crawls it as before. A mount sticks at
+    // once. Off: every wall holds at once, as before.
+    void wallGripToStick(bool on, int frictionPct) {
+        gripToStick_ = on;
+        slideFriction_ = static_cast<float>(std::clamp(frictionPct, 0, 100)) / 100.f;
+    }
+    bool wallGripToStickEnabled() const {
+        return gripToStick_;
+    }
+    float wallSlideFriction() const {
+        return slideFriction_;
+    }
+    // How many times the body has come onto a wall sliding, and has been stuck
+    // to one (by a grip, a mount or carried on) since the start.
+    std::uint32_t wallSlides() const {
+        return wallSlides_;
+    }
+    std::uint32_t wallSticks() const {
+        return wallSticks_;
+    }
     // A near-wall squeeze that points at the wall (SwingConfig::gripAim)
     // belongs to climbing before other actions.
     bool wallHand(int hand, const Input&, const WorldQueries&) const;
@@ -1117,6 +1144,13 @@ class Swing {
     };
     std::array<ClimbingHand, 2> climbing_{};
     bool handClimb_{};
+    // GRIP TO STICK (beta3e): the switch, its friction (0..1 of gravity), the
+    // wall left last was stuck and how long ago, and the counts.
+    bool gripToStick_{}, leftStuck_{};
+    float slideFriction_ = wall_slide::defaultFrictionPct / 100.f, sinceLeftWall_ = 100;
+    std::uint32_t wallSlides_{}, wallSticks_{};
+    void stickWall();
+    void stickInputs(const Input&, const WorldQueries&);
     float climbSeconds_{};
     void climbInputs(const Input&, const WorldQueries&);
     void gripInputs(const Input&, const WorldQueries&);

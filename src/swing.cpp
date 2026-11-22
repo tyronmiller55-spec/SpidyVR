@@ -292,8 +292,12 @@ void Swing::allowWalls(bool allowed) {
         leaveWall();
 }
 void Swing::leaveWall() {
-    if (wall_.on)
+    if (wall_.on) {
         events_.push_back({EventKind::WallOff, -1, .2f});
+        // GRIP TO STICK: whether the next wall met sticks (wall_slide::carries).
+        leftStuck_ = wall_.stuck;
+        sinceLeftWall_ = 0;
+    }
     wall_ = {};
     climbing_ = {};
     wallLost_ = 0;
@@ -327,7 +331,10 @@ void Swing::joinWall(const RayHit& hit) {
     body_.velocity = along - n * into;
     if (!wall_.on) {
         wall_.seconds = 0;
+        wall_.stuck = false;
         events_.push_back({EventKind::WallOn, -1, std::clamp(into / 20, .2f, 1.f)});
+        if (gripToStick_)
+            ++wallSlides_;
     }
     wall_.on = true;
     wall_.normal = n;
@@ -344,8 +351,42 @@ void Swing::offerWall(const RayHit& wall) {
     mountWall_ = {wall.point, n, wall.surface, true};
     offered_ = true;
 }
+void Swing::stickWall() {
+    if (!wall_.on || wall_.stuck)
+        return;
+    wall_.stuck = true;
+    if (gripToStick_) {
+        ++wallSticks_;
+        // A slide counted for a wall that stuck at once (a mount, a wall carried on) was none.
+        if (wall_.seconds <= 0 && wallSlides_ > 0)
+            --wallSlides_;
+    }
+}
+void Swing::stickInputs(const Input& in, const WorldQueries& world) {
+    // GRIP TO STICK: a grip closed with the palm at the wall (hand climbing's own test, with hand climbing on
+    // or off, the stick pushed or not) sticks the body; hand climbing's hold (climbInputs) sticks it too.
+    if (!gripToStick_ || !wall_.on || wall_.stuck || !in.focused)
+        return;
+    for (int i = 0; i < 2; ++i) {
+        const auto& h = in.hands[i];
+        if (climbing_[i].attached) {
+            stickWall();
+            return;
+        }
+        if (webs_[i].attached || !h.tracked || !finite(h.wallPosition) || !std::isfinite(h.wallGrip) ||
+            h.wallGrip <= .65f)
+            continue;
+        if (pointsAtWall(h) && wallContact(h, world)) {
+            // The grip catches the slide, as hand climbing's hold does (the WALL BRAKE is hand climbing's).
+            stickWall();
+            body_.velocity = wall_.normal * dot(body_.velocity, wall_.normal);
+            return;
+        }
+    }
+}
 void Swing::senseWall(float dt, const Input& in, const WorldQueries& world) {
     sinceWallJump_ += dt;
+    sinceLeftWall_ += dt;
     backLeft_ = std::max(0.f, backLeft_ - dt);
     const bool offered = offered_;
     offered_ = mounting_ = false;
@@ -389,6 +430,7 @@ void Swing::senseWall(float dt, const Input& in, const WorldQueries& world) {
     }
     if (body_.grounded) {
         leaveWall();
+        leftStuck_ = false;
         crest_ = 0;
         // No mounts (mountFromGround, allowMounts): the game's crawl offered
         // to the swing is not taken from it, nor is a wall the stick walks
@@ -450,6 +492,7 @@ void Swing::senseWall(float dt, const Input& in, const WorldQueries& world) {
                                            : limited(body_.velocity - n * dot(body_.velocity, n),
                                                      config_.wallWalkSpeed);
             joinWall(mountWall_);
+            stickWall(); // GRIP TO STICK: a mount is a crawl the player asked for
             return;
         }
     }
@@ -618,8 +661,14 @@ void Swing::senseWall(float dt, const Input& in, const WorldQueries& world) {
     // fall (the player, October 14: "i went forward, wall walked to the vent
     // and fell"). A climb is never interrupted; only STARTING one is refused
     // when new walls are off, which offerWall does.
-    if (wall)
+    if (wall) {
+        const bool carried = wall_slide::carries(leftStuck_, sinceLeftWall_, sinceWallJump_);
         joinWall(*wall);
+        // GRIP TO STICK: a wall the body was stuck to, lost by itself (the next face of a shaft, the wall
+        // past a gap), carries on stuck.
+        if (carried)
+            stickWall();
+    }
 }
 std::optional<RayHit> Swing::wallContact(const HandInput& hand, const WorldQueries& world) const {
     const Vec3 n = wall_.normal;
@@ -677,6 +726,7 @@ void Swing::climbInputs(const Input& in, const WorldQueries& world) {
                 c.surface = hit->surface;
                 c.previous = h.gripRelativeToHead;
                 events_.push_back({EventKind::WallGrip, i, .45f});
+                stickWall(); // GRIP TO STICK: hand climbing's hold sticks the body
                 // WALL BRAKE (grip.hpp): a press on a sliding body is friction, not a stop at once; with
                 // the other hand holding, the body's speed is the hand's own and the brake stays out.
                 if (gripBrake_ && !climbing_[1 - i].attached) {
@@ -821,6 +871,14 @@ void Swing::wallMotion(float dt, const Input& in) {
             }
         // Two hands share the body: equal pulls move it once, never twice.
         body_.velocity = limited(pull / static_cast<float>(count), config_.maxSpeed);
+        return;
+    }
+    if (gripToStick_ && !wall_.stuck) {
+        // GRIP TO STICK (wall_slide.hpp): not stuck, the body slides - gravity along the wall less friction,
+        // the speed it came with kept; the stick does not crawl. A grip sticks it (stickInputs).
+        const float out = dot(body_.velocity, n);
+        const Vec3 along = wall_slide::step(body_.velocity - n * out, n, config_.gravity, slideFriction_, dt);
+        body_.velocity = limited(along + n * (press_ ? -config_.pressSpeed : out), config_.maxSpeed);
         return;
     }
     const float out = dot(body_.velocity, n);
@@ -1133,6 +1191,7 @@ void Swing::inputs(float dt, const Input& in, const WorldQueries& world) {
         zipGestureBlock_ = .2f;
     climbSeconds_ = dt;
     climbInputs(in, world);
+    stickInputs(in, world);
     gripInputs(in, world);
     // JUMP ALWAYS: a press while the swing runs the body on the ground
     // (SPIDY RUN, the landing carry) ends that run; the game has the body
