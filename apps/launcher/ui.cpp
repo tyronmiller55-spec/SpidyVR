@@ -3375,6 +3375,8 @@ void App::options(ImVec2 origin, ImVec2 size) {
                    S(42), [&] { flagToggle("##kicklunge", tabOnly_.kickLunge); });
             settingOption(Item::none, "Kick lunge reach", "How far past your leg's reach an enemy may be for the lunge. Default: 250 cm.",
                    S(150), [&] { fineSlider("##kicklungereach", tabOnly_.kickLungeReachCm, 0, 400, 10, "%d cm", "Leg only"); });
+            settingOption(Item::none, "Kick feel", "A kick that starts ticks both controllers, and a lunge adds the web strike's rush thump and sound. Landed kicks feel as before. Default: on.",
+                   S(42), [&] { flagToggle("##kickfeel", tabOnly_.kickFeel); });
             // BETA3F LAUNCHER END
         });
         // NA HELP (beta polish M5): the same pages as the game's NA · HELP tab (na_help.hpp), a card per topic.

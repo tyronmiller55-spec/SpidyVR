@@ -7378,7 +7378,19 @@ DWORD WINAPI run(void*) {
                                 const auto gesture = airGesture;
                                 if (what == 1)
                                     attackSound(values.attackSound, 2); // HERO ATTACK SOUND: a kick starts
+                                // KICK FEEL (beta3f, kick_feel): a kick taken ticks both controllers (the
+                                // legs have none); a lunge at him is the strike rush's thump and sound as
+                                // well.
                                 const bool lunging = what == 1 && al->lungeSpeed > .1f;
+                                if (what == 1 && values.kickFeel && input.focused) {
+                                    runtime.haptic(0, lunging ? .6f : .3f, lunging ? .07f : .03f);
+                                    runtime.haptic(1, lunging ? .6f : .3f, lunging ? .07f : .03f);
+                                    if (lunging) {
+                                        feel(body_haptics::Kind::strikeRush);
+                                        if (values.blowSounds != 2)
+                                            play(ImpactSound::Rush);
+                                    }
+                                }
                                 // THE KICK'S OUTCOME (beta3f): who was there to kick.
                                 char around[96] = "";
                                 if (al->enemies == 0)

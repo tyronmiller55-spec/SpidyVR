@@ -3316,6 +3316,7 @@ constexpr TabOnly tabOnly[] = {
     {"swing_rope_drag_pct", nullptr, &Values::swingRopeDragPct},
     {"kick_lunge", &Values::kickLunge, nullptr},
     {"kick_lunge_reach_cm", nullptr, &Values::kickLungeReachCm},
+    {"kick_feel", &Values::kickFeel, nullptr},
     {"log_level", nullptr, &Values::logLevel},
     {"movement_defaults", nullptr, &Values::movementDefaults},
 };
@@ -3572,6 +3573,8 @@ Values withMovementDefaults(Values v, std::string_view text) {
         // next build"): KICK LUNGE comes on once (a new key, all features on for testing); a 0 chosen after
         // this revision stays.
         v.kickLunge = true;
+        // KICK FEEL comes on once (t96u, a new key); a 0 chosen after this revision stays.
+        v.kickFeel = true;
         // BETA3F MIGRATION END
     }
     v.movementDefaults = movementDefaultsRevision;

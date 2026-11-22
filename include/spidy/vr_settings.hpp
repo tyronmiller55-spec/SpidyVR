@@ -886,6 +886,10 @@ struct Values {
     bool kickLunge = true;
     // (cm, 0 to 400) KICK LUNGE's reach past the leg's (1.55 m with the air's lunge). 250 by default.
     int kickLungeReachCm = 250;
+    // KICK FEEL (0.8.7-na-beta3f, t96u): a kick that starts ticks both controllers (the legs have none), so a
+    // gesture taken is felt at once; a kick that lunges adds the strike rush's thump and sound (BLOW SOUNDS
+    // OFF silences it). A landed kick's blow feels and sounds as before (the strikes'). Off: as beta3e.
+    bool kickFeel = true;
     // BETA3 SETTINGS END
     // HERO ATTACK SOUND (beta polish A2; attack_sound, spidy_vr.ini only, no menu row): one of the game's sounds played
     // on Spidey as a punch is thrown or a kick starts (at most one a hand every 250 ms, hit_sound.hpp): the id's 32

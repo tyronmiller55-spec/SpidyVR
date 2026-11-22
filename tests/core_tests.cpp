@@ -25999,6 +25999,7 @@ int main() {
                   "swing_rope_drag_pct=100\n"
                   "kick_lunge=1\n"
                   "kick_lunge_reach_cm=250\n"
+                  "kick_feel=1\n"
                   "log_level=1\n"
                   "movement_defaults=22\n",
               "the defaults' text");
@@ -34764,6 +34765,7 @@ int main() {
         check(d.wallGripToStick && d.wallSlideFriction == 50, "GRIP TO STICK: on, 50% friction");
         check(d.swingRopeWeightPct == 200 && d.swingRopeDragPct == 100, "ROPE WEIGHT 200%, ROPE DRAG 100%");
         check(d.kickLunge && d.kickLungeReachCm == 250, "KICK LUNGE: on, 250 cm");
+        check(d.kickFeel, "KICK FEEL: on");
         // BETA3 DEFAULT CHECKS END
         Values off{};
         off.handoffHeadFirst = false;
@@ -34783,6 +34785,7 @@ int main() {
         off.pointJumpWallCancel = false;
         off.wallGripToStick = false;
         off.kickLunge = false;
+        off.kickFeel = false;
         // BETA3 OFF END
         std::string base = tabOnlyText(off);
         base = base.substr(0, base.find("movement_defaults="));
@@ -34831,6 +34834,7 @@ int main() {
         const std::string rev21 = base + "movement_defaults=21\n";
         const Values kicks = withMovementDefaults(withTabOnly({}, rev21), rev21);
         check(kicks.kickLunge && kicks.kickLungeReachCm == 250, "a revision 21 file did not get KICK LUNGE");
+        check(kicks.kickFeel, "a revision 21 file did not get KICK FEEL");
         check(!kicks.pointJumpWallCancel, "revision 21 ran again");
         // BETA3F MIGRATED END
         // BETA3 MIGRATED END
@@ -34853,6 +34857,7 @@ int main() {
         check(!kept.pointJumpWallCancel, "POINT JUMP CANCELS WALL GRABS: a 0 chosen after revision 21 moved");
         check(!kept.wallGripToStick, "GRIP TO STICK: a 0 chosen after revision 21 moved");
         check(!kept.kickLunge, "KICK LUNGE: a 0 chosen after revision 22 moved");
+        check(!kept.kickFeel, "KICK FEEL: a 0 chosen after revision 22 moved");
         // BETA3 KEPT END
     });
     test("showtime auto: a Y+B finisher's scene (no play, the tracking rig off) lets the camera out", [&] {

@@ -810,7 +810,7 @@ int main() {
                 continue;
             if (key == "swing_rope_drag_pct")
                 continue;
-            if (key == "kick_lunge" || key == "kick_lunge_reach_cm")
+            if (key == "kick_lunge" || key == "kick_lunge_reach_cm" || key == "kick_feel")
                 continue;
             if (key == "swing_rope_weight_pct")
                 continue;
