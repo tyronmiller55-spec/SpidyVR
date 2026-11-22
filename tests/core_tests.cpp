@@ -26003,6 +26003,9 @@ int main() {
                   "swing_rope_stable=1\n"
                   "swing_rope_load_taut=1\n"
                   "web_wrap_keep=1\n"
+                  "kick_lean=1\n"
+                  "kick_momentum=1\n"
+                  "kick_chamber=1\n"
                   "log_level=1\n"
                   "movement_defaults=23\n",
               "the defaults' text");
@@ -34960,6 +34963,8 @@ int main() {
         check(d.kickLunge && d.kickLungeReachCm == 250, "KICK LUNGE: on, 250 cm");
         check(d.kickFeel, "KICK FEEL: on");
         check(d.swingRopeStable && d.swingRopeLoadTaut && d.webWrapKeep, "ROPE STABILITY, TAUT UNDER LOAD, WRAP KEEP: on");
+        check(d.kickLean && d.kickMomentum, "KICK LEAN, KICK MOMENTUM: on");
+        check(d.kickChamber, "KICK CHAMBER: on");
         // BETA3 DEFAULT CHECKS END
         Values off{};
         off.handoffHeadFirst = false;
@@ -34981,6 +34986,7 @@ int main() {
         off.kickLunge = false;
         off.kickFeel = false;
         off.swingRopeStable = off.swingRopeLoadTaut = off.webWrapKeep = false;
+        off.kickLean = off.kickMomentum = off.kickChamber = false;
         off.swingRopeWeightPct = 300;
         // BETA3 OFF END
         std::string base = tabOnlyText(off);
@@ -35037,6 +35043,8 @@ int main() {
         const Values ropes = withMovementDefaults(withTabOnly({}, rev22), rev22);
         check(ropes.swingRopeStable && ropes.swingRopeLoadTaut && ropes.webWrapKeep,
               "a revision 22 file did not get ROPE STABILITY, TAUT UNDER LOAD, WRAP KEEP");
+        check(ropes.kickLean && ropes.kickMomentum && ropes.kickChamber,
+              "a revision 22 file did not get the beta3g kick animation switches");
         check(ropes.swingRopeWeightPct == 120, "a saved 300% weight did not become the same mass (120%)");
         const std::string heavy = "swing_rope_weight_pct=200\nmovement_defaults=22\n";
         check(withMovementDefaults(withTabOnly({}, heavy), heavy).swingRopeWeightPct == 100,
@@ -35067,7 +35075,8 @@ int main() {
         check(!kept.wallGripToStick, "GRIP TO STICK: a 0 chosen after revision 21 moved");
         check(!kept.kickLunge, "KICK LUNGE: a 0 chosen after revision 22 moved");
         check(!kept.kickFeel, "KICK FEEL: a 0 chosen after revision 22 moved");
-        check(!kept.swingRopeStable && !kept.swingRopeLoadTaut && !kept.webWrapKeep,
+        check(!kept.swingRopeStable && !kept.swingRopeLoadTaut && !kept.webWrapKeep && !kept.kickLean &&
+                  !kept.kickMomentum && !kept.kickChamber,
               "the beta3g switches: a 0 chosen after revision 23 moved");
         check(kept.swingRopeWeightPct == 300, "ROPE WEIGHT chosen after revision 23 moved");
         // BETA3 KEPT END

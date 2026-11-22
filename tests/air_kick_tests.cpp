@@ -641,6 +641,68 @@ int main() {
         const auto og = s.ask(g, {Gesture::freeform, 1, 0, .9f});
         check(og.event == Kick::Event::started && og.target == 0 && !s.lunged(), "a standing kick lunged");
     }
+    // KICK LEAN and KICK MOMENTUM (beta3g): the dive arches back, the roundhouse twists, none at rest; the
+    // legs swing with the travel and keep their limits; the torso goes on the channel in the kick layer.
+    {
+        const float mid = extendOf(Gesture::dive) + .05f;
+        check(kickLean(Gesture::dive, 1, 30, mid).pitch < -.3f, "the dive does not arch back");
+        check(kickLean(Gesture::doubleDive, 1, 0, mid).pitch < kickLean(Gesture::dive, 1, 30, mid).pitch,
+              "the double dive arches more");
+        check(std::abs(kickLean(Gesture::roundhouse, 1, 60, .15f).yaw) > .1f, "the roundhouse does not twist");
+        check(kickLean(Gesture::dive, 1, 30, 0).pitch == 0 && kickLean(Gesture::sweep, 1, 0, mid).pitch == 0,
+              "a lean at rest or on a sweep");
+        const auto pose = legPose(Gesture::dive, 1, 30, mid);
+        const auto forward = momentumPose(pose, 10.f, 0.f, 0.f), back = momentumPose(pose, -10.f, 0.f, 0.f);
+        check(forward[0].pitch >= pose[0].pitch && back[0].pitch < pose[0].pitch, "the legs do not carry the travel");
+        check(back[0].pitch > pose[0].pitch - momentumMaxRadians - 1e-4f, "past the momentum's most");
+        const auto wild = momentumPose(pose, 1e4f, -1e4f, 0.f);
+        for (const auto& leg : wild)
+            check(leg.pitch <= leg_control::pitchMax && std::abs(leg.side) <= leg_control::sideMax, "past a leg's limit");
+        const auto same = momentumPose(pose, NAN, 0.f, 0.f);
+        check(same[1].pitch == pose[1].pitch, "a NaN travel moved the legs");
+        leg_layers::Mixer mixer;
+        leg_layers::Input in;
+        in.air = true;
+        in.kick = true;
+        in.kickPose = pose;
+        auto o = mixer.update(in, {});
+        check(o.layer == leg_layers::Layer::kick && !o.torsoOn, "KICK LEAN off: the torso was driven");
+        in.kickLeanOn = true;
+        in.kickTorso = {-.42f, 0, 5.f};
+        o = mixer.update(in, {});
+        check(o.torsoOn && near(o.torso.pitch, -.42f) && near(o.torso.yaw, .7f), "the kick's lean on the channel (clamped)");
+    }
+    // KICK CHAMBER (beta3g; t100u "we need lots of animation work there"): the kicking leg winds up (knee
+    // bent, thigh part way), snaps out straight past its line a little, then folds back as it comes home.
+    {
+        const float e = extendOf(Gesture::dive), w = windowOf(Gesture::dive);
+        const auto wind = shapedLegPose(Gesture::dive, 1, 30, .4f * e);
+        const auto line = shapedLegPose(Gesture::dive, 1, 30, e);
+        const auto held = shapedLegPose(Gesture::dive, 1, 30, e + .5f * (w - e));
+        const auto fold = shapedLegPose(Gesture::dive, 1, 30, w + .5f * Config{}.recover);
+        const auto stiff = legPose(Gesture::dive, 1, 30, e);
+        check(wind[1].knee > .6f && wind[1].pitch < .8f * stiff[1].pitch, "no chamber: the knee not drawn up");
+        check(line[1].knee < .2f && near(line[1].pitch, stiff[1].pitch, .05f), "not out straight on its line");
+        check(held[1].pitch > line[1].pitch, "no overshoot through the line");
+        check(fold[1].knee > legPose(Gesture::dive, 1, 30, w + .5f * Config{}.recover)[1].knee + .2f, "no recoil fold");
+        const auto rest = shapedLegPose(Gesture::dive, 1, 30, totalOf(Gesture::dive) + .01f);
+        check(std::abs(rest[1].pitch - leg_control::centrePose[1].pitch) < .05f, "not home after the kick");
+        check(shapedLegPose(Gesture::dive, 1, 30, .4f * e)[0].knee == legPose(Gesture::dive, 1, 30, .4f * e)[0].knee,
+              "the other leg was shaped");
+        for (float t = 0; t < totalOf(Gesture::roundhouse) + .05f; t += .01f)
+            for (const auto& leg : shapedLegPose(Gesture::roundhouse, -1, 60, t))
+                check(std::isfinite(leg.pitch) && leg.knee <= leg_control::kneeMax && leg.knee >= 0, "a leg out of its range");
+        check(kickLean(Gesture::dive, 1, 30, .4f * e).pitch > kickLean(Gesture::dive, 1, 30, e).pitch + .2f,
+              "no curl into the wind-up");
+        leg_layers::Mixer quick, slow;
+        leg_layers::Input in;
+        in.air = in.kick = true;
+        in.dt = .03f;
+        in.kickQuick = true;
+        const float fast = quick.update(in, {}).amount;
+        in.kickQuick = false;
+        check(fast > .45f && slow.update(in, {}).amount < .2f, "the kick layer's quick blend");
+    }
     // KICK FLICK MISSES: a slow push and a short one are logged with why; a flick and a resting thumb are not.
     {
         FlickWatch w;

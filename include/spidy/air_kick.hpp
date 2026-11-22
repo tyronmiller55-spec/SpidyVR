@@ -443,6 +443,60 @@ inline float sweepYaw(Gesture g, int side, float t, const Config& c = {}) {
     return static_cast<float>(side) * c.roundhouseArc * deg * (1.f - smoothstep(0, extendOf(g, c), t));
 }
 
+// KICK LEAN (beta3g, kick_lean): the kick's upper body on the torso channel (leg_layers' Torso: pitch curl +,
+// roll toward the left +, yaw twist left +; radians), eased with the kick (amountAt). A dive arches back to
+// throw the legs (25 degrees, AIR_KICKS.md's plan), a double dive more; a roundhouse twists the chest against
+// the sweep and leans away from the kicking leg; a side kick leans off it; a back kick curls forward.
+struct Lean {
+    float pitch{}, roll{}, yaw{};
+};
+inline Lean kickLean(Gesture g, int side, float angle, float t, const Config& c = {}) {
+    const float a = amountAt(g, t, c);
+    if (g == Gesture::none || g == Gesture::sweep || !(a > 0))
+        return {};
+    const float s = side >= 0 ? 1.f : -1.f; // +1 the right leg
+    // The wind-up: the chest curls over the chambered leg (and turns toward it, the hips' turn the spine
+    // shows), then throws back as it snaps out (KICK CHAMBER's timing).
+    const float e = extendOf(g, c);
+    const float drawn = t <= windowOf(g, c) ? smoothstep(0, .45f * e, t) * (1.f - smoothstep(.35f * e, e, t)) : 0.f;
+    Lean l;
+    switch (g) {
+    case Gesture::doubleDive:
+        l = {-.5f * a, 0, 0};
+        break;
+    case Gesture::dive:
+        l = {-.42f * a, s * .08f * a, -s * .14f * a};
+        break;
+    case Gesture::roundhouse: {
+        const float sweep = 1.f - smoothstep(0, e, t);
+        l = {-.12f * a, s * .22f * a, s * .5f * sweep * a};
+        break;
+    }
+    default:
+        l = std::abs(angle) > c.sideDegrees ? Lean{.3f * a, 0, 0} : Lean{-.05f * a, s * .3f * a, -s * .1f * a};
+        break;
+    }
+    l.pitch += .22f * drawn;
+    l.yaw += s * .12f * drawn;
+    return l;
+}
+// KICK MOMENTUM (beta3g, kick_momentum): the kick's legs carry the body's travel - its speed along his facing
+// (forward +) and across (to the left +), m/s, swings both legs that way, up to maxRadians at fullSpeed and
+// less the further out the kick is (a kick reaching full keeps its own line).
+inline constexpr float momentumMaxRadians = .35f, momentumFullSpeed = 10.f;
+inline leg_control::Legs momentumPose(leg_control::Legs pose, float forward, float left, float amount) {
+    if (!std::isfinite(forward) || !std::isfinite(left) || !std::isfinite(amount))
+        return pose;
+    const float k = momentumMaxRadians / momentumFullSpeed * (1.f - .5f * std::clamp(amount, 0.f, 1.f));
+    const float dp = std::clamp(forward * k, -momentumMaxRadians, momentumMaxRadians);
+    const float ds = std::clamp(left * k, -momentumMaxRadians, momentumMaxRadians);
+    for (auto& leg : pose) {
+        leg.pitch = std::clamp(leg.pitch + dp, leg_control::pitchMin, leg_control::pitchMax);
+        leg.side = std::clamp(leg.side + ds, -leg_control::sideMax, leg_control::sideMax);
+    }
+    return pose;
+}
+
 // ---- the legs' pose ----
 // leg_control's angles: 0 the left leg, 1 the right; pitch forward +, side toward the body's left +, knee
 // bend. `side`: -1 left, +1 right. `angle`: a freeform flick's (degrees from up).
@@ -480,6 +534,50 @@ inline leg_control::Legs legPose(Gesture g, int side, float angle, float t, cons
         break;
     }
     for (auto& leg : out) {
+        leg.pitch = std::clamp(leg.pitch, leg_control::pitchMin, leg_control::pitchMax);
+        leg.side = std::clamp(leg.side, -leg_control::sideMax, leg_control::sideMax);
+        leg.knee = std::clamp(leg.knee, 0.f, leg_control::kneeMax);
+    }
+    return out;
+}
+
+// KICK CHAMBER (beta3g, kick_chamber; the owner, Nov 22 t100u: "Kicks were okay, we need lots of animation
+// work there"): the kicking leg's curve as a kick is thrown, not a stiff leg swung out - it chambers first
+// (the knee drawn up and bent, the thigh at 60% of its line), snaps out straight through its line with a
+// small overshoot held at full, then recoils (the knee folds back as the leg comes home) before it eases
+// down. The other leg is legPose's. A roundhouse keeps legPose's sweep and gets the chamber's knee and the
+// recoil's fold on it. Times are the kick's own (extendOf, hold, recover).
+inline constexpr float chamberKnee = 1.15f, chamberPitch = .6f, chamberSide = .4f, overshoot = .08f, recoilFold = .7f;
+inline leg_control::Legs shapedLegPose(Gesture g, int side, float angle, float t, const Config& c = {}) {
+    leg_control::Legs out = legPose(g, side, angle, t, c);
+    if (g == Gesture::none || g == Gesture::sweep || !(t > 0))
+        return out;
+    const float e = extendOf(g, c), w = windowOf(g, c);
+    const leg_control::Legs full = legPose(g, side, angle, e, c); // the line at full extension
+    const int kick = side >= 0 ? 1 : 0;
+    const bool both = g == Gesture::doubleDive || (g == Gesture::freeform && std::abs(angle) > c.sideDegrees);
+    for (int i = 0; i < 2; ++i) {
+        if (i != kick && !both)
+            continue;
+        auto& leg = out[i];
+        const auto& f = full[i];
+        if (t <= w) {
+            const float ch = smoothstep(0, .45f * e, t), x = smoothstep(.35f * e, e, t);
+            const float over = t > e ? std::sin(pi * std::clamp((t - e) / std::max(c.hold, 1e-3f), 0.f, 1.f)) : 0.f;
+            const float drawn = ch * (1.f - x);
+            if (g != Gesture::roundhouse) {
+                leg.pitch = f.pitch * (chamberPitch * drawn + x * (1.f + overshoot * over));
+                leg.side = f.side * (chamberSide * drawn + x);
+            }
+            leg.knee = chamberKnee * drawn + f.knee * x;
+        } else {
+            const float r = smoothstep(0, c.recover, t - w), fold = std::sin(pi * r);
+            if (g != Gesture::roundhouse) {
+                leg.pitch = f.pitch * (1.f - r) * (1.f - .25f * fold);
+                leg.side = f.side * (1.f - r);
+            }
+            leg.knee = f.knee * (1.f - r) + chamberKnee * recoilFold * fold;
+        }
         leg.pitch = std::clamp(leg.pitch, leg_control::pitchMin, leg_control::pitchMax);
         leg.side = std::clamp(leg.side, -leg_control::sideMax, leg_control::sideMax);
         leg.knee = std::clamp(leg.knee, 0.f, leg_control::kneeMax);

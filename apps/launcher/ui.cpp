@@ -3379,8 +3379,9 @@ void App::options(ImVec2 origin, ImVec2 size) {
                    S(42), [&] { flagToggle("##kickfeel", tabOnly_.kickFeel); });
             // BETA3F LAUNCHER END
         });
-        // WEB ROPE (0.8.7-na-beta3g): the swing line's steps, load and wraps, each on by default for testing. The
-        // same spidy_vr.ini keys as the game's NA tabs.
+        // WEB ROPE AND KICKS (0.8.7-na-beta3g): the swing line's steps, load and wraps, and the kicks' ring, lunge,
+        // lean, momentum, rebound and rope assist, each on by default for testing. The same spidy_vr.ini keys as
+        // the game's NA tabs.
         group(shootersPage, 1, "Web rope (beta3g)", [&] {
             settingOption(Item::none, "Steady rope steps", "Changes the feel: the swing line's physics step at a steady rate whatever the frame rate, damp out instead of building up, and no longer stall the line in midair. Off: as beta3f. Default: on.",
                    S(42), [&] { flagToggle("##swingropestable", tabOnly_.swingRopeStable); });
@@ -3389,6 +3390,15 @@ void App::options(ImVec2 origin, ImVec2 size) {
             settingOption(Item::none, "Keep lines through wraps", "A web that wraps round an edge or comes off one keeps its line as it lies instead of a new line appearing. Off: as beta3f. Default: on.",
                    S(42), [&] { flagToggle("##webwrapkeep", tabOnly_.webWrapKeep); });
             // BETA3G ROPE LAUNCHER END
+        });
+        group(kicksPage, 0, "Kicks (beta3g)", [&] {
+            settingOption(Item::none, "Kick chamber", "Changes the look of air kicks: the leg winds up with the knee drawn in, snaps out through its line and folds back as it recoils, and comes in faster. Off: the stiff leg, as beta3f. Default: on.",
+                   S(42), [&] { flagToggle("##kickchamber", tabOnly_.kickChamber); });
+            settingOption(Item::none, "Kick lean", "Air kicks lean your upper body into the kick. Off: the legs only. Default: on.",
+                   S(42), [&] { flagToggle("##kicklean", tabOnly_.kickLean); });
+            settingOption(Item::none, "Kick momentum", "Air kicks' legs carry your travel and swing in a little softer. Off: as beta3f. Default: on.",
+                   S(42), [&] { flagToggle("##kickmomentum", tabOnly_.kickMomentum); });
+            // BETA3G LAUNCHER END
         });
         // NA HELP (beta polish M5): the same pages as the game's NA · HELP tab (na_help.hpp), a card per topic.
         const int helpPage = static_cast<int>(Category::help);

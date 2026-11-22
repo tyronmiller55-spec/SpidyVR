@@ -12231,8 +12231,25 @@ DWORD WINAPI run(void*) {
                             if (airState != 0 && airGesture != air_kick::Gesture::none && values.kicks &&
                                 !airOnGround) {
                                 layerIn.kick = true;
-                                layerIn.kickPose = air_kick::legPose(airGesture, airSide, airAngle, airSeconds);
+                                // KICK CHAMBER (beta3g, kick_chamber): wind-up, snap, recoil; the quick blend in.
+                                layerIn.kickPose =
+                                    values.kickChamber
+                                        ? air_kick::shapedLegPose(airGesture, airSide, airAngle, airSeconds)
+                                        : air_kick::legPose(airGesture, airSide, airAngle, airSeconds);
+                                layerIn.kickQuick = values.kickChamber;
                                 layerIn.kickSpin = static_cast<float>(values.kickSpinPct) / 100.f;
+                                // KICK MOMENTUM (beta3g, kick_momentum): the legs carry the body's travel.
+                                if (values.kickMomentum && finite(swingState.velocity))
+                                    layerIn.kickPose = air_kick::momentumPose(
+                                        layerIn.kickPose, dot(swingState.velocity, fwd),
+                                        dot(swingState.velocity, leftB),
+                                        air_kick::amountAt(airGesture, airSeconds));
+                                // KICK LEAN (beta3g, kick_lean): the upper body into the kick.
+                                if (values.kickLean) {
+                                    const auto lean = air_kick::kickLean(airGesture, airSide, airAngle, airSeconds);
+                                    layerIn.kickLeanOn = true;
+                                    layerIn.kickTorso = {lean.pitch, lean.roll, lean.yaw};
+                                }
                             }
                             leg_layers::Settings layerSet;
                             layerSet.passivePct = values.passiveLegsPct;
@@ -12269,8 +12286,8 @@ DWORD WINAPI run(void*) {
                             auto params = leg_control::fromPercent(values.legStiffnessPct, values.legDampingPct,
                                                                    values.legCouplingPct);
                             params.coupling *= layered.couplingScale;
-                            if (layered.layer == leg_layers::Layer::kick)
-                                params.stickSeconds = std::min(params.stickSeconds, .04f); // a kick is quick
+                            if (layered.layer == leg_layers::Layer::kick) // a kick is quick (KICK MOMENTUM: the legs'
+                                params.stickSeconds = std::min(params.stickSeconds, values.kickMomentum ? .07f : .04f); // swing carries in)
                             if (layered.easing) {
                                 params.frequencyHz = std::max(params.frequencyHz, 2.5f);
                                 params.dampingRatio = 1.f;

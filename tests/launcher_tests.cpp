@@ -814,7 +814,10 @@ int main() {
                 continue;
             if (key == "swing_rope_stable" ||
                 key == "swing_rope_load_taut" ||
-                key == "web_wrap_keep")
+                key == "web_wrap_keep" ||
+                key == "kick_lean" ||
+                key == "kick_momentum" ||
+                key == "kick_chamber")
                 continue;
             if (key == "swing_rope_weight_pct")
                 continue;

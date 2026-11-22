@@ -92,6 +92,9 @@ inline constexpr Legs starfishPose{{{.1f, .65f, .1f}, {.1f, -.65f, .1f}}};
 struct Torso {
     float pitch = 0, roll = 0, yaw = 0;
 };
+inline float torsoClamp(float a) {
+    return std::isfinite(a) ? std::clamp(a, -.7f, .7f) : 0.f;
+}
 inline constexpr Torso tuckTorso{.55f, 0, 0}, diveTorso{-.25f, 0, 0}, superheroTorso{-.2f, 0, .15f},
                        starfishTorso{-.18f, 0, 0};
 inline Torso airPoseTorso(AirPose p, int heroSide = 0) {
@@ -285,6 +288,13 @@ struct Input {
     bool kick = false;
     Legs kickPose = leg_control::centrePose;
     float kickSpin = .3f;
+    // KICK LEAN (beta3g, kick_lean; air_kick::kickLean): the kick's upper body on the torso channel while the
+    // kick layer runs. Off: the torso stays the solve's during a kick, as before.
+    bool kickLeanOn = false;
+    Torso kickTorso{};
+    // KICK CHAMBER (beta3g, kick_chamber): the kick layer comes in over 60 ms (0.2 s before: a 0.16 s kick was
+    // about 80% shown at its fullest) - the pose itself carries the wind-up and the recoil.
+    bool kickQuick = false;
 };
 struct Output {
     Layer layer = Layer::off;
@@ -398,6 +408,10 @@ class Mixer {
         out.torsoOn = layer == Layer::autoPose && poseMax > .001f;
         if (!out.torsoOn)
             out.torso = {};
+        if (layer == Layer::kick && in.kickLeanOn) {
+            out.torsoOn = true;
+            out.torso = {torsoClamp(in.kickTorso.pitch), torsoClamp(in.kickTorso.roll), torsoClamp(in.kickTorso.yaw)};
+        }
         out.layer = layer;
         out.layerChanged = layer != layer_;
         layer_ = layer;
@@ -448,7 +462,7 @@ class Mixer {
         if (layer != Layer::flail)
             flailPhase_ = 0;
         // The shown amount eases at body_ik's airLegBlendSeconds pace (0.2 s full scale).
-        amount_ = approach(amount_, want, dt / .2f);
+        amount_ = approach(amount_, want, dt / (layer == Layer::kick && in.kickQuick ? .06f : .2f));
         out.amount = amount_;
         return out;
     }

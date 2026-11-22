@@ -911,6 +911,17 @@ struct Values {
     // releasing"; tether::Rope::reanchor): a web that bends round an edge or comes off one keeps its line as it
     // lies, cut at (or carried on to) the new end, instead of a fresh one laid. Off: laid anew, as beta3f.
     bool webWrapKeep = true;
+    // KICK LEAN (beta3g; air_kick::kickLean): an air kick leans the upper body into it on the torso channel.
+    // Off: the legs only, as beta3f.
+    bool kickLean = true;
+    // KICK MOMENTUM (beta3g; air_kick::momentumPose): an air kick's legs carry the body's travel and swing
+    // in over 70 ms rather than 40. Off: as beta3f.
+    bool kickMomentum = true;
+    // KICK CHAMBER (beta3g; the owner, Nov 22 t100u: "Kicks were okay, we need lots of animation work there, but
+    // they seem to fire"; air_kick::shapedLegPose): an air kick's leg winds up (the knee drawn up), snaps out
+    // through its line with a small overshoot and folds back as it recoils, and the kick's legs come in over
+    // 60 ms rather than 0.2 s. Off: the stiff leg swung out, as beta3f.
+    bool kickChamber = true;
     // BETA3 SETTINGS END
     // HERO ATTACK SOUND (beta polish A2; attack_sound, spidy_vr.ini only, no menu row): one of the game's sounds played
     // on Spidey as a punch is thrown or a kick starts (at most one a hand every 250 ms, hit_sound.hpp): the id's 32
