@@ -3232,6 +3232,26 @@ int main() {
         check(duct.update(false, frame, 0) == 0 && !duct.duct(), "the cap outlived the crawl");
         check(duct.update(true, frame, 0) == 0, "a new crawl began capped");
     });
+    test("POINT JUMP on the game's floor-crawl flag: refused only in a duct, not in fights, ducking or on rooftops", [] {
+        constexpr float frame = 1.f / 90;
+        // The beta3b log's refusals: the flag in a fight or a ground move, nothing over his feet.
+        FloorCrawlRoof fight;
+        for (int i = 0; i < 90; ++i)
+            fight.update(true, frame, 0);
+        check(!floorCrawlRefuses(true, fight), "a fight pose's floor flag refused the point jump");
+        // Ducking under a rooftop's beams 1.7 m up: no duct.
+        FloorCrawlRoof beams;
+        for (int i = 0; i < 90; ++i)
+            beams.update(true, frame, 1.7f);
+        check(!floorCrawlRefuses(true, beams), "a rooftop's beams refused the point jump");
+        // A duct's roof 1.2 m up: refused, as ground flips are, until the crawl ends.
+        FloorCrawlRoof duct;
+        duct.update(true, frame, 1.2f);
+        check(floorCrawlRefuses(true, duct), "a duct let the point jump through");
+        check(!floorCrawlRefuses(false, duct), "no floor flag, refused anyway");
+        duct.update(false, frame, 0);
+        check(!floorCrawlRefuses(true, duct), "a duct's refusal outlived its crawl");
+    });
     test("ground floor-flag bursts cannot acquire the vent camera or its height cap", [] {
         TestWorld open;
         open.enabled = false;

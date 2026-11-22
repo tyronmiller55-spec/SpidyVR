@@ -252,6 +252,13 @@ class FloorCrawlRoof {
     float held_{};
     bool duct_{};
 };
+// A move off the floor (the point jump since beta3f, ground flips since Nov 18)
+// is refused on the game's floor-crawl flag only in a duct: the flag also
+// lights for a hero ducking under anything low, in fights and in rooftop
+// parkour, where it is no reason to refuse him.
+inline bool floorCrawlRefuses(bool floorFlag, const FloorCrawlRoof& roof) {
+    return floorFlag && roof.duct();
+}
 // On the game's crawl the stick goes along the game camera's own look laid
 // onto the surface; where less than crawlLook of that look lies along the
 // surface (the camera faces it), along the camera's up laid onto it instead.

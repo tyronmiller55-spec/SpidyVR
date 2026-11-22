@@ -3169,9 +3169,17 @@ DWORD WINAPI run(void*) {
                         else if (values.webLines && lineState.phase == 2 && lineState.onLine)
                             blockedBy = "line";
                         else if (pjFresh && !pjGameWall &&
-                                 (swingState.wall == static_cast<uint32_t>(game_swing::Surface::game) ||
-                                  swingState.wall == static_cast<uint32_t>(game_swing::Surface::floor)))
+                                 swingState.wall == static_cast<uint32_t>(game_swing::Surface::game))
                             blockedBy = "game crawl";
+                        // The game's FLOOR crawl flag (beta3f; the owner, Nov 22 t96u): as ground flips since
+                        // Nov 18, a refusal only in a duct, a roof confirmed over him (FloorCrawlRoof). The
+                        // beta3b log's 5 "denied game crawl" were all this flag in fights and ground moves,
+                        // with no duct.
+                        else if (pjFresh &&
+                                 floorCrawlRefuses(swingState.wall ==
+                                                       static_cast<uint32_t>(game_swing::Surface::floor),
+                                                   floorRoof))
+                            blockedBy = "the game's crawl in a duct (a roof over him)";
                         else if (pjFresh && (swingState.takeoff || swingState.takeoffPhase))
                             blockedBy = "takeoff";
                         point_jump::Controller::Input gateIn;
@@ -3217,6 +3225,12 @@ DWORD WINAPI run(void*) {
                                              blockedBy ? blockedBy : point_jump::denyName(pointJumpGate.deny()));
                         }
                         pointJumpBothWas = both;
+                        if (chord.began && pjFresh &&
+                            swingState.wall == static_cast<uint32_t>(game_swing::Surface::floor) &&
+                            !floorRoof.duct())
+                            diag_log::write(
+                                "point jump: on the game's floor-crawl flag with no duct roof over him - "
+                                "allowed (beta3e refused it as \"game crawl\")");
                         if (chord.began) {
                             // The chord took the press: whatever A was doing ends unsent.
                             chargeJump.consume();
