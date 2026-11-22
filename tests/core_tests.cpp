@@ -10,6 +10,7 @@
 #include "spidy/handstand.hpp"
 #include "spidy/spherical_aim.hpp"
 #include "spidy/swing_line.hpp"
+#include "spidy/reel_out.hpp"
 #include "spidy/swing.hpp"
 #include "spidy/lab_world.hpp"
 #include "spidy/native_view.hpp"
@@ -8461,6 +8462,151 @@ int main() {
         check(held.webs()[0].attached, "web lost when the reel stopped");
         near(held.webs()[0].length, reeled);
         near(held.body().velocity.y, held.config().reelSpeed, .05f);
+    });
+    test("reel out: a double tap and hold pays the line out, a lone press or hold reels in, and off nothing changes", [] {
+        TestWorld w;
+        reel_out::Params on;
+        on.speed = 4.f;
+        // The second press, held, pays out at the speed; let go, the line stays as long as it got.
+        Swing s(inert());
+        s.reelOut(on);
+        s.reset({{0, 0, 0}, {}, false});
+        auto in = aimed();
+        in.hands[0].trigger = 0;
+        s.update(.01f, in, w);
+        check(s.webs()[0].attached, "no web");
+        const float start = s.webs()[0].length;
+        in.hands[0].trigger = 1;
+        for (int i = 0; i < 6; ++i)
+            s.update(.01f, in, w);
+        check(s.reeling(0) && !s.reelingOut(0), "the first press reels in, as always");
+        in.hands[0].trigger = 0;
+        for (int i = 0; i < 6; ++i)
+            s.update(.01f, in, w);
+        const float tapped = s.webs()[0].length;
+        check(tapped < start, "the tap took a little in");
+        in.hands[0].trigger = 1;
+        s.update(.01f, in, w);
+        check(s.reelingOut(0) && !s.reeling(0) && s.reelOuts() == 1, "the second press pays out");
+        for (int i = 0; i < 49; ++i)
+            s.update(.01f, in, w);
+        near(s.webs()[0].length - tapped, 4.f * .5f, .05f);
+        in.hands[0].trigger = 0;
+        s.update(.01f, in, w);
+        const float paid = s.webs()[0].length;
+        check(!s.reelingOut(0) && s.webs()[0].attached, "let go: no more, the web kept");
+        for (int i = 0; i < 20; ++i)
+            s.update(.01f, in, w);
+        check(s.webs()[0].length <= paid + 1e-3f, "nothing more pays out after the let-go");
+        // At the swing's longest it stops growing.
+        Swing far(inert());
+        reel_out::Params fast = on;
+        fast.speed = 15.f;
+        far.reelOut(fast);
+        far.reset({{0, 0, 0}, {}, false});
+        in = aimed();
+        in.hands[0].trigger = 0;
+        far.update(.01f, in, w);
+        for (const float t : {1.f, 0.f})
+            for (int i = 0; i < 5; ++i) {
+                in.hands[0].trigger = t;
+                far.update(.01f, in, w);
+            }
+        in.hands[0].trigger = 1;
+        for (int i = 0; i < 1200; ++i)
+            far.update(.01f, in, w);
+        check(far.webs()[0].length <= far.config().maxRange + 1e-3f, "past the swing's longest line");
+        // A lone press held is the reel, never a pay-out.
+        Swing one(inert());
+        one.reelOut(on);
+        one.reset({{0, 0, 0}, {}, false});
+        in = aimed();
+        in.hands[0].trigger = 0;
+        one.update(.01f, in, w);
+        const float before = one.webs()[0].length;
+        in.hands[0].trigger = 1;
+        for (int i = 0; i < 60; ++i)
+            one.update(.01f, in, w);
+        check(one.reeling(0) && !one.reelingOut(0) && one.webs()[0].length < before, "a hold reels in");
+        // Off (the swing's default until XR sends it): the second press reels in.
+        Swing off(inert());
+        off.reset({{0, 0, 0}, {}, false});
+        in = aimed();
+        in.hands[0].trigger = 0;
+        off.update(.01f, in, w);
+        for (const float t : {1.f, 0.f})
+            for (int i = 0; i < 5; ++i) {
+                in.hands[0].trigger = t;
+                off.update(.01f, in, w);
+            }
+        in.hands[0].trigger = 1;
+        for (int i = 0; i < 10; ++i)
+            off.update(.01f, in, w);
+        check(off.reeling(0) && !off.reelingOut(0), "off, the second press reels in");
+        // The grip still lets go while paying out.
+        in.hands[0].grip = 0;
+        s.update(.01f, in, w);
+        for (int i = 0; i < 3; ++i)
+            s.update(.01f, in, w);
+        check(!s.webs()[0].attached && !s.reelingOut(0), "the grip let go of the web");
+    });
+    test("reel out tap: the double tap and hold's state machine", [&] {
+        using namespace spidy::reel_out;
+        Params p;
+        const float dt = .01f;
+        Tap t;
+        auto run = [&](bool down, int steps, bool attached = true) {
+            bool out = false;
+            for (int i = 0; i < steps; ++i)
+                out = t.update(dt, down, attached, p);
+            return out;
+        };
+        check(!run(false, 5) && t.phase() == Tap::Phase::idle, "nothing pressed, nothing");
+        check(!run(true, 5) && t.phase() == Tap::Phase::first, "a first press is a reel");
+        check(!run(false, 5) && t.phase() == Tap::Phase::gap, "let go inside the window");
+        check(t.update(dt, true, true, p) && t.began() && t.count() == 1, "the second press pays out");
+        check(run(true, 100) && !t.began(), "held, it keeps paying out");
+        check(!run(false, 1) && t.phase() == Tap::Phase::idle, "let go, it stops");
+        // A first press held past the window is an ordinary reel: the next press is a first one.
+        check(!run(true, 40) && t.phase() == Tap::Phase::holding, "a long press is the reel");
+        check(!run(false, 1) && t.phase() == Tap::Phase::idle, "and ends with its let-go");
+        // The second press too late is a new first press.
+        run(true, 5);
+        run(false, 40);
+        check(t.phase() == Tap::Phase::idle, "the window ran out");
+        run(true, 5);
+        run(false, 30);
+        check(!t.update(dt, true, true, p) && t.phase() == Tap::Phase::first, "too late: a new first press");
+        run(false, 40);
+        // The web going ends it at once; a press still down when a web comes waits for its let-go.
+        run(true, 1);
+        run(false, 3);
+        check(t.update(dt, true, true, p), "out again");
+        check(!t.update(dt, true, false, p) && t.phase() == Tap::Phase::holding, "the web went: no pay-out");
+        check(!run(true, 3) && t.phase() == Tap::Phase::holding, "a press held through a new web is no tap");
+        run(false, 1);
+        // Off: nothing.
+        Params off = p;
+        off.enabled = false;
+        t.update(dt, true, true, off);
+        t.update(dt, false, true, off);
+        check(!t.update(dt, true, true, off), "off, no pay-out");
+        // The window is the setting's (clamped 150 to 600 ms).
+        Params wide = p;
+        wide.tapSeconds = .5f;
+        Tap w2;
+        for (int i = 0; i < 5; ++i)
+            w2.update(dt, true, true, wide);
+        for (int i = 0; i < 40; ++i)
+            w2.update(dt, false, true, wide);
+        check(w2.update(dt, true, true, wide), "a 500 ms window takes a 450 ms second press");
+        // The press reads as the reel does: down past 0.65, up under 0.35.
+        check(!pressed(.6f, false) && pressed(.7f, false) && pressed(.4f, true) && !pressed(.3f, true) &&
+                  !pressed(NAN, true),
+              "the press's hysteresis");
+        near(paidOut(10.f, 4.f, .5f, 100.f), 12.f);
+        near(paidOut(99.f, 4.f, .5f, 100.f), 100.f);
+        near(paidOut(10.f, 4.f, -1.f, 100.f), 10.f);
     });
     test("two reeling webs carry the body together and it keeps that speed on release", [] {
         // Each rope shortens at the reel speed; at an angle they move the body
@@ -25627,6 +25773,9 @@ int main() {
                   "showtime_auto_punch=0\n"
                   "showtime_auto_punch_every=1\n"
                   "showtime_auto_punch_cooldown_ms=0\n"
+                  "swing_reel_out=1\n"
+                  "swing_reel_out_tap_ms=300\n"
+                  "swing_reel_out_speed=400\n"
                   "log_level=1\n"
                   "movement_defaults=20\n",
               "the defaults' text");
@@ -34299,6 +34448,7 @@ int main() {
         check(d.swingRopePhysics && d.swingRopePhysicsPct == 100, "ROPE PHYSICS: on, 100%");
         check(!d.showtimeAutoPunch && d.showtimeAutoPunchEvery == 1 && d.showtimeAutoPunchCooldownMs == 0,
               "AUTO: PUNCHES: off, every one, no cooldown");
+        check(d.swingReelOut && d.swingReelOutTapMs == 300 && d.swingReelOutSpeed == 400, "REEL OUT: on, 300 ms, 400 cm/s");
         // BETA3 DEFAULT CHECKS END
         Values off{};
         off.handoffHeadFirst = false;
@@ -34313,6 +34463,7 @@ int main() {
         off.webConnectHandoff = false;
         off.swingRopePhysics = false;
         off.showtimeAutoPunch = true; // (off by default: the other way)
+        off.swingReelOut = false;
         // BETA3 OFF END
         std::string base = tabOnlyText(off);
         base = base.substr(0, base.find("movement_defaults="));
@@ -34349,6 +34500,7 @@ int main() {
         check(!punches.showtimeAutoPunch, "revision 20 did not turn AUTO: PUNCHES off");
         check(!punches.showtimeAutoStrike, "revision 20 moved a saved AUTO: STRIKES");
         check(!migrated.showtimeAutoPunch, "an older file kept AUTO: PUNCHES on");
+        check(punches.swingReelOut, "a revision 19 file did not get REEL OUT");
         // BETA3 MIGRATED END
         const std::string chosen = base + "movement_defaults=20\n";
         const Values kept = withMovementDefaults(withTabOnly({}, chosen), chosen);
@@ -34364,6 +34516,7 @@ int main() {
         check(!kept.webConnectHandoff, "CONNECT HANDOFF: a 0 chosen after revision 19 moved");
         check(!kept.swingRopePhysics, "ROPE PHYSICS: a 0 chosen after revision 19 moved");
         check(kept.showtimeAutoPunch, "AUTO: PUNCHES: a 1 chosen after revision 20 moved");
+        check(!kept.swingReelOut, "REEL OUT: a 0 chosen after revision 20 moved");
         // BETA3 KEPT END
     });
     test("showtime auto: a Y+B finisher's scene (no play, the tracking rig off) lets the camera out", [&] {

@@ -3340,6 +3340,17 @@ void App::options(ImVec2 origin, ImVec2 size) {
                    S(150), [&] { fineSlider("##swingropephysicspct", tabOnly_.swingRopePhysicsPct, 0, 300, 10, "%d%%", "Off"); });
             // BETA3C LAUNCHER END
         });
+        // SWINGING (0.8.7-na-beta3d): reel out and the air's physics on a swing, each on by default for testing. The
+        // same spidy_vr.ini keys as the game's NA tabs.
+        group(shootersPage, 1, "Swinging (beta3d)", [&] {
+            settingOption(Item::none, "Reel out", "With a web attached, double tap that hand's reel trigger and hold: the line pays out until you let go (the first tap reels in a little, as always). Default: on.",
+                   S(42), [&] { flagToggle("##swingreelout", tabOnly_.swingReelOut); });
+            settingOption(Item::none, "Reel out: double tap", "How quickly the second press must follow the first. Default: 300 ms.",
+                   S(150), [&] { fineSlider("##swingreelouttap", tabOnly_.swingReelOutTapMs, 150, 600, 10, "%d ms", nullptr); });
+            settingOption(Item::none, "Reel out: speed", "How fast the line pays out while held (the reel takes in at 8 m/s). Default: 400 cm/s.",
+                   S(150), [&] { fineSlider("##swingreeloutspeed", tabOnly_.swingReelOutSpeed, 50, 1500, 25, "%d cm/s", nullptr); });
+            // BETA3D LAUNCHER END
+        });
         // NA HELP (beta polish M5): the same pages as the game's NA · HELP tab (na_help.hpp), a card per topic.
         const int helpPage = static_cast<int>(Category::help);
         static const std::vector<std::pair<const char*, std::string>> helpTopics = [] {

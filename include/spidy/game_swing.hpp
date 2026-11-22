@@ -196,7 +196,8 @@ constexpr uint32_t commandBytesV2 = 168, commandBytesV3 = 184, commandBytesV4 = 
 // not shoot it (Web::taken; it stays when the other hand lets go); 8 this
 // hand reels it in now (Swing::reeling; its trigger, reel_haptics.hpp); 16
 // this hand climbs the shared strand hand over hand (Swing::ropeClimbing,
-// beta3c: its rope changes only by the pulls).
+// beta3c: its rope changes only by the pulls); 32 this hand pays its line out
+// now (Swing::reelingOut, beta3d REEL OUT: a double tap and hold on its reel).
 struct WebState {
     uint32_t attached{}, bodyId{};
     Vec3 anchor{};
@@ -769,6 +770,17 @@ struct RopePullAsk {
     uint32_t reserved[3]{};
 };
 static_assert(sizeof(RopePullAsk) == 48);
+// Side channel from XR (REEL OUT, beta3d, swing_reel_out; reel_out.hpp): sent every frame to SpidyReelOut; an
+// ask older than 200 ms is off. `flags` bit 0: on. `tapMs`: the double tap's window (150 to 600); `speed`:
+// the pay-out, m/s (0.5 to 15). Not a Command or Settings field: an older module has no export and XR then
+// sends none (no reel out, the swing as before).
+struct ReelOutAsk {
+    uint32_t magic = 0x5357524f, version = 1, bytes = sizeof(ReelOutAsk), serial{};
+    uint32_t flags{}, tapMs = 300;
+    float speed = 4.f;
+    uint32_t reserved{};
+};
+static_assert(sizeof(ReelOutAsk) == 32);
 // SpidyJumpPullLive: what the pull did. `events` counts up LAST (a pick began, changed or ended); `active` is 1 while a
 // pick is in force; `target` his record, `weight` 0..1, `angleDeg` off the picking line, `distance` to him (m), `added` what
 // this jump has had added (m/s), `byStick` whether the stick's cone picked him. `pulls` counts jumps that were pulled.

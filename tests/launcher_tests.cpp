@@ -808,6 +808,12 @@ int main() {
                 continue;
             if (key == "swing_line_full_length")
                 continue;
+            if (key == "swing_reel_out_speed")
+                continue;
+            if (key == "swing_reel_out_tap_ms")
+                continue;
+            if (key == "swing_reel_out")
+                continue;
             if (key == "showtime_auto_punch_cooldown_ms")
                 continue;
             if (key == "showtime_auto_punch_every")

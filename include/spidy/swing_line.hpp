@@ -37,6 +37,9 @@ struct Input {
     float ropeLength{}; // the swing's rope (game_swing::WebState::length)
     bool reeling{};     // that hand reels it in now (WebState::attached bit 8)
     bool grounded{};    // the swing pays out on the ground (Swing::payOut)
+    // REEL OUT (beta3d, swing_reel_out): that hand pays its line out now (WebState::attached bit 32): the
+    // drawn line grows one-for-one with the rope, as the reel shortens it.
+    bool reelingOut{};
     // WRAP (beta3c, web_wrap_slack): the web's run past the free part, metres (wrist to the first edge is the
     // free part; the edges to where it sticks are this). It counts in the line's length; the slack hangs on
     // the free part. 0: a straight web.
@@ -78,8 +81,8 @@ class DrawnLength {
                 drawn_ += d; // one-for-one with the reel
                 reeled_ -= d;
                 c.reeled = true;
-            } else if (in.grounded && d > 0) {
-                drawn_ += d; // the ground's payout
+            } else if ((in.grounded || in.reelingOut) && d > 0) {
+                drawn_ += d; // the ground's payout, or REEL OUT's
             }
             rope_ = in.ropeLength;
         }

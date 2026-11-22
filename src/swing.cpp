@@ -904,6 +904,10 @@ void Swing::reset(Body b) {
     kickKeep_ = -1;
     pullOn_ = false;
     ropePull_ = {};
+    for (auto& hand : hands_) {
+        hand.reelingOut = hand.reelDown = false;
+        hand.reelTap.reset();
+    }
     pulled_ = pullAir_ = 0;
     pointJumpQueued_ = false;
     pointJumpVelocity_ = {};
@@ -945,6 +949,7 @@ void Swing::release(int i, EventKind reason) {
     hands_[i].zipUsed = false;
     hands_[i].ropeClimbing = false;
     hands_[i].reeling = false;
+    hands_[i].reelingOut = false;
     hands_[i].pullDistance = hands_[i].pullTime = hands_[i].obstructed = hands_[i].winch = 0;
     hands_[i].slack = 0;
     hands_[i].passing = false;
@@ -1182,6 +1187,10 @@ void Swing::inputs(float dt, const Input& in, const WorldQueries& world) {
                     s.triggerReleased = true;
                 s.reeling = s.triggerReleased && h.trigger > .65f;
             }
+            // REEL OUT: a hand not seen pays nothing out (its press waits to be let go of).
+            s.reelDown = keep && reel_out::pressed(h.trigger, s.reelDown);
+            s.reelingOut = false;
+            s.reelTap.update(dt, s.reelDown, false, reelOut_);
             if (!keep) // let go of by its button, or by the hand's loss
                 release(i, h.lost ? EventKind::Release : EventKind::TrackingLost);
             s.sample = false;
@@ -1289,10 +1298,15 @@ void Swing::inputs(float dt, const Input& in, const WorldQueries& world) {
                 events_.push_back({EventKind::Miss, i, .15f});
             }
         }
+        // REEL OUT (reel_out.hpp, beta3d): the second press of a double tap, held, pays the line out instead
+        // of reeling it in (not while this hand climbs a shared strand hand over hand).
+        s.reelDown = reel_out::pressed(h.trigger, s.reelDown);
+        s.reelingOut =
+            s.reelTap.update(dt, s.reelDown, w.ready() && !w.catching && !s.ropeClimbing, reelOut_);
         if (w.ready()) {
             if (h.trigger < .35f)
                 s.triggerReleased = true;
-            const bool reel = s.triggerReleased && h.trigger > .65f;
+            const bool reel = s.triggerReleased && h.trigger > .65f && !s.reelingOut;
             if (reel && !s.reeling) {
                 // A yank/forward swing leaves slack. Starting a winch should
                 // engage at the current distance, not spend seconds winding in
@@ -1946,11 +1960,15 @@ void Swing::step(float dt, const Input& in, const WorldQueries& world, const Wor
         hands_[i].winch = (webs_[i].length - lengths[i]) / dt;
         webs_[i].length = lengths[i];
     }
+    // REEL OUT: that hand's line longer by the pay-out's speed, to the swing's longest.
+    for (int i = 0; i < 2; ++i)
+        if (hands_[i].reelingOut && webs_[i].ready() && !webs_[i].catching)
+            webs_[i].length = reel_out::paidOut(webs_[i].length, reelOut_.speed, dt, config_.maxRange);
     // MANUAL SWING KICK: each ready web's rope toward the aim's distance from its anchor.
     if (kick_.on && !body_.grounded && !wall_.on)
         for (int i = 0; i < 2; ++i) {
             auto& w = webs_[i];
-            if (!w.ready() || w.catching || hands_[i].ropeClimbing)
+            if (!w.ready() || w.catching || hands_[i].ropeClimbing || hands_[i].reelingOut)
                 continue;
             const float longer = swing_kick::ropeLength(kickStart_[i], w.length, length(hold(i) - kick_.aim),
                                                         kick_.weight, dt, config_.minRope, kickConfig_);
@@ -1970,7 +1988,8 @@ void Swing::step(float dt, const Input& in, const WorldQueries& world, const Wor
             auto& w = webs_[i];
             const Vec3 out = body_.position - hold(i);
             const float span = length(out);
-            if (!bearing[i] || w.catching || span < 1e-5f || kick_.on)
+            // (REEL OUT: a line paying out is not taken in again; the body falls or swings onto it.)
+            if (!bearing[i] || w.catching || span < 1e-5f || kick_.on || hands_[i].reelingOut)
                 continue;
             const float pulled = std::max(0.f, dot(hands_[i].rate, out / span)) * dt;
             const float slackest = span + hands_[i].slack + pulled;

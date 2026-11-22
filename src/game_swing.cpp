@@ -376,6 +376,10 @@ float pullPeak{};
 SRWLOCK ropePullLock = SRWLOCK_INIT;
 RopePullAsk ropePullAsk{};
 ULONGLONG ropePullAt{};
+// REEL OUT (SpidyReelOut, beta3d): XR's latest ask (every frame) and when it came.
+SRWLOCK reelOutLock = SRWLOCK_INIT;
+ReelOutAsk reelOutAsk{};
+ULONGLONG reelOutAt{};
 // GRIP ACROSS THE GAME (SpidySwingGrip, grip.hpp): the latest settings (the swing's step applies them).
 SRWLOCK gripLock = SRWLOCK_INIT;
 GripAsk gripAsk{};
@@ -710,7 +714,8 @@ void idleRopeInput(const Command& c, const Input& in, const native_rays::QueryCo
         d.webs[i] = {!w.attached ? 0u
                                  : 1u | (solver.shared() ? 2u : 0u) | (w.taken ? 4u : 0u) |
                                        (solver.reeling(static_cast<int>(i)) ? 8u : 0u) |
-                                       (solver.ropeClimbing(static_cast<int>(i)) ? 16u : 0u),
+                                       (solver.ropeClimbing(static_cast<int>(i)) ? 16u : 0u) |
+                                       (solver.reelingOut(static_cast<int>(i)) ? 32u : 0u),
                      static_cast<uint32_t>(w.surface), w.anchor, w.length, w.tension};
     }
     if (elapsed > 0)
@@ -1835,6 +1840,20 @@ void visit(const native_rays::QueryContext& world) {
             }
             solver.ropePull(accel);
         }
+        // REEL OUT (beta3d): the double tap and hold's settings, while XR sends them (200 ms at most old).
+        {
+            AcquireSRWLockShared(&reelOutLock);
+            const ReelOutAsk ro = reelOutAsk;
+            const bool fresh = GetTickCount64() - reelOutAt <= 200;
+            ReleaseSRWLockShared(&reelOutLock);
+            reel_out::Params rp;
+            rp.enabled = fresh && (ro.flags & 1u);
+            rp.tapSeconds = static_cast<float>(ro.tapMs) / 1000.f;
+            rp.speed = ro.speed;
+            const auto& now = solver.reelOutParams();
+            if (now.enabled != rp.enabled || now.tapSeconds != rp.tapSeconds || now.speed != rp.speed)
+                solver.reelOut(rp);
+        }
         volatile JumpPullLive& live = SpidyJumpPullLive;
         const uint64_t target = pick.valid ? pick.id : 0;
         const float added = solver.jumpPullAdded();
@@ -2390,7 +2409,8 @@ void visit(const native_rays::QueryContext& world) {
         d.webs[i] = {!w.attached ? 0u
                                  : 1u | (solver.shared() ? 2u : 0u) | (w.taken ? 4u : 0u) |
                                        (solver.reeling(static_cast<int>(i)) ? 8u : 0u) |
-                                       (solver.ropeClimbing(static_cast<int>(i)) ? 16u : 0u),
+                                       (solver.ropeClimbing(static_cast<int>(i)) ? 16u : 0u) |
+                                       (solver.reelingOut(static_cast<int>(i)) ? 32u : 0u),
                      static_cast<uint32_t>(w.surface), w.anchor, w.length, w.tension};
     }
     InterlockedIncrement64(&d.sequence);
@@ -2709,6 +2729,24 @@ extern "C" __declspec(dllexport) DWORD WINAPI SpidyRopePull(void* input) {
     ropePullAsk = a;
     ropePullAt = GetTickCount64();
     ReleaseSRWLockExclusive(&ropePullLock);
+    return 0;
+}
+// REEL OUT (beta3d): XR's ask, every frame. 2001: not a ReelOutAsk; 1004: the swing has not started; 0 taken.
+extern "C" __declspec(dllexport) DWORD WINAPI SpidyReelOut(void* input) {
+    ReelOutAsk a;
+    if (!input || !copy(&a, input, sizeof(a)) || a.magic != 0x5357524f || a.version != 1 ||
+        a.bytes != sizeof(a) || (a.flags & ~1u) || a.tapMs < 150 || a.tapMs > 600 ||
+        !std::isfinite(a.speed) || a.speed < .5f || a.speed > 15.f)
+        return 2001;
+    AcquireSRWLockShared(&lifecycle);
+    const bool running = started;
+    ReleaseSRWLockShared(&lifecycle);
+    if (!running)
+        return 1004;
+    AcquireSRWLockExclusive(&reelOutLock);
+    reelOutAsk = a;
+    reelOutAt = GetTickCount64();
+    ReleaseSRWLockExclusive(&reelOutLock);
     return 0;
 }
 // GRIP ACROSS THE GAME (grip.hpp): the VR worker's settings. 2001: not a GripAsk; 1004: the swing has not

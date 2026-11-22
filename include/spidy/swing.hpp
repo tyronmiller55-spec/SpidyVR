@@ -3,6 +3,7 @@
 #include "hitch_guard.hpp"
 #include "jump_pull.hpp"
 #include "math.hpp"
+#include "reel_out.hpp"
 #include "swing_kick.hpp"
 #include "web_landing.hpp"
 #include <algorithm>
@@ -890,6 +891,27 @@ class Swing {
     Vec3 ropePullApplied() const {
         return ropePull_;
     }
+    // REEL OUT (reel_out.hpp, beta3d, swing_reel_out): the double tap and hold on a hand's reel control pays
+    // its line out. Off (the default here, until XR sends SpidyReelOut) nothing changes.
+    void reelOut(const reel_out::Params& p) {
+        reelOut_ = p;
+        if (!p.enabled)
+            for (auto& hand : hands_) {
+                hand.reelingOut = false;
+                hand.reelTap.reset();
+            }
+    }
+    const reel_out::Params& reelOutParams() const {
+        return reelOut_;
+    }
+    // That hand pays its line out now.
+    bool reelingOut(int hand) const {
+        return hand >= 0 && hand < 2 && webs_[hand].attached && hands_[hand].reelingOut;
+    }
+    // Pay-outs begun so far (both hands).
+    uint32_t reelOuts() const {
+        return hands_[0].reelTap.count() + hands_[1].reelTap.count();
+    }
     // The player kept `keep` of his velocity from a kick's blow, on the next step.
     void kickRecoil(float keep) {
         if (std::isfinite(keep) && keep >= 0 && keep <= 1)
@@ -983,6 +1005,9 @@ class Swing {
         // press that sets it, so a lost web never re-fires while the grip stays held.
         bool held{}, sample{}, zipUsed{}, triggerReleased{}, reeling{};
         bool ropeClimbing{};
+        // REEL OUT: the reel control's press (reel_out::pressed), its double tap, and paying out now.
+        bool reelDown{}, reelingOut{};
+        reel_out::Tap reelTap{};
         Vec3 previous{};
         float pullDistance{}, pullTime{}, obstructed{};
         float winch{}; // how fast this hand's rope shortened in the last step
@@ -1074,6 +1099,7 @@ class Swing {
     // JUMP PULL: the pick in force, the speed this jump has had added, and how long it has been in the air.
     bool pullOn_{};
     Vec3 ropePull_{};
+    reel_out::Params reelOut_{false};
     jump_pull::Config pullConfig_{};
     Vec3 pullAim_{};
     float pullWeight_{}, pulled_{}, pullAir_{};

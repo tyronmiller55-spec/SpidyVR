@@ -727,6 +727,9 @@ BridgeCall jumpPullCall{};
 // ROPE PHYSICS ON THE SWING (beta3c): the swing lines' pull, sent every frame while on (SpidyRopePull); none
 // in an older module (the swing as before).
 BridgeCall ropePullCall{};
+// REEL OUT (beta3d): the double tap and hold's settings, sent every frame (SpidyReelOut); none in an older
+// module (no reel out).
+BridgeCall reelOutCall{};
 const game_swing::JumpPullLive* jumpPullLive{};
 // AIR KICKS' settings and gestures for the swing (SpidyAirKick), and its account (SpidyAirKickLive); none in an
 // older module (no air kicks).
@@ -2126,6 +2129,12 @@ DWORD WINAPI run(void*) {
         uint32_t webTieCountSeen{}, webLineCountSeen{};
         uint32_t ropePullSerial{};
         bool ropePullWasOn{};
+        // REEL OUT (beta3d): the ask's serial, whether the swing took the last one, each hand paying out last
+        // frame and the rope's length when it began, and the pay-outs so far.
+        uint32_t reelOutSerial{};
+        bool reelOutTaken{}, reelOutWas[2]{};
+        float reelOutFrom[2]{};
+        uint32_t reelOutCount{};
         // Which of the game's two ropes draws which hand's web (one web in
         // both hands has one rope), and when a free hand last came onto the
         // other hand's web (a tick says a press there takes hold of it).
@@ -7121,6 +7130,45 @@ DWORD WINAPI run(void*) {
                                             frame.predictedDisplayTime);
                         }
                         zipBefore = swingState.zips;
+                        // REEL OUT (swing_reel_out, beta3d; reel_out.hpp): the settings to the swing every
+                        // frame (SpidyReelOut; stale after 200 ms: off), and each hand's pay-out (WebState
+                        // bit 32) in the log, with a light tick as it begins.
+                        if (reelOutCall) {
+                            game_swing::ReelOutAsk ask;
+                            ask.serial = ++reelOutSerial;
+                            ask.flags = values.swingReelOut ? 1u : 0u;
+                            ask.tapMs = static_cast<uint32_t>(std::clamp(values.swingReelOutTapMs, 150, 600));
+                            ask.speed =
+                                static_cast<float>(std::clamp(values.swingReelOutSpeed, 50, 1500)) / 100.f;
+                            const bool taken = reelOutCall(&ask) == 0;
+                            if (taken != reelOutTaken)
+                                diag_log::writef("reel out: %s (double tap within %u ms, then %.1f m/s)",
+                                                 !taken                ? "the swing took no settings"
+                                                 : values.swingReelOut ? "on"
+                                                                       : "off",
+                                                 ask.tapMs, ask.speed);
+                            reelOutTaken = taken;
+                        }
+                        for (unsigned i = 0; i < 2; ++i) {
+                            const bool out = swingState.status && (swingState.webs[i].attached & 1u) &&
+                                             (swingState.webs[i].attached & 32u);
+                            const float rope = swingState.webs[i].length;
+                            if (out && !reelOutWas[i]) {
+                                reelOutFrom[i] = rope;
+                                ++reelOutCount;
+                                runtime.haptic(i, .25f, .03f);
+                                diag_log::writef("reel out: %s hand paying out from %.1f m, #%u",
+                                                 i ? "right" : "left", rope, reelOutCount);
+                            } else if (!out && reelOutWas[i]) {
+                                diag_log::writef(
+                                    "reel out: %s hand stopped (%s), %.1f m paid out", i ? "right" : "left",
+                                    (swingState.webs[i].attached & 1u) ? "let go of" : "the web went",
+                                    (swingState.webs[i].attached & 1u) && std::isfinite(rope)
+                                        ? std::max(0.f, rope - reelOutFrom[i])
+                                        : 0.f);
+                            }
+                            reelOutWas[i] = out;
+                        }
                         if (zipHands) {
                             // On the body toward where the zipped webs pull it.
                             Vec3 toward{};
@@ -8084,6 +8132,7 @@ DWORD WINAPI run(void*) {
                                     sl.key = hand.attachedAt;
                                     sl.ropeLength = web.length;
                                     sl.reeling = (web.attached & 8u) != 0 || climbing;
+                                    sl.reelingOut = (web.attached & 32u) != 0; // REEL OUT (beta3d)
                                     sl.grounded = swingState.grounded != 0;
                                     sl.beyond = beyond;
                                     sl.most = std::max(room, 0);
@@ -14613,6 +14662,7 @@ extern "C" __declspec(dllexport) DWORD WINAPI SpidyXrStart(void* input) {
         swingScanCost = nullptr; // an older module has none: no "punch scan:" line
     jumpPullCall = reinterpret_cast<BridgeCall>(GetProcAddress(rays, "SpidyJumpPull"));
     ropePullCall = reinterpret_cast<BridgeCall>(GetProcAddress(rays, "SpidyRopePull"));
+    reelOutCall = reinterpret_cast<BridgeCall>(GetProcAddress(rays, "SpidyReelOut"));
     jumpPullLive = reinterpret_cast<const game_swing::JumpPullLive*>(GetProcAddress(rays, "SpidyJumpPullLive"));
     if (const game_swing::JumpPullLive expected;
         jumpPullLive && (jumpPullLive->magic != expected.magic || jumpPullLive->version != expected.version ||

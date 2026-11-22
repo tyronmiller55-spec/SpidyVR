@@ -1328,6 +1328,8 @@ Values sanitized(Values v) {
     v.handstandGraceAfterMs = std::clamp(v.handstandGraceAfterMs, 100, 1000);
     v.handstandGraceBeforeMs = std::clamp(v.handstandGraceBeforeMs, 0, 1000);
     v.handoffPlaceCm = std::clamp(v.handoffPlaceCm, 0, 2000);
+    v.swingReelOutSpeed = std::clamp(v.swingReelOutSpeed, 50, 1500);
+    v.swingReelOutTapMs = std::clamp(v.swingReelOutTapMs, 150, 600);
     v.showtimeAutoPunchCooldownMs = std::clamp(v.showtimeAutoPunchCooldownMs, 0, 60000);
     v.showtimeAutoPunchEvery = std::clamp(v.showtimeAutoPunchEvery, 1, 10);
     v.swingRopePhysicsPct = std::clamp(v.swingRopePhysicsPct, 0, 300);
@@ -3298,6 +3300,9 @@ constexpr TabOnly tabOnly[] = {
     {"showtime_auto_punch", &Values::showtimeAutoPunch, nullptr},
     {"showtime_auto_punch_every", nullptr, &Values::showtimeAutoPunchEvery},
     {"showtime_auto_punch_cooldown_ms", nullptr, &Values::showtimeAutoPunchCooldownMs},
+    {"swing_reel_out", &Values::swingReelOut, nullptr},
+    {"swing_reel_out_tap_ms", nullptr, &Values::swingReelOutTapMs},
+    {"swing_reel_out_speed", nullptr, &Values::swingReelOutSpeed},
     {"log_level", nullptr, &Values::logLevel},
     {"movement_defaults", nullptr, &Values::movementDefaults},
 };
@@ -3530,6 +3535,9 @@ Values withMovementDefaults(Values v, std::string_view text) {
         // remove that"): AUTO: PUNCHES, the new switch for SpidyVR's own manual punches, is off for everyone; AUTO:
         // STRIKES keeps its value and from now on means the game's animated web strike alone.
         v.showtimeAutoPunch = false;
+        // REEL OUT comes on once (t93u, a feel change, all features on for testing). A new key; a 0 chosen after
+        // this revision stays.
+        v.swingReelOut = true;
         // BETA3D MIGRATION END
     }
     v.movementDefaults = movementDefaultsRevision;
