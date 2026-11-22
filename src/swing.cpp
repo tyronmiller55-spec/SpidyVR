@@ -972,6 +972,7 @@ void Swing::reset(Body b) {
     airDodgeQueued_ = false;
     airDodgeVelocity_ = {};
     kickLungeQueued_ = false;
+    kickImpulseQueued_ = false;
     flingQueued_ = false;
     gripHands_ = {};
     gripHave_ = {};
@@ -1736,6 +1737,14 @@ void Swing::step(float dt, const Input& in, const WorldQueries& world, const Wor
         if (!body_.grounded && !wall_.on)
             body_.velocity = body_.velocity * kickKeep_;
         kickKeep_ = -1;
+    }
+    if (kickImpulseQueued_) {
+        // KICK REBOUND: off the enemy, after the recoil (in the air only).
+        if (!body_.grounded && !wall_.on) {
+            body_.velocity = limited(body_.velocity + kickImpulse_, config_.maxSpeed);
+            ++kickImpulses_;
+        }
+        kickImpulseQueued_ = false;
     }
     if (pointJumpQueued_) {
         // POINT JUMP: off the ground, a perch or Spidy's wall the way he looks

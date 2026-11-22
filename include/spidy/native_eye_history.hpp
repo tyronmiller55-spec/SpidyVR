@@ -46,6 +46,9 @@ struct NativeEyeFrame {
     // The zip's marker on a web line (0: none in view).
     Vec3 lineTarget{};
     uint32_t lineTargetId{};
+    // KICK TARGET RING (beta3g): the enemy a kick would take now (radius 0: none shown).
+    Vec3 kickTarget{};
+    float kickTargetRadius{};
     // What each hand's grip press would do (game_swing::AimKind none while
     // the aim markers are off).
     std::array<game_swing::Aim, 2> aims{};

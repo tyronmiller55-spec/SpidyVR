@@ -828,19 +828,25 @@ static_assert(sizeof(JumpPullLive) == 64);
 // probe_c0_skeleton.py). gazeCone is kick_gaze_cone_deg (25). Not a Command or Settings field and not
 // versioned with them (an older swing module has no SpidyAirKick export; XR then sends none and no air kick
 // happens). Version 2 (beta3f): flags bit 5, KICK LUNGE (kick_lunge), and `lungeCm` its reach past the leg's
-// (cm, 0 to 400; the field was version 1's reserved, 0).
+// (cm, 0 to 400; the field was version 1's reserved, 0). Version 3 (beta3g, 80 bytes): `more` bit 0 KICK
+// REBOUND (kick_rebound), bit 1 GROUND LUNGE (kick_ground_lunge), bit 2 KICK ROPE ASSIST (kick_rope_assist),
+// bit 3 KICK TARGET RING (kick_target_ring: the swing works out the enemy a kick would take every step, from
+// the latest ask's gaze - XR then sends one every frame while the legs are engaged); `groundSpeedCms` the
+// fastest a standing kick may start at (kick_ground_speed_cms, 100 to 1000; 300 was the fixed value).
 struct AirKickAsk {
-    uint32_t magic = 0x5357414b, version = 2, bytes = sizeof(AirKickAsk), serial{};
+    uint32_t magic = 0x5357414b, version = 3, bytes = sizeof(AirKickAsk), serial{};
     uint32_t flags{}, gesture{};
     int32_t side{};
     float gazeCone = 25.f;
     Vec3 eyeOffset{0, 1.6f, 0}, gaze{0, 0, -1};
     float angle{};
     uint32_t lungeCm{};
+    uint32_t more{}, groundSpeedCms = 300, pad3[2]{};
 };
-static_assert(sizeof(AirKickAsk) == 64);
+static_assert(sizeof(AirKickAsk) == 80);
 inline bool validAirKick(const AirKickAsk& a) {
-    return a.magic == 0x5357414b && a.version == 2 && a.bytes == sizeof(AirKickAsk) && !(a.flags & ~63u) &&
+    return a.magic == 0x5357414b && a.version == 3 && a.bytes == sizeof(AirKickAsk) && !(a.flags & ~63u) &&
+           !(a.more & ~15u) && a.groundSpeedCms >= 100 && a.groundSpeedCms <= 1000 &&
            a.lungeCm <= 400 && a.gesture <= 5 && a.side >= -1 && a.side <= 1 && std::isfinite(a.gazeCone) &&
            a.gazeCone >= 8.f && a.gazeCone <= 60.f && std::isfinite(a.angle) &&
            std::isfinite(a.eyeOffset.x) && std::isfinite(a.eyeOffset.y) && std::isfinite(a.eyeOffset.z) &&
@@ -853,7 +859,7 @@ inline bool validAirKick(const AirKickAsk& a) {
 // record), the foot's speed (real m/s) and the blow's strength (0..1), and for a refusal air_kick::Refusal.
 // `state` is the kick's Phase now (0 idle, 1 kicking, 2 recovering); `progress` 0..1 through the kick.
 struct AirKickLive {
-    uint32_t magic = 0x53574b4c, version = 4, bytes = sizeof(AirKickLive), state{};
+    uint32_t magic = 0x53574b4c, version = 5, bytes = sizeof(AirKickLive), state{};
     uint32_t gesture{}, zone{}, refusal{}, lastEvent{};
     int32_t side{};
     uint32_t asked{}, started{}, hits{}, misses{}, refused{}, flies{}, events{};
@@ -876,6 +882,12 @@ struct AirKickLive {
     float lungeSpeed{}, lungeGap{};
     uint32_t lunges{}, enemies{};
     float nearest{}, pad4{};
+    // Version 5 (beta3g). KICK TARGET RING: the enemy a kick would take now (0 none; air_kick::preview), his
+    // chest and radius (world, metres). The rebounds given (KICK REBOUND), the standing kicks that stepped
+    // in (GROUND LUNGE) and the steps the web's rope steered an air kick (KICK ROPE ASSIST).
+    uint64_t preview{};
+    float previewX{}, previewY{}, previewZ{}, previewRadius{};
+    uint32_t rebounds{}, groundLunges{}, ropeAssists{}, pad5{};
 };
 static_assert(sizeof(AirKickLive) % 8 == 0);
 // Side channel from XR (GRIP ACROSS THE GAME, grip.hpp): the settings, sent whenever they change and again

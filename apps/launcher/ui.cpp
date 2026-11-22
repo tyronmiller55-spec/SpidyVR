@@ -3392,12 +3392,22 @@ void App::options(ImVec2 origin, ImVec2 size) {
             // BETA3G ROPE LAUNCHER END
         });
         group(kicksPage, 0, "Kicks (beta3g)", [&] {
+            settingOption(Item::none, "Kick target ring", "With the legs engaged, a turning ring shows the enemy a kick would go for. Default: on.",
+                   S(42), [&] { flagToggle("##kicktargetring", tabOnly_.kickTargetRing); });
+            settingOption(Item::none, "Ground lunge", "Changes the feel: a standing kick at an enemy a step or two out of reach steps you in to land it. Off: as beta3f. Default: on.",
+                   S(42), [&] { flagToggle("##kickgroundlunge", tabOnly_.kickGroundLunge); });
             settingOption(Item::none, "Kick chamber", "Changes the look of air kicks: the leg winds up with the knee drawn in, snaps out through its line and folds back as it recoils, and comes in faster. Off: the stiff leg, as beta3f. Default: on.",
                    S(42), [&] { flagToggle("##kickchamber", tabOnly_.kickChamber); });
             settingOption(Item::none, "Kick lean", "Air kicks lean your upper body into the kick. Off: the legs only. Default: on.",
                    S(42), [&] { flagToggle("##kicklean", tabOnly_.kickLean); });
             settingOption(Item::none, "Kick momentum", "Air kicks' legs carry your travel and swing in a little softer. Off: as beta3f. Default: on.",
                    S(42), [&] { flagToggle("##kickmomentum", tabOnly_.kickMomentum); });
+            settingOption(Item::none, "Kick rebound", "Changes the feel: an air kick that lands springs you up and back off the enemy. Off: as beta3f. Default: on.",
+                   S(42), [&] { flagToggle("##kickrebound", tabOnly_.kickRebound); });
+            settingOption(Item::none, "Kick rope assist", "An air kick while on a web steers the swing at the enemy. Off: as beta3f. Default: on.",
+                   S(42), [&] { flagToggle("##kickropeassist", tabOnly_.kickRopeAssist); });
+            settingOption(Item::none, "Ground kick speed", "The fastest you may move and still start a standing kick. 300 was the old value. Default: 450 cm/s.",
+                   S(150), [&] { fineSlider("##kickgroundspeed", tabOnly_.kickGroundSpeedCms, 100, 1000, 10, "%d cm/s", "Slow"); });
             // BETA3G LAUNCHER END
         });
         // NA HELP (beta polish M5): the same pages as the game's NA · HELP tab (na_help.hpp), a card per topic.

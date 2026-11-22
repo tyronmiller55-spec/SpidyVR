@@ -896,6 +896,18 @@ class Swing {
     std::uint32_t kickLunges() const {
         return kickLunges_;
     }
+    // KICK REBOUND (air_kick.hpp, beta3g): a kick's blow in the air adds `change` (m/s) to his velocity on the next
+    // step, after the blow's recoil (kickRecoil): he springs off the enemy. In the air only (off the ground and
+    // off Spidy's wall); dropped there if he is on either.
+    void kickImpulse(Vec3 change) {
+        if (finite(change) && length(change) > .05f && length(change) < 20.f) {
+            kickImpulseQueued_ = true;
+            kickImpulse_ = change;
+        }
+    }
+    std::uint32_t kickImpulses() const {
+        return kickImpulses_;
+    }
     // MANUAL SWING KICK (swing_kick.hpp): the assist for the steps to come, set again every native step
     // (off by itself when not). While on, in the air, each ready web's length moves toward the aim's
     // distance from its anchor (at most ropeMetres from its length when the assist began, ropeRate m/s)
@@ -1138,6 +1150,9 @@ class Swing {
     Vec3 kickLungeWay_{};
     float kickLungeSpeed_{};
     std::uint32_t kickLunges_{};
+    bool kickImpulseQueued_{};
+    Vec3 kickImpulse_{};
+    std::uint32_t kickImpulses_{};
     // MANUAL SWING KICK: the assist in force, the ropes' lengths when it began, what it has done, and a
     // blow's recoil waiting.
     KickAssist kick_{};

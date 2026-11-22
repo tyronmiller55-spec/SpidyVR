@@ -1330,6 +1330,7 @@ Values sanitized(Values v) {
     v.handoffPlaceCm = std::clamp(v.handoffPlaceCm, 0, 2000);
     v.swingRopeDragPct = std::clamp(v.swingRopeDragPct, 0, 300);
     v.kickLungeReachCm = std::clamp(v.kickLungeReachCm, 0, 400);
+    v.kickGroundSpeedCms = std::clamp(v.kickGroundSpeedCms, 100, 1000);
     v.swingRopeWeightPct = std::clamp(v.swingRopeWeightPct, 0, 300);
     v.wallSlideFriction = std::clamp(v.wallSlideFriction, 0, 100);
     v.swingReelOutSpeed = std::clamp(v.swingReelOutSpeed, 50, 1500);
@@ -3320,8 +3321,13 @@ constexpr TabOnly tabOnly[] = {
     {"swing_rope_stable", &Values::swingRopeStable, nullptr},
     {"swing_rope_load_taut", &Values::swingRopeLoadTaut, nullptr},
     {"web_wrap_keep", &Values::webWrapKeep, nullptr},
+    {"kick_target_ring", &Values::kickTargetRing, nullptr},
+    {"kick_ground_lunge", &Values::kickGroundLunge, nullptr},
     {"kick_lean", &Values::kickLean, nullptr},
     {"kick_momentum", &Values::kickMomentum, nullptr},
+    {"kick_rebound", &Values::kickRebound, nullptr},
+    {"kick_rope_assist", &Values::kickRopeAssist, nullptr},
+    {"kick_ground_speed_cms", nullptr, &Values::kickGroundSpeedCms},
     {"kick_chamber", &Values::kickChamber, nullptr},
     {"log_level", nullptr, &Values::logLevel},
     {"movement_defaults", nullptr, &Values::movementDefaults},
@@ -3588,7 +3594,10 @@ Values withMovementDefaults(Values v, std::string_view text) {
         // and your inclusions all are perfect"): the new switches come on once (new keys, all features on for
         // testing); a 0 chosen after this revision stays.
         v.swingRopeStable = v.swingRopeLoadTaut = v.webWrapKeep = true;
-        v.kickChamber = v.kickLean = v.kickMomentum = true;
+        v.kickTargetRing = v.kickGroundLunge = v.kickLean = v.kickMomentum = v.kickRebound = v.kickRopeAssist =
+            v.kickChamber = true;
+        // KICK GROUND SPEED: 4.5 m/s once (approved); a value chosen after this revision stays.
+        v.kickGroundSpeedCms = 450;
         // MASS RESCALE: the line is 2.5 times as heavy a metre at the same percentage now - a saved weight
         // becomes the same mass (to the slider's 10%), and beta3f's 200% default becomes the new 100%.
         v.swingRopeWeightPct = v.swingRopeWeightPct == 200

@@ -10521,6 +10521,29 @@ int main() {
         z.predictNativeStep(1.f/90,in,w,{{0,5,0},{},false});
         check(!z.kickLunges(),"an empty lunge");
     });
+    test("KICK REBOUND (beta3g): the swing adds the blow's spring in the air, after the recoil, never on the ground", [] {
+        TestWorld w;
+        w.enabled = false;
+        Input in;
+        Swing air(inert());
+        air.kickRecoil(.5f);
+        air.kickImpulse({0, 3, 2.5f});
+        const auto out = air.predictNativeStep(1.f / 90, in, w, {{0, 5, 0}, {0, 0, -10}, false});
+        check(air.kickImpulses() == 1, "no rebound in the air");
+        near(out.velocity.z, -5 + 2.5f, .2f);
+        check(out.velocity.y > 2.5f, "not up");
+        Swing ground(inert());
+        ground.kickImpulse({0, 3, 0});
+        ground.predictNativeStep(1.f / 90, in, w, {{0, 0, 0}, {}, true});
+        ground.predictNativeStep(1.f / 90, in, w, {{0, 5, 0}, {}, false});
+        check(!ground.kickImpulses(), "a rebound on the ground");
+        Swing z(inert());
+        z.kickImpulse({NAN, 1, 0});
+        z.kickImpulse({0, 0, 0});
+        z.kickImpulse({0, 50, 0});
+        z.predictNativeStep(1.f / 90, in, w, {{0, 5, 0}, {}, false});
+        check(!z.kickImpulses(), "an empty or wild rebound");
+    });
     test("POINT JUMP CANCELS WALL GRABS: off the game's own wall crawl when asked so, never otherwise", [] {
         TestWorld w;w.enabled=false;
         // The game holds him on its wall (supportSurface: its crawl's normal), off the ground in its run.
@@ -26003,8 +26026,13 @@ int main() {
                   "swing_rope_stable=1\n"
                   "swing_rope_load_taut=1\n"
                   "web_wrap_keep=1\n"
+                  "kick_target_ring=1\n"
+                  "kick_ground_lunge=1\n"
                   "kick_lean=1\n"
                   "kick_momentum=1\n"
+                  "kick_rebound=1\n"
+                  "kick_rope_assist=1\n"
+                  "kick_ground_speed_cms=450\n"
                   "kick_chamber=1\n"
                   "log_level=1\n"
                   "movement_defaults=23\n",
@@ -34661,6 +34689,20 @@ int main() {
         near(sl::Line::pullCap, 6.f, 1e-6f);
         near(sl::Line::capFor(.5f, 1.f), 3.f, 1e-6f);
     });
+    test("AirKickAsk v3 / AirKickLive v5 (beta3g): the kicks' new switches and ground speed travel, checked", [] {
+        game_swing::AirKickAsk a;
+        check(sizeof(a) == 80 && a.version == 3 && game_swing::validAirKick(a), "v3 default");
+        a.more = 15;
+        a.groundSpeedCms = 450;
+        check(game_swing::validAirKick(a), "all four on, 450");
+        a.more = 16;
+        check(!game_swing::validAirKick(a), "an unknown bit");
+        a.more = 0;
+        a.groundSpeedCms = 50;
+        check(!game_swing::validAirKick(a), "a ground speed under 1 m/s");
+        game_swing::AirKickLive l;
+        check(l.version == 5 && sizeof(l) % 8 == 0 && l.preview == 0, "live v5");
+    });
     test("shooter check: the logged forearm sign and the palm-side rule read the same palm, both hands", [&] {
         const float d2r = 3.14159265f / 180;
         for (int hand = 0; hand < 2; ++hand)
@@ -34963,8 +35005,10 @@ int main() {
         check(d.kickLunge && d.kickLungeReachCm == 250, "KICK LUNGE: on, 250 cm");
         check(d.kickFeel, "KICK FEEL: on");
         check(d.swingRopeStable && d.swingRopeLoadTaut && d.webWrapKeep, "ROPE STABILITY, TAUT UNDER LOAD, WRAP KEEP: on");
-        check(d.kickLean && d.kickMomentum, "KICK LEAN, KICK MOMENTUM: on");
+        check(d.kickTargetRing && d.kickGroundLunge && d.kickLean && d.kickMomentum && d.kickRebound && d.kickRopeAssist,
+              "the beta3g kick switches: on");
         check(d.kickChamber, "KICK CHAMBER: on");
+        check(d.kickGroundSpeedCms == 450, "KICK GROUND SPEED: 450 cm/s");
         // BETA3 DEFAULT CHECKS END
         Values off{};
         off.handoffHeadFirst = false;
@@ -34986,7 +35030,9 @@ int main() {
         off.kickLunge = false;
         off.kickFeel = false;
         off.swingRopeStable = off.swingRopeLoadTaut = off.webWrapKeep = false;
-        off.kickLean = off.kickMomentum = off.kickChamber = false;
+        off.kickTargetRing = off.kickGroundLunge = off.kickLean = off.kickMomentum = off.kickRebound =
+            off.kickRopeAssist = off.kickChamber = false;
+        off.kickGroundSpeedCms = 300;
         off.swingRopeWeightPct = 300;
         // BETA3 OFF END
         std::string base = tabOnlyText(off);
@@ -35043,8 +35089,9 @@ int main() {
         const Values ropes = withMovementDefaults(withTabOnly({}, rev22), rev22);
         check(ropes.swingRopeStable && ropes.swingRopeLoadTaut && ropes.webWrapKeep,
               "a revision 22 file did not get ROPE STABILITY, TAUT UNDER LOAD, WRAP KEEP");
-        check(ropes.kickLean && ropes.kickMomentum && ropes.kickChamber,
-              "a revision 22 file did not get the beta3g kick animation switches");
+        check(ropes.kickTargetRing && ropes.kickGroundLunge && ropes.kickLean && ropes.kickMomentum &&
+                  ropes.kickRebound && ropes.kickRopeAssist && ropes.kickChamber && ropes.kickGroundSpeedCms == 450,
+              "a revision 22 file did not get the beta3g kick switches");
         check(ropes.swingRopeWeightPct == 120, "a saved 300% weight did not become the same mass (120%)");
         const std::string heavy = "swing_rope_weight_pct=200\nmovement_defaults=22\n";
         check(withMovementDefaults(withTabOnly({}, heavy), heavy).swingRopeWeightPct == 100,
@@ -35075,10 +35122,12 @@ int main() {
         check(!kept.wallGripToStick, "GRIP TO STICK: a 0 chosen after revision 21 moved");
         check(!kept.kickLunge, "KICK LUNGE: a 0 chosen after revision 22 moved");
         check(!kept.kickFeel, "KICK FEEL: a 0 chosen after revision 22 moved");
-        check(!kept.swingRopeStable && !kept.swingRopeLoadTaut && !kept.webWrapKeep && !kept.kickLean &&
-                  !kept.kickMomentum && !kept.kickChamber,
+        check(!kept.swingRopeStable && !kept.swingRopeLoadTaut && !kept.webWrapKeep && !kept.kickTargetRing &&
+                  !kept.kickGroundLunge && !kept.kickLean && !kept.kickMomentum && !kept.kickRebound &&
+                  !kept.kickRopeAssist && !kept.kickChamber,
               "the beta3g switches: a 0 chosen after revision 23 moved");
-        check(kept.swingRopeWeightPct == 300, "ROPE WEIGHT chosen after revision 23 moved");
+        check(kept.kickGroundSpeedCms == 300 && kept.swingRopeWeightPct == 300,
+              "KICK GROUND SPEED / ROPE WEIGHT chosen after revision 23 moved");
         // BETA3 KEPT END
     });
     test("showtime auto: a Y+B finisher's scene (no play, the tracking rig off) lets the camera out", [&] {

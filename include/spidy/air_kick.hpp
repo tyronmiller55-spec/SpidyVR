@@ -116,6 +116,14 @@ struct Config {
     // keeps lungeKeep of the velocity (he stops at the enemy rather than flying through). 0: off, the leg's
     // reach only (beta3e).
     float lungeReach = 0.f, lungeSpeed = 12.f, lungeKeep = .4f;
+    // GROUND LUNGE (beta3g, kick_ground_lunge; the owner, Nov 22 t97u: "your inclusions all are perfect"): a
+    // standing kick at an enemy up to groundLungeReach past the leg's reach steps the body at him - a burst
+    // along the ground (the swing's sidestep drive under the animation), at most groundLungeSpeed m/s - and
+    // the kick goes on while it runs (its speed limit is the burst's then). Never a sweep. 0: off (beta3f).
+    float groundLungeReach = 0.f, groundLungeSpeed = 7.f;
+    // KICK REBOUND (beta3g, kick_rebound): a blow landed in the air springs him off the enemy - after the
+    // blow's recoil, reboundUp m/s up and reboundBack back along the kick's way (level).
+    float reboundUp = 3.f, reboundBack = 2.5f;
 };
 // The same, standing: no lunge.
 inline Config standingConfig(Config c) {
@@ -443,6 +451,61 @@ inline float sweepYaw(Gesture g, int side, float t, const Config& c = {}) {
     return static_cast<float>(side) * c.roundhouseArc * deg * (1.f - smoothstep(0, extendOf(g, c), t));
 }
 
+// KICK REBOUND (beta3g): the velocity a blow in the air adds (m/s): up, and back from the kick's way (level).
+inline Vec3 rebound(Vec3 way, const Config& c = {}) {
+    Vec3 level{finite(way) ? way.x : 0.f, 0.f, finite(way) ? way.z : 0.f};
+    const float l = length(level);
+    const Vec3 back = l > 1e-3f ? level * (-1.f / l) : Vec3{};
+    return back * std::max(c.reboundBack, 0.f) + Vec3{0, std::max(c.reboundUp, 0.f), 0};
+}
+// KICK TARGET RING (beta3g, kick_target_ring): the enemy a kick would go for now - the chest (or the gaze's
+// zone) of the best within the gaze cone and the foot's reach (the lunge's on top), else the nearest in front
+// within it, else the punches' lock within it. As Kick::ask picks, for a dive (the zones of the commonest
+// kick); 0 none.
+struct Preview {
+    std::uint64_t id{};
+    Vec3 point{};
+    float radius{};
+};
+template <class Target>
+inline Preview preview(std::span<const Target> targets, Vec3 feet, Vec3 eyeOffset, Vec3 gaze, bool grounded,
+                       std::uint64_t locked, const Config& c = {}) {
+    Preview out;
+    if (!finite(feet) || !finite(gaze) || length(gaze) < .5f)
+        return out;
+    gaze = normalized(gaze);
+    const Vec3 eye = feet + (finite(eyeOffset) ? eyeOffset : Vec3{0, 1.6f, 0});
+    const Vec3 pelvis = feet + Vec3{0, c.hipHeight, 0};
+    const float lunge = grounded ? std::clamp(c.groundLungeReach, 0.f, 6.f) : std::clamp(c.lungeReach, 0.f, 6.f);
+    const float reach = (grounded ? 0.f : c.lunge) + c.reach + lunge;
+    float best = 0, nearest = 1e9f;
+    Preview front, lock;
+    for (const auto& t : targets) {
+        const Vec3 chest = zonePoint(t.feet, t.height, Zone::chest);
+        const float d = length(chest - pelvis);
+        if (!(d <= reach + t.radius + c.frontSlack))
+            continue;
+        for (const Zone z : {Zone::head, Zone::chest}) {
+            const Vec3 p = zonePoint(t.feet, t.height, z);
+            const float w = gazeWeight(gaze, eye, p, c);
+            if (w > best) {
+                best = w;
+                out = {t.id, chest, t.radius};
+            }
+        }
+        const Vec3 ahead{gaze.x, 0, gaze.z}, to{chest.x - pelvis.x, 0, chest.z - pelvis.z};
+        const float la = length(ahead), lt = length(to);
+        if (d < nearest && !(la > 1e-3f && lt > 1e-3f && dot(ahead / la, to / lt) < std::cos(c.frontDegrees * deg))) {
+            nearest = d;
+            front = {t.id, chest, t.radius};
+        }
+        if (locked != 0 && t.id == locked)
+            lock = {t.id, chest, t.radius};
+    }
+    if (out.id == 0)
+        out = front.id ? front : lock;
+    return out;
+}
 // KICK LEAN (beta3g, kick_lean): the kick's upper body on the torso channel (leg_layers' Torso: pitch curl +,
 // roll toward the left +, yaw twist left +; radians), eased with the kick (amountAt). A dive arches back to
 // throw the legs (25 degrees, AIR_KICKS.md's plan), a double dive more; a roundhouse twists the chest against
@@ -753,9 +816,11 @@ class Kick {
             zones |= 8u;
         bool askedByJoints = false;
         // KICK LUNGE: off the ground only, and never a sweep.
-        const float lungeReach = !f.grounded && gesture_ != Gesture::sweep && std::isfinite(c.lungeReach)
-                                     ? std::clamp(c.lungeReach, 0.f, 6.f)
-                                     : 0.f;
+        // GROUND LUNGE (beta3g): standing, its own reach (never a sweep).
+        const float lungeReach =
+            gesture_ == Gesture::sweep ? 0.f
+            : !f.grounded              ? (std::isfinite(c.lungeReach) ? std::clamp(c.lungeReach, 0.f, 6.f) : 0.f)
+                          : (std::isfinite(c.groundLungeReach) ? std::clamp(c.groundLungeReach, 0.f, 6.f) : 0.f);
         lunged_ = false;
         for (const auto& t : f.targets) {
             for (int z = 0; z < (c.limbZones ? 4 : 3); ++z) {
@@ -853,9 +918,9 @@ class Kick {
                 const float gap = length(p - pelvis) - t.radius - full * .8f;
                 if (gap > .05f && finite(p - pelvis)) {
                     out.lungeWay = normalized(p - pelvis);
-                    out.lungeSpeed =
-                        std::min(gap / std::max(windowOf(gesture_, c), .05f),
-                                 std::isfinite(c.lungeSpeed) ? std::clamp(c.lungeSpeed, 0.f, 20.f) : 0.f);
+                    const float most = f.grounded ? c.groundLungeSpeed : c.lungeSpeed;
+                    out.lungeSpeed = std::min(gap / std::max(windowOf(gesture_, c), .05f),
+                                              std::isfinite(most) ? std::clamp(most, 0.f, 20.f) : 0.f);
                     out.lungeGap = gap;
                     lunged_ = out.lungeSpeed > .1f;
                     const Vec3 line = p - eye_;
@@ -885,7 +950,9 @@ class Kick {
         }
         t_ += dt;
         if (!(f.grounded ? f.ground : f.enabled) || !f.focused || f.grounded != startedGrounded_ || f.wall ||
-            (f.grounded && f.speed > config_.groundSpeed + config_.groundSlack)) {
+            (f.grounded && f.speed > (lunged_ ? std::max(config_.groundSpeed, config_.groundLungeSpeed)
+                                              : config_.groundSpeed) +
+                                         config_.groundSlack)) {
             // The air, the ground or the setting is gone (or a standing kick's player runs): the kick ends
             // where it is, nothing snaps (the legs ease back).
             out.event = hit_ ? Event::none : Event::miss;

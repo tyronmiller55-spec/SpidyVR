@@ -395,6 +395,9 @@ HandGrabAsk handGrabAsk{};
 SRWLOCK tetherLock = SRWLOCK_INIT;
 TetherAsk tetherAsk{};
 std::atomic<bool> autoDiveOff{}, kickBusy{};
+// KICK ROPE ASSIST (beta3g): an air kick on a web holds the swing kick's assist (the swing kick's own call
+// leaves it alone meanwhile).
+bool airRopeAssisting{};
 // QUICK SIDESTEP (SpidySwingSidestep, sidestep.hpp): a burst waiting for the
 // next step, as the point jump's; and the burst under way (the swing's
 // thread alone): its velocity, its move and stop, its start (QPC), where it
@@ -500,6 +503,7 @@ void endAirKick() {
     }
     airKickState.reset();
     kickBusy = false;
+    airRopeAssisting = false;
 }
 // The swing alone: a perched player's webs are let go, a grab keeps its target.
 // keepWall: the player stays on the wall it is on (a paused game goes on from
@@ -1660,7 +1664,8 @@ void visit(const native_rays::QueryContext& world) {
             MemoryBarrier();
             live.events = live.events + 1;
         }
-        solver.kickAssist({ko.assist, ko.aim, ko.weight}, kickState.config());
+        if (ko.assist || !airRopeAssisting)
+            solver.kickAssist({ko.assist, ko.aim, ko.weight}, kickState.config());
         kickBusy.store(kickState.busy(), std::memory_order_relaxed);
         live.state = static_cast<uint32_t>(kickState.phase());
         live.autoOff = autoDiveOff.load(std::memory_order_relaxed) ? 1u : 0u;
@@ -1686,6 +1691,10 @@ void visit(const native_rays::QueryContext& world) {
         // KICK LUNGE (beta3f; flags bit 5, kick_lunge_reach_cm): off, the leg's reach only (beta3e).
         ac.lungeReach =
             (ask.flags & 32u) ? static_cast<float>(std::min<uint32_t>(ask.lungeCm, 400)) / 100.f : 0.f;
+        // GROUND LUNGE (beta3g; `more` bit 1): the same reach standing, at most 2 m.
+        ac.groundLungeReach = (ask.more & 2u) ? std::min(ac.lungeReach, 2.f) : 0.f;
+        // KICK GROUND SPEED (beta3g, kick_ground_speed_cms): the fastest a standing kick starts at.
+        ac.groundSpeed = static_cast<float>(std::clamp<uint32_t>(ask.groundSpeedCms, 100, 1000)) / 100.f;
         airKickState.configure(ac);
         const float scale = game_punch::worldScale();
         air_kick::Kick::Frame af;
@@ -1768,9 +1777,27 @@ void visit(const native_rays::QueryContext& world) {
             // KICK LUNGE: the body goes at him (the solver's next step, in the air only).
             live.lungeSpeed = ao.lungeSpeed;
             live.lungeGap = ao.lungeGap;
-            if (airKickState.lunged()) {
+            if (airKickState.lunged() && !airKickState.onGround()) {
                 solver.kickLunge(ao.lungeWay, ao.lungeSpeed / std::max(scale, .05f));
                 live.lunges = live.lunges + 1;
+            }
+            // GROUND LUNGE (beta3g): standing, a burst along the ground at him (the sidestep's drive: it stops at
+            // an edge or a wall, and with anything else taking him).
+            if (airKickState.lunged() && airKickState.onGround() && (ask.more & 2u) && motion.grounded && !owned &&
+                !sidestepRun.on) {
+                const Vec3 level{ao.lungeWay.x, 0.f, ao.lungeWay.z};
+                if (length(level) > .2f) {
+                    const float speed = std::clamp(ao.lungeSpeed, 1.5f, ac.groundLungeSpeed);
+                    sidestepRun.on = true;
+                    sidestepRun.iframes = false;
+                    sidestepRun.velocity = normalized(level) * speed;
+                    sidestepRun.from = at;
+                    sidestepRun.moveSeconds = std::clamp(static_cast<double>(ao.lungeGap / speed), .05, .4);
+                    sidestepRun.stopSeconds = .05;
+                    sidestepRun.startQpc = now.QuadPart;
+                    sidestepRun.serial = 0;
+                    live.groundLunges = live.groundLunges + 1;
+                }
             }
             // How the target was found: bit 2 the nearest in front (KICK TARGET FALLBACK), bit 3 the punches' lock.
             live.reserved = (live.reserved & ~12u) | (airKickState.fallback() && !airKickState.lockAimed() ? 4u : 0u) |
@@ -1793,6 +1820,11 @@ void visit(const native_rays::QueryContext& world) {
             // KICK LUNGE: a blow off a lunge stops him at the enemy (he keeps lungeKeep of his velocity).
             if (blow && airKickState.lunged())
                 solver.kickRecoil(ac.lungeKeep);
+            // KICK REBOUND (beta3g; `more` bit 0): a blow in the air springs him off the enemy.
+            if (blow && !airKickState.onGround() && (ask.more & 1u)) {
+                solver.kickImpulse(air_kick::rebound(ao.way, ac) / std::max(scale, .05f));
+                live.rebounds = live.rebounds + 1;
+            }
             account();
             if (blow) {
                 live.hits = live.hits + 1;
@@ -1821,6 +1853,45 @@ void visit(const native_rays::QueryContext& world) {
         }
         live.speed = af.speed;
         live.reserved = (live.reserved & ~1u) | (airKickState.busy() && airKickState.onGround() ? 1u : 0u);
+        // KICK ROPE ASSIST (beta3g; `more` bit 2): an air kick at an enemy while a web holds him - the swing
+        // kick's assist (the web's length toward his distance from the anchor, the velocity turned at him)
+        // while the kick goes out.
+        {
+            Vec3 aim{NAN, NAN, NAN};
+            const bool webbed = solver.webs()[0].ready() || solver.webs()[1].ready();
+            if ((ask.more & 4u) && webbed && airKickState.phase() == air_kick::Kick::Phase::kicking &&
+                !airKickState.onGround() && airKickState.target() != 0 && !kickState.busy())
+                for (size_t i = 0; i < count; ++i)
+                    if (targets[i].id == airKickState.target())
+                        aim = air_kick::zonePoint(targets[i].feet, targets[i].height, airKickState.zone());
+            if (finite(aim)) {
+                if (!airRopeAssisting)
+                    live.ropeAssists = live.ropeAssists + 1;
+                solver.kickAssist({true, aim, 1.f}, kickState.config());
+                airRopeAssisting = true;
+            } else if (airRopeAssisting) {
+                if (!kickState.busy())
+                    solver.kickAssist({}, kickState.config());
+                airRopeAssisting = false;
+            }
+        }
+        // KICK TARGET RING (beta3g; `more` bit 3): the enemy a kick would take now, from the latest gaze.
+        {
+            air_kick::Preview p;
+            if ((ask.more & 8u) && af.legs && (af.enabled || af.ground) && !af.wall && count) {
+                ac.groundLungeReach = (ask.more & 2u) ? ac.groundLungeReach : 0.f;
+                p = air_kick::preview(std::span<const air_kick::Kick::Target>(targets.data(), count), at,
+                                      Vec3{ask.eyeOffset.x, ask.eyeOffset.y, ask.eyeOffset.z},
+                                      Vec3{ask.gaze.x, ask.gaze.y, ask.gaze.z}, body.grounded != 0,
+                                      game_punch::kickTarget().id, ac);
+            }
+            live.previewX = p.point.x;
+            live.previewY = p.point.y;
+            live.previewZ = p.point.z;
+            live.previewRadius = p.radius;
+            MemoryBarrier();
+            live.preview = p.id;
+        }
         kickBusy.store(kickState.busy() || airKickState.busy(), std::memory_order_relaxed);
     }
     // JUMP PULL (jump_pull.hpp; off until XR sends jump_pull): off the ground, the enemy the jump is aimed at (the gaze's

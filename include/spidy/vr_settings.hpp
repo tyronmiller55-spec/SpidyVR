@@ -911,12 +911,27 @@ struct Values {
     // releasing"; tether::Rope::reanchor): a web that bends round an edge or comes off one keeps its line as it
     // lies, cut at (or carried on to) the new end, instead of a fresh one laid. Off: laid anew, as beta3f.
     bool webWrapKeep = true;
+    // KICK TARGET RING (beta3g, t97u, approved in the beta3f plan; air_kick::preview): with the legs engaged, a
+    // turning ring round the enemy a kick would take now. Off: none, as beta3f.
+    bool kickTargetRing = true;
+    // GROUND LUNGE (beta3g; air_kick::Config::groundLungeReach): a standing kick at an enemy past the leg's
+    // reach (up to KICK LUNGE's reach, at most 2 m) steps the body at him along the ground. Off: as beta3f.
+    bool kickGroundLunge = true;
     // KICK LEAN (beta3g; air_kick::kickLean): an air kick leans the upper body into it on the torso channel.
     // Off: the legs only, as beta3f.
     bool kickLean = true;
     // KICK MOMENTUM (beta3g; air_kick::momentumPose): an air kick's legs carry the body's travel and swing
     // in over 70 ms rather than 40. Off: as beta3f.
     bool kickMomentum = true;
+    // KICK REBOUND (beta3g; air_kick::rebound): a kick's blow in the air springs him off the enemy (3 m/s up,
+    // 2.5 back). Off: as beta3f.
+    bool kickRebound = true;
+    // KICK ROPE ASSIST (beta3g): an air kick at an enemy while a web holds him steers the swing at him (the
+    // swing kick's assist: the web's length and the velocity toward him). Off: as beta3f.
+    bool kickRopeAssist = true;
+    // (cm/s, 100 to 1000) KICK GROUND SPEED (beta3g, approved): the fastest a standing kick may start at (it
+    // may go on 1.5 m/s faster). 450 by default; 300 was the fixed value through beta3f.
+    int kickGroundSpeedCms = 450;
     // KICK CHAMBER (beta3g; the owner, Nov 22 t100u: "Kicks were okay, we need lots of animation work there, but
     // they seem to fire"; air_kick::shapedLegPose): an air kick's leg winds up (the knee drawn up), snaps out
     // through its line with a small overshoot and folds back as it recoils, and the kick's legs come in over

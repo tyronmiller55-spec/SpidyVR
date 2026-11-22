@@ -812,12 +812,10 @@ int main() {
                 continue;
             if (key == "kick_lunge" || key == "kick_lunge_reach_cm" || key == "kick_feel")
                 continue;
-            if (key == "swing_rope_stable" ||
-                key == "swing_rope_load_taut" ||
-                key == "web_wrap_keep" ||
-                key == "kick_lean" ||
-                key == "kick_momentum" ||
-                key == "kick_chamber")
+            if (key == "swing_rope_stable" || key == "swing_rope_load_taut" || key == "web_wrap_keep" ||
+                key == "kick_target_ring" || key == "kick_ground_lunge" || key == "kick_lean" ||
+                key == "kick_momentum" || key == "kick_rebound" || key == "kick_rope_assist" ||
+                key == "kick_ground_speed_cms" || key == "kick_chamber")
                 continue;
             if (key == "swing_rope_weight_pct")
                 continue;

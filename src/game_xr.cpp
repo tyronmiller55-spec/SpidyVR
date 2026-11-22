@@ -1938,6 +1938,10 @@ DWORD WINAPI run(void*) {
         // GROUND KICKS: the player stands slow with the setting on (this frame); the kick under way began
         // standing, and its foot from the feet (the swing's account).
         bool groundStand{}, airOnGround{}, airZoneByJoints{};
+        // KICK TARGET RING (beta3g): the legs engaged with the ring on (this frame), and the swing's pick.
+        bool kickRingWanted{};
+        Vec3 kickRingPoint{};
+        float kickRingRadius{};
         uint32_t jointNamedSeen = ~0u, jointValidSeen = ~0u;
         Vec3 airFoot{};
         air_kick::Gesture airGesture{};
@@ -3643,6 +3647,14 @@ DWORD WINAPI run(void*) {
                         } else {
                             const Vec3 eyes{0, std::clamp(frame.head.position.y, .3f, 2.5f), 0};
                             ask.eyeOffset = {eyes.x, eyes.y, eyes.z};
+                            // KICK TARGET RING (beta3g): the gaze every frame, for the swing's pick.
+                            if (values.kickTargetRing) {
+                                const Quat world = Quat::yaw(motion.swing.trackingYaw) * motion.swing.tilt;
+                                const Vec3 gaze = world.rotate(frame.head.orientation.rotate({0, 0, -1}));
+                                const Vec3 eyesW = world.rotate(eyes);
+                                ask.gaze = {gaze.x, gaze.y, gaze.z};
+                                ask.eyeOffset = {eyesW.x, eyesW.y, eyesW.z};
+                            }
                         }
                         ask.serial = airSerial;
                         ask.flags = (values.kicks ? 1u : 0u) | (legHoldOut.engaged ? 2u : 0u) |
@@ -3651,13 +3663,18 @@ DWORD WINAPI run(void*) {
                                     (values.kickLunge ? 32u : 0u);
                         // KICK LUNGE (beta3f): its reach past the leg's.
                         ask.lungeCm = static_cast<uint32_t>(std::clamp(values.kickLungeReachCm, 0, 400));
+                        // beta3g: KICK REBOUND, GROUND LUNGE, KICK ROPE ASSIST, KICK TARGET RING; KICK GROUND SPEED.
+                        ask.more = (values.kickRebound ? 1u : 0u) | (values.kickGroundLunge ? 2u : 0u) |
+                                   (values.kickRopeAssist ? 4u : 0u) | (values.kickTargetRing ? 8u : 0u);
+                        ask.groundSpeedCms = static_cast<uint32_t>(std::clamp(values.kickGroundSpeedCms, 100, 1000));
+                        kickRingWanted = values.kickTargetRing && (values.kicks || values.groundKicks) && legHoldOut.engaged;
                         ask.gesture = static_cast<uint32_t>(flick.gesture);
                         ask.side = flick.side;
                         ask.angle = flick.angle;
                         ask.gazeCone = static_cast<float>(values.kickGazeConeDeg);
                         airSentAge += std::isfinite(frame.seconds) ? std::max(frame.seconds, 0.f) : 0.f;
                         const bool sent = flick.gesture != air_kick::Gesture::none;
-                        if (airKick && (sent || ask.flags != airFlagsSent || airSentAge > 1.f)) {
+                        if (airKick && (sent || ask.flags != airFlagsSent || airSentAge > 1.f || kickRingWanted)) {
                             if (airKick(&ask) == 0) {
                                 airFlagsSent = ask.flags;
                                 airSentAge = 0;
@@ -7370,6 +7387,13 @@ DWORD WINAPI run(void*) {
                             airSide = al->side;
                             airAngle = al->angle;
                             airSeconds = al->progress * air_kick::totalOf(airGesture);
+                            // KICK TARGET RING (beta3g): the swing's pick, drawn while the legs are engaged.
+                            if (const uint64_t pick = al->preview; pick != 0 && kickRingWanted) {
+                                kickRingPoint = {al->previewX, al->previewY, al->previewZ};
+                                kickRingRadius = std::clamp(static_cast<float>(al->previewRadius), .2f, 1.f);
+                            } else {
+                                kickRingRadius = 0;
+                            }
                             if (events != airEventsSeen) {
                                 airEventsSeen = events;
                                 const uint32_t what = al->lastEvent;
@@ -7401,8 +7425,9 @@ DWORD WINAPI run(void*) {
                                 char lunge[96] = "";
                                 if (lunging)
                                     std::snprintf(lunge, sizeof lunge,
-                                                  " lunge %.1f m at %.1f m/s (lunges %u)", al->lungeGap,
-                                                  al->lungeSpeed, static_cast<unsigned>(al->lunges));
+                                                  " lunge %.1f m at %.1f m/s (lunges %u, ground lunges %u)",
+                                                  al->lungeGap, al->lungeSpeed, static_cast<unsigned>(al->lunges),
+                                                  static_cast<unsigned>(al->groundLunges));
                                 if (what == 1 && kickBusyRefused) {
                                     diag_log::writef("kick: %u more gestures refused while the last kick ran",
                                                      kickBusyRefused);
@@ -7422,11 +7447,12 @@ DWORD WINAPI run(void*) {
                                                      lunge, !who ? around : "");
                                 else if (what == 2)
                                     diag_log::writef("kick: %s hit foot=%.1f zone=%s (%s) strength=%.2f target=%llu "
-                                                     "(started %u, hits %u, flies %u, misses %u; zones by joints %u)",
+                                                     "(started %u, hits %u, flies %u, misses %u; zones by joints %u; "
+                                                     "rebounds %u, rope assists %u)",
                                                      air_kick::gestureName(gesture), al->foot,
                                                      air_kick::zoneName(zone), airZoneByJoints ? "joints" : "bands",
                                                      al->strength, who, al->started, al->hits, al->flies,
-                                                     al->misses, al->jointZones);
+                                                     al->misses, al->jointZones, al->rebounds, al->ropeAssists);
                                 else if (what == 3)
                                     diag_log::writef("kick: %s miss (started %u, hits %u, misses %u%s)",
                                                      air_kick::gestureName(gesture), al->started, al->hits,
@@ -13791,6 +13817,8 @@ DWORD WINAPI run(void*) {
                     saved.linesByGame = native_webs::linesDrawn();
                     saved.lineTarget = lineState.target;
                     saved.lineTargetId = lineState.targetId;
+                    saved.kickTarget = kickRingPoint;
+                    saved.kickTargetRadius = kickRingWanted && finite(kickRingPoint) ? kickRingRadius : 0.f;
                     saved.lineCount = 0;
                     for (uint32_t i = 0; i < lineState.count && saved.lineCount < saved.lines.size(); ++i)
                         saved.lines[saved.lineCount++] = {lineState.lines[i].start, lineState.lines[i].end};
@@ -14257,6 +14285,18 @@ DWORD WINAPI run(void*) {
                             marker.hand = 1;
                             marker.spin =
                                 static_cast<float>(std::fmod(static_cast<double>(shown) * 1e-9, 6.283185307));
+                            marks.push_back(marker);
+                        }
+                        // KICK TARGET RING (beta3g, kick_target_ring): a turning ring round the enemy a kick would
+                        // take now, while the legs are engaged (the right hand's amber).
+                        if (feedback && !saved->flatScreen && saved->kickTargetRadius > 0 && finite(saved->kickTarget)) {
+                            AimMarker marker;
+                            marker.kind = AimMark::target;
+                            marker.point = saved->kickTarget;
+                            marker.radius = saved->kickTargetRadius;
+                            marker.hand = 1;
+                            marker.spin = -static_cast<float>(
+                                std::fmod(static_cast<double>(shown) * 1.5e-9, 6.283185307));
                             marks.push_back(marker);
                         }
                         std::sort(marks.begin(), marks.end(), [&](const AimMarker& a, const AimMarker& b) {
