@@ -24,11 +24,11 @@ In a game jump or move, tilt the left stick to break into SpidyVR's air. Or sque
 
 ## AIR KICKS
 
-In the air hold Y + X to engage your legs, then flick the right stick fast. From under 0.35 to past 0.75 within 150 ms; a slower push poses the legs. Up: dive. Up-left/right: one-leg dive. Quarter circle to the top: roundhouse. Other flicks: a quick kick. Kicks aim where you look (AIR KICK AIM, 40 deg). An enemy up to 2.5 m past your leg: you fly at him and stop on the blow. A kick taken ticks both controllers; a lunge thumps with the rush sound.
+In the air hold Y + X to engage your legs, then flick the right stick fast. From under 0.35 to past 0.75 within 150 ms; a slower push poses the legs. Up: dive. Up-left/right: one-leg dive. Quarter circle to the top: roundhouse. Other flicks: a quick kick. Kicks aim where you look (AIR KICK AIM, 40 deg). An enemy up to 2.5 m past your leg: you fly at him and stop on the blow. A kick taken ticks both controllers; a lunge thumps with the rush sound. KICK TARGET RING: legs engaged, a ring turns round who a kick would hit. KICK CHAMBER: the leg winds up, snaps out through its line, folds back. KICK LEAN and KICK MOMENTUM: the chest leans in; the legs carry your travel. KICK REBOUND: a kick that lands in the air springs you up and back off him. KICK ROPE ASSIST: kick while on a web and the swing steers you at him.
 
 ## GROUND KICKS
 
-Standing or walking (under 3 m/s), hold Y + X and flick the right stick: up a front kick, sideways a side kick, a half circle across the bottom a sweep.
+Standing or walking (under 4.5 m/s), hold Y + X and flick the right stick: up a front kick, sideways a side kick, a half circle across the bottom a sweep. GROUND LUNGE: an enemy a step or two out of reach: you step in to kick.
 
 ## SWING KICK
 
@@ -48,7 +48,7 @@ X sends the game's LB + RB where the game shows it: throw, pick up, rip. X and Y
 
 ## WEBS & WEB CANCEL
 
-Shoot a web on the ground or a perch to cancel the animation into SpidyVR. Not in fights, cutscenes, dodges or your own wall run. A zip cancels at once. Y + X cuts a zip. SHOOTERS: LOCKED TO ARM fires from your wrist. FULL-LENGTH SWING LINES: webs keep their length, slack hangs; the reel shortens. WRAP SLACK: round edges a line keeps its slack, hung before the first edge. SECOND HAND: the web in both hands keeps its line; climbing takes it in. PHYSICS UNTIL FADE: a let-go line swings free 1.2 s, then dissolves. A stick-click web line or tie takes the hands' webs at once (CONNECT HANDOFF). ROPE PHYSICS: hanging slack pulls you, coils fling, trailing lines drag. 100%. REEL OUT: double tap a web's reel trigger and hold: the line pays out, 4 m/s. AIR PHYSICS WHILE SWINGING: arm spin, poses, air dodge, landing blend on a web. ROPE WEIGHT: a heavier line hangs, swings on and pulls harder. 200%. ROPE DRAG: less air on the line, less slack tug and fling; still swings. 100%.
+Shoot a web on the ground or a perch to cancel the animation into SpidyVR. Not in fights, cutscenes, dodges or your own wall run. A zip cancels at once. Y + X cuts a zip. SHOOTERS: LOCKED TO ARM fires from your wrist. FULL-LENGTH SWING LINES: webs keep their length, slack hangs; the reel shortens. WRAP SLACK: round edges a line keeps its slack, hung before the first edge. SECOND HAND: the web in both hands keeps its line; climbing takes it in. PHYSICS UNTIL FADE: a let-go line swings free 1.2 s, then dissolves. A stick-click web line or tie takes the hands' webs at once (CONNECT HANDOFF). ROPE PHYSICS: hanging slack pulls you, coils fling, trailing lines drag. 100%. REEL OUT: double tap a web's reel trigger and hold: the line pays out, 4 m/s. AIR PHYSICS WHILE SWINGING: arm spin, poses, air dodge, landing blend on a web. ROPE WEIGHT: a heavier line hangs and pulls harder. 100% (was 250%). ROPE DRAG: less air on the line, less slack tug and fling; still swings. 100%. STEADY ROPE STEPS: the line steps at a fixed rate and settles, no jitter. TAUT UNDER LOAD: swing or hang on a web and its line pulls tight. KEEP LINES THROUGH WRAPS: a wrapping web keeps its line, no new one.
 
 ## HAND GRAB
 

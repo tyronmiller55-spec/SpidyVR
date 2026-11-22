@@ -3,6 +3,28 @@
 Every build, newest first, with what changed, why, and what was measured.
 Per-check results are in [VALIDATION.md](VALIDATION.md).
 
+**0.8.7-na-beta3, build beta3g (November 22, the owner's t97u, t98u, t100u):** the same version, a seventh test
+package ([checklist](NA_BETA3.md#beta3g-web-rope-physics-kick-animation-and-reach)); migration rev 23.
+
+- **Steady rope steps** (feel change, `swing_rope_stable=1`). The swing line steps at a fixed 1/600 s (8 passes),
+  damps toward moving with its ends, limits a particle to 30 m/s about them and eases its pull: a line no longer
+  builds energy or stalls in midair. Headless: 0.17 m apart at 90 Hz vs ragged frames (beta3f 4.4 m); energy to
+  0.2% of its peak. Off: exactly beta3f.
+- **Taut under load** (`swing_rope_load_taut=1`). The drawn line pulls straight while the swing's rope carries him
+  (2 to 6 m/s^2) and its slack comes back when the load eases.
+- **Keep lines through wraps** (`web_wrap_keep=1`). A wrap or unwrap cuts or carries the rope as it lies
+  (`tether::Rope::reanchor`) instead of laying a new one. The swing's obstruction cut stays a let-go.
+- **Rope weight rescaled.** 100% (new default) is beta3f's 250%; the pull's cap is 6 m/s^2 a hand (2.5). Revision 23
+  converts saved weights to the same mass.
+- **Kick chamber, lean and momentum** (look change for t100u; `kick_chamber`, `kick_lean`, `kick_momentum`). Wind-up,
+  snap through the line with an overshoot, recoil fold; the chest curls in and throws back on the torso channel; the
+  legs carry your travel; the kick layer blends in over 60 ms.
+- **Kick target ring, ground lunge, rebound, rope assist, ground kick speed** (`kick_target_ring`,
+  `kick_ground_lunge`, `kick_rebound`, `kick_rope_assist`, `kick_ground_speed_cms=450`). `AirKickAsk` v3,
+  `AirKickLive` v5, `Swing::kickImpulse`.
+- Logs read: beta3e (860 let-gos, 27% at the pull cap; 515 wraps, 16 cuts) and beta3f (26 kicks started, 24 out of a
+  fight, 0 hits; 200 let-gos).
+
 **0.8.7-na-beta3, build beta3f (November 22, the owner's t96u):** the same version, a sixth test package
 ([checklist](NA_BETA3.md#beta3f-kick-lunge-kick-feel-the-kicks-outcome-in-the-log-point-jump-on-the-floor-crawl-flag));
 migration rev 22.

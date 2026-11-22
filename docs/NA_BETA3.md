@@ -458,3 +458,86 @@ crawl")`. The quick sidestep's own floor-flag refusal is unchanged (not asked).
 3. **Outcome log.** Out of a fight a kick logs `no enemy in a fight`; in one, how many and the nearest distance.
 4. **Point jump.** A+B in fights, ducking under something low and in rooftop parkour should fire where it did
    nothing. In a vent or duct it should still be refused (`the game's crawl in a duct (a roof over him)`).
+
+## beta3g: web rope physics, kick animation and reach
+
+The owner, Nov 22 t97u: "they have a problem catching Spiderman's weight. They seem to build up kinetic energy and
+become volatile, never settling ... the rope seems jittery and jumpy ... it feels like a step issue. Also, the webs
+are cutting off and making new lines instead of wrapping and releasing ... Spiderman's weight should make it taut
+when he swings against it ... I had to increase his weight to see an effect ... Kicks sound interesting, and your
+inclusions all are perfect." Then t100u, on beta3f: "Kicks were okay, we need lots of animation work there, but
+they seem to fire."
+
+Settings revision 23: every switch below comes on once; KICK GROUND SPEED becomes 450 cm/s once; a saved ROPE
+WEIGHT becomes the same mass on the new scale (beta3f's 200% default becomes 100%, 300% becomes 120%). A value
+chosen after revision 23 stays. No game address is new. `AirKickAsk` is version 3 (80 bytes: `more` bits 0..3 and
+`groundSpeedCms`), `AirKickLive` version 5 (the ring's pick, rebounds, ground lunges, rope assists).
+
+| Key | Default | What |
+| --- | --- | --- |
+| `swing_rope_stable` | 1 | **Feel change.** The swing line's sim steps at a fixed 1/600 s out of the frames' time (beta3f: 8 steps a frame, each 1/8 of whatever the frame took), 8 constraint passes a step, damped toward moving with its ends (90%: a line carried along is no longer dragged back into the midair "stall"), no particle faster than 30 m/s about its ends, and the pull eased over 80 ms. Headless: a swung 18 m line at 90 Hz and at ragged 30..120 Hz frames ends 0.17 m apart (beta3f's steps: 4.4 m), and its energy settles to 0.2% of its peak within 2.5 s. Off: exactly beta3f. |
+| `swing_rope_load_taut` | 1 | **Look change.** While the swing's own rope carries him (its pull past 2 m/s^2, all in by 6; hanging still is 9.8) the drawn line's spare length goes in over about 60 ms and it is drawn straight; the slack comes back over about 0.3 s when the load comes off (falling toward the anchor, thrown past it). The length it caught at is kept, and the pull follows the shown slack. Off: the slack always hangs. |
+| `web_wrap_keep` | 1 | A web that wraps round an edge or comes off one keeps its line as it lies: the rope is cut at the new edge (or carried on to the new end) and its particles shared out again (`tether::Rope::reanchor`), instead of a fresh rope laid (what made the "new line" on every wrap). Log: `swing line: L kept through a wrap`. Off: laid anew. |
+| `swing_rope_weight_pct` | 100 | **Rescaled.** The line's mass a metre is 2.5 times beta3f's at the same percentage (100% now = beta3f's 250%), and the pull's cap at full strength is 6 m/s^2 a hand (beta3f 2.5). |
+| `kick_chamber` | 1 | **Look change (t100u).** An air kick's leg winds up (the knee drawn up, the thigh part way), snaps out through its line with a small overshoot held at full, and folds back as it recoils before easing home (`air_kick::shapedLegPose`); the kick layer comes in over 60 ms (0.2 s before: a 0.16 s kick was about 80% shown at its fullest). Off: the stiff leg, as beta3f. |
+| `kick_lean` | 1 | An air kick leans the upper body on the torso channel: it curls over the chambered leg and turns toward it (the hips' turn, shown by the spine), then throws back as the leg snaps out (dives arch back 25 to 30 degrees, a roundhouse twists against the sweep, a side kick leans off it). Off: the legs only. |
+| `kick_momentum` | 1 | An air kick's legs carry the body's travel (up to 0.35 rad at 10 m/s, less as the kick reaches full) and swing in over 70 ms rather than 40. Off: as beta3f. |
+| `kick_target_ring` | 1 | With the legs engaged (Y + X), a turning amber ring round the enemy a kick would take now: the gaze's within reach (the lunge's on top), else the nearest in front, else the punches' lock (`air_kick::preview`, sent every frame then). |
+| `kick_ground_lunge` | 1 | **Feel change.** A standing kick at an enemy past the leg's reach (up to KICK LUNGE's reach, at most 2 m) steps you in along the ground (the quick sidestep's drive: it stops at an edge or a wall), at most 7 m/s; the kick goes on while the burst runs. Never a sweep. |
+| `kick_rebound` | 1 | **Feel change.** A kick that lands in the air springs you off him: after the blow's recoil, 3 m/s up and 2.5 m/s back along the kick (`Swing::kickImpulse`). |
+| `kick_rope_assist` | 1 | An air kick at an enemy while a web holds you drives the swing kick's assist (the web's length toward his distance from the anchor, your velocity turned at him) while the leg goes out. |
+| `kick_ground_speed_cms` | 450 | (100 to 1000) the fastest you may move and still start a standing kick (it may go on 1.5 m/s faster). 300 was the fixed value. |
+
+Launcher: "Web rope (beta3g)" on the Shooters page and "Kicks (beta3g)" on the Kicks & Combat page. NA HELP: WEBS (14)
+to (16), AIR KICKS (7) to (11), GROUND KICKS (3), ROPE WEIGHT and the ground kicks' speed updated.
+
+### The logs behind it
+
+**beta3e log (Nov 22 10:29, build 4272657, 46 min):** 860 swing-line let-gos. The most pull a line reached: median
+0.74, p90 2.50 m/s^2 - 236 (27%) sat at the 2.5 cap (ROPE WEIGHT 200%, strength 50%). Most slack: median 3.2 m, p90
+15.2 m, max 208 m; 311 let-gos over 5 m. Wraps 515, unwraps 68, obstruction cuts 16; 240 let-gos were "round
+edges", and 81 re-catches on the same hand within 0.6 s. Only 16 of 860 catches had no web fired on that hand in the
+0.6 s before: the game hardly ever makes a new web of its own - the "new line" seen on a wrap was our own rope being
+laid afresh when the free run's length jumped (`tether::Rope::step`'s re-lay past a 50% change of its rest length).
+
+**beta3f log (Nov 22 11:41, build 942f3ff, 7.6 min):** kicks fire - 32 air flicks, 26 kicks started (15 freeform,
+6 dive, 5 double), 13 swing-kick flicks; 37 misses, 0 hits, 2 refused as busy, 1 on a wall, 9 swing kicks refused
+"not swinging". 24 of the 26 starts had no enemy in a fight; one started with 4 in the fight and the nearest 1.1 m
+(behind: no target), one lunged 0.5 m at 1.9 m/s. So beta3f's reach was barely tried in a fight; the owner's read
+(t100u) is that kicks fire but look stiff - beta3g's kick work is mostly their animation. Rope: 200 let-gos, most
+pull median 0.41, p90 2.50 (26 at the cap), most slack median 2.0 m, p90 9.4 m; wraps 103, unwraps 14, cuts 3.
+Point jump: 33 jumps off a surface, 27 cancelling a wall grab, 4 refused "no contact" (A and B went on to the game),
+and one on the game's floor-crawl flag with no duct roof that beta3e would have refused.
+
+### What stays the game's (needs a new hook or is not ours)
+
+- The swing's **obstruction cut**: a web whose line is blocked with no edge to bend round (or already 6 bends) is
+  released after 0.15 s (`swing.cpp`, 16 in the beta3e log, 3 in beta3f's). Our rope keeps its line through every
+  wrap and unwrap the swing makes; a cut is a real let-go.
+- The game's own **web dissolve** at the end of a fade, and the **connected web line** (stick click), drawn taut by
+  the game.
+- The rope's hand points: the game draws a swing line through at most 6 points of ours; with many edges fewer are
+  left for the slack (`6 - edges`).
+- Kicks: no game kick animation or kick sound ids are captured, so the legs are ours (leg_layers, the torso
+  channel) and the blow is the web strike's; the hips have no channel of their own (the spine's twist shows it).
+- Legs mode without the Y + X chord (approved "if cheap"): not done - the right stick is the camera's and the
+  gadget's without it, so a chord-free flick needs the input map reworked (backlog).
+
+### beta3g checklist
+
+1. **Steady rope.** Swing hard with slack out, then hang: the line should settle within a couple of seconds with no
+   jitter or buzzing, and no midair "stall" when you give slack. Try at your usual frame rate and with ASW/reprojection
+   off. `swing_rope_stable=0` brings beta3f's back for comparison.
+2. **Taut under load.** Swing against the web at ROPE WEIGHT 100%: the line should snap straight as it takes your
+   weight and the slack fall back in as you come over the top or fall toward the anchor.
+3. **Wraps.** Swing round building corners: the line should bend round the edge and keep its shape - no new line.
+   Log: `swing line: R kept through a wrap: 1 edge(s) now`. A blocked web with nowhere to bend still lets go.
+4. **Rope weight.** 100% should now feel like beta3f's 250%; try 50% and 150%. The log's `rope pull:` line reports
+   the steps, taut and wrap switches.
+5. **Kick animation.** In the air, every flick: the leg should chamber, snap out, and fold back; the chest leans
+   in and throws back; the legs come in with your travel. Compare `kick_chamber=0`, `kick_lean=0`, `kick_momentum=0`.
+6. **Target ring.** Y + X near thugs: an amber ring on the one a kick would take; look between two to move it.
+7. **Ground lunge.** Standing 2 to 3 m off a thug, kick: you should step in and land it. Walking at up to 4.5 m/s
+   still kicks.
+8. **Rebound and rope assist.** Land an air kick: you spring up and back. Kick while on a web: the swing steers at him.
+
