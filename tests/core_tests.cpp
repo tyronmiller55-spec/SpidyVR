@@ -25950,6 +25950,8 @@ int main() {
                   "point_jump_wall_cancel=1\n"
                   "wall_grip_to_stick=1\n"
                   "wall_slide_friction=50\n"
+                  "swing_rope_weight_pct=200\n"
+                  "swing_rope_drag_pct=100\n"
                   "log_level=1\n"
                   "movement_defaults=21\n",
               "the defaults' text");
@@ -34295,6 +34297,93 @@ int main() {
         const auto first = fresh.update(in, {10, 40, 0}, anchor, 1.f / 72);
         check(length(first.pull) < .3f * sl::Line::pullCap, "not ramped in");
     });
+    test("rope weight and drag: drag 0 shrinks the slack's tug while the rope still moves; weight scales its pull and inertia", [&] {
+        namespace sl = swing_line;
+        const Vec3 anchor{0, 40, 0};
+        // 1 and 1 are beta3d's rope: the combat rope's damping and mass.
+        near(sl::Line::config().damping, tether::Config{}.damping, 1e-6f);
+        near(sl::Line::config(1, 1).particleMass, tether::Config{}.particleMass, 1e-7f);
+        near(sl::dampingFor(2, 2, 1), 1, 1e-6f);
+        near(sl::dampingFor(2, 1, 0), .1f, 1e-6f); // drag 0: a floor, the rope still swings
+        near(sl::dampingFor(2, 0, 1), 8, 1e-6f);   // weight 0: held to a quarter
+        // A hand swinging fast across with 5 m of slack: the line trails and tugs.
+        struct Run {
+            float pull{}, moved{};
+            bool simulated{};
+        };
+        const auto swing = [&](float weight, float drag) {
+            sl::Line line;
+            sl::Input in{true, true, 6, 0, 30.f, false, false};
+            in.pullStrength = 1.f;
+            in.weight = weight;
+            in.drag = drag;
+            line.update(in, {30, 40, 0}, anchor, 1.f / 72);
+            sl::Line::Out o;
+            for (int i = 0; i < 72; ++i)
+                o = line.update(in, {25, 40, 0}, anchor, 1.f / 72);
+            Run r;
+            float most{};
+            for (int i = 0; i < 36; ++i) {
+                const float t = static_cast<float>(i) / 72;
+                const Vec3 wrist{25 * std::cos(t * 4), 40, 25 * std::sin(t * 4)};
+                const auto before = o;
+                o = line.update(in, wrist, anchor, 1.f / 72);
+                most = std::max(most, length(o.pull));
+                r.simulated |= o.simulated;
+                for (int k = 0; k < std::min(o.count, before.count); ++k)
+                    r.moved += length(o.points[k] - before.points[k]);
+            }
+            r.pull = most;
+            return r;
+        };
+        const Run beta3d = swing(1, 1), still = swing(1, 0), heavy = swing(2, 1);
+        check(beta3d.pull > 0 && beta3d.pull < sl::Line::pullCap, "the swinging line's pull (under its cap)");
+        check(still.pull < beta3d.pull * .9f, "drag 0 did not shrink the slack's pull");
+        check(still.pull > 0, "drag 0 took the slack's hanging weight too");
+        check(still.simulated && still.moved > .5f, "drag 0 stopped the rope");
+        check(heavy.pull > beta3d.pull * 1.5f, "a heavier line did not pull harder");
+        // 30 m of slack hanging after a pull-in: twice the weight pulls much harder (its weight doubles; the
+        // swing it still has differs, the heavier one lagging less), under its own cap.
+        const auto hang = [&](float weight) {
+            sl::Line line;
+            sl::Input in{true, true, 7, 0, 40.f, false, false};
+            in.pullStrength = 1.f;
+            in.weight = weight;
+            line.update(in, {40, 40, 0}, anchor, 1.f / 72);
+            sl::Line::Out o;
+            for (int i = 0; i < 72 * 3; ++i)
+                o = line.update(in, {10, 40, 0}, anchor, 1.f / 72);
+            return o;
+        };
+        const auto one = hang(1), two = hang(2), none = hang(0);
+        const float ratio = length(two.pull) / std::max(length(one.pull), 1e-6f);
+        check(ratio > 1.3f && ratio < 2.2f, "200% weight did not pull much harder");
+        check(length(two.pull) <= sl::Line::capFor(1, 2) + 1e-3f && sl::Line::capFor(1, 2) == 2 * sl::Line::pullCap,
+              "the heavier line's cap");
+        check(length(none.pull) == 0 && none.simulated, "a weightless line pulled, or stopped hanging");
+        // Inertia: the hand stops after a flick; a heavier line swings on longer.
+        const auto after = [&](float weight) {
+            sl::Line line;
+            sl::Input in{true, true, 8, 0, 30.f, false, false};
+            in.weight = weight;
+            line.update(in, {30, 40, 0}, anchor, 1.f / 72);
+            sl::Line::Out o;
+            for (int i = 0; i < 72; ++i)
+                o = line.update(in, {25, 40, 0}, anchor, 1.f / 72);
+            for (int i = 0; i < 12; ++i)
+                o = line.update(in, {25, 40, -i * .25f}, anchor, 1.f / 72);
+            float moved{};
+            for (int i = 0; i < 72; ++i) {
+                const auto before = o;
+                o = line.update(in, {25, 40, -2.75f}, anchor, 1.f / 72);
+                if (i >= 36)
+                    for (int k = 0; k < std::min(o.count, before.count); ++k)
+                        moved += length(o.points[k] - before.points[k]);
+            }
+            return moved;
+        };
+        check(after(2) > after(1) * 1.2f, "a heavier line did not carry its swing on longer");
+    });
     test("rope physics on the swing: the pull bends SpidyVR's air with a web on; none, or a zero pull, leaves it as before", [] {
         const auto run = [](int mode, Vec3* position) {
             TestWorld world;
@@ -34626,6 +34715,7 @@ int main() {
         check(d.swingAirPhysics, "AIR PHYSICS WHILE SWINGING: on");
         check(d.pointJumpWallCancel, "POINT JUMP CANCELS WALL GRABS: on");
         check(d.wallGripToStick && d.wallSlideFriction == 50, "GRIP TO STICK: on, 50% friction");
+        check(d.swingRopeWeightPct == 200 && d.swingRopeDragPct == 100, "ROPE WEIGHT 200%, ROPE DRAG 100%");
         // BETA3 DEFAULT CHECKS END
         Values off{};
         off.handoffHeadFirst = false;
@@ -34686,6 +34776,8 @@ int main() {
         const Values walls = withMovementDefaults(withTabOnly({}, rev20), rev20);
         check(walls.pointJumpWallCancel, "a revision 20 file did not get POINT JUMP CANCELS WALL GRABS");
         check(walls.wallGripToStick && walls.wallSlideFriction == 50, "a revision 20 file did not get GRIP TO STICK");
+        check(walls.swingRopeWeightPct == 200 && walls.swingRopeDragPct == 100,
+              "a revision 20 file did not get ROPE WEIGHT 200% and ROPE DRAG 100%");
         // BETA3E MIGRATED END
         // BETA3 MIGRATED END
         const std::string chosen = base + "movement_defaults=21\n";

@@ -48,7 +48,26 @@ struct Input {
     int most = tether::maxDrawn;
     // ROPE PHYSICS ON THE SWING (beta3c, swing_rope_physics): the pull's strength, 1 = moderate; 0 = none.
     float pullStrength{};
+    // ROPE WEIGHT AND DRAG (beta3e, swing_rope_weight_pct / swing_rope_drag_pct; the owner, Nov 22 t94u: "I
+    // want a weight slider for the webs, right now they're so light I can't control the swing ... Reducing
+    // drag should reduce the effect of slack while swinging, but still allow for the physics"). Both 1:
+    // beta3d.
+    //   weight: the line's mass, times massPerMetre (0 to 3). Its hanging weight and the momentum its slack
+    //     carries both scale with it (the pull, and its cap past 1), and the air slows a heavier line less
+    //     (the sim's damping is divided by it): it hangs and swings on with what it had.
+    //   drag: the air on the line (0 to 3). The sim's damping scales with it (a line trailing a swing lags
+    //   less
+    //     with less), and so does the slack's tug and fling on the player (the pull's momentum part); its
+    //     hanging weight stays. At 0 the rope still moves (a floor of damping keeps it stable).
+    float weight = 1, drag = 1;
 };
+// ROPE WEIGHT AND DRAG: the sim's damping for a line of `weight` in air of `drag` (Input's), from the combat
+// rope's own: drag over weight, each held to its floor (drag 0.05, weight 0.25) so the rope never runs wild.
+inline float dampingFor(float base, float weight, float drag) {
+    const float w = std::isfinite(weight) ? std::clamp(weight, .25f, 3.f) : 1.f;
+    const float d = std::isfinite(drag) ? std::clamp(drag, .05f, 3.f) : 1.f;
+    return base * d / w;
+}
 struct Change {
     bool attached{}; // this update caught a new web
     bool reeled{};   // the reel took some in this update
@@ -177,8 +196,10 @@ class Line {
         // Past maxSlack the rope is drawn maxSlack longer than the line (the rest is not drawn).
         const float laid = o.distance + std::clamp(slack, 0.f, maxSlack);
         laid_ = laid;
-        if (!rope_.started())
-            rope_.configure(config());
+        weight_ = std::isfinite(in.weight) ? std::clamp(in.weight, 0.f, 3.f) : 1.f;
+        drag_ = std::isfinite(in.drag) ? std::clamp(in.drag, 0.f, 3.f) : 1.f;
+        // ROPE WEIGHT AND DRAG: the sim takes the line's weight and the air's drag every frame (no rebuild).
+        rope_.configure(config(weight_, drag_));
         tether::Rope::Frame f;
         f.dt = dt;
         f.hand = wrist;
@@ -195,7 +216,7 @@ class Line {
         if (!o.simulated && most > 0)
             o.count = sagPoints(wrist, anchor, o.drawn - beyond, most, o.points);
         if (in.pullStrength > 0 && !in.grounded && (r.active || r.asleep))
-            o.pull = pull(slack, in.pullStrength);
+            o.pull = pull(slack, in.pullStrength, weight_, drag_);
         return o;
     }
     // PHYSICS UNTIL FADE (beta3c, web_fade_physics): the web was let go of. Its wrist end comes free with the
@@ -227,7 +248,7 @@ class Line {
         fadeAge_ += dt;
         // The free end: a particle on the rope's length from the anchor.
         freeVelocity_ += Vec3{0, -config().gravity, 0} * dt;
-        freeVelocity_ = freeVelocity_ * std::exp(-config().damping * dt);
+        freeVelocity_ = freeVelocity_ * std::exp(-config(weight_, drag_).damping * dt);
         freeEnd_ += freeVelocity_ * dt;
         const Vec3 out = freeEnd_ - anchor;
         const float reach = length(out);
@@ -274,9 +295,13 @@ class Line {
     // the momentum the slack carries away from the hand handed over in flingSeconds. The line's mass per
     // metre is massPerMetre of the player's; capped at pullCap (both times the strength), ramped in over
     // pullRamp after a catch. The sim's damping is world-space (still air), so a line trailing a fast swing
-    // pulls back: the drag.
+    // pulls back: the drag. ROPE WEIGHT AND DRAG (beta3e): `weight` scales the mass (and the cap past 1),
+    // `drag` the momentum part (the tug and the fling); both 1 as beta3d.
     static constexpr float massPerMetre = .0102f, flingSeconds = .5f, pullCap = 2.5f, pullRamp = .3f;
-    Vec3 pull(float slack, float strength) const {
+    static float capFor(float strength, float weight) {
+        return pullCap * strength * std::max(std::isfinite(weight) ? weight : 1.f, 1.f);
+    }
+    Vec3 pull(float slack, float strength, float weight = 1, float drag = 1) const {
         const auto x = rope_.points();
         const auto v = rope_.velocities();
         const size_t n = x.size();
@@ -287,15 +312,17 @@ class Line {
         if (!(len > 1e-5f))
             return {};
         const Vec3 dir = first / len;
-        const float mass = massPerMetre * std::min(slack, maxSlack);
+        weight = std::isfinite(weight) ? std::clamp(weight, 0.f, 3.f) : 1.f;
+        drag = std::isfinite(drag) ? std::clamp(drag, 0.f, 3.f) : 1.f;
+        const float mass = massPerMetre * std::min(slack, maxSlack) * weight;
         float along = 0;
         for (size_t i = 1; i + 1 < n; ++i)
             along += dot(v[i] - handVelocity_, dir);
         along /= static_cast<float>(n - 2);
-        const float weight = .5f * mass * config().gravity;
-        const float fling = mass * std::max(along, 0.f) / flingSeconds;
-        Vec3 a = dir * ((weight + fling) * strength);
-        const float cap = pullCap * strength, m = length(a);
+        const float hanging = .5f * mass * config().gravity;
+        const float fling = mass * std::max(along, 0.f) / flingSeconds * drag;
+        Vec3 a = dir * ((hanging + fling) * strength);
+        const float cap = capFor(strength, weight), m = length(a);
         if (m > cap && m > 0)
             a = a * (cap / m);
         a = a * std::clamp(age_ / pullRamp, 0.f, 1.f);
@@ -304,18 +331,27 @@ class Line {
     const DrawnLength& drawnLength() const {
         return length_;
     }
-    static tether::Config config() {
+    static tether::Config config(float weight = 1, float drag = 1) {
         tether::Config c; // the combat webs' rope: 24 particles, 8 substeps, gravity, its damping
         c.enabled = true;
         c.raysPerStep = 0; // no world here
+        // ROPE WEIGHT AND DRAG (beta3e): 1 and 1 leave the combat rope's damping and mass as they were.
+        c.damping = dampingFor(c.damping, weight, drag);
+        c.particleMass *= std::clamp(std::isfinite(weight) ? weight : 1.f, .05f, 3.f);
         return c;
+    }
+    float weight() const {
+        return weight_;
+    }
+    float drag() const {
+        return drag_;
     }
 
   private:
     DrawnLength length_;
     tether::Rope rope_;
     bool fading_{};
-    float age_{}, laid_{}, fadeAge_{};
+    float age_{}, laid_{}, fadeAge_{}, weight_ = 1, drag_ = 1;
     Vec3 lastWrist_{}, handVelocity_{}, freeEnd_{}, freeVelocity_{};
 };
 } // namespace spidy::swing_line

@@ -808,6 +808,10 @@ int main() {
                 continue;
             if (key == "swing_line_full_length")
                 continue;
+            if (key == "swing_rope_drag_pct")
+                continue;
+            if (key == "swing_rope_weight_pct")
+                continue;
             if (key == "wall_slide_friction")
                 continue;
             if (key == "wall_grip_to_stick")

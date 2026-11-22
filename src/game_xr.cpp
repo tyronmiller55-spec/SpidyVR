@@ -8202,6 +8202,10 @@ DWORD WINAPI run(void*) {
                                     sl.most = std::max(room, 0);
                                     sl.pullStrength =
                                         values.swingRopePhysics ? values.swingRopePhysicsPct * .01f : 0.f;
+                                    // ROPE WEIGHT AND DRAG (beta3e): the line's mass and the air on it, the
+                                    // sim and the pull alike.
+                                    sl.weight = std::clamp(values.swingRopeWeightPct, 0, 300) * .01f;
+                                    sl.drag = std::clamp(values.swingRopeDragPct, 0, 300) * .01f;
                                     // Let go of (no web on this rope now, or another): the line's account,
                                     // then PHYSICS UNTIL FADE - it swings free from where it sticks while the
                                     // rope is not wanted, until WEB FADE MS, a new web, or a stick-click line
@@ -8397,15 +8401,20 @@ DWORD WINAPI run(void*) {
                                     ask.accel[0] = a.x;
                                     ask.accel[1] = a.y;
                                     ask.accel[2] = a.z;
-                                    // Both hands' cap.
-                                    ask.cap = std::min(2.f * swing_line::Line::pullCap *
-                                                           values.swingRopePhysicsPct * .01f,
-                                                       10.f);
+                                    // Both hands' cap (a heavier line's rises with its weight, beta3e).
+                                    ask.cap = std::min(
+                                        2.f * swing_line::Line::capFor(
+                                                  values.swingRopePhysicsPct * .01f,
+                                                  std::clamp(values.swingRopeWeightPct, 0, 300) * .01f),
+                                        10.f);
                                     if (ropePullCall(&ask) == 0) {
                                         if (on != ropePullWasOn)
-                                            diag_log::writef(
-                                                "rope pull: %s (strength %d%%, at most %.1f m/s^2)",
-                                                on ? "on" : "off", values.swingRopePhysicsPct, ask.cap);
+                                            diag_log::writef("rope pull: %s (strength %d%%, weight %d%%, "
+                                                             "drag %d%%, at most "
+                                                             "%.1f m/s^2)",
+                                                             on ? "on" : "off", values.swingRopePhysicsPct,
+                                                             values.swingRopeWeightPct,
+                                                             values.swingRopeDragPct, ask.cap);
                                         ropePullWasOn = on;
                                     }
                                 }

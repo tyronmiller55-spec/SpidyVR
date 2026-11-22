@@ -868,6 +868,16 @@ struct Values {
     // (%, 0 to 100) GRIP TO STICK's slide: friction as a share of gravity. 0 slides freely; 100 holds a body at
     // rest (a moving one still slows to a stop).
     int wallSlideFriction = 50;
+    // (%, 0 to 300) ROPE WEIGHT (0.8.7-na-beta3e; the owner, Nov 22 t94u: "I want a weight slider for the webs,
+    // right now they're so light I can't control the swing"): the swing line's mass for ROPE PHYSICS, the sim and
+    // the pull alike (swing_line::Input::weight). Heavier hangs and swings on with what it has - more inertia to
+    // lean on - and pulls harder (its cap rises with it). 100 is beta3d's line; 200 by default.
+    int swingRopeWeightPct = 200;
+    // (%, 0 to 300) ROPE DRAG (beta3e, t94u: "Reducing drag should reduce the effect of slack while swinging, but
+    // still allow for the physics"): the air on the swing line (swing_line::Input::drag). Less: the slack's tug and
+    // fling on you shrink and a trailing line lags less, its weight still hangs and the rope still moves. 100 is
+    // beta3d's.
+    int swingRopeDragPct = 100;
     // BETA3 SETTINGS END
     // HERO ATTACK SOUND (beta polish A2; attack_sound, spidy_vr.ini only, no menu row): one of the game's sounds played
     // on Spidey as a punch is thrown or a kick starts (at most one a hand every 250 ms, hit_sound.hpp): the id's 32

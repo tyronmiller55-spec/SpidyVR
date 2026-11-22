@@ -1328,6 +1328,8 @@ Values sanitized(Values v) {
     v.handstandGraceAfterMs = std::clamp(v.handstandGraceAfterMs, 100, 1000);
     v.handstandGraceBeforeMs = std::clamp(v.handstandGraceBeforeMs, 0, 1000);
     v.handoffPlaceCm = std::clamp(v.handoffPlaceCm, 0, 2000);
+    v.swingRopeDragPct = std::clamp(v.swingRopeDragPct, 0, 300);
+    v.swingRopeWeightPct = std::clamp(v.swingRopeWeightPct, 0, 300);
     v.wallSlideFriction = std::clamp(v.wallSlideFriction, 0, 100);
     v.swingReelOutSpeed = std::clamp(v.swingReelOutSpeed, 50, 1500);
     v.swingReelOutTapMs = std::clamp(v.swingReelOutTapMs, 150, 600);
@@ -3308,6 +3310,8 @@ constexpr TabOnly tabOnly[] = {
     {"point_jump_wall_cancel", &Values::pointJumpWallCancel, nullptr},
     {"wall_grip_to_stick", &Values::wallGripToStick, nullptr},
     {"wall_slide_friction", nullptr, &Values::wallSlideFriction},
+    {"swing_rope_weight_pct", nullptr, &Values::swingRopeWeightPct},
+    {"swing_rope_drag_pct", nullptr, &Values::swingRopeDragPct},
     {"log_level", nullptr, &Values::logLevel},
     {"movement_defaults", nullptr, &Values::movementDefaults},
 };
@@ -3554,6 +3558,9 @@ Values withMovementDefaults(Values v, std::string_view text) {
         // GRIP TO STICK comes on once (t94u, a feel change, all features on for testing); a 0 chosen after this
         // revision stays.
         v.wallGripToStick = true;
+        // ROPE WEIGHT: 200% once (t94u, "so light I can't control the swing"); a value chosen after this
+        // revision stays. ROPE DRAG is new at beta3d's 100%.
+        v.swingRopeWeightPct = 200;
         // BETA3E MIGRATION END
     }
     v.movementDefaults = movementDefaultsRevision;

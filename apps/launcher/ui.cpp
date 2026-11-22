@@ -3338,6 +3338,10 @@ void App::options(ImVec2 origin, ImVec2 size) {
                    S(42), [&] { flagToggle("##swingropephysics", tabOnly_.swingRopePhysics); });
             settingOption(Item::none, "Rope pull strength", "How hard the line pulls. 100% is moderate; 0% is none. Default: 100%.",
                    S(150), [&] { fineSlider("##swingropephysicspct", tabOnly_.swingRopePhysicsPct, 0, 300, 10, "%d%%", "Off"); });
+            settingOption(Item::none, "Rope weight", "How heavy the swing line is: a heavier line hangs and swings on with what it has, so you can lean on its momentum, and pulls harder. 100% is the beta3d line. Default: 200%.",
+                   S(150), [&] { fineSlider("##swingropeweightpct", tabOnly_.swingRopeWeightPct, 0, 300, 10, "%d%%", "Weightless"); });
+            settingOption(Item::none, "Rope drag", "The air on the swing line. Lower: the slack tugs and flings you less while the rope still swings and hangs. 100% is the beta3d line. Default: 100%.",
+                   S(150), [&] { fineSlider("##swingropedragpct", tabOnly_.swingRopeDragPct, 0, 300, 10, "%d%%", "No drag"); });
             // BETA3C LAUNCHER END
         });
         // SWINGING (0.8.7-na-beta3d): reel out and the air's physics on a swing, each on by default for testing. The

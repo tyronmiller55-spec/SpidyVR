@@ -77,6 +77,8 @@ inline constexpr Page pages[] = {
     {"WEBS & WEB CANCEL", "  (9) ROPE PHYSICS", "ROPE PHYSICS: hanging slack pulls you, coils fling, trailing lines drag. 100%."},
     {"WEBS & WEB CANCEL", "  (10) REEL OUT", "REEL OUT: double tap a web's reel trigger and hold: the line pays out, 4 m/s."},
     {"WEBS & WEB CANCEL", "  (11) AIR PHYSICS", "AIR PHYSICS WHILE SWINGING: arm spin, poses, air dodge, landing blend on a web."},
+    {"WEBS & WEB CANCEL", "  (12) ROPE WEIGHT", "ROPE WEIGHT: a heavier line hangs, swings on and pulls harder. 200%."},
+    {"WEBS & WEB CANCEL", "  (13) ROPE DRAG", "ROPE DRAG: less air on the line, less slack tug and fling; still swings. 100%."},
 
     {"HAND GRAB", "HAND GRAB", "HAND GRAB: a palm on an enemy or prop holds it."},
     {"HAND GRAB", "  (2) HEAVIES", "Heavies and bosses resist throws unless stunned or webbed up (open)."},
