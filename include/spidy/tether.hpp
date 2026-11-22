@@ -58,6 +58,22 @@ struct Config {
     float spinRate = 3.f, spinHandSpeed = 1.f, spinSeconds = .3f, spinRamp = .5f, spinMax = 18.f;
     // Throw on a tether: the trigger depth where the line starts to pay out (less cuts it) and where it locks.
     float payoutTrigger = .1f, lockTrigger = .95f;
+    // ROPE STABILITY (0.8.7-na-beta3g, the swing lines; the owner, Nov 22 t97u: "the rope seems jittery and jumpy.
+    // The amount of bones seem fine, it feels like a step issue"). All four at their defaults: as before.
+    //   fixedStep: 0 - `substeps` a frame, each a share of the frame's time (a 14 ms frame and a 100 ms hitch both
+    //     make 8 steps: their size swings with the frame). > 0 - steps of this size (seconds) out of the time the
+    //     frames bring (an accumulator), at most maxFixedSteps a frame (past that the rest is dropped: a hitch
+    //     slows the rope, never blows it up).
+    //   iterations: the distance constraint's passes a step (4 before).
+    //   carry: the share of the ends' velocity (the hand's at the hand, the end's at the end, between along the
+    //     rope) the damping leaves alone (0: still air, the whole line damped toward rest in the world; 1:
+    //     damped toward moving with its ends - a line carried along at 20 m/s is not dragged back by its own
+    //     damping, only its swinging about them dies away).
+    //   maxRelative: the most a particle may move relative to that same reference (m/s; 0 no limit) - the
+    //     long-range attachment's corrections on a short step read as huge velocities otherwise.
+    float fixedStep = 0.f;
+    int maxFixedSteps = 40, iterations = 4;
+    float carry = 0.f, maxRelative = 0.f;
 };
 inline bool valid(const Config& c) {
     return c.particles >= 8 && c.particles <= maxParticles && c.substeps >= 2 && c.substeps <= 16 &&
@@ -65,7 +81,10 @@ inline bool valid(const Config& c) {
            std::isfinite(c.damping) && c.damping >= 0 && std::isfinite(c.particleMass) && c.particleMass > 1e-4f &&
            std::isfinite(c.radius) && c.radius >= 0 && c.radius < .5f && c.planeSeconds > 0 && c.raysPerStep >= 0 &&
            c.raysPerStep <= 64 && c.maxPlanes >= 1 && c.maxPlanes <= 64 && c.sleepSeconds > 0 && c.whipMax > 0 &&
-           c.spinMax > 0 && c.payoutTrigger >= 0 && c.lockTrigger > c.payoutTrigger && c.lockTrigger <= 1.f;
+           c.spinMax > 0 && c.payoutTrigger >= 0 && c.lockTrigger > c.payoutTrigger && c.lockTrigger <= 1.f &&
+           std::isfinite(c.fixedStep) && c.fixedStep >= 0 && c.fixedStep <= .05f && c.maxFixedSteps >= 1 &&
+           c.maxFixedSteps <= 200 && c.iterations >= 1 && c.iterations <= 32 && std::isfinite(c.carry) &&
+           c.carry >= 0 && c.carry <= 1 && std::isfinite(c.maxRelative) && c.maxRelative >= 0;
 }
 inline float smoothstep(float a, float b, float x) {
     if (!(b > a))
@@ -174,6 +193,7 @@ class Rope {
     void reset() {
         started_ = false;
         asleep_ = false;
+        accumulated_ = 0;
         planes_.clear();
         rays_ = 0;
         whipCool_ = 0;
@@ -182,6 +202,78 @@ class Rope {
     }
     bool started() const {
         return started_;
+    }
+    // WRAP KEEP (0.8.7-na-beta3g; t97u: "the webs are cutting off and making new lines instead of wrapping and
+    // releasing ... We want to keep our lines as long as we can while wrapping"). The line's far end moved to
+    // `end` - an edge it now bends round (nearer the hand, on the line's own path), or back past one it came off
+    // (farther) - and the rope runs `len` to it. The hand's part of the line as it lies, up to the point on it
+    // nearest `end` and on to `end`, is shared out again among the particles (their velocities with them): no
+    // fresh lay (the "new line" the length's jump made in step()). Returns false (nothing done) with no rope.
+    bool reanchor(Vec3 end, float len) {
+        const int n = config_.particles;
+        if (!started_ || !finite(end) || !std::isfinite(len) || len < .05f)
+            return false;
+        // The point on the polyline nearest `end`.
+        int seg = n - 2;
+        float at = 1, best = 1e30f;
+        for (int i = 0; i + 1 < n; ++i) {
+            const Vec3 a = x_[i], ab = x_[i + 1] - x_[i];
+            const float l2 = dot(ab, ab);
+            const float t = l2 > 1e-12f ? std::clamp(dot(end - a, ab) / l2, 0.f, 1.f) : 0.f;
+            const float d = length(a + ab * t - end);
+            if (d < best) {
+                best = d;
+                seg = i;
+                at = t;
+            }
+        }
+        std::array<Vec3, maxParticles + 2> px{}, pv{};
+        int m = 0;
+        for (int i = 0; i <= seg; ++i) {
+            px[m] = x_[i];
+            pv[m++] = v_[i];
+        }
+        px[m] = x_[seg] + (x_[seg + 1] - x_[seg]) * at;
+        pv[m++] = v_[seg] + (v_[seg + 1] - v_[seg]) * at;
+        if (length(px[m - 1] - end) > 1e-3f) {
+            px[m] = end;
+            pv[m++] = {};
+        }
+        std::array<float, maxParticles + 2> arc{};
+        for (int k = 1; k < m; ++k)
+            arc[k] = arc[k - 1] + length(px[k] - px[k - 1]);
+        const float total = arc[m - 1];
+        if (!(total > 1e-4f))
+            return false;
+        std::array<Vec3, maxParticles> nx{}, nv{};
+        int k = 0;
+        for (int i = 0; i < n; ++i) {
+            const float want = total * static_cast<float>(i) / static_cast<float>(n - 1);
+            while (k + 2 < m && arc[k + 1] < want)
+                ++k;
+            const float span = arc[k + 1] - arc[k];
+            const float t = span > 1e-6f ? std::clamp((want - arc[k]) / span, 0.f, 1.f) : 0.f;
+            nx[i] = px[k] + (px[k + 1] - px[k]) * t;
+            nv[i] = pv[k] + (pv[k + 1] - pv[k]) * t;
+        }
+        nx[0] = x_[0];
+        nx[n - 1] = end;
+        nv[n - 1] = {};
+        for (int i = 0; i < n; ++i) {
+            if (!finite(nx[i]) || !finite(nv[i]))
+                return false;
+        }
+        for (int i = 0; i < n; ++i) {
+            x_[i] = p_[i] = prevStep_[i] = nx[i];
+            v_[i] = nv[i];
+        }
+        pinEnd_ = lastEnd_ = end;
+        rest_ = len / static_cast<float>(n - 1);
+        lastLength_ = len;
+        asleep_ = false;
+        still_ = 0;
+        planes_.clear();
+        return true;
     }
     bool asleep() const {
         return asleep_;
@@ -242,9 +334,29 @@ class Rope {
         }
         asleep_ = false;
         lastLength_ = f.length;
-        // The step.
-        const int substeps = config_.substeps;
-        const float h = dt / static_cast<float>(substeps);
+        // The step. ROPE STABILITY: fixed steps out of an accumulator, or `substeps` shares of the frame.
+        int substeps = config_.substeps;
+        float h = dt / static_cast<float>(substeps);
+        if (config_.fixedStep > 0) {
+            h = config_.fixedStep;
+            accumulated_ += dt;
+            substeps = static_cast<int>(accumulated_ / h);
+            if (substeps > config_.maxFixedSteps) {
+                substeps = config_.maxFixedSteps;
+                accumulated_ = 0; // a hitch: the rest is dropped
+            } else {
+                accumulated_ -= static_cast<float>(substeps) * h;
+            }
+            if (substeps <= 0)
+                return out; // not a whole step yet: the pins wait (the next frame's steps run from them)
+        }
+        // ROPE STABILITY: each particle's frame of reference - the hand's velocity at the hand, the end's at the
+        // end, in between along the rope (the line moves with its ends; only its swinging about them is damped
+        // and limited).
+        const auto reference = [&](int i) {
+            const float u = static_cast<float>(i) / static_cast<float>(n - 1);
+            return f.handVelocity * (1.f - u) + f.endVelocity * u;
+        };
         const float alpha = config_.compliance / (h * h);
         const float inverseMass = 1.f / config_.particleMass;
         const Vec3 gravity{0, -config_.gravity, 0};
@@ -256,7 +368,8 @@ class Rope {
             const float t = static_cast<float>(s + 1) / static_cast<float>(substeps);
             const Vec3 hand = hand0 + (f.hand - hand0) * t, end = end0 + (f.end - end0) * t;
             for (int i = 1; i + 1 < n; ++i) {
-                v_[i] = (v_[i] + gravity * h) * damp;
+                const Vec3 carried = reference(i) * config_.carry;
+                v_[i] = carried + (v_[i] + gravity * h - carried) * damp;
                 p_[i] = x_[i];
                 x_[i] += v_[i] * h;
             }
@@ -266,7 +379,7 @@ class Rope {
             x_[n - 1] = end;
             std::fill(lambda_.begin(), lambda_.begin() + (n - 1), 0.f);
             // A rope pulls, it does not push: a segment is only constrained once it is longer than its rest.
-            for (int pass = 0; pass < 4; ++pass) {
+            for (int pass = 0; pass < config_.iterations; ++pass) {
                 for (int i = 0; i + 1 < n; ++i) {
                     const Vec3 d = x_[i] - x_[i + 1];
                     const float len = length(d);
@@ -297,8 +410,15 @@ class Rope {
                         x_[i] = end + d * (fromEnd / len);
                 }
             collide();
-            for (int i = 1; i + 1 < n; ++i)
+            for (int i = 1; i + 1 < n; ++i) {
                 v_[i] = (x_[i] - p_[i]) / h;
+                if (config_.maxRelative > 0) {
+                    const Vec3 ref = reference(i), rel = v_[i] - ref;
+                    const float r = length(rel);
+                    if (r > config_.maxRelative)
+                        v_[i] = ref + rel * (config_.maxRelative / r);
+                }
+            }
         }
         pinHand_ = f.hand;
         pinEnd_ = f.end;
@@ -444,7 +564,7 @@ class Rope {
     std::vector<Capsule> capsules_;
     std::vector<Sample> handSpeeds_;
     Vec3 pinHand_{}, pinEnd_{}, lastHand_{}, lastEnd_{};
-    float rest_{}, lastLength_{}, whipCool_{}, still_{};
+    float rest_{}, lastLength_{}, whipCool_{}, still_{}, accumulated_{};
     int rays_{};
 };
 

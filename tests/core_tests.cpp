@@ -25497,7 +25497,7 @@ int main() {
                   "the movement defaults overrode a choice made after them");
             check(withMovementDefaults(withTabOnly({}, ""), "").runCurve,
                   "no file: not the movement defaults");
-            check(tabOnlyText(migrated).find("movement_defaults=22\n") != std::string::npos,
+            check(tabOnlyText(migrated).find("movement_defaults=23\n") != std::string::npos,
                   "the migration is not remembered");
         }
         {
@@ -25995,13 +25995,16 @@ int main() {
                   "point_jump_wall_cancel=1\n"
                   "wall_grip_to_stick=1\n"
                   "wall_slide_friction=50\n"
-                  "swing_rope_weight_pct=200\n"
+                  "swing_rope_weight_pct=100\n"
                   "swing_rope_drag_pct=100\n"
                   "kick_lunge=1\n"
                   "kick_lunge_reach_cm=250\n"
                   "kick_feel=1\n"
+                  "swing_rope_stable=1\n"
+                  "swing_rope_load_taut=1\n"
+                  "web_wrap_keep=1\n"
                   "log_level=1\n"
-                  "movement_defaults=22\n",
+                  "movement_defaults=23\n",
               "the defaults' text");
         Values changed = defaults;
         changed.recordingFov = 140;
@@ -34465,6 +34468,196 @@ int main() {
         check(none.x == zero.x && none.y == zero.y && none.z == zero.z, "a zero pull changed the swing");
         check(pulled.x > none.x + .05f, "the pull did not move him");
     });
+    test("ROPE STABILITY (beta3g): fixed steps settle a swung line, alike at any frame rate, with no spikes", [&] {
+        namespace sl = swing_line;
+        // The hand swings a 12 m line with 6 m of slack round the anchor for a second, then stops.
+        const Vec3 anchor{0, 30, 0};
+        const auto handAt = [&](float t) {
+            const float a = std::min(t, 1.f) * 3.f;
+            return Vec3{12.f * std::sin(a), 30.f - 6.f * std::cos(a), 6.f * std::cos(a)};
+        };
+        const auto handVel = [&](float t) {
+            return t < 1.f ? (handAt(t + 1e-3f) - handAt(t)) / 1e-3f : Vec3{};
+        };
+        struct Run {
+            float peak{}, settled{}, fastest{};
+            std::vector<Vec3> at; // the line at 1.5 s
+        };
+        const auto run = [&](const tether::Config& c, auto nextDt) {
+            tether::Rope r;
+            r.configure(c);
+            Run out;
+            float t = 0;
+            int frameNo = 0;
+            while (t < 4.f) {
+                const float dt = nextDt(frameNo++);
+                tether::Rope::Frame f;
+                f.dt = dt;
+                f.hand = handAt(t + dt);
+                f.handVelocity = handVel(t + dt);
+                f.end = anchor;
+                f.length = 18.f;
+                r.step(f);
+                t += dt;
+                float e = 0;
+                const auto vs = r.velocities();
+                for (size_t i = 0; i < vs.size(); ++i) {
+                    const Vec3 v = vs[i];
+                    e += dot(v, v);
+                    const float u = static_cast<float>(i) / static_cast<float>(vs.size() - 1);
+                    if (i > 0 && i + 1 < vs.size()) // each particle about its ends' velocity there
+                        out.fastest = std::max(out.fastest, length(v - f.handVelocity * (1.f - u)));
+                }
+                if (t < 1.5f)
+                    out.peak = std::max(out.peak, e);
+                else
+                    out.settled = e;
+                if (out.at.empty() && t >= 1.5f)
+                    out.at.assign(r.points().begin(), r.points().end());
+            }
+            return out;
+        };
+        const auto steady = [](int) { return 1.f / 90; };
+        unsigned seed = 7;
+        const auto ragged = [&](int) {
+            seed = seed * 1103515245u + 12345u;
+            return 1.f / 120 + static_cast<float>((seed >> 8) % 1000) / 1000.f * (1.f / 30 - 1.f / 120);
+        };
+        const auto hitchy = [](int i) { return i % 40 == 39 ? .1f : 1.f / 90; };
+        const auto c = sl::Line::stableConfig();
+        check(tether::valid(c) && c.fixedStep > 0 && c.iterations == 8 && c.carry > .5f && c.maxRelative > 0,
+              "the stable config");
+        const Run a = run(c, steady), b = run(c, ragged), h = run(c, hitchy);
+        check(a.peak > 1.f, "the line never swung");
+        check(a.settled < a.peak * .02f && b.settled < b.peak * .02f, "the energy did not settle (the volatile line)");
+        float apart = 0;
+        for (size_t i = 0; i < a.at.size() && i < b.at.size(); ++i)
+            apart = std::max(apart, length(a.at[i] - b.at[i]));
+        check(apart < .6f, "the line differs with the frame rate (a step issue)");
+        check(a.fastest <= c.maxRelative + 1e-3f && h.fastest <= c.maxRelative + 1e-3f, "a spike past the limit");
+        // The old per-frame steps differ far more with the frame rate (the bug's measure, logged for the notes).
+        const Run oa = run(sl::Line::config(), steady), ob = run(sl::Line::config(), ragged);
+        float oldApart = 0;
+        for (size_t i = 0; i < oa.at.size() && i < ob.at.size(); ++i)
+            oldApart = std::max(oldApart, length(oa.at[i] - ob.at[i]));
+        std::printf("  rope stability: 90 Hz vs ragged frames apart %.3f m (beta3f steps %.3f m); settled energy "
+                    "%.4f of peak\n",
+                    apart, oldApart, a.settled / std::max(a.peak, 1e-6f));
+        // Defaults: off is the old rope (combat tethers too).
+        const tether::Config plain{};
+        check(plain.fixedStep == 0 && plain.iterations == 4 && plain.carry == 0 && plain.maxRelative == 0,
+              "the old rope's defaults moved");
+        tether::Config bad = c;
+        bad.carry = 2;
+        check(!tether::valid(bad), "a carry past 1 is valid");
+    });
+    test("TAUT UNDER LOAD (beta3g): the swing rope's pull draws the line taut; its slack comes back when it eases", [&] {
+        namespace sl = swing_line;
+        const Vec3 anchor{0, 40, 0};
+        sl::Line line;
+        sl::Input in{true, true, 9, 0, 40.f, false, false};
+        in.stable = true;
+        in.loadTaut = true;
+        in.tension = 0;
+        line.update(in, {40, 40, 0}, anchor, 1.f / 90);
+        sl::Line::Out o;
+        for (int i = 0; i < 90; ++i)
+            o = line.update(in, {30, 40, 0}, anchor, 1.f / 90); // 10 m of slack hangs
+        check(o.slack > 9.f && line.tautness() < .01f, "unloaded: the slack");
+        in.tension = 9.81f; // he hangs on it
+        for (int i = 0; i < 45; ++i)
+            o = line.update(in, {30, 40, 0}, anchor, 1.f / 90);
+        check(line.tautness() > .95f && o.slack < .5f, "loaded: the line did not go taut");
+        check(std::abs(o.drawn - 40.f) < 1e-2f, "the line's length was lost");
+        in.tension = 0; // thrown up past the anchor
+        for (int i = 0; i < 180; ++i)
+            o = line.update(in, {30, 40, 0}, anchor, 1.f / 90);
+        check(o.slack > 9.f, "the slack did not come back");
+        in.tension = 3.f; // a light load: part of it
+        for (int i = 0; i < 90; ++i)
+            o = line.update(in, {30, 40, 0}, anchor, 1.f / 90);
+        check(line.tautness() > .05f && line.tautness() < .6f, "a light load: not part taut");
+        // Off: the slack hangs whatever the load (beta3f).
+        sl::Line plain;
+        sl::Input off{true, true, 9, 0, 40.f, false, false};
+        off.tension = 9.81f;
+        plain.update(off, {40, 40, 0}, anchor, 1.f / 90);
+        for (int i = 0; i < 90; ++i)
+            o = plain.update(off, {30, 40, 0}, anchor, 1.f / 90);
+        check(o.slack > 9.f && plain.tautness() == 0, "off: the load drew it");
+        // The pull goes with the shown slack: none once taut.
+        sl::Line pulled;
+        in.pullStrength = 1.f;
+        in.tension = 0;
+        pulled.update(in, {40, 40, 0}, anchor, 1.f / 90);
+        for (int i = 0; i < 180; ++i)
+            o = pulled.update(in, {10, 40, 0}, anchor, 1.f / 90);
+        const float hanging = length(o.pull);
+        in.tension = 12.f;
+        for (int i = 0; i < 90; ++i)
+            o = pulled.update(in, {10, 40, 0}, anchor, 1.f / 90);
+        check(hanging > .5f && length(o.pull) < .1f, "the loaded line still pulled its slack");
+    });
+    test("WRAP KEEP (beta3g): a line bending round an edge keeps the rope as it lies, cut at the edge", [&] {
+        namespace sl = swing_line;
+        // The rope itself: settle, then the end moves to a point on the line.
+        tether::Rope r;
+        r.configure(sl::Line::stableConfig());
+        tether::Rope::Frame f;
+        f.dt = 1.f / 90;
+        f.hand = {0, 20, 0};
+        f.end = {16, 20, 0};
+        f.length = 20.f;
+        for (int i = 0; i < 180; ++i)
+            r.step(f);
+        const std::vector<Vec3> before(r.points().begin(), r.points().end());
+        const Vec3 edge = before[before.size() / 2];
+        check(!tether::Rope{}.reanchor(edge, 5.f), "a rope never laid reanchored");
+        check(r.reanchor(edge, 10.f), "no reanchor");
+        const auto after = r.points();
+        check(length(after.front() - f.hand) < 1e-4f && length(after.back() - edge) < 1e-4f, "the ends");
+        float off = 0;
+        for (const Vec3& p : after) {
+            float best = 1e9f;
+            for (size_t i = 0; i + 1 < before.size(); ++i) {
+                const Vec3 ab = before[i + 1] - before[i];
+                const float t = std::clamp(dot(p - before[i], ab) / std::max(dot(ab, ab), 1e-9f), 0.f, 1.f);
+                best = std::min(best, length(before[i] + ab * t - p));
+            }
+            off = std::max(off, best);
+        }
+        check(off < .02f, "the kept line left where it lay (a new line)");
+        // The next step goes on from it: no fresh lay (the hand's half keeps its sag).
+        f.end = edge;
+        f.length = 10.f;
+        r.step(f);
+        float moved = 0;
+        for (size_t i = 0; i < after.size(); ++i)
+            moved = std::max(moved, length(r.points()[i] - after[i]));
+        check(moved < .5f, "the line was laid anew after the reanchor");
+        // The line: an edge's count changing reanchors with it on, not with it off.
+        const auto wrapRun = [&](bool keep) {
+            sl::Line line;
+            sl::Input in{true, true, 11, 0, 24.f, false, false};
+            in.stable = true;
+            in.wrapKeep = keep;
+            const Vec3 anchor{20, 20, 0};
+            line.update(in, {0, 20, 0}, anchor, 1.f / 90);
+            for (int i = 0; i < 90; ++i)
+                line.update(in, {0, 20, 0}, anchor, 1.f / 90);
+            in.edges = 1;
+            in.beyond = 10.f;
+            line.update(in, {0, 20, 0}, {10, 19, 0}, 1.f / 90);
+            return line.reanchors();
+        };
+        check(wrapRun(true) == 1 && wrapRun(false) == 0, "WRAP KEEP: the wrap's reanchor");
+    });
+    test("MASS RESCALE (beta3g): 100% is beta3f's 250%, the pull's cap 6 m/s^2 a hand", [&] {
+        namespace sl = swing_line;
+        near(sl::Line::massPerMetre, .0102f * 2.5f, 1e-6f);
+        near(sl::Line::pullCap, 6.f, 1e-6f);
+        near(sl::Line::capFor(.5f, 1.f), 3.f, 1e-6f);
+    });
     test("shooter check: the logged forearm sign and the palm-side rule read the same palm, both hands", [&] {
         const float d2r = 3.14159265f / 180;
         for (int hand = 0; hand < 2; ++hand)
@@ -34763,9 +34956,10 @@ int main() {
         check(d.swingAirPhysics, "AIR PHYSICS WHILE SWINGING: on");
         check(d.pointJumpWallCancel, "POINT JUMP CANCELS WALL GRABS: on");
         check(d.wallGripToStick && d.wallSlideFriction == 50, "GRIP TO STICK: on, 50% friction");
-        check(d.swingRopeWeightPct == 200 && d.swingRopeDragPct == 100, "ROPE WEIGHT 200%, ROPE DRAG 100%");
+        check(d.swingRopeWeightPct == 100 && d.swingRopeDragPct == 100, "ROPE WEIGHT 100% (rescaled, beta3g), ROPE DRAG 100%");
         check(d.kickLunge && d.kickLungeReachCm == 250, "KICK LUNGE: on, 250 cm");
         check(d.kickFeel, "KICK FEEL: on");
+        check(d.swingRopeStable && d.swingRopeLoadTaut && d.webWrapKeep, "ROPE STABILITY, TAUT UNDER LOAD, WRAP KEEP: on");
         // BETA3 DEFAULT CHECKS END
         Values off{};
         off.handoffHeadFirst = false;
@@ -34786,6 +34980,8 @@ int main() {
         off.wallGripToStick = false;
         off.kickLunge = false;
         off.kickFeel = false;
+        off.swingRopeStable = off.swingRopeLoadTaut = off.webWrapKeep = false;
+        off.swingRopeWeightPct = 300;
         // BETA3 OFF END
         std::string base = tabOnlyText(off);
         base = base.substr(0, base.find("movement_defaults="));
@@ -34828,8 +35024,8 @@ int main() {
         const Values walls = withMovementDefaults(withTabOnly({}, rev20), rev20);
         check(walls.pointJumpWallCancel, "a revision 20 file did not get POINT JUMP CANCELS WALL GRABS");
         check(walls.wallGripToStick && walls.wallSlideFriction == 50, "a revision 20 file did not get GRIP TO STICK");
-        check(walls.swingRopeWeightPct == 200 && walls.swingRopeDragPct == 100,
-              "a revision 20 file did not get ROPE WEIGHT 200% and ROPE DRAG 100%");
+        check(walls.swingRopeWeightPct == 100 && walls.swingRopeDragPct == 100,
+              "a revision 20 file did not get ROPE WEIGHT (200% then rescaled to 100%) and ROPE DRAG 100%");
         // BETA3E MIGRATED END
         const std::string rev21 = base + "movement_defaults=21\n";
         const Values kicks = withMovementDefaults(withTabOnly({}, rev21), rev21);
@@ -34837,8 +35033,21 @@ int main() {
         check(kicks.kickFeel, "a revision 21 file did not get KICK FEEL");
         check(!kicks.pointJumpWallCancel, "revision 21 ran again");
         // BETA3F MIGRATED END
+        const std::string rev22 = base + "movement_defaults=22\n";
+        const Values ropes = withMovementDefaults(withTabOnly({}, rev22), rev22);
+        check(ropes.swingRopeStable && ropes.swingRopeLoadTaut && ropes.webWrapKeep,
+              "a revision 22 file did not get ROPE STABILITY, TAUT UNDER LOAD, WRAP KEEP");
+        check(ropes.swingRopeWeightPct == 120, "a saved 300% weight did not become the same mass (120%)");
+        const std::string heavy = "swing_rope_weight_pct=200\nmovement_defaults=22\n";
+        check(withMovementDefaults(withTabOnly({}, heavy), heavy).swingRopeWeightPct == 100,
+              "beta3f's 200% default did not become 100%");
+        const std::string light = "swing_rope_weight_pct=100\nmovement_defaults=22\n";
+        check(withMovementDefaults(withTabOnly({}, light), light).swingRopeWeightPct == 40,
+              "a saved 100% did not become 40% (the same mass)");
+        check(!ropes.kickLunge, "revision 22 ran again");
+        // BETA3G MIGRATED END
         // BETA3 MIGRATED END
-        const std::string chosen = base + "movement_defaults=22\n";
+        const std::string chosen = base + "movement_defaults=23\n";
         const Values kept = withMovementDefaults(withTabOnly({}, chosen), chosen);
         check(!kept.handoffHeadFirst, "a 0 chosen after revision 17 moved");
         check(!kept.landingViewSnap, "LANDING VIEW SNAP: a 0 chosen after revision 17 moved");
@@ -34858,6 +35067,9 @@ int main() {
         check(!kept.wallGripToStick, "GRIP TO STICK: a 0 chosen after revision 21 moved");
         check(!kept.kickLunge, "KICK LUNGE: a 0 chosen after revision 22 moved");
         check(!kept.kickFeel, "KICK FEEL: a 0 chosen after revision 22 moved");
+        check(!kept.swingRopeStable && !kept.swingRopeLoadTaut && !kept.webWrapKeep,
+              "the beta3g switches: a 0 chosen after revision 23 moved");
+        check(kept.swingRopeWeightPct == 300, "ROPE WEIGHT chosen after revision 23 moved");
         // BETA3 KEPT END
     });
     test("showtime auto: a Y+B finisher's scene (no play, the tracking rig off) lets the camera out", [&] {

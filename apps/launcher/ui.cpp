@@ -3338,7 +3338,7 @@ void App::options(ImVec2 origin, ImVec2 size) {
                    S(42), [&] { flagToggle("##swingropephysics", tabOnly_.swingRopePhysics); });
             settingOption(Item::none, "Rope pull strength", "How hard the line pulls. 100% is moderate; 0% is none. Default: 100%.",
                    S(150), [&] { fineSlider("##swingropephysicspct", tabOnly_.swingRopePhysicsPct, 0, 300, 10, "%d%%", "Off"); });
-            settingOption(Item::none, "Rope weight", "How heavy the swing line is: a heavier line hangs and swings on with what it has, so you can lean on its momentum, and pulls harder. 100% is the beta3d line. Default: 200%.",
+            settingOption(Item::none, "Rope weight", "How heavy the swing line is: a heavier line hangs and swings on with what it has, so you can lean on its momentum, and pulls harder. Rescaled in beta3g: 100% is now Spidey's own match (the old 250%). Default: 100%.",
                    S(150), [&] { fineSlider("##swingropeweightpct", tabOnly_.swingRopeWeightPct, 0, 300, 10, "%d%%", "Weightless"); });
             settingOption(Item::none, "Rope drag", "The air on the swing line. Lower: the slack tugs and flings you less while the rope still swings and hangs. 100% is the beta3d line. Default: 100%.",
                    S(150), [&] { fineSlider("##swingropedragpct", tabOnly_.swingRopeDragPct, 0, 300, 10, "%d%%", "No drag"); });
@@ -3378,6 +3378,17 @@ void App::options(ImVec2 origin, ImVec2 size) {
             settingOption(Item::none, "Kick feel", "A kick that starts ticks both controllers, and a lunge adds the web strike's rush thump and sound. Landed kicks feel as before. Default: on.",
                    S(42), [&] { flagToggle("##kickfeel", tabOnly_.kickFeel); });
             // BETA3F LAUNCHER END
+        });
+        // WEB ROPE (0.8.7-na-beta3g): the swing line's steps, load and wraps, each on by default for testing. The
+        // same spidy_vr.ini keys as the game's NA tabs.
+        group(shootersPage, 1, "Web rope (beta3g)", [&] {
+            settingOption(Item::none, "Steady rope steps", "Changes the feel: the swing line's physics step at a steady rate whatever the frame rate, damp out instead of building up, and no longer stall the line in midair. Off: as beta3f. Default: on.",
+                   S(42), [&] { flagToggle("##swingropestable", tabOnly_.swingRopeStable); });
+            settingOption(Item::none, "Taut under load", "Changes the look: when you swing or hang on the web the line pulls straight and tight; its slack comes back when the load comes off. Off: the slack always hangs, as beta3f. Default: on.",
+                   S(42), [&] { flagToggle("##swingropeloadtaut", tabOnly_.swingRopeLoadTaut); });
+            settingOption(Item::none, "Keep lines through wraps", "A web that wraps round an edge or comes off one keeps its line as it lies instead of a new line appearing. Off: as beta3f. Default: on.",
+                   S(42), [&] { flagToggle("##webwrapkeep", tabOnly_.webWrapKeep); });
+            // BETA3G ROPE LAUNCHER END
         });
         // NA HELP (beta polish M5): the same pages as the game's NA · HELP tab (na_help.hpp), a card per topic.
         const int helpPage = static_cast<int>(Category::help);

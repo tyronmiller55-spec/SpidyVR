@@ -812,6 +812,10 @@ int main() {
                 continue;
             if (key == "kick_lunge" || key == "kick_lunge_reach_cm" || key == "kick_feel")
                 continue;
+            if (key == "swing_rope_stable" ||
+                key == "swing_rope_load_taut" ||
+                key == "web_wrap_keep")
+                continue;
             if (key == "swing_rope_weight_pct")
                 continue;
             if (key == "wall_slide_friction")

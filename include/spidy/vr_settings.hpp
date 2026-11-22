@@ -302,7 +302,7 @@ struct Values {
     // from before it gets RUN CURVE on and EARLY JUMP QUICK TAP once (the
     // user: "movement fixes will be defaults"); after that the player's own
     // choice stands. Not a row. movement_defaults.
-    int movementDefaults = 22; // movementDefaultsRevision: a new file has seen them
+    int movementDefaults = 23; // movementDefaultsRevision: a new file has seen them
     // SOFT LANDING (the tab's SOFT LANDING; Swing::allowSoftLanding,
     // run_update::softLandVertical): a fall the swing flies, with no web
     // holding, eases to 9 m/s down over its last 3 m (or 0.35 s), its speed
@@ -872,7 +872,12 @@ struct Values {
     // right now they're so light I can't control the swing"): the swing line's mass for ROPE PHYSICS, the sim and
     // the pull alike (swing_line::Input::weight). Heavier hangs and swings on with what it has - more inertia to
     // lean on - and pulls harder (its cap rises with it). 100 is beta3d's line; 200 by default.
-    int swingRopeWeightPct = 200;
+    // MASS RESCALE (0.8.7-na-beta3g, settings revision 23; the owner, Nov 22 t97u: "I had to increase his weight
+    // to see an effect ... See how you can massage things to achieve this without me setting his weight to
+    // 300%"): the line's mass a metre is 2.5 times beta3f's at the same percentage (swing_line::Line::
+    // massPerMetre), so 100% now is beta3f's 250%; revision 23 turns a saved weight into the same mass (beta3f's
+    // 200% default becomes 100%). 100 by default.
+    int swingRopeWeightPct = 100;
     // (%, 0 to 300) ROPE DRAG (beta3e, t94u: "Reducing drag should reduce the effect of slack while swinging, but
     // still allow for the physics"): the air on the swing line (swing_line::Input::drag). Less: the slack's tug and
     // fling on you shrink and a trailing line lags less, its weight still hangs and the rope still moves. 100 is
@@ -890,6 +895,22 @@ struct Values {
     // gesture taken is felt at once; a kick that lunges adds the strike rush's thump and sound (BLOW SOUNDS
     // OFF silences it). A landed kick's blow feels and sounds as before (the strikes'). Off: as beta3e.
     bool kickFeel = true;
+    // ROPE STABILITY (0.8.7-na-beta3g; the owner, Nov 22 t97u: "they seem to build up kinetic energy and become
+    // volatile, never settling ... the rope seems jittery and jumpy ... it feels like a step issue"; swing_line::
+    // Input::stable): the swing line's sim steps at a fixed 1/600 s out of the frames' time (beta3f: 8 steps a
+    // frame whatever its length), 8 constraint passes a step, damped toward moving with the hand (a line carried
+    // along is not dragged back into a stall), no particle faster than 30 m/s about the hand, its pull eased
+    // over 80 ms. Off: as beta3f.
+    bool swingRopeStable = true;
+    // TAUT UNDER LOAD (beta3g, t97u: "Spiderman's weight should make it taut when he swings against it";
+    // swing_line::Input::loadTaut): while the swing's own rope carries him (its pull past 2 m/s^2, all in at 6),
+    // the drawn line's spare length goes in and it is drawn taut; the slack comes back when the load comes off.
+    // Off: the slack always hangs, as beta3f.
+    bool swingRopeLoadTaut = true;
+    // WRAP KEEP (beta3g, t97u: "the webs are cutting off and making new lines instead of wrapping and
+    // releasing"; tether::Rope::reanchor): a web that bends round an edge or comes off one keeps its line as it
+    // lies, cut at (or carried on to) the new end, instead of a fresh one laid. Off: laid anew, as beta3f.
+    bool webWrapKeep = true;
     // BETA3 SETTINGS END
     // HERO ATTACK SOUND (beta polish A2; attack_sound, spidy_vr.ini only, no menu row): one of the game's sounds played
     // on Spidey as a punch is thrown or a kick starts (at most one a hand every 250 ms, hit_sound.hpp): the id's 32
@@ -1438,7 +1459,7 @@ std::string tabOnlyText(const Values&);
 // key, or whose value is no whole number, is passed over.
 Values withTabOnly(Values, std::string_view text);
 // The movement defaults' revision (Values::movementDefaults) this build has.
-inline constexpr int movementDefaultsRevision = 22;
+inline constexpr int movementDefaultsRevision = 23;
 // November 12 movement cleanup: a settings file (that text) older than
 // movementDefaultsRevision gets the new movement defaults once - RUN CURVE
 // on, EARLY JUMP at least QUICK TAP - and is marked as having seen them; a

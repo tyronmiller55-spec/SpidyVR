@@ -60,7 +60,31 @@ struct Input {
     //     with less), and so does the slack's tug and fling on the player (the pull's momentum part); its
     //     hanging weight stays. At 0 the rope still moves (a floor of damping keeps it stable).
     float weight = 1, drag = 1;
+    // ROPE STABILITY (0.8.7-na-beta3g, swing_rope_stable; the owner, Nov 22 t97u: "they seem to build up kinetic
+    // energy and become volatile, never settling until I give extra slack, then the physics seem to 'stall' in
+    // midair ... the rope seems jittery and jumpy ... it feels like a step issue"): the sim steps at a fixed
+    // 1/600 s out of the frames' time (stableConfig), 8 passes a step, damped toward moving with the hand (a line
+    // carried along is not dragged back by its own damping: the stall) with a little still air left, no particle
+    // faster than 30 m/s about the hand, and the pull eased over 80 ms. Off: as beta3f.
+    bool stable{};
+    // TAUT UNDER LOAD (beta3g, swing_rope_load_taut; t97u: "Spiderman's weight should make it taut when he swings
+    // against it. The line never pulled tight against his weight"): `tension` is the swing's own rope's pull on
+    // him (game_swing::WebState::tension, m/s^2). While he hangs or swings against the web the drawn line's
+    // spare length goes in (it is drawn straight and taut), and it comes back as slack when the load comes off
+    // (falling toward the anchor, thrown up past it). The length the line caught at is kept for that. Off: the
+    // slack always hangs, as beta3f.
+    bool loadTaut{};
+    float tension{};
+    // WRAP KEEP (beta3g, web_wrap_keep; t97u: "the webs are cutting off and making new lines instead of wrapping
+    // and releasing"): the line's far end jumped (an edge the web now bends round, or one it came off): the rope
+    // as it lies is cut at the new edge or carried on to the new end (tether::Rope::reanchor), not laid anew.
+    // `edges`: how many edges the web bends round now. Off: laid anew, as beta3f.
+    bool wrapKeep{};
+    int edges{};
 };
+// TAUT UNDER LOAD: the swing rope's pull (m/s^2) where the drawn line starts going in, and where it is all in
+// (his weight is 9.81: hanging still is past the second).
+inline constexpr float tautFrom = 2.f, tautFull = 6.f, tautIn = .06f, tautOut = .3f;
 // ROPE WEIGHT AND DRAG: the sim's damping for a line of `weight` in air of `drag` (Input's), from the combat
 // rope's own: drag over weight, each held to its floor (drag 0.05, weight 0.25) so the rope never runs wild.
 inline float dampingFor(float base, float weight, float drag) {
@@ -182,6 +206,8 @@ class Line {
         if (o.change.attached) {
             rope_.reset();
             age_ = 0;
+            taut_ = 0;
+            pull_ = {};
             lastWrist_ = wrist;
             handVelocity_ = {};
         }
@@ -191,7 +217,17 @@ class Line {
         }
         lastWrist_ = wrist;
         age_ += dt;
-        const float slack = o.drawn - (o.distance + beyond);
+        float slack = o.drawn - (o.distance + beyond);
+        // TAUT UNDER LOAD: the spare length in while the swing rope carries him.
+        if (in.loadTaut) {
+            const float want = std::isfinite(in.tension) ? tether::smoothstep(tautFrom, tautFull, in.tension) : 0.f;
+            const float tau = want > taut_ ? tautIn : tautOut;
+            taut_ += (want - taut_) * (dt > 0 ? 1.f - std::exp(-dt / tau) : 0.f);
+            taut_ = std::clamp(taut_, 0.f, 1.f);
+            slack = std::max(slack, 0.f) * (1.f - taut_);
+        } else {
+            taut_ = 0;
+        }
         o.slack = std::max(slack, 0.f);
         // Past maxSlack the rope is drawn maxSlack longer than the line (the rest is not drawn).
         const float laid = o.distance + std::clamp(slack, 0.f, maxSlack);
@@ -199,15 +235,27 @@ class Line {
         weight_ = std::isfinite(in.weight) ? std::clamp(in.weight, 0.f, 3.f) : 1.f;
         drag_ = std::isfinite(in.drag) ? std::clamp(in.drag, 0.f, 3.f) : 1.f;
         // ROPE WEIGHT AND DRAG: the sim takes the line's weight and the air's drag every frame (no rebuild).
-        rope_.configure(config(weight_, drag_));
+        stable_ = in.stable;
+        rope_.configure(stable_ ? stableConfig(weight_, drag_) : config(weight_, drag_));
+        // WRAP KEEP: the far end jumped, or the edges changed: the line as it lies, to the new end.
+        if (in.wrapKeep && rope_.started() && !o.change.attached && finite(lastEnd_) &&
+            (in.edges != lastEdges_ || length(anchor - lastEnd_) > std::max(.5f, 4.f * length(handVelocity_) * dt)))
+            if (rope_.reanchor(anchor, std::max(laid, .05f)))
+                ++reanchors_;
+        lastEnd_ = anchor;
+        lastEdges_ = in.edges;
         tether::Rope::Frame f;
         f.dt = dt;
         f.hand = wrist;
         f.end = anchor;
         f.length = laid;
+        if (stable_)
+            f.handVelocity = handVelocity_;
         const auto r = rope_.step(f);
-        if (!(slack > minSlack))
+        if (!(slack > minSlack)) {
+            pull_ = {};
             return o; // taut: the straight line, as before (the rope keeps running for the next slack)
+        }
         const int most = std::clamp(in.most, 0, tether::maxDrawn);
         if (most > 0 && (r.active || r.asleep)) {
             o.count = rope_.draw(o.points, most);
@@ -217,6 +265,11 @@ class Line {
             o.count = sagPoints(wrist, anchor, o.drawn - beyond, most, o.points);
         if (in.pullStrength > 0 && !in.grounded && (r.active || r.asleep))
             o.pull = pull(slack, in.pullStrength, weight_, drag_);
+        // ROPE STABILITY: the pull eased (80 ms), so a jitter of the line's first segment does not shake him.
+        if (stable_) {
+            pull_ += (o.pull - pull_) * (dt > 0 ? 1.f - std::exp(-dt / .08f) : 0.f);
+            o.pull = finite(pull_) ? pull_ : Vec3{};
+        }
         return o;
     }
     // PHYSICS UNTIL FADE (beta3c, web_fade_physics): the web was let go of. Its wrist end comes free with the
@@ -297,7 +350,11 @@ class Line {
     // pullRamp after a catch. The sim's damping is world-space (still air), so a line trailing a fast swing
     // pulls back: the drag. ROPE WEIGHT AND DRAG (beta3e): `weight` scales the mass (and the cap past 1),
     // `drag` the momentum part (the tug and the fling); both 1 as beta3d.
-    static constexpr float massPerMetre = .0102f, flingSeconds = .5f, pullCap = 2.5f, pullRamp = .3f;
+    // MASS RESCALE (beta3g; t97u: "I had to increase his weight to see an effect ... I'm sure it's just a scaling
+    // issue"): the line is 2.5 times as heavy a metre at 100% as through beta3f (100% now is beta3f's 250%;
+    // revision 23 turns a saved weight into the same mass), and the pull's cap at full strength is 6 m/s^2 a hand (beta3f's 2.5: 27% of the let-gos in the Nov 22
+    // log had sat at it).
+    static constexpr float massPerMetre = .0255f, flingSeconds = .5f, pullCap = 6.f, pullRamp = .3f;
     static float capFor(float strength, float weight) {
         return pullCap * strength * std::max(std::isfinite(weight) ? weight : 1.f, 1.f);
     }
@@ -340,8 +397,27 @@ class Line {
         c.particleMass *= std::clamp(std::isfinite(weight) ? weight : 1.f, .05f, 3.f);
         return c;
     }
+    // ROPE STABILITY: the swing line's sim - fixed 1/600 s steps (at most 40 a frame), 8 passes, damped toward
+    // moving with the hand (90%) and the rest in still air, no particle past 30 m/s about the hand.
+    static tether::Config stableConfig(float weight = 1, float drag = 1) {
+        tether::Config c = config(weight, drag);
+        c.fixedStep = 1.f / 600.f;
+        c.maxFixedSteps = 40;
+        c.iterations = 8;
+        c.carry = .9f;
+        c.maxRelative = 30.f;
+        return c;
+    }
     float weight() const {
         return weight_;
+    }
+    // TAUT UNDER LOAD: how far in the spare length is (0 all hanging, 1 drawn taut).
+    float tautness() const {
+        return taut_;
+    }
+    // WRAP KEEP: the times the line was carried to a new end.
+    std::uint32_t reanchors() const {
+        return reanchors_;
     }
     float drag() const {
         return drag_;
@@ -351,7 +427,10 @@ class Line {
     DrawnLength length_;
     tether::Rope rope_;
     bool fading_{};
-    float age_{}, laid_{}, fadeAge_{}, weight_ = 1, drag_ = 1;
-    Vec3 lastWrist_{}, handVelocity_{}, freeEnd_{}, freeVelocity_{};
+    float age_{}, laid_{}, fadeAge_{}, weight_ = 1, drag_ = 1, taut_{};
+    Vec3 lastWrist_{}, handVelocity_{}, freeEnd_{}, freeVelocity_{}, lastEnd_{NAN, NAN, NAN}, pull_{};
+    bool stable_{};
+    int lastEdges_{};
+    std::uint32_t reanchors_{};
 };
 } // namespace spidy::swing_line

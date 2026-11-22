@@ -8250,6 +8250,12 @@ DWORD WINAPI run(void*) {
                                     // sim and the pull alike.
                                     sl.weight = std::clamp(values.swingRopeWeightPct, 0, 300) * .01f;
                                     sl.drag = std::clamp(values.swingRopeDragPct, 0, 300) * .01f;
+                                    // ROPE STABILITY, TAUT UNDER LOAD, WRAP KEEP (beta3g, t97u).
+                                    sl.stable = values.swingRopeStable;
+                                    sl.loadTaut = values.swingRopeLoadTaut;
+                                    sl.tension = web.tension;
+                                    sl.wrapKeep = values.webWrapKeep;
+                                    sl.edges = static_cast<int>(edgeCount);
                                     // Let go of (no web on this rope now, or another): the line's account,
                                     // then PHYSICS UNTIL FADE - it swings free from where it sticks while the
                                     // rope is not wanted, until WEB FADE MS, a new web, or a stick-click line
@@ -8315,9 +8321,15 @@ DWORD WINAPI run(void*) {
                                         }
                                     }
                                     const float drawnBefore = line.drawnLength().drawn();
+                                    const uint32_t reanchorsBefore = line.reanchors();
                                     swing_line::Line::Out out;
                                     if (!line.fading())
                                         out = line.update(sl, hand.wrist, runEnd, frame.seconds);
+                                    if (line.reanchors() != reanchorsBefore)
+                                        diag_log::writef("swing line: %c kept through a wrap: %u edge(s) now, drawn %.1f m, "
+                                                         "free run %.1f m, slack %.1f m (kept %u)",
+                                                         from ? 'R' : 'L', edgeCount, out.drawn, out.distance,
+                                                         out.slack, line.reanchors());
                                     if (drawn) {
                                         uint32_t n = 0;
                                         for (int k = 0; k < out.count && n < native_webs::maxRopeBends; ++k)
@@ -8455,10 +8467,14 @@ DWORD WINAPI run(void*) {
                                         if (on != ropePullWasOn)
                                             diag_log::writef("rope pull: %s (strength %d%%, weight %d%%, "
                                                              "drag %d%%, at most "
-                                                             "%.1f m/s^2)",
+                                                             "%.1f m/s^2; stable steps %s, taut under load "
+                                                             "%s, wrap keep %s)",
                                                              on ? "on" : "off", values.swingRopePhysicsPct,
                                                              values.swingRopeWeightPct,
-                                                             values.swingRopeDragPct, ask.cap);
+                                                             values.swingRopeDragPct, ask.cap,
+                                                             values.swingRopeStable ? "on" : "off",
+                                                             values.swingRopeLoadTaut ? "on" : "off",
+                                                             values.webWrapKeep ? "on" : "off");
                                         ropePullWasOn = on;
                                     }
                                 }

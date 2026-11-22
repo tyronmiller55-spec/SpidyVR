@@ -3317,6 +3317,9 @@ constexpr TabOnly tabOnly[] = {
     {"kick_lunge", &Values::kickLunge, nullptr},
     {"kick_lunge_reach_cm", nullptr, &Values::kickLungeReachCm},
     {"kick_feel", &Values::kickFeel, nullptr},
+    {"swing_rope_stable", &Values::swingRopeStable, nullptr},
+    {"swing_rope_load_taut", &Values::swingRopeLoadTaut, nullptr},
+    {"web_wrap_keep", &Values::webWrapKeep, nullptr},
     {"log_level", nullptr, &Values::logLevel},
     {"movement_defaults", nullptr, &Values::movementDefaults},
 };
@@ -3576,6 +3579,17 @@ Values withMovementDefaults(Values v, std::string_view text) {
         // KICK FEEL comes on once (t96u, a new key); a 0 chosen after this revision stays.
         v.kickFeel = true;
         // BETA3F MIGRATION END
+    }
+    if (seen < 23) {
+        // Revision 23 (0.8.7-na-beta3g; the owner, Nov 22 t97u: the webs' physics): the new switches come on once (new keys, all features on for
+        // testing); a 0 chosen after this revision stays.
+        v.swingRopeStable = v.swingRopeLoadTaut = v.webWrapKeep = true;
+        // MASS RESCALE: the line is 2.5 times as heavy a metre at the same percentage now - a saved weight
+        // becomes the same mass (to the slider's 10%), and beta3f's 200% default becomes the new 100%.
+        v.swingRopeWeightPct = v.swingRopeWeightPct == 200
+                                   ? 100
+                                   : static_cast<int>(std::lround(std::clamp(v.swingRopeWeightPct, 0, 300) / 25.f)) * 10;
+        // BETA3G MIGRATION END
     }
     v.movementDefaults = movementDefaultsRevision;
     return sanitized(v);
