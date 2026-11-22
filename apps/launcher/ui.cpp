@@ -3349,6 +3349,8 @@ void App::options(ImVec2 origin, ImVec2 size) {
                    S(150), [&] { fineSlider("##swingreelouttap", tabOnly_.swingReelOutTapMs, 150, 600, 10, "%d ms", nullptr); });
             settingOption(Item::none, "Reel out: speed", "How fast the line pays out while held (the reel takes in at 8 m/s). Default: 400 cm/s.",
                    S(150), [&] { fineSlider("##swingreeloutspeed", tabOnly_.swingReelOutSpeed, 50, 1500, 25, "%d cm/s", nullptr); });
+            settingOption(Item::none, "Air physics while swinging", "Changes the feel: on a web your arm swings build their own spin over the swing, the midair poses (dive, superhero, starfish) and the air dodge work, and the landing blend uprights you before a touchdown. Off: the swing as before. Default: on.",
+                   S(42), [&] { flagToggle("##swingairphysics", tabOnly_.swingAirPhysics); });
             // BETA3D LAUNCHER END
         });
         // NA HELP (beta polish M5): the same pages as the game's NA · HELP tab (na_help.hpp), a card per topic.

@@ -8550,6 +8550,52 @@ int main() {
             s.update(.01f, in, w);
         check(!s.webs()[0].attached && !s.reelingOut(0), "the grip let go of the web");
     });
+    test("air physics while swinging: on a web the arms' spin builds over the alignment; off exactly as before", [&] {
+        RealisticFlipSettings base;
+        base.enabled = true;
+        RealisticFlipSettings on = base;
+        on.tetherSpin = true;
+        RealisticFlipSettings offExplicit = base;
+        offExplicit.tetherSpin = false;
+        check(!base.tetherSpin, "off unless the settings set it");
+        RealisticFlight f;
+        f.valid = f.attached = true;
+        f.pull = {0, 10, 0};
+        f.velocity = {8, 0, 0};
+        f.ropeLength = 10;
+        f.coupling = 1;
+        RealisticFlip a, b, c;
+        const float dt = 1.f / 90;
+        float spinOff = 0, spinOn = 0;
+        for (int i = 0; i < 120; ++i) {
+            f.handMomentum = i < 30 ? Vec3{1.5f, 0, 0} : Vec3{};
+            a.update(f, true, false, 0, dt, base);
+            b.update(f, true, false, 0, dt, on);
+            c.update(f, true, false, 0, dt, offExplicit);
+            if (i == 45) {
+                spinOff = length(a.angularVelocity());
+                spinOn = length(b.angularVelocity());
+            }
+        }
+        check(spinOn > spinOff + .2f, "the arms' spin did not last on the web");
+        check(length(a.angularVelocity() - c.angularVelocity()) < 1e-6f &&
+                  std::abs(a.orientation().w - c.orientation().w) < 1e-6f,
+              "off is not exactly as before");
+        for (int i = 0; i < 900; ++i)
+            b.update(f, true, false, 0, dt, on);
+        check(length(b.angularVelocity()) < .25f, "the arms' spin never fell off");
+        // Let go: the spin built on the web goes on in the release.
+        RealisticFlip d;
+        for (int i = 0; i < 30; ++i) {
+            f.handMomentum = {1.5f, 0, 0};
+            d.update(f, true, false, 0, dt, on);
+        }
+        RealisticFlight free = f;
+        free.attached = false;
+        free.handMomentum = {};
+        d.update(free, true, false, 0, dt, on);
+        check(length(d.angularVelocity()) > .2f, "the release lost the arms' spin");
+    });
     test("reel out tap: the double tap and hold's state machine", [&] {
         using namespace spidy::reel_out;
         Params p;
@@ -25776,6 +25822,7 @@ int main() {
                   "swing_reel_out=1\n"
                   "swing_reel_out_tap_ms=300\n"
                   "swing_reel_out_speed=400\n"
+                  "swing_air_physics=1\n"
                   "log_level=1\n"
                   "movement_defaults=20\n",
               "the defaults' text");
@@ -34449,6 +34496,7 @@ int main() {
         check(!d.showtimeAutoPunch && d.showtimeAutoPunchEvery == 1 && d.showtimeAutoPunchCooldownMs == 0,
               "AUTO: PUNCHES: off, every one, no cooldown");
         check(d.swingReelOut && d.swingReelOutTapMs == 300 && d.swingReelOutSpeed == 400, "REEL OUT: on, 300 ms, 400 cm/s");
+        check(d.swingAirPhysics, "AIR PHYSICS WHILE SWINGING: on");
         // BETA3 DEFAULT CHECKS END
         Values off{};
         off.handoffHeadFirst = false;
@@ -34464,6 +34512,7 @@ int main() {
         off.swingRopePhysics = false;
         off.showtimeAutoPunch = true; // (off by default: the other way)
         off.swingReelOut = false;
+        off.swingAirPhysics = false;
         // BETA3 OFF END
         std::string base = tabOnlyText(off);
         base = base.substr(0, base.find("movement_defaults="));
@@ -34501,6 +34550,7 @@ int main() {
         check(!punches.showtimeAutoStrike, "revision 20 moved a saved AUTO: STRIKES");
         check(!migrated.showtimeAutoPunch, "an older file kept AUTO: PUNCHES on");
         check(punches.swingReelOut, "a revision 19 file did not get REEL OUT");
+        check(punches.swingAirPhysics, "a revision 19 file did not get AIR PHYSICS WHILE SWINGING");
         // BETA3 MIGRATED END
         const std::string chosen = base + "movement_defaults=20\n";
         const Values kept = withMovementDefaults(withTabOnly({}, chosen), chosen);
@@ -34517,6 +34567,7 @@ int main() {
         check(!kept.swingRopePhysics, "ROPE PHYSICS: a 0 chosen after revision 19 moved");
         check(kept.showtimeAutoPunch, "AUTO: PUNCHES: a 1 chosen after revision 20 moved");
         check(!kept.swingReelOut, "REEL OUT: a 0 chosen after revision 20 moved");
+        check(!kept.swingAirPhysics, "AIR PHYSICS WHILE SWINGING: a 0 chosen after revision 20 moved");
         // BETA3 KEPT END
     });
     test("showtime auto: a Y+B finisher's scene (no play, the tracking rig off) lets the camera out", [&] {

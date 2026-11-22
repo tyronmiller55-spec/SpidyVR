@@ -3303,6 +3303,7 @@ constexpr TabOnly tabOnly[] = {
     {"swing_reel_out", &Values::swingReelOut, nullptr},
     {"swing_reel_out_tap_ms", nullptr, &Values::swingReelOutTapMs},
     {"swing_reel_out_speed", nullptr, &Values::swingReelOutSpeed},
+    {"swing_air_physics", &Values::swingAirPhysics, nullptr},
     {"log_level", nullptr, &Values::logLevel},
     {"movement_defaults", nullptr, &Values::movementDefaults},
 };
@@ -3538,6 +3539,8 @@ Values withMovementDefaults(Values v, std::string_view text) {
         // REEL OUT comes on once (t93u, a feel change, all features on for testing). A new key; a 0 chosen after
         // this revision stays.
         v.swingReelOut = true;
+        // AIR PHYSICS WHILE SWINGING comes on once (t93u). A new key; a 0 chosen after this revision stays.
+        v.swingAirPhysics = true;
         // BETA3D MIGRATION END
     }
     v.movementDefaults = movementDefaultsRevision;

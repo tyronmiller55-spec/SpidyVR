@@ -1126,7 +1126,7 @@ RealisticFlipSettings realisticFlips(const vr_settings::Values& v) {
     return {v.realisticFlips,         v.automaticReleaseFlip, v.automaticStrength,     v.automaticSpeed,
             v.automaticMinimumSpeed,  v.automaticResponse,    v.automaticHandStrength, v.automaticFalloff,
             v.automaticHandThreshold, v.automaticAirBrake,    v.automaticCombat,       v.airCorrectMs,
-            v.airFlipDoubleTap,       v.airFlipDoubleTapMs};
+            v.airFlipDoubleTap,       v.airFlipDoubleTapMs,   v.swingAirPhysics};
 }
 DWORD WINAPI run(void*) {
     bool nativeStarted = false, gpuStarted = false, raysStarted = false, swingStarted = false, websStarted = false,
@@ -3366,7 +3366,12 @@ DWORD WINAPI run(void*) {
                                        swingState.wall == static_cast<uint32_t>(game_swing::Surface::none);
                         adIn.vrOwns = adFresh && swingState.owned &&
                                       (!adHybrid || hybridOwner.domain == hybrid_owner::Domain::vr);
-                        adIn.webbed = adFresh && (swingState.webs[0].attached || swingState.webs[1].attached);
+                        // AIR PHYSICS WHILE SWINGING (swing_air_physics, beta3d): the dodge goes on a swing
+                        // too - its burst is the body's velocity, and the web's tension-only rope turns it
+                        // into the arc.
+                        adIn.webbed = adFresh &&
+                                      (swingState.webs[0].attached || swingState.webs[1].attached) &&
+                                      !values.swingAirPhysics;
                         adIn.blocked = !swingAirDodge ||
                                        !(viewing && gameplay && motion.active && !flatScreen && spiderMan) ||
                                        phone.open() || gadgetWheel.open() || padLayer.latched() ||
@@ -10810,8 +10815,13 @@ DWORD WINAPI run(void*) {
                             landing_blend::Params lbp;
                             lbp.enabled = values.airLandingBlend;
                             lbp.release = values.airLandingRelease && values.airLandingBlend;
-                            const bool held = motion.handstand.supporting || motion.handstand.holdVr ||
-                                              (swingFresh && (swingState.webs[0].attached || swingState.webs[1].attached));
+                            // AIR PHYSICS WHILE SWINGING (beta3d): a web held no longer keeps the tilt from
+                            // the upright before a touchdown (a swing down onto the ground lands as a fall
+                            // does).
+                            const bool held =
+                                motion.handstand.supporting || motion.handstand.holdVr ||
+                                (swingFresh && (swingState.webs[0].attached || swingState.webs[1].attached) &&
+                                 !values.swingAirPhysics);
                             // F2: inverted, the tilt is kept for the handstand catch only while both arms are up.
                             const bool inverted = landing_blend::keepInverted(
                                 values.handstand && handstand::invertedDegrees(motion.flipTilt.rotate({0, 1, 0})) >
@@ -12075,7 +12085,10 @@ DWORD WINAPI run(void*) {
                                 layerIn.pose.lookPitch =
                                     std::asin(std::clamp(finite(lookFull) ? lookFull.y : 0.f, -1.f, 1.f)) * (180.f / 3.14159265f);
                                 layerIn.pose.vy = layerIn.crouch.vy;
-                                layerIn.pose.webbed = layerIn.crouch.webbed;
+                                // AIR PHYSICS WHILE SWINGING (beta3d): the poses (dive, superhero, starfish)
+                                // on a swing too; the crouch still waits for no web (the legs trail a swing's
+                                // low point).
+                                layerIn.pose.webbed = layerIn.crouch.webbed && !values.swingAirPhysics;
                                 const Vec3 leftT = cross(Vec3{0, 1, 0}, levelLook);
                                 layerIn.pose.hands = validTrackedPose(frame.head);
                                 for (int i = 0; i < 2; ++i) {
@@ -12103,7 +12116,8 @@ DWORD WINAPI run(void*) {
                             const auto poseExitWhy = [&] {
                                 return leg_layers::poseExitWhy(
                                     motion.handstand.holdVr, swingFresh && swingState.grounded != 0,
-                                    hybridOn && hybridOwner.domain == hybrid_owner::Domain::anim, layerIn.crouch.webbed);
+                                    hybridOn && hybridOwner.domain == hybrid_owner::Domain::anim,
+                                    layerIn.pose.webbed);
                             };
                             const bool legMode = layered.run;
                             const Vec3 vel = swingState.velocity;

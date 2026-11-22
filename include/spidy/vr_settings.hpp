@@ -847,6 +847,13 @@ struct Values {
     int swingReelOutTapMs = 300;
     // REEL OUT: how fast the line pays out, cm/s (50 to 1500; 400 = 4 m/s, half the reel-in's 8 m/s).
     int swingReelOutSpeed = 400;
+    // AIR PHYSICS WHILE SWINGING (0.8.7-na-beta3d; the owner, Nov 21 t93u: "I also want air arm and leg physics, and all
+    // mid air physics calculations to apply while swinging as well"): the air systems that stood down while a web
+    // held now run on a swing too - REALISTIC FLIPS' arm spin builds over the web's alignment
+    // (RealisticFlipSettings::tetherSpin), MIDAIR POSES (dive, superhero, starfish), the LANDING BLEND-IN's upright
+    // before a touchdown, and the AIR DODGE (B) - each where it makes physical sense; docs/NA_BETA3.md (beta3d) has the
+    // table, with what stays off and why. Off: exactly as beta3c. On by default (revision 20 turns it on once).
+    bool swingAirPhysics = true;
     // BETA3 SETTINGS END
     // HERO ATTACK SOUND (beta polish A2; attack_sound, spidy_vr.ini only, no menu row): one of the game's sounds played
     // on Spidey as a punch is thrown or a kick starts (at most one a hand every 250 ms, hit_sound.hpp): the id's 32

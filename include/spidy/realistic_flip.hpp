@@ -31,6 +31,12 @@ struct RealisticFlipSettings {
     // here; the settings set it.
     bool doubleTapInvert = false;
     int doubleTapMs = 300;
+    // AIR PHYSICS WHILE SWINGING (swing_air_physics, 0.8.7-na-beta3d; the owner, Nov 21 t93u: "I also want
+    // air arm and leg physics, and all mid air physics calculations to apply while swinging as well"): on a
+    // web the arms' swings build a spin of their own (falling off at the air's falloff, as in free air) that
+    // rides on the web's alignment, instead of a nudge one frame long that the alignment took back at once;
+    // it goes on in the release spin. Off (here; the settings set it): exactly as before.
+    bool tetherSpin = false;
     bool operator==(const RealisticFlipSettings&) const = default;
 };
 struct RealisticFlight {
@@ -139,6 +145,8 @@ class RealisticFlip {
     Quat tilt_{}, levelTarget_{}, levelFrom_{};
     float levelAge_{}, levelSeconds_ = 1.f;
     Vec3 angular_{}, momentum_{}, averageVelocity_{}, lastPull_{0, 1, 0};
+    Vec3
+        ownSpin_{}; // AIR PHYSICS WHILE SWINGING: the arms' spin on a web (RealisticFlipSettings::tetherSpin)
     bool attached_{}, sampled_{}, airborne_{}, leveling_{}, brakeHeld_{}, inverting_{};
     float missingTime_{}, lastRadius_ = 20, poseInertia_ = 1;
     static Quat unit(Quat q) {
@@ -219,6 +227,7 @@ class RealisticFlip {
         levelFrom_ = unit(back * levelFrom_);
         angular_ = back.rotate(angular_);
         momentum_ = back.rotate(momentum_);
+        ownSpin_ = back.rotate(ownSpin_);
         averageVelocity_ = back.rotate(averageVelocity_);
         lastPull_ = back.rotate(lastPull_);
         return heading;
@@ -238,6 +247,7 @@ class RealisticFlip {
                 tilt_ = q;
             angular_ = finite(flight.supportAngular) ? limited(flight.supportAngular, 12.f) : Vec3{};
             momentum_ = angular_;
+            ownSpin_ = {};
             leveling_ = brakeHeld_ = attached_ = airborne_ = false;
             missingTime_ = 0;
             return tilt_;
@@ -263,6 +273,7 @@ class RealisticFlip {
             // Finish an upright recovery even after a short button press, as a smooth turn (minimum jerk: no hard start,
             // no hard stop). Preserve horizontal heading, and discard the old spin momentum.
             momentum_ = {};
+            ownSpin_ = {};
             levelAge_ += dt;
             const float u = std::clamp(levelAge_ / levelSeconds_, 0.f, 1.f);
             const float smooth = u * u * u * (u * (6 * u - 15) + 10);
@@ -296,6 +307,7 @@ class RealisticFlip {
                 return tilt_;
             attached_ = airborne_ = false;
             momentum_ = {};
+            ownSpin_ = {};
             integrate(limited(rotationVector(arc(tilt_.rotate({0, 1, 0}), {0, 1, 0})) / response, rate),
                       acceleration, dt);
             return tilt_;
@@ -330,6 +342,7 @@ class RealisticFlip {
             const float keep = poseInertia_ / inertia;
             angular_ = angular_ * keep;
             momentum_ = momentum_ * keep;
+            ownSpin_ = ownSpin_ * keep;
         }
         poseInertia_ = inertia;
         const float drag = (std::clamp(settings.falloffMs, 500, 3000) / 1000.f) / poseDrag;
@@ -353,11 +366,20 @@ class RealisticFlip {
         if (flying) {
             const float gain = 8.f * std::clamp(settings.handStrength, 0, 200) / 100.f / inertia;
             const Vec3 hand = tilt_.rotate(flight.handMomentum) * gain;
-            // Capture the short arm swing that straddles takeoff, then accept
-            // ongoing gestures and opposite gestures that brake the rotation.
-            desired += hand * (dt + (!airborne_ ? .08f : 0));
-
+            if (tether && settings.tetherSpin) {
+                // AIR PHYSICS WHILE SWINGING: the arms' spin builds and falls off on its own, over the web's
+                // alignment (at most half the turn rate, so the web still leads).
+                ownSpin_ = limited(ownSpin_ * std::exp(-dt / drag) + hand * (dt + (!airborne_ ? .08f : 0)),
+                                   rate * .5f);
+                desired += ownSpin_;
+            } else {
+                // Capture the short arm swing that straddles takeoff, then accept
+                // ongoing gestures and opposite gestures that brake the rotation.
+                desired += hand * (dt + (!airborne_ ? .08f : 0));
+                ownSpin_ = {};
+            }
         } else {
+            ownSpin_ = {};
             desired = limited(rotationVector(arc(tilt_.rotate({0, 1, 0}), {0, 1, 0})) / response, rate);
         }
         if (manual && flying)
