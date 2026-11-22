@@ -25136,7 +25136,7 @@ int main() {
                   "the movement defaults overrode a choice made after them");
             check(withMovementDefaults(withTabOnly({}, ""), "").runCurve,
                   "no file: not the movement defaults");
-            check(tabOnlyText(migrated).find("movement_defaults=19\n") != std::string::npos,
+            check(tabOnlyText(migrated).find("movement_defaults=20\n") != std::string::npos,
                   "the migration is not remembered");
         }
         {
@@ -25624,8 +25624,11 @@ int main() {
                   "web_connect_handoff=1\n"
                   "swing_rope_physics=1\n"
                   "swing_rope_physics_pct=100\n"
+                  "showtime_auto_punch=0\n"
+                  "showtime_auto_punch_every=1\n"
+                  "showtime_auto_punch_cooldown_ms=0\n"
                   "log_level=1\n"
-                  "movement_defaults=19\n",
+                  "movement_defaults=20\n",
               "the defaults' text");
         Values changed = defaults;
         changed.recordingFov = 140;
@@ -34294,6 +34297,8 @@ int main() {
         check(d.webFadePhysics && d.webFadeMs == 1200, "PHYSICS UNTIL FADE: on, 1200 ms");
         check(d.webConnectHandoff, "CONNECT HANDOFF: on");
         check(d.swingRopePhysics && d.swingRopePhysicsPct == 100, "ROPE PHYSICS: on, 100%");
+        check(!d.showtimeAutoPunch && d.showtimeAutoPunchEvery == 1 && d.showtimeAutoPunchCooldownMs == 0,
+              "AUTO: PUNCHES: off, every one, no cooldown");
         // BETA3 DEFAULT CHECKS END
         Values off{};
         off.handoffHeadFirst = false;
@@ -34307,6 +34312,7 @@ int main() {
         off.webFadePhysics = false;
         off.webConnectHandoff = false;
         off.swingRopePhysics = false;
+        off.showtimeAutoPunch = true; // (off by default: the other way)
         // BETA3 OFF END
         std::string base = tabOnlyText(off);
         base = base.substr(0, base.find("movement_defaults="));
@@ -34338,8 +34344,13 @@ int main() {
         check(webs.webConnectHandoff, "a revision 18 file did not get CONNECT HANDOFF");
         check(webs.swingRopePhysics, "a revision 18 file did not get ROPE PHYSICS");
         check(!webs.airFlipDoubleTap, "revision 18 ran again");
+        const std::string rev19 = base + "movement_defaults=19\n";
+        const Values punches = withMovementDefaults(withTabOnly({}, rev19), rev19);
+        check(!punches.showtimeAutoPunch, "revision 20 did not turn AUTO: PUNCHES off");
+        check(!punches.showtimeAutoStrike, "revision 20 moved a saved AUTO: STRIKES");
+        check(!migrated.showtimeAutoPunch, "an older file kept AUTO: PUNCHES on");
         // BETA3 MIGRATED END
-        const std::string chosen = base + "movement_defaults=19\n";
+        const std::string chosen = base + "movement_defaults=20\n";
         const Values kept = withMovementDefaults(withTabOnly({}, chosen), chosen);
         check(!kept.handoffHeadFirst, "a 0 chosen after revision 17 moved");
         check(!kept.landingViewSnap, "LANDING VIEW SNAP: a 0 chosen after revision 17 moved");
@@ -34352,7 +34363,30 @@ int main() {
         check(!kept.webFadePhysics, "PHYSICS UNTIL FADE: a 0 chosen after revision 19 moved");
         check(!kept.webConnectHandoff, "CONNECT HANDOFF: a 0 chosen after revision 19 moved");
         check(!kept.swingRopePhysics, "ROPE PHYSICS: a 0 chosen after revision 19 moved");
+        check(kept.showtimeAutoPunch, "AUTO: PUNCHES: a 1 chosen after revision 20 moved");
         // BETA3 KEPT END
+    });
+    test("showtime auto: the game's web strike (web rush, dodge kind 8) apart from SpidyVR's punches", [&] {
+        using namespace spidy::showtime;
+        WebRush rush;
+        check(!rush.began(5, 8, 0), "the first sample only takes the count");
+        check(!rush.began(5, 8, 0), "no new dodge, no strike");
+        check(rush.began(6, 8, 0), "a new dodge of kind 8 is the game's web strike");
+        check(!rush.began(6, 8, 0), "the same dodge counts once");
+        check(!rush.began(7, 4, 0), "a ground dodge (kind 4) is no web strike");
+        check(!rush.began(8, 8, 1), "Spidy's own web dodge is no web strike");
+        check(rush.began(10, 8, 0), "two dodges between frames, the latest a web rush");
+        check(!rush.began(2, 8, 0) && rush.began(3, 8, 0), "a count that went back (a new game) starts again");
+        check(WebRush::live(8) && !WebRush::live(0) && !WebRush::live(14), "live while the dodge on is the rush");
+        check(autoLive(Why::strike, false, false, true, false) && !autoLive(Why::strike, false, false, false, true),
+              "a web strike's moment goes on with the rush, not with a punch");
+        check(autoLive(Why::punch, false, false, false, true) && !autoLive(Why::punch, false, false, true, false),
+              "a punch's moment goes on with SpidyVR's strike, not with the rush");
+        check(std::string(whyName(Why::punch)) == "punch" && std::string(whyName(Why::strike)) == "web strike",
+              "the log names which kind fired");
+        AutoGate strike, punch;
+        check(punch.fire(0, 1, 0) && strike.event(0, 2, 0) == AutoGate::Result::counting,
+              "each kind counts on its own gate");
     });
     test("handoff head gap: one report per switch with the worst gap, the settled gap and the time over it (H6)", [&] {
         using namespace spidy::handoff_gap;

@@ -88,8 +88,9 @@ inline constexpr Page pages[] = {
     {"SHOWTIME", "SHOWTIME", "SHOWTIME: hold X + B for 200 ms to step outside Spider-Man."},
     {"SHOWTIME", "  (2) ORBIT", "The right stick orbits; let go to return. WATCH ONLY keeps your hands still."},
     {"SHOWTIME", "  (3) WALLS", "SHOWTIME RAY FAN pulls the camera in before walls and trails less at speed."},
-    {"SHOWTIME", "  (4) AUTO", "AUTO: FINISHERS and AUTO: WEB STRIKES step out for a Y+B finisher or a strike."},
+    {"SHOWTIME", "  (4) AUTO", "AUTO: FINISHERS / WEB STRIKES: out for a Y+B finisher or the game's web strike."},
     {"SHOWTIME", "  (5) HOW OFTEN", "Each auto kind (dodges too): EVERY N fires on every Nth, COOLDOWN waits."},
+    {"SHOWTIME", "  (6) PUNCHES", "AUTO: PUNCHES (off by default): out for your own SpidyVR punch or dive."},
 
     {"CAMERA & STABILIZATION", "CAMERA & STABILIZATION", "How much the animation moves your view: CAMERA MOTION, PITCH, ROLL, BOB."},
     {"CAMERA & STABILIZATION", "  (2) SMOOTHING", "How smoothly: STABILIZATION and the LIGHT / HEAVY times. Lower = calmer."},

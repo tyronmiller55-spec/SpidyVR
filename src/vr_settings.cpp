@@ -1328,6 +1328,8 @@ Values sanitized(Values v) {
     v.handstandGraceAfterMs = std::clamp(v.handstandGraceAfterMs, 100, 1000);
     v.handstandGraceBeforeMs = std::clamp(v.handstandGraceBeforeMs, 0, 1000);
     v.handoffPlaceCm = std::clamp(v.handoffPlaceCm, 0, 2000);
+    v.showtimeAutoPunchCooldownMs = std::clamp(v.showtimeAutoPunchCooldownMs, 0, 60000);
+    v.showtimeAutoPunchEvery = std::clamp(v.showtimeAutoPunchEvery, 1, 10);
     v.swingRopePhysicsPct = std::clamp(v.swingRopePhysicsPct, 0, 300);
     v.webFadeMs = std::clamp(v.webFadeMs, 300, 3000);
     v.airFlipDoubleTapMs = std::clamp(v.airFlipDoubleTapMs, 150, 600);
@@ -3293,6 +3295,9 @@ constexpr TabOnly tabOnly[] = {
     {"web_connect_handoff", &Values::webConnectHandoff, nullptr},
     {"swing_rope_physics", &Values::swingRopePhysics, nullptr},
     {"swing_rope_physics_pct", nullptr, &Values::swingRopePhysicsPct},
+    {"showtime_auto_punch", &Values::showtimeAutoPunch, nullptr},
+    {"showtime_auto_punch_every", nullptr, &Values::showtimeAutoPunchEvery},
+    {"showtime_auto_punch_cooldown_ms", nullptr, &Values::showtimeAutoPunchCooldownMs},
     {"log_level", nullptr, &Values::logLevel},
     {"movement_defaults", nullptr, &Values::movementDefaults},
 };
@@ -3519,6 +3524,13 @@ Values withMovementDefaults(Values v, std::string_view text) {
         v.webConnectHandoff = true;
         v.swingRopePhysics = true;
         // BETA3C MIGRATION END
+    }
+    if (seen < 20) {
+        // Revision 20 (0.8.7-na-beta3d; the owner, Nov 21 t93u: "Showtime on punches is what's happening now, let's
+        // remove that"): AUTO: PUNCHES, the new switch for SpidyVR's own manual punches, is off for everyone; AUTO:
+        // STRIKES keeps its value and from now on means the game's animated web strike alone.
+        v.showtimeAutoPunch = false;
+        // BETA3D MIGRATION END
     }
     v.movementDefaults = movementDefaultsRevision;
     return sanitized(v);

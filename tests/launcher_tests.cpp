@@ -808,6 +808,12 @@ int main() {
                 continue;
             if (key == "swing_line_full_length")
                 continue;
+            if (key == "showtime_auto_punch_cooldown_ms")
+                continue;
+            if (key == "showtime_auto_punch_every")
+                continue;
+            if (key == "showtime_auto_punch")
+                continue;
             if (key == "swing_rope_physics_pct")
                 continue;
             if (key == "swing_rope_physics")

@@ -1561,6 +1561,11 @@ DWORD WINAPI run(void*) {
         // HOW OFTEN (showtime_auto_<kind>_every / _cooldown_ms, beta3b): one gate per kind of automatic
         // moment.
         showtime::AutoGate showtimeGateDodge, showtimeGateFinisher, showtimeGateStrike;
+        // AUTO: PUNCHES (beta3d): SpidyVR's manual punches have their own gate; AUTO: STRIKES watches the
+        // game's web rush (showtime::WebRush, from SpidyDodgeLive) and whether one is on now.
+        showtime::AutoGate showtimeGatePunch;
+        showtime::WebRush showtimeRush;
+        bool webRushLive{};
         showtime::Why showtimeWhy{};
         float showtimeStickX{}, showtimeStickY{}, showtimeEntryHeading{};
         uint64_t showtimeLogMs{};
@@ -2885,6 +2890,34 @@ DWORD WINAPI run(void*) {
                     // (swallowX/swallowB), and while the camera is out the hands start nothing new (WATCH ONLY). It never writes the
                     // view heading: see the header.
                     {
+                        // AUTO: STRIKES (showtime_auto_strike; since beta3d the game's animated web strike
+                        // alone): its web rush starting (showtime::WebRush: a dodge of kind 8 began in
+                        // SpidyDodgeLive), and whether it is on now (what keeps the moment going).
+                        webRushLive = false;
+                        if (dodgeLive) {
+                            const volatile game_dodge::Live* live = dodgeLive;
+                            const uint64_t starts = live->starts;
+                            MemoryBarrier();
+                            const uint32_t lastKind = live->lastKind, ours = live->ours, kindNow = live->kind;
+                            webRushLive = showtime::WebRush::live(kindNow);
+                            if (showtimeRush.began(starts, lastKind, ours) && frame.focused &&
+                                values.showtime && values.showtimeAutoStrike &&
+                                !(showtimeAuto.on() && showtimeAuto.why() == showtime::Why::finisher)) {
+                                const auto gate = showtimeGateStrike.event(
+                                    static_cast<int64_t>(GetTickCount64()), values.showtimeAutoStrikeEvery,
+                                    values.showtimeAutoStrikeCooldownMs);
+                                diag_log::writef(
+                                    "showtime: the game's web strike began (its web rush, dodge kind %u, "
+                                    "#%llu) -> %s",
+                                    lastKind, static_cast<unsigned long long>(starts),
+                                    gate == showtime::AutoGate::Result::fire
+                                        ? (showtimeAuto.on() ? "camera kept out" : "camera out")
+                                    : gate == showtime::AutoGate::Result::cooling ? "cooling down"
+                                                                                  : "counting");
+                                if (gate == showtime::AutoGate::Result::fire)
+                                    showtimeAuto.trigger(showtime::Why::strike);
+                            }
+                        }
                         // AUTO: FINISHERS (showtime_auto_finisher): the game's finisher is
                         // a scene, not play, so while its automatic moment lasts (and the 0.3 s tail after)
                         // that is in play too.
@@ -2928,10 +2961,10 @@ DWORD WINAPI run(void*) {
                         // moment lasts and 0.3 s after. AUTO: FINISHERS AND STRIKES: a finisher while its
                         // scene plays, a web strike while it flies (both last frame's: read further on).
                         const bool stAuto =
-                            stOk &&
-                            showtimeAuto.update(frame.seconds,
-                                                showtime::autoLive(showtimeAuto.why(), dodging,
-                                                                   finisherWatch.active(), strikeUnderWay));
+                            stOk && showtimeAuto.update(frame.seconds,
+                                                        showtime::autoLive(showtimeAuto.why(), dodging,
+                                                                           finisherWatch.active(),
+                                                                           webRushLive, strikeUnderWay));
                         mi.wantOut = stWant || stAuto;
                         mi.wantWhy = stWant || !stAuto ? showtime::Why::chord : showtimeAuto.why();
                         mi.allowed = stOk;
@@ -2991,7 +3024,7 @@ DWORD WINAPI run(void*) {
                             showtimeStickY = frame.hands[1].stickY;
                             const bool keep = values.showtimeWhile == 1;
                             if (!keep && showtimeWhy != showtime::Why::dodge &&
-                                showtimeWhy != showtime::Why::strike) {
+                                showtimeWhy != showtime::Why::strike && showtimeWhy != showtime::Why::punch) {
                                 // (an automatic dodge or web strike keeps its own B and A until they are let
                                 // go of)
                                 frame.jump = false;
@@ -7391,20 +7424,26 @@ DWORD WINAPI run(void*) {
                                 strikes.phase == static_cast<uint32_t>(WebStrike::Phase::Flying) &&
                                 strikes.hand == static_cast<uint32_t>(WebStrike::diveHand);
                             if (strikes.opened > strikesBefore && input.focused) {
-                                // AUTO: STRIKES (beta3, showtime_auto_strike; how often: _every,
-                                // _cooldown_ms): Showtime's camera out while the strike flies (a finisher's
-                                // moment is not cut short by one).
-                                if (values.showtime && values.showtimeAutoStrike &&
+                                // AUTO: PUNCHES (beta3d, showtime_auto_punch, off by default; how often:
+                                // _every, _cooldown_ms): Showtime's camera out while SpidyVR's own manual
+                                // punch flies him (until beta3d AUTO: STRIKES did this; the game's animated
+                                // web strike is showtime::WebRush, above). A finisher's moment is not cut
+                                // short by one.
+                                if (values.showtime && values.showtimeAutoPunch &&
                                     !(showtimeAuto.on() && showtimeAuto.why() == showtime::Why::finisher)) {
-                                    const auto gate = showtimeGateStrike.event(
-                                        static_cast<int64_t>(GetTickCount64()),
-                                        values.showtimeAutoStrikeEvery, values.showtimeAutoStrikeCooldownMs);
-                                    if (gate == showtime::AutoGate::Result::fire) {
-                                        if (!showtimeAuto.on())
-                                            diag_log::writef("showtime: auto (web strike #%llu)",
-                                                             static_cast<unsigned long long>(strikes.opened));
-                                        showtimeAuto.trigger(showtime::Why::strike);
-                                    }
+                                    const auto gate = showtimeGatePunch.event(
+                                        static_cast<int64_t>(GetTickCount64()), values.showtimeAutoPunchEvery,
+                                        values.showtimeAutoPunchCooldownMs);
+                                    diag_log::writef(
+                                        "showtime: SpidyVR's punch flew (manual web strike #%llu%s) -> %s",
+                                        static_cast<unsigned long long>(strikes.opened),
+                                        diving ? ", a dive" : "",
+                                        gate == showtime::AutoGate::Result::fire
+                                            ? (showtimeAuto.on() ? "camera kept out" : "camera out")
+                                        : gate == showtime::AutoGate::Result::cooling ? "cooling down"
+                                                                                      : "counting");
+                                    if (gate == showtime::AutoGate::Result::fire)
+                                        showtimeAuto.trigger(showtime::Why::punch);
                                 }
                                 // Off to him: a tick in both hands, and the rush. A
                                 // dive's is harder, and the last of its way slows.

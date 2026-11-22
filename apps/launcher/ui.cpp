@@ -3205,8 +3205,9 @@ void App::options(ImVec2 origin, ImVec2 size) {
                    "The least time between two automatic finisher cameras. Default: none.",
                    S(150), [&] { autoSlider("##showtimeautofinishercd", tabOnly_.showtimeAutoFinisherCooldownMs, 0, 60000, 500, "%d ms", "None"); });
             settingOption(Item::none, "Auto: web strikes",
-                   "The camera steps outside on its own while a web strike flies, and comes back 0.3 s after. "
-                   "Needs Showtime. On by default.",
+                   "The camera steps outside on its own while the game's own animated web strike carries you to "
+                   "an enemy, and comes back 0.3 s after. Your own SpidyVR punches are Auto: punches. Needs "
+                   "Showtime. On by default.",
                    S(42), [&] { autoToggle("##showtimeautostrike", tabOnly_.showtimeAutoStrike); });
             settingOption(Item::none, "Strikes: every",
                    "Out on every Nth web strike (1: every one). Default: 1.",
@@ -3214,6 +3215,16 @@ void App::options(ImVec2 origin, ImVec2 size) {
             settingOption(Item::none, "Strikes: cooldown",
                    "The least time between two automatic web strike cameras. Default: none.",
                    S(150), [&] { autoSlider("##showtimeautostrikecd", tabOnly_.showtimeAutoStrikeCooldownMs, 0, 60000, 500, "%d ms", "None"); });
+            settingOption(Item::none, "Auto: punches",
+                   "The camera steps outside on its own while one of your own SpidyVR punches flies you to an "
+                   "enemy (or dives), and comes back 0.3 s after. Needs Showtime. Off by default.",
+                   S(42), [&] { autoToggle("##showtimeautopunch", tabOnly_.showtimeAutoPunch); });
+            settingOption(Item::none, "Punches: every",
+                   "Out on every Nth punch that flies you (1: every one). Default: 1.",
+                   S(150), [&] { autoSlider("##showtimeautopunchevery", tabOnly_.showtimeAutoPunchEvery, 1, 10, 1, "every %d", nullptr); });
+            settingOption(Item::none, "Punches: cooldown",
+                   "The least time between two automatic punch cameras. Default: none.",
+                   S(150), [&] { autoSlider("##showtimeautopunchcd", tabOnly_.showtimeAutoPunchCooldownMs, 0, 60000, 500, "%d ms", "None"); });
             settingOption(Item::none, "Dodges: every",
                    "With Auto: dodges on, out on every Nth dodge it counts (1: every one). Default: 1.",
                    S(150), [&] { autoSlider("##showtimeautododgeevery", tabOnly_.showtimeAutoDodgeEvery, 1, 10, 1, "every %d", nullptr); });

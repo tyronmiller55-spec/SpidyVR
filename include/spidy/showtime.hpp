@@ -148,7 +148,9 @@ class Fade {
 };
 
 // ---- The machine ----
-enum class Why : uint8_t { none, chord, finisher, dodge, strike };
+// strike: the game's own animated web strike (its web rush; since 0.8.7-na-beta3d), punch: SpidyVR's manual
+// punch that flies him to an enemy (WebStrike; until beta3d this was "web strike").
+enum class Why : uint8_t { none, chord, finisher, dodge, strike, punch };
 inline const char* whyName(Why w) {
     switch (w) {
     case Why::chord:
@@ -159,6 +161,8 @@ inline const char* whyName(Why w) {
         return "dodge";
     case Why::strike:
         return "web strike";
+    case Why::punch:
+        return "punch";
     default:
         return "none";
     }
@@ -433,9 +437,9 @@ struct AutoGate {
 };
 
 // What keeps an automatic moment going (Auto::update's `live`): the dodge while it dodges, the game's
-// finisher while its scene plays (finisher_handoff::Watch::active), a web strike while SpidyVR's WebStrike is
-// not idle.
-inline bool autoLive(Why why, bool dodging, bool finisher, bool strike) {
+// finisher while its scene plays (finisher_handoff::Watch::active), the game's web strike while its web rush
+// is the hero's dodge (WebRush::live), a punch while SpidyVR's WebStrike is not idle.
+inline bool autoLive(Why why, bool dodging, bool finisher, bool strike, bool punch = false) {
     switch (why) {
     case Why::dodge:
         return dodging;
@@ -443,10 +447,39 @@ inline bool autoLive(Why why, bool dodging, bool finisher, bool strike) {
         return finisher;
     case Why::strike:
         return strike;
+    case Why::punch:
+        return punch;
     default:
         return false;
     }
 }
+
+// AUTO: STRIKES vs AUTO: PUNCHES (0.8.7-na-beta3d; the owner, Nov 21 t93u: "Let's only have it on animation
+// web strikes, not manual SpidyVR punches. Or, if we do, let's give it a toggle"). The game's own web strike
+// is HeroStateWebRush (docs/REFERENCE.md), which runs as a dodge of kind 8 in the hero's dodge manager
+// (game_dodge.hpp: "8 the web rush"; SpidyDodgeLive, the hook DODGE TUMBLE reads; the beta3b log: "the game's
+// dodge began (kind 8)" at each web strike). SpidyVR's manual punch is its own WebStrike
+// (game_punch::Strikes::opened), which never runs a kind 8 dodge. WebRush reads SpidyDodgeLive once a frame:
+// began() is true for the frame a web rush starts (the manager's count of dodges moved on and the latest is
+// of kind 8, not Spidy's own web dodge); the first sample only takes the count.
+struct WebRush {
+    static constexpr uint32_t kind = 8;
+    uint64_t seen = ~0ull;
+    bool began(uint64_t starts, uint32_t lastKind, uint32_t ours) {
+        if (seen == ~0ull || starts < seen) {
+            seen = starts;
+            return false;
+        }
+        if (starts == seen)
+            return false;
+        seen = starts;
+        return lastKind == kind && !ours;
+    }
+    // The rush goes on: the dodge on now is of kind 8.
+    static bool live(uint32_t kindNow) {
+        return kindNow == kind;
+    }
+};
 
 // ---- The outside camera's frame ----
 // The level frame game_fp hands the eyes (game_fp.cpp cameraFrame's layout: columns right, down, forward, position; the game's

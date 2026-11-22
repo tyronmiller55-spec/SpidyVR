@@ -302,7 +302,7 @@ struct Values {
     // from before it gets RUN CURVE on and EARLY JUMP QUICK TAP once (the
     // user: "movement fixes will be defaults"); after that the player's own
     // choice stands. Not a row. movement_defaults.
-    int movementDefaults = 19; // movementDefaultsRevision: a new file has seen them
+    int movementDefaults = 20; // movementDefaultsRevision: a new file has seen them
     // SOFT LANDING (the tab's SOFT LANDING; Swing::allowSoftLanding,
     // run_update::softLandVertical): a fall the swing flies, with no web
     // holding, eases to 9 m/s down over its last 3 m (or 0.35 s), its speed
@@ -786,7 +786,8 @@ struct Values {
     // SHOWTIME AUTO: FINISHERS / STRIKES (beta3, the owner Nov 21 t87u: "activate Showtime during finishers and web
     // strikes"; split in beta3b, t88u: "separate toggles for dodges, finishers, and strikes, and different timings for
     // how often it fires"): Showtime's camera steps out when the game's Y+B finisher starts (finisher_handoff's scene
-    // detection) or a web strike opens (SpidyVR's WebStrike), and back through the normal exit 0.3 s after it ends (a
+    // detection) or the game's own animated web strike begins (since beta3d: its web rush, the hero's dodge of kind 8 in
+    // SpidyDodgeLive; SpidyVR's manual punches are AUTO: PUNCHES, below), and back through the normal exit 0.3 s after it ends (a
     // finisher at most 10 s, a strike 4 s). Needs SHOWTIME. Each kind, the dodges' (AUTO: DODGES) too: _every N fires
     // on every Nth one (1: every one), _cooldown_ms the least time between two of that kind (0: none). The beta3 key
     // showtime_auto_finisher_strike is read once by revision 18: a saved 0 turns finishers and strikes off.
@@ -828,6 +829,15 @@ struct Values {
     bool swingRopePhysics = true;
     // (%, 0 to 300) the pull's strength: 100 moderate (30 m of slack hanging pulls about 1.5 m/s^2; at most 2.5)
     int swingRopePhysicsPct = 100;
+    // SHOWTIME AUTO: PUNCHES (0.8.7-na-beta3d; the owner, Nov 21 t93u: "Showtime on punches is what's happening
+    // now, let's remove that ... Or, if we do, let's give it a toggle"): the camera out for SpidyVR's own manual
+    // punch that flies him to an enemy (WebStrike, game_punch::Strikes::opened). Off by default (revision 20 turns
+    // it off for everyone); AUTO: STRIKES is the game's animated web strike alone since beta3d.
+    bool showtimeAutoPunch = false;
+    // PUNCHES: out on every Nth one (1 to 10).
+    int showtimeAutoPunchEvery = 1;
+    // PUNCHES: the least time between two of their cameras, ms (0: none).
+    int showtimeAutoPunchCooldownMs = 0;
     // BETA3 SETTINGS END
     // HERO ATTACK SOUND (beta polish A2; attack_sound, spidy_vr.ini only, no menu row): one of the game's sounds played
     // on Spidey as a punch is thrown or a kick starts (at most one a hand every 250 ms, hit_sound.hpp): the id's 32
@@ -1376,7 +1386,7 @@ std::string tabOnlyText(const Values&);
 // key, or whose value is no whole number, is passed over.
 Values withTabOnly(Values, std::string_view text);
 // The movement defaults' revision (Values::movementDefaults) this build has.
-inline constexpr int movementDefaultsRevision = 19;
+inline constexpr int movementDefaultsRevision = 20;
 // November 12 movement cleanup: a settings file (that text) older than
 // movementDefaultsRevision gets the new movement defaults once - RUN CURVE
 // on, EARLY JUMP at least QUICK TAP - and is marked as having seen them; a
