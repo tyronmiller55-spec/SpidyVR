@@ -2923,9 +2923,20 @@ DWORD WINAPI run(void*) {
                         // that is in play too.
                         const bool stAutoScene = values.showtimeAutoFinisher && showtimeAuto.on() &&
                                                  showtimeAuto.why() == showtime::Why::finisher;
-                        const bool stOk = values.showtime && values.body && !flatScreen && viewing &&
-                                          (gameplay || stAutoScene) && motion.active && spiderMan &&
-                                          !calibrationInput && !phone.open() && !padLayer.latched();
+                        // (and past the tracking rig, which is off in a scene: showtime::OkInput, beta3d).
+                        showtime::OkInput okIn;
+                        okIn.enabled = values.showtime;
+                        okIn.body = values.body;
+                        okIn.flatScreen = flatScreen;
+                        okIn.viewing = viewing;
+                        okIn.gameplay = gameplay;
+                        okIn.rigActive = motion.active;
+                        okIn.spiderMan = spiderMan;
+                        okIn.calibrating = calibrationInput;
+                        okIn.phone = phone.open();
+                        okIn.padLatched = padLayer.latched();
+                        okIn.autoScene = stAutoScene;
+                        const bool stOk = showtime::ok(okIn);
                         const bool stFree = !gadgetWheel.open() &&
                                             !(namedPress.claimed() &
                                               (game_pad::NamedPress::controlX | game_pad::NamedPress::controlB));
@@ -2972,6 +2983,14 @@ DWORD WINAPI run(void*) {
                                     : stTeleport                  ? showtime::ExitWhy::teleport
                                                                   : showtime::ExitWhy::none;
                         if (mi.forced != showtime::ExitWhy::none || !stOk) {
+                            // An automatic moment given and taken away again: what took it, once (beta3d).
+                            if (showtimeAuto.on() && values.showtime)
+                                diag_log::writef("showtime: auto (%s) held back: %s",
+                                                 showtime::whyName(showtimeAuto.why()),
+                                                 mi.forced == showtime::ExitWhy::menu ? "the menu button"
+                                                 : mi.forced == showtime::ExitWhy::teleport ? "a teleport"
+                                                 : showtime::heldBackBy(okIn) ? showtime::heldBackBy(okIn)
+                                                                              : "?");
                             showtimeLatch.clear();
                             showtimeAuto.clear();
                         }
@@ -10395,6 +10414,83 @@ DWORD WINAPI run(void*) {
                         // interval. A scene's screen keeps the game's frame.
                         return !vrPlay;
                     }
+                    // SHOWTIME's outside camera, placed and published (game_fp::showtimeFrame) for this
+                    // frame's eyes, with its vignette and fade in `saved`: in play below, and (AUTO:
+                    // FINISHERS, beta3d) in the first-person scene a Y+B finisher plays, whose eyes the
+                    // native views put on game_fp::frame / frameLevel - the published frame while one is
+                    // current.
+                    const auto showtimePlace = [&](NativeEyeFrame& saved) {
+                        const Vec3 stFeet{body[12], body[13], body[14]};
+                        showtime::RigParams rp;
+                        rp.distance = static_cast<float>(values.showtimeDistanceCm) / 100.f;
+                        rp.height = static_cast<float>(values.showtimeHeightCm) / 100.f;
+                        rp.angleDeg = static_cast<float>(values.showtimeAngleDeg);
+                        rp.follow = values.showtimeFollow;
+                        rp.snap = values.showtimeTurn == 1;
+                        rp.turnRadians = values.smoothTurn > 0
+                                             ? static_cast<float>(values.smoothTurn) * 0.017453292f
+                                             : 2.0943951f;
+                        rp.vignette = values.showtimeVignette;
+                        // SHOWTIME RAY FAN's speed lead (showtime_speed_lead_pct; 0 with the fan off: as
+                        // before).
+                        rp.speedLead = values.showtimeRayFan
+                                           ? static_cast<float>(values.showtimeSpeedLeadPct) / 100.f
+                                           : 0.f;
+                        if (showtimeInit) {
+                            showtimeInit = false;
+                            showtimeRef = {frame.head.position, screenAhead(frame.head, 0).orientation};
+                            showtimeRefSet = validTrackedPose(frame.head);
+                            showtimeEnterMs = GetTickCount64();
+                            showtimeRig.begin(stFeet, showtimeEntryHeading, rp);
+                            diag_log::writef("showtime: enter (%s) yaw %.0f deg, %.1f m out, %.0f deg off "
+                                             "his back, head view %s",
+                                             showtime::whyName(showtimeOut.enterWhy),
+                                             showtimeEntryHeading * 57.29578f, rp.distance, rp.angleDeg,
+                                             std::isfinite(hsViewNow) ? "headset" : "body");
+                        }
+                        showtime::OrbitRig::Input ri;
+                        ri.seconds = frame.seconds;
+                        ri.feet = stFeet;
+                        ri.stickX = showtimeStickX;
+                        ri.stickY = showtimeStickY;
+                        ri.turning = showtimeMachine.state() == showtime::State::out;
+                        Vec3 stockPlace{};
+                        float stockYaw{};
+                        ri.stockOk = game_fp::stockSeat(stockPlace, stockYaw);
+                        ri.stock = stockPlace;
+                        const uint64_t fanMs = GetTickCount64();
+                        ri.raysOk =
+                            values.showtimeRayFan && showtimeFan.ok && fanMs - showtimeFanSeenMs < 250;
+                        ri.rayRatio = ri.raysOk ? showtimeFan.ratio : 1.f;
+                        showtimeCam = showtimeRig.update(ri, rp);
+                        showtimeFanFrom = showtimeCam.fanFrom;
+                        showtimeFanTo = showtimeCam.fanTo;
+                        showtimeFanAtMs = fanMs;
+                        const Mat4 stFrame = showtime::levelFrame(showtimeCam.position, showtimeCam.yaw);
+                        game_fp::showtimeFrame(&stFrame);
+                        game_fp::showtimeHead(values.showtimeBody != showtime::bodyAsInPlay);
+                        saved.showtimeVignette = showtimeCam.vignette;
+                        saved.showtimeFade =
+                            std::max({showtimeOut.fade, showtimeCam.blink, showtimeCam.closeFade});
+                        if (const uint64_t nowMs = GetTickCount64(); nowMs - showtimeLogMs >= 1000) {
+                            showtimeLogMs = nowMs;
+                            diag_log::writef(
+                                "showtime: cam d=%.1f m lag=%.1f m v=%.1f m/s w=%.1f rad/s vignette=%.2f "
+                                "collide=%s "
+                                "pull=%.1f m fade=%s rays=%.1f m (%u of %u hit, %u batches %u with a hit, %u "
+                                "sent) "
+                                "lead=%.2f",
+                                rp.distance, showtimeCam.lag, showtimeCam.speed, showtimeCam.omega,
+                                showtimeCam.vignette,
+                                ri.raysOk && ri.stockOk ? "rays+stock"
+                                : ri.raysOk             ? "rays"
+                                : ri.stockOk            ? "stock"
+                                                        : "none",
+                                showtimeCam.pull, showtimeCam.closeFade > .01f ? "close" : "none",
+                                showtimeCam.rayLimit, showtimeFan.hits, showtimeFan.rays, showtimeFanBatches,
+                                showtimeFanHitBatches, showtimeFanSent, showtimeCam.lead);
+                        }
+                    };
                     if ((!vrPlay || fpPlayBlip) && fpScene) {
                         headset_smoothing::liveLevel.store(0, std::memory_order_relaxed);
                         headset_smoothing::publish({});
@@ -10421,6 +10517,17 @@ DWORD WINAPI run(void*) {
                         // Off: only his place follows him, on a level frame (anchored 4); you look about
                         // freely from there.
                         eyes.anchored = follow ? 2 : 4;
+                        // AUTO: FINISHERS (beta3d): Showtime out in the finisher's scene - the eyes are the
+                        // headset's own on the outside camera's level frame, as in play (anchored 4 with
+                        // showtimeRef; game_fp::frameLevel hands the native views that frame).
+                        const bool showtimeScene = showtimeMachine.out();
+                        NativeEyeFrame showtimePlaced;
+                        showtimePlaced.showtimeFade = showtimeOut.fade;
+                        if (showtimeScene) {
+                            eyes.anchored = 4;
+                            showtimePlace(
+                                showtimePlaced); // (before the eyes: it takes showtimeRef on the cut)
+                        }
                         if (!follow) {
                             // The right stick turns the view, as it turns you in play: smooth while held, or
                             // a snap a flick (the launcher's turn settings).
@@ -10457,8 +10564,10 @@ DWORD WINAPI run(void*) {
                                 fpFacingMs = GetTickCount64();
                             }
                         }
+                        const Pose showtimeToRef = inverse(showtimeRef);
                         for (unsigned i = 0; i < 2; ++i) {
-                            Pose eye = compose(turned, compose(toRef, frame.eyes[i].pose));
+                            Pose eye = showtimeScene ? compose(showtimeToRef, frame.eyes[i].pose)
+                                                     : compose(turned, compose(toRef, frame.eyes[i].pose));
                             eyes.eyes[i].world = native_view::relativePose(axes, eye);
                             const auto& f = frame.eyes[i].fov;
                             eyes.eyes[i].fov[0] = f.left;
@@ -10479,6 +10588,8 @@ DWORD WINAPI run(void*) {
                         saved.scene = true;
                         saved.uiStyle = values.uiStyle == 1 ? UiStyle::tech : UiStyle::comic;
                         saved.screenAspect = SpidyFlatAspect();
+                        saved.showtimeFade = showtimePlaced.showtimeFade;
+                        saved.showtimeVignette = showtimePlaced.showtimeVignette;
                         history.remember(saved);
                         const auto code = SpidySetEyes(&eyes);
                         if (code && code != 4003)
@@ -13514,71 +13625,7 @@ DWORD WINAPI run(void*) {
                     // camera's level frame (eye command 4, as a level scene's), Spidey's own marks, webs and hands not drawn.
                     saved.showtimeFade = showtimeOut.fade;
                     if (showtimeMachine.out()) {
-                        const Vec3 stFeet{body[12], body[13], body[14]};
-                        showtime::RigParams rp;
-                        rp.distance = static_cast<float>(values.showtimeDistanceCm) / 100.f;
-                        rp.height = static_cast<float>(values.showtimeHeightCm) / 100.f;
-                        rp.angleDeg = static_cast<float>(values.showtimeAngleDeg);
-                        rp.follow = values.showtimeFollow;
-                        rp.snap = values.showtimeTurn == 1;
-                        rp.turnRadians = values.smoothTurn > 0 ? static_cast<float>(values.smoothTurn) * 0.017453292f : 2.0943951f;
-                        rp.vignette = values.showtimeVignette;
-                        // SHOWTIME RAY FAN's speed lead (showtime_speed_lead_pct; 0 with the fan off: as
-                        // before).
-                        rp.speedLead = values.showtimeRayFan
-                                           ? static_cast<float>(values.showtimeSpeedLeadPct) / 100.f
-                                           : 0.f;
-                        if (showtimeInit) {
-                            showtimeInit = false;
-                            showtimeRef = {frame.head.position, screenAhead(frame.head, 0).orientation};
-                            showtimeRefSet = validTrackedPose(frame.head);
-                            showtimeEnterMs = GetTickCount64();
-                            showtimeRig.begin(stFeet, showtimeEntryHeading, rp);
-                            diag_log::writef("showtime: enter (%s) yaw %.0f deg, %.1f m out, %.0f deg off his back, head view %s",
-                                             showtime::whyName(showtimeOut.enterWhy), showtimeEntryHeading * 57.29578f,
-                                             rp.distance, rp.angleDeg, std::isfinite(hsViewNow) ? "headset" : "body");
-                        }
-                        showtime::OrbitRig::Input ri;
-                        ri.seconds = frame.seconds;
-                        ri.feet = stFeet;
-                        ri.stickX = showtimeStickX;
-                        ri.stickY = showtimeStickY;
-                        ri.turning = showtimeMachine.state() == showtime::State::out;
-                        Vec3 stockPlace{};
-                        float stockYaw{};
-                        ri.stockOk = game_fp::stockSeat(stockPlace, stockYaw);
-                        ri.stock = stockPlace;
-                        const uint64_t fanMs = GetTickCount64();
-                        ri.raysOk =
-                            values.showtimeRayFan && showtimeFan.ok && fanMs - showtimeFanSeenMs < 250;
-                        ri.rayRatio = ri.raysOk ? showtimeFan.ratio : 1.f;
-                        showtimeCam = showtimeRig.update(ri, rp);
-                        showtimeFanFrom = showtimeCam.fanFrom;
-                        showtimeFanTo = showtimeCam.fanTo;
-                        showtimeFanAtMs = fanMs;
-                        const Mat4 stFrame = showtime::levelFrame(showtimeCam.position, showtimeCam.yaw);
-                        game_fp::showtimeFrame(&stFrame);
-                        game_fp::showtimeHead(values.showtimeBody != showtime::bodyAsInPlay);
-                        saved.showtimeVignette = showtimeCam.vignette;
-                        saved.showtimeFade = std::max({showtimeOut.fade, showtimeCam.blink, showtimeCam.closeFade});
-                        if (const uint64_t nowMs = GetTickCount64(); nowMs - showtimeLogMs >= 1000) {
-                            showtimeLogMs = nowMs;
-                            diag_log::writef(
-                                "showtime: cam d=%.1f m lag=%.1f m v=%.1f m/s w=%.1f rad/s vignette=%.2f "
-                                "collide=%s "
-                                "pull=%.1f m fade=%s rays=%.1f m (%u of %u hit, %u batches %u with a hit, %u "
-                                "sent) "
-                                "lead=%.2f",
-                                rp.distance, showtimeCam.lag, showtimeCam.speed, showtimeCam.omega,
-                                showtimeCam.vignette,
-                                ri.raysOk && ri.stockOk ? "rays+stock"
-                                : ri.raysOk             ? "rays"
-                                : ri.stockOk            ? "stock"
-                                                        : "none",
-                                showtimeCam.pull, showtimeCam.closeFade > .01f ? "close" : "none",
-                                showtimeCam.rayLimit, showtimeFan.hits, showtimeFan.rays, showtimeFanBatches,
-                                showtimeFanHitBatches, showtimeFanSent, showtimeCam.lead);
-                        }
+                        showtimePlace(saved);
                         headset_smoothing::liveLevel.store(0, std::memory_order_relaxed);
                         headset_smoothing::publish({});
                         headset_smoothing::liveRide.store(false, std::memory_order_relaxed);

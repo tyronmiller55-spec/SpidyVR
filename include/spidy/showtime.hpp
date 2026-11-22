@@ -454,6 +454,44 @@ inline bool autoLive(Why why, bool dodging, bool finisher, bool strike, bool pun
     }
 }
 
+// Where the camera may go out (game_xr's stOk), and the first thing that keeps it in (for the log). AUTO:
+// FINISHERS (autoScene: its automatic moment is on): the Y+B finisher is a first-person scene, not play - the
+// game's follow camera is not the one in use, so neither gameplay nor the tracking rig is (GameTrackingRig:
+// Inactive notPlaying, "a menu, a scene, the game's own camera"). Until 0.8.7-na-beta3d the moment got past
+// `gameplay` but not `rigActive`: the first frame of the scene cleared the trigger it had just been given and
+// the camera never went out (the beta3b log: finishers at 1033.984 s and 1052.234 s, the head probe "combat
+// -> cutscene" across them, no "showtime: enter (finisher)"). Now it gets past both.
+struct OkInput {
+    bool enabled{}, body{}, flatScreen{}, viewing{}, gameplay{}, rigActive{}, spiderMan{}, calibrating{},
+        phone{}, padLatched{}, autoScene{};
+};
+inline const char* heldBackBy(const OkInput& in) {
+    if (!in.enabled)
+        return "Showtime off";
+    if (!in.body)
+        return "the body off";
+    if (in.flatScreen)
+        return "the flat screen";
+    if (!in.viewing)
+        return "no view";
+    if (!in.gameplay && !in.autoScene)
+        return "not in play";
+    if (!in.rigActive && !in.autoScene)
+        return "the tracking rig off";
+    if (!in.spiderMan)
+        return "not Spider-Man";
+    if (in.calibrating)
+        return "calibrating";
+    if (in.phone)
+        return "the phone open";
+    if (in.padLatched)
+        return "the pad layer latched";
+    return nullptr;
+}
+inline bool ok(const OkInput& in) {
+    return heldBackBy(in) == nullptr;
+}
+
 // AUTO: STRIKES vs AUTO: PUNCHES (0.8.7-na-beta3d; the owner, Nov 21 t93u: "Let's only have it on animation
 // web strikes, not manual SpidyVR punches. Or, if we do, let's give it a toggle"). The game's own web strike
 // is HeroStateWebRush (docs/REFERENCE.md), which runs as a dodge of kind 8 in the hero's dodge manager

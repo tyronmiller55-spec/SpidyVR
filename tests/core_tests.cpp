@@ -34366,6 +34366,25 @@ int main() {
         check(kept.showtimeAutoPunch, "AUTO: PUNCHES: a 1 chosen after revision 20 moved");
         // BETA3 KEPT END
     });
+    test("showtime auto: a Y+B finisher's scene (no play, the tracking rig off) lets the camera out", [&] {
+        using namespace spidy::showtime;
+        OkInput play;
+        play.enabled = play.body = play.viewing = play.gameplay = play.rigActive = play.spiderMan = true;
+        check(ok(play) && heldBackBy(play) == nullptr, "in play it may go out");
+        OkInput scene = play;
+        scene.gameplay = scene.rigActive = false; // the finisher's first-person scene (the beta3b log)
+        check(!ok(scene) && std::string(heldBackBy(scene)) == "not in play", "a scene without the moment keeps it in");
+        scene.autoScene = true;
+        check(ok(scene), "the finisher's own moment goes out with the rig off (the beta3b bug)");
+        OkInput rigOff = play;
+        rigOff.rigActive = false;
+        check(std::string(heldBackBy(rigOff)) == "the tracking rig off", "the log names the rig");
+        scene.phone = true;
+        check(!ok(scene) && std::string(heldBackBy(scene)) == "the phone open", "the phone still keeps it in");
+        scene.phone = false;
+        scene.enabled = false;
+        check(!ok(scene), "Showtime off keeps it in");
+    });
     test("showtime auto: the game's web strike (web rush, dodge kind 8) apart from SpidyVR's punches", [&] {
         using namespace spidy::showtime;
         WebRush rush;
