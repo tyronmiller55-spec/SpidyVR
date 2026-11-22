@@ -1487,7 +1487,7 @@ void visit(const native_rays::QueryContext& world) {
         pointJumpWaiting = false;
         ReleaseSRWLockExclusive(&pointJumpLock);
         if (waiting && focused && GetTickCount64() - at <= pointJumpMaxAgeMs)
-            solver.pointJump(ask.velocity);
+            solver.pointJump(ask.velocity, (ask.flags & 1u) != 0);
     }
     // AIR DODGE: a dodge XR sent since the last step (SpidySwingAirDodge). Taken in the air only.
     {

@@ -411,6 +411,15 @@ void bridge() {
     check(!game_swing::validPointJump(a), "no NaN launch");
     a.velocity = {0, 100, 0};
     check(!game_swing::validPointJump(a), "no absurd launch");
+    // Version 2 (beta3e): flags bit 0, off the game's own wall crawl; nothing else.
+    a.velocity = {0, 5, -10};
+    a.flags = 1;
+    check(game_swing::validPointJump(a), "a launch off the game's crawl");
+    a.flags = 2;
+    check(!game_swing::validPointJump(a), "an unknown flag");
+    a.flags = 0;
+    a.version = 1;
+    check(!game_swing::validPointJump(a), "a version 1 ask (40 bytes) read as 44");
 }
 
 void settings() {

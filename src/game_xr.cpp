@@ -1873,6 +1873,8 @@ DWORD WINAPI run(void*) {
         bool groundOk{};
         uint32_t landingRays{}, landingSeen{}, landingReports{};
         const char* pointJumpSurface = "ground";
+        bool pointJumpOffCrawl{}; // POINT JUMP CANCELS WALL GRABS (beta3e): the last contact was the game's
+                                  // wall
         // QUICK SIDESTEP (sidestep.hpp): the flick-then-A trigger, the bursts
         // sent, refused and denied, the swing's account read so far, B as it
         // came from the controller this frame (before the point jump's chord),
@@ -3119,13 +3121,21 @@ DWORD WINAPI run(void*) {
                         const bool pjFresh = swingState.status && swingState.qpc &&
                                              static_cast<int64_t>(swingState.qpc) > now.QuadPart - frequency.QuadPart / 10;
                         const bool pjSpidyWall = swingState.wall == static_cast<uint32_t>(game_swing::Surface::wall);
-                        const bool pjContact = pjFresh && (swingState.grounded || pjSpidyWall);
+                        // POINT JUMP CANCELS WALL GRABS (beta3e): the game's own wall crawl or wall run is a
+                        // surface to jump off as Spidy's wall is (its normal: the crawl's, game_swing's
+                        // wallNormal); off, refused as "game crawl" below, as beta3d.
+                        const bool pjGameWall =
+                            values.pointJumpWallCancel && pjFresh &&
+                            swingState.wall == static_cast<uint32_t>(game_swing::Surface::game) &&
+                            finite(swingState.wallNormal) && length(swingState.wallNormal) > .5f;
+                        const bool pjContact = pjFresh && (swingState.grounded || pjSpidyWall || pjGameWall);
                         if (pjContact) {
-                            pointJumpNormal = pjSpidyWall && finite(swingState.wallNormal) &&
+                            pointJumpNormal = (pjSpidyWall || pjGameWall) && finite(swingState.wallNormal) &&
                                                       length(swingState.wallNormal) > .5f
                                                   ? normalized(swingState.wallNormal)
                                                   : Vec3{0, 1, 0};
-                            pointJumpSurface = pjSpidyWall ? "wall" : "ground";
+                            pointJumpSurface = pjGameWall ? "game wall" : pjSpidyWall ? "wall" : "ground";
+                            pointJumpOffCrawl = pjGameWall;
                         }
                         // Not while something else has A or B: out of play, the phone,
                         // the gadget wheel, the pad layer, the calibration, a prompt
@@ -3150,8 +3160,9 @@ DWORD WINAPI run(void*) {
                             blockedBy = "vent";
                         else if (values.webLines && lineState.phase == 2 && lineState.onLine)
                             blockedBy = "line";
-                        else if (pjFresh && (swingState.wall == static_cast<uint32_t>(game_swing::Surface::game) ||
-                                             swingState.wall == static_cast<uint32_t>(game_swing::Surface::floor)))
+                        else if (pjFresh && !pjGameWall &&
+                                 (swingState.wall == static_cast<uint32_t>(game_swing::Surface::game) ||
+                                  swingState.wall == static_cast<uint32_t>(game_swing::Surface::floor)))
                             blockedBy = "game crawl";
                         else if (pjFresh && (swingState.takeoff || swingState.takeoffPhase))
                             blockedBy = "takeoff";
@@ -3165,8 +3176,11 @@ DWORD WINAPI run(void*) {
                         const bool warning = std::any_of(senseMarks.begin(), senseMarks.end(),
                                                          [](const SenseMark& m) { return m.live && !m.brokenAt; });
                         const bool rawA = frame.jump, rawB = (frame.buttons & buttonB) != 0;
-                        // A grip cancels a charge.
-                        if (pointChord.charging() &&
+                        // A grip cancels a charge - but not on a wall with POINT JUMP CANCELS WALL GRABS
+                        // (beta3e): there the grip is the wall grab the jump cancels (hand climbing's hold,
+                        // the wall brake), and the chord goes on.
+                        const bool pjOnWall = pjFresh && (pjSpidyWall || pjGameWall);
+                        if (pointChord.charging() && !(values.pointJumpWallCancel && pjOnWall) &&
                             ((frame.hands[0].valid && frame.hands[0].squeeze > .6f) ||
                              (frame.hands[1].valid && frame.hands[1].squeeze > .6f)))
                             pointChord.cancel();
@@ -3245,6 +3259,10 @@ DWORD WINAPI run(void*) {
                             ask.serial = ++pointJumpSerial;
                             ask.velocity = velocity;
                             ask.normal = pointJumpNormal;
+                            // Off the game's own wall crawl or run (beta3e): the swing takes it there too.
+                            ask.flags = pointJumpOffCrawl ? 1u : 0u;
+                            if (pointJumpOffCrawl || (pjOnWall && values.pointJumpWallCancel))
+                                diag_log::writef("point jump: cancels the wall grab (%s)", pointJumpSurface);
                             const DWORD result = swingPointJump(&ask);
                             if (result == 0) {
                                 ++pointJumps;

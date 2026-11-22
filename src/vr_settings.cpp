@@ -3304,6 +3304,7 @@ constexpr TabOnly tabOnly[] = {
     {"swing_reel_out_tap_ms", nullptr, &Values::swingReelOutTapMs},
     {"swing_reel_out_speed", nullptr, &Values::swingReelOutSpeed},
     {"swing_air_physics", &Values::swingAirPhysics, nullptr},
+    {"point_jump_wall_cancel", &Values::pointJumpWallCancel, nullptr},
     {"log_level", nullptr, &Values::logLevel},
     {"movement_defaults", nullptr, &Values::movementDefaults},
 };
@@ -3542,6 +3543,12 @@ Values withMovementDefaults(Values v, std::string_view text) {
         // AIR PHYSICS WHILE SWINGING comes on once (t93u). A new key; a 0 chosen after this revision stays.
         v.swingAirPhysics = true;
         // BETA3D MIGRATION END
+    }
+    if (seen < 21) {
+        // Revision 21 (0.8.7-na-beta3e; the owner, Nov 22 t94u): POINT JUMP CANCELS WALL GRABS comes on once (a
+        // new key, all features on for testing); a 0 chosen after this revision stays.
+        v.pointJumpWallCancel = true;
+        // BETA3E MIGRATION END
     }
     v.movementDefaults = movementDefaultsRevision;
     return sanitized(v);

@@ -302,7 +302,7 @@ struct Values {
     // from before it gets RUN CURVE on and EARLY JUMP QUICK TAP once (the
     // user: "movement fixes will be defaults"); after that the player's own
     // choice stands. Not a row. movement_defaults.
-    int movementDefaults = 20; // movementDefaultsRevision: a new file has seen them
+    int movementDefaults = 21; // movementDefaultsRevision: a new file has seen them
     // SOFT LANDING (the tab's SOFT LANDING; Swing::allowSoftLanding,
     // run_update::softLandVertical): a fall the swing flies, with no web
     // holding, eases to 9 m/s down over its last 3 m (or 0.35 s), its speed
@@ -854,6 +854,11 @@ struct Values {
     // before a touchdown, and the AIR DODGE (B) - each where it makes physical sense; docs/NA_BETA3.md (beta3d) has the
     // table, with what stays off and why. Off: exactly as beta3c. On by default (revision 20 turns it on once).
     bool swingAirPhysics = true;
+    // POINT JUMP CANCELS WALL GRABS (0.8.7-na-beta3e; the owner, Nov 22 t94u: "I want point jump to cancel wall
+    // grabs"): A+B on a wall fires the point jump off it - a hand climbing grip held on Spidy's wall no longer
+    // cancels the charge, and the game's own wall crawl or wall run is no longer refused ("game crawl"): the
+    // jump takes the body off the game's hold, with its sounds. Off: as beta3d.
+    bool pointJumpWallCancel = true;
     // BETA3 SETTINGS END
     // HERO ATTACK SOUND (beta polish A2; attack_sound, spidy_vr.ini only, no menu row): one of the game's sounds played
     // on Spidey as a punch is thrown or a kick starts (at most one a hand every 250 ms, hit_sound.hpp): the id's 32
@@ -1402,7 +1407,7 @@ std::string tabOnlyText(const Values&);
 // key, or whose value is no whole number, is passed over.
 Values withTabOnly(Values, std::string_view text);
 // The movement defaults' revision (Values::movementDefaults) this build has.
-inline constexpr int movementDefaultsRevision = 20;
+inline constexpr int movementDefaultsRevision = 21;
 // November 12 movement cleanup: a settings file (that text) older than
 // movementDefaultsRevision gets the new movement defaults once - RUN CURVE
 // on, EARLY JUMP at least QUICK TAP - and is marked as having seen them; a

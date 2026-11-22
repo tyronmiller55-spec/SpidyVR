@@ -10373,6 +10373,27 @@ int main() {
         z.predictNativeStep(1.f/60,in,w,standing);
         check(!z.pointJumps(),"an empty launch");
     });
+    test("POINT JUMP CANCELS WALL GRABS: off the game's own wall crawl when asked so, never otherwise", [] {
+        TestWorld w;w.enabled=false;
+        // The game holds him on its wall (supportSurface: its crawl's normal), off the ground in its run.
+        const Body onRun{{0,3,0},{0,2,0},false};
+        Swing plain(inert());Input in;
+        plain.supportSurface({1,0,0},{-.4f,3,0});
+        plain.pointJump({8,6,0});
+        plain.predictNativeStep(1.f/60,in,w,onRun);
+        check(!plain.pointJumps(),"a beta3d point jump taken off the game's crawl");
+        Swing crawl(inert());
+        crawl.supportSurface({1,0,0},{-.4f,3,0});
+        crawl.pointJump({8,6,0},true);
+        const auto out=crawl.predictNativeStep(1.f/60,in,w,onRun);
+        check(crawl.pointJumps()==1,"no point jump off the game's crawl");
+        check(out.velocity.x>7,"not launched out of the game's wall");
+        // Asked so with no crawl under him (plain air): nothing.
+        Swing air(inert());
+        air.pointJump({8,6,0},true);
+        air.predictNativeStep(1.f/60,in,w,onRun);
+        check(!air.pointJumps(),"a crawl point jump with no crawl");
+    });
     test("a charged leap takes the body off the ground: up by its charge, and along the stick", [] {
         TestWorld w;w.enabled=false;
         const Body standing{{0,0,0},{},true};
@@ -25328,7 +25349,7 @@ int main() {
                   "the movement defaults overrode a choice made after them");
             check(withMovementDefaults(withTabOnly({}, ""), "").runCurve,
                   "no file: not the movement defaults");
-            check(tabOnlyText(migrated).find("movement_defaults=20\n") != std::string::npos,
+            check(tabOnlyText(migrated).find("movement_defaults=21\n") != std::string::npos,
                   "the migration is not remembered");
         }
         {
@@ -25823,8 +25844,9 @@ int main() {
                   "swing_reel_out_tap_ms=300\n"
                   "swing_reel_out_speed=400\n"
                   "swing_air_physics=1\n"
+                  "point_jump_wall_cancel=1\n"
                   "log_level=1\n"
-                  "movement_defaults=20\n",
+                  "movement_defaults=21\n",
               "the defaults' text");
         Values changed = defaults;
         changed.recordingFov = 140;
@@ -34497,6 +34519,7 @@ int main() {
               "AUTO: PUNCHES: off, every one, no cooldown");
         check(d.swingReelOut && d.swingReelOutTapMs == 300 && d.swingReelOutSpeed == 400, "REEL OUT: on, 300 ms, 400 cm/s");
         check(d.swingAirPhysics, "AIR PHYSICS WHILE SWINGING: on");
+        check(d.pointJumpWallCancel, "POINT JUMP CANCELS WALL GRABS: on");
         // BETA3 DEFAULT CHECKS END
         Values off{};
         off.handoffHeadFirst = false;
@@ -34513,6 +34536,7 @@ int main() {
         off.showtimeAutoPunch = true; // (off by default: the other way)
         off.swingReelOut = false;
         off.swingAirPhysics = false;
+        off.pointJumpWallCancel = false;
         // BETA3 OFF END
         std::string base = tabOnlyText(off);
         base = base.substr(0, base.find("movement_defaults="));
@@ -34551,8 +34575,12 @@ int main() {
         check(!migrated.showtimeAutoPunch, "an older file kept AUTO: PUNCHES on");
         check(punches.swingReelOut, "a revision 19 file did not get REEL OUT");
         check(punches.swingAirPhysics, "a revision 19 file did not get AIR PHYSICS WHILE SWINGING");
+        const std::string rev20 = base + "movement_defaults=20\n";
+        const Values walls = withMovementDefaults(withTabOnly({}, rev20), rev20);
+        check(walls.pointJumpWallCancel, "a revision 20 file did not get POINT JUMP CANCELS WALL GRABS");
+        // BETA3E MIGRATED END
         // BETA3 MIGRATED END
-        const std::string chosen = base + "movement_defaults=20\n";
+        const std::string chosen = base + "movement_defaults=21\n";
         const Values kept = withMovementDefaults(withTabOnly({}, chosen), chosen);
         check(!kept.handoffHeadFirst, "a 0 chosen after revision 17 moved");
         check(!kept.landingViewSnap, "LANDING VIEW SNAP: a 0 chosen after revision 17 moved");
@@ -34568,6 +34596,7 @@ int main() {
         check(kept.showtimeAutoPunch, "AUTO: PUNCHES: a 1 chosen after revision 20 moved");
         check(!kept.swingReelOut, "REEL OUT: a 0 chosen after revision 20 moved");
         check(!kept.swingAirPhysics, "AIR PHYSICS WHILE SWINGING: a 0 chosen after revision 20 moved");
+        check(!kept.pointJumpWallCancel, "POINT JUMP CANCELS WALL GRABS: a 0 chosen after revision 21 moved");
         // BETA3 KEPT END
     });
     test("showtime auto: a Y+B finisher's scene (no play, the tracking rig off) lets the camera out", [&] {

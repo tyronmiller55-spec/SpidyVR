@@ -3353,6 +3353,13 @@ void App::options(ImVec2 origin, ImVec2 size) {
                    S(42), [&] { flagToggle("##swingairphysics", tabOnly_.swingAirPhysics); });
             // BETA3D LAUNCHER END
         });
+        // WALLS (0.8.7-na-beta3e): the point jump off a wall grab, and grip to stick, each on by default for testing.
+        // The same spidy_vr.ini keys as the game's NA tabs.
+        group(legsPage, 0, "Walls (beta3e)", [&] {
+            settingOption(Item::none, "Point jump cancels wall grabs", "A + B on a wall fires the point jump off it: a grip held on the wall no longer cancels the charge, and the game's own wall crawl lets you go. Default: on.",
+                   S(42), [&] { flagToggle("##pointjumpwallcancel", tabOnly_.pointJumpWallCancel); });
+            // BETA3E LAUNCHER END
+        });
         // NA HELP (beta polish M5): the same pages as the game's NA · HELP tab (na_help.hpp), a card per topic.
         const int helpPage = static_cast<int>(Category::help);
         static const std::vector<std::pair<const char*, std::string>> helpTopics = [] {

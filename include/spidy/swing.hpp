@@ -832,10 +832,14 @@ class Swing {
     // the ground or Spidy's wall only (game_xr has aimed it out of the
     // surface). Never the point launch (jumpQueued_): no game launch, no smoke.
     // A queue older than its next step is dropped there if he is on neither.
-    void pointJump(Vec3 velocity) {
+    // POINT JUMP CANCELS WALL GRABS (beta3e): `offCrawl`, the launch is off the
+    // game's own wall crawl or wall run (supportSurface): it is taken there too,
+    // where the swing holds no wall of its own and the body may not stand.
+    void pointJump(Vec3 velocity, bool offCrawl = false) {
         if (finite(velocity) && length(velocity) > .1f) {
             pointJumpQueued_ = true;
             pointJumpVelocity_ = velocity;
+            pointJumpOffCrawl_ = offCrawl;
         }
     }
     std::uint32_t pointJumps() const {
@@ -1082,7 +1086,7 @@ class Swing {
     float leapQueued_{};
     bool leapHeld_{};
     // POINT JUMP: a launch waiting for the next step, and those made.
-    bool pointJumpQueued_{};
+    bool pointJumpQueued_{}, pointJumpOffCrawl_{};
     Vec3 pointJumpVelocity_{};
     std::uint32_t pointJumps_{};
     // AIR DODGE: a burst waiting for the next step, and those made.

@@ -12,7 +12,7 @@ This build has every current feature on so you can try them. Topics are below. S
 
 ## JUMPS & POINT JUMP
 
-A jumps: the game's own jump. Hold A to charge it. A + B together (or hold B, then A) charges a POINT JUMP where you look. Tap for a hop, hold up to 1 s for a leap. A grip cancels the charge. In SpidyVR's air, B alone dodges the way the left stick points (rest: back).
+A jumps: the game's own jump. Hold A to charge it. A + B together (or hold B, then A) charges a POINT JUMP where you look. Tap for a hop, hold up to 1 s for a leap. A grip cancels the charge. On a wall a grip no longer cancels it: A+B jumps you off the wall grab. In SpidyVR's air, B alone dodges the way the left stick points (rest: back).
 
 ## FLIPS (A TAPS)
 

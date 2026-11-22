@@ -909,7 +909,7 @@ void Swing::reset(Body b) {
         hand.reelTap.reset();
     }
     pulled_ = pullAir_ = 0;
-    pointJumpQueued_ = false;
+    pointJumpQueued_ = pointJumpOffCrawl_ = false;
     pointJumpVelocity_ = {};
     airDodgeQueued_ = false;
     airDodgeVelocity_ = {};
@@ -1680,8 +1680,10 @@ void Swing::step(float dt, const Input& in, const WorldQueries& world, const Wor
     if (pointJumpQueued_) {
         // POINT JUMP: off the ground, a perch or Spidy's wall the way he looks
         // (game_xr aimed it out of the surface). Takes the place of any leap
-        // or jump this step; never the point launch.
-        if (body_.grounded || wall_.on) {
+        // or jump this step; never the point launch. POINT JUMP CANCELS WALL
+        // GRABS (beta3e): off the game's own crawl or run as well, when asked
+        // so (the hold there is the game's: the jump takes the body off it).
+        if (body_.grounded || wall_.on || (pointJumpOffCrawl_ && length(support_) > .5f)) {
             body_.velocity = limited(pointJumpVelocity_, config_.maxSpeed);
             if (wall_.on) {
                 leaveWall();
@@ -1695,7 +1697,7 @@ void Swing::step(float dt, const Input& in, const WorldQueries& world, const Wor
             ++pointJumps_;
             events_.push_back({EventKind::PointJump, -1, length(body_.velocity)});
         }
-        pointJumpQueued_ = false;
+        pointJumpQueued_ = pointJumpOffCrawl_ = false;
     }
     if (airDodgeQueued_) {
         // AIR DODGE (air_dodge.hpp): in the air only; game_xr aimed it from the view's heading and the stick.

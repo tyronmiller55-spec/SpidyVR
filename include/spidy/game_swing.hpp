@@ -613,15 +613,18 @@ static_assert(sizeof(PoseCoupling) == 16);
 // rises with each new launch; the same serial again is ignored. Not a Command
 // or Settings field and not versioned with them (an older swing module has no
 // SpidySwingPointJump export; XR then never fires). `normal`: the surface's,
-// for the diagnostics only.
+// for the diagnostics only. Version 2 (beta3e) appends `flags`: bit 0, POINT JUMP CANCELS WALL GRABS - the
+// launch is off the game's own wall crawl or wall run (Swing::pointJump's offCrawl), which version 1 never
+// was; 0, as before.
 struct PointJumpAsk {
-    uint32_t magic = 0x5357504a, version = 1, bytes = sizeof(PointJumpAsk), serial{};
+    uint32_t magic = 0x5357504a, version = 2, bytes = sizeof(PointJumpAsk), serial{};
     Vec3 velocity{}, normal{};
+    uint32_t flags{};
 };
-static_assert(sizeof(PointJumpAsk) == 40);
+static_assert(sizeof(PointJumpAsk) == 44);
 inline bool validPointJump(const PointJumpAsk& a) {
-    return a.magic == 0x5357504a && a.version == 1 && a.bytes == sizeof(PointJumpAsk) && finite(a.velocity) &&
-           length(a.velocity) > .1f && length(a.velocity) <= 80.f && finite(a.normal);
+    return a.magic == 0x5357504a && a.version == 2 && a.bytes == sizeof(PointJumpAsk) && a.flags <= 1u &&
+           finite(a.velocity) && length(a.velocity) > .1f && length(a.velocity) <= 80.f && finite(a.normal);
 }
 // Side channel from XR (QUICK SIDESTEP, sidestep.hpp): a burst across the
 // ground at `velocity` (level, real m/s) for moveSeconds, then a hard stop

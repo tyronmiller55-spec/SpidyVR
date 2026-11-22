@@ -32,6 +32,7 @@ inline constexpr Page pages[] = {
     {"JUMPS & POINT JUMP", "JUMPS & POINT JUMP", "A jumps: the game's own jump. Hold A to charge it."},
     {"JUMPS & POINT JUMP", "  (2) POINT JUMP", "A + B together (or hold B, then A) charges a POINT JUMP where you look."},
     {"JUMPS & POINT JUMP", "  (3) CHARGE", "Tap for a hop, hold up to 1 s for a leap. A grip cancels the charge."},
+    {"JUMPS & POINT JUMP", "  (3) ON A WALL", "On a wall a grip no longer cancels it: A+B jumps you off the wall grab."},
     {"JUMPS & POINT JUMP", "  (4) AIR DODGE", "In SpidyVR's air, B alone dodges the way the left stick points (rest: back)."},
 
     {"FLIPS (A TAPS)", "FLIPS (A TAPS)", "Hold the left stick a way and tap A (under 180 ms): a flip that way."},
