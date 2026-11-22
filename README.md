@@ -30,6 +30,9 @@ finishers and web strikes. Build **beta3b** (same version) splits Showtime's aut
 strikes and dodges with how-often controls, and adds double-tap A in the air to turn upside down (hold to stay).
 Build **beta3c** makes swing lines work round edges, in both hands and while climbing, swing free until they fade,
 and hand over to stick-click web lines. The hanging line now really pulls on the swing (ROPE PHYSICS, on at 100%).
+Build **beta3d** steps Showtime out only for the game's own web strikes, with your SpidyVR punches on their own
+switch (off). It fixes auto Showtime for Y+B finishers, adds a double tap and hold on the reel trigger to pay a
+web's line out, and lets arm spin, midair poses, the air dodge and the landing blend work while swinging.
 [Checklist](docs/NA_BETA3.md).
 
 **0.8.7-na-beta2** (CURRENT, Nov 21): point jumps play the game's whole jump sound set; Y+B finishers stay the

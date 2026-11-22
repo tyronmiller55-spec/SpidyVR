@@ -3,6 +3,26 @@
 Every build, newest first, with what changed, why, and what was measured.
 Per-check results are in [VALIDATION.md](VALIDATION.md).
 
+**0.8.7-na-beta3, build beta3d (November 21, the owner's t93u):** the same version, a fourth test package
+([checklist](NA_BETA3.md#beta3d-showtime-strikes-vs-punches-finishers-fixed-reel-out-air-physics-on-a-swing));
+migration rev 20.
+
+- **Showtime: strikes vs punches.** `showtime_auto_strike` now steps out only for the game's own animated web
+  strike: its web rush, which is the hero's dodge of kind 8 in `SpidyDodgeLive`. SpidyVR's manual punches get
+  `showtime_auto_punch`, which is off (rev 20 turns it off for everyone), with its own `_every` and
+  `_cooldown_ms`. The log names which kind fired.
+- **Auto finishers fixed.** A Y+B finisher's first-person scene turns the tracking rig off, and Showtime's gate
+  still required the rig, so the scene's first frame cleared the camera it had just been given. The moment now
+  gets past that check, and the scene's eye path places the outside camera. A `held back:` line names whatever
+  takes an auto camera away.
+- **Reel out** (feel change; `swing_reel_out=1`, `_tap_ms=300`, `_speed=400` cm/s). On a web, double tap the reel
+  trigger and hold to pay the line out, up to the swing's longest line. Full-length lines grow with it. It uses
+  the new `SpidyReelOut` side channel.
+- **Air physics while swinging** (feel change; `swing_air_physics=1`). On a web, arm swings build their own spin
+  over the web's alignment. MIDAIR POSES, the AIR DODGE and the LANDING BLEND-IN now work there too. The air
+  crouch, dodge tumble and jump pull stay off; the audit table in NA_BETA3.md gives the reasons. Off: exactly
+  beta3c.
+
 **0.8.7-na-beta3, build beta3c (November 21, the owner's t90u-t92u):** the same version, a third test package
 ([checklist](NA_BETA3.md#beta3c-webs-across-the-game-and-rope-physics)); migration rev 19, every new switch on.
 

@@ -170,3 +170,91 @@ Launcher: Web shooters page, card "Webs across the game (beta3c)". NA HELP: WEBS
 5. **Connect.** Hold webs on two surfaces, bring the hands together, click the right stick: the web line appears at
    once, with no leftover swinging line. Log: `web connect: a web line takes the webs ...` when a fade was cut.
 6. Watch for any web drawn through a wall while fading, or a frozen line.
+
+## beta3d: Showtime strikes vs punches, finishers fixed, reel out, air physics on a swing
+
+The owner, Nov 21 t93u: "Showtime on punches is what's happening now, let's remove that. Let's only have it on
+animation web strikes, not manual SpidyVR punches. Or, if we do, let's give it a toggle ... I'd like the ability to
+double tap the trigger and hold to reel the line out, so we can have more control there. I also want air arm and leg
+physics, and all mid air physics calculations to apply while swinging as well."
+
+Settings revision 20: AUTO: PUNCHES is set off for everyone, and REEL OUT and AIR PHYSICS WHILE SWINGING come on
+once. A value chosen after revision 20 stays. No game address is new. Reel out uses a new side channel between
+SpidyVR's own modules (`SpidyReelOut`, the same pattern as `SpidyRopePull`).
+
+| Key | Default | What |
+| --- | --- | --- |
+| `showtime_auto_strike` | 1 (kept) | **Changed meaning.** Now only the game's own animated web strike. That strike is `HeroStateWebRush` (REFERENCE.md), which runs as a dodge of kind 8 in the hero's dodge manager (game_dodge.hpp, "8 the web rush"). It is read from `SpidyDodgeLive`, the hook DODGE TUMBLE already reads. The beta3b log shows "the game's dodge began (kind 8)" at each strike. The camera stays out while the dodge is still kind 8, plus 0.3 s. |
+| `showtime_auto_punch` | 0 | **New.** SpidyVR's own manual punch that flies you to an enemy, or a dive (`WebStrike`, `game_punch::Strikes::opened`). Until beta3d this is what AUTO: STRIKES fired on. |
+| `showtime_auto_punch_every` | 1 | (1 to 10) out on every Nth punch. |
+| `showtime_auto_punch_cooldown_ms` | 0 | (0 to 60000) least time between two punch cameras. |
+| `swing_reel_out` | 1 | **Feel change.** While a hand's web is attached, press that hand's reel control (the trigger, or the grip with WEBS ON THE TRIGGER) a second time within the window and hold it. The line pays out until you let go, the web goes, or the line reaches the swing's longest (`SwingConfig::maxRange`). The first press still reels in, as always (a tap is a short reel). A single long press is the ordinary reel. Shooting and letting go of webs belong to the other control and are untouched. The taut take-in stands down for that hand while it pays out, so you fall or swing out onto the longer line. A full-length line grows one-for-one with it (`WebState` bit 32). |
+| `swing_reel_out_tap_ms` | 300 | (150 to 600) the double tap's window, first press to second. |
+| `swing_reel_out_speed` | 400 | (50 to 1500 cm/s) the pay-out speed. 4 m/s is half the reel-in's 8 m/s. |
+| `swing_air_physics` | 1 | **Feel change.** The air systems below that stood down while a web held now run on a swing. Off: exactly beta3c (every changed gate is behind this switch). |
+
+Launcher: the Showtime card has Auto: punches with its every and cooldown rows. The Web shooters page has a new card,
+"Swinging (beta3d)". NA HELP: SHOWTIME (4) to (6), WEBS & WEB CANCEL (10) REEL OUT and (11) AIR PHYSICS.
+
+### Finisher root cause (beta3b: detected, but the camera never went out)
+
+The log fired the trigger at 1033.984 s and 1052.234 s ("Showtime's camera out for it (AUTO: FINISHERS)"), but no
+"showtime: enter (finisher)" followed. A Y+B finisher is a first-person scene. In a scene the game's follow camera
+is not committed, so `gameplay` is false and the tracking rig goes inactive (`GameTrackingRig` Inactive notPlaying,
+"a menu, a scene, the game's own camera"). The head probe logged "combat -> cutscene" right across the finisher.
+
+Showtime's gate let the finisher's own moment past `gameplay`, but it still required `motion.active`. So on the
+scene's first frame `stOk` was false and `showtimeAuto.clear()` wiped the trigger it had just been given.
+
+The fix has two parts:
+- `showtime::OkInput` lets that moment past both checks.
+- The first-person scene's eye path now places and publishes Showtime's outside camera (`showtimePlace`, shared
+  with play). Before, only the play path did, so the scene's eyes would have stayed on his head. The native views
+  read it through `game_fp::frameLevel`, as in play.
+
+A new `showtime: auto (<kind>) held back: <reason>` line names whatever takes an auto camera away.
+
+### Air systems on a swing (audit)
+
+| System | beta3c with a web attached | beta3d (`swing_air_physics=1`) |
+| --- | --- | --- |
+| Momentum leg trail (`native_body::setAirMomentum`, legs in the air) | already on (`legsAirOnly` covers SpidyVR's swing) | unchanged |
+| Tuck pose + pose coupling (`swing_coupling::scales` to the flips' inertia) | already on | unchanged |
+| LEG CONTROL counter-turn and spin scale (REALISTIC FLIPS) | already on | unchanged |
+| REALISTIC FLIPS: web alignment, release spin | already on | unchanged |
+| REALISTIC FLIPS: arm swings (hand momentum) | **gated in effect**: added for one frame, then the web's alignment reset the momentum every frame | **on**: the arms' spin builds and falls off at the air falloff on top of the alignment (at most half the turn rate, so the web leads), and carries into the release (`RealisticFlipSettings::tetherSpin`) |
+| Air correct (A rights him) and double-tap A upside down | already on (the leveling runs before the tether) | unchanged |
+| Animated air spin | already on (head probe swing/web states) | unchanged |
+| MIDAIR POSES: dive, superhero, starfish | **off** (`PoseInput::webbed`) | **on**. A one-hand-up rising swing is the superhero pose, and both hands spread falling is the starfish. |
+| AIR DODGE (B) | **off** (`Why::web`, B went to the game) | **on**. The burst is the body's velocity, and the tension-only rope turns it into the arc. |
+| LANDING BLEND-IN (upright before a touchdown) | **off** (a web held kept the tilt) | **on**: a swing down onto the ground lands like a fall |
+| Air crouch (legs tucked at a hang) | off | **left off**: at a swing's low point he is upright and slow, and there the legs should trail the swing, not crouch |
+| Dodge tumble (the game's dodge leaning the view) | off | **left off**: it is the game's own dodge, and on SpidyVR's swing the game is not dodging |
+| Jump pull (nudge toward an aimed enemy) | off | **left off**: it would fight the rope (the swing kick steers on a web instead) |
+| Soft landing | off with a web | **left off**: SMOOTH WEB LANDING is the web's own version |
+| Point jump bullet | off | **left off**: an A-hold mechanic, not air physics |
+| Ground flips, sidestep | off | **left off**: ground moves |
+
+### beta3d checklist
+
+1. **Showtime: strikes vs punches.**
+   - Use the game's own web strike on an enemy: the camera should step out. Log: `showtime: the game's web strike
+     began (its web rush, dodge kind 8, #N) -> camera out` and `showtime: enter (web strike)`.
+   - Throw your own SpidyVR punches that fly you in: no camera (AUTO: PUNCHES is off). Log: none for them.
+   - Turn AUTO: PUNCHES on: punches step out. Log: `showtime: SpidyVR's punch flew (manual web strike #N) -> camera
+     out` and `showtime: enter (punch)`.
+2. **Finishers.** Do a Y+B finisher: the camera should step outside for the scene and come back about 0.3 s after
+   it ends. Log: `showtime: enter (finisher)`. If it doesn't, the `showtime: auto (finisher) held back: ...` line
+   says why. Say whether the outside view in the scene looks right.
+3. **Reel out.**
+   - On a web, tap the trigger and then press and hold it: you should drop or swing out on a longer line. Let go and
+     it stops. Log: `reel out: left hand paying out from X m` / `stopped (let go of), Y m paid out`.
+   - A single hold still reels in, and the grip still lets go.
+   - Try speeds 200, 400 and 800 cm/s.
+   - With full-length lines, the drawn line should grow with it, with no snap.
+4. **Air physics while swinging.**
+   - Swing and swing your arms: the body should keep some of the spin you give it.
+   - Raise one hand on a rising swing (superhero) and spread both on a fall (starfish).
+   - Press B on a swing for the air dodge.
+   - Swing down to the ground: the landing should upright you like a fall does.
+   - With the switch off, the swing should feel exactly like beta3c.
