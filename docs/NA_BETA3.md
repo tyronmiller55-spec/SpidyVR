@@ -396,3 +396,65 @@ rope's damping and mass.
      control it.
    - Lower drag (50, 0): the slack should tug you less, and the line should still swing.
    - The log's `rope pull: on (strength S%, weight W%, drag D%, ...)` line shows the values.
+
+## beta3f: kick lunge, kick feel, the kick's outcome in the log, point jump on the floor-crawl flag
+
+The owner, Nov 22 t95u/t96u: "Why is there a floor crawl flag? Do we need it?" ... "Yep, I like it. Do that, and
+let's start to work on kicks. I'll test them next build."
+
+Settings revision 22: KICK LUNGE and KICK FEEL come on once. A value chosen after revision 22 stays. No existing
+default changed, and no game address is new. The air kick's side channel (`AirKickAsk`) is now version 2 (flag
+bit 5 and `lungeCm` in the old reserved word), and its account (`AirKickLive`) version 4.
+
+| Key | Default | What |
+| --- | --- | --- |
+| `kick_lunge` | 1 | **Feel change (kicks only).** Off the ground, an air kick at an enemy up to `kick_lunge_reach_cm` past the leg's reach (the gaze cone, in front, or the punches' lock, as before) takes him as the target and carries you at him: your velocity toward him rises to what closes the gap within the kick's window, at most 12 m/s, and the rest of your motion is kept. The kick aims along the line to him. A blow off a lunge keeps 40% of your velocity, so you stop at him. SpidyVR's air only; standing kicks never lunge. Off: the leg's reach only, exactly beta3e. |
+| `kick_lunge_reach_cm` | 250 | (0 to 400 cm) how far past the leg's reach (1.15 m + the air's 0.4 m, plus his 0.3 m radius) the lunge looks. |
+| `kick_feel` | 1 | A kick that starts ticks both controllers (the legs have none); a lunge ticks harder, with the web strike's rush body haptic and its rush sound (BLOW SOUNDS OFF silences it). A landed kick keeps the strikes' blow feedback. Off: exactly beta3e. |
+
+The point jump change has no switch: it is the refusal the owner asked to narrow.
+
+Launcher: a new "Kicks (beta3f)" card on the Kicks & Combat page. NA HELP: AIR KICKS (5) KICK LUNGE and (6) KICK
+FEEL. The full audit, the logs and the slices left are in the playtest folder's `KICKS_PLAN.md`.
+
+### Why kicks needed this (the audit)
+
+Air kicks (K2), ground kicks (K3) and the swing kick (K1) all hang off the legs chord (Y + X) and a fast flick of the
+right stick ([AIR_KICKS.md](AIR_KICKS.md), [GROUND_KICKS.md](GROUND_KICKS.md), [SWING_KICK.md](SWING_KICK.md)). An
+air kick's foot is modelled from the pelvis (1.15 m leg + 0.4 m lunge) and never moved the body, so an enemy had to
+be within about 1.85 m when you flicked. In the beta3b and beta3c logs, 11 kicks were started and **none** had an
+enemy in reach: 9 were outside a fight, one was refused on a landing (`moving too fast`), one started standing in a
+fight with nobody close enough. The gestures registered every time; the reach did not.
+
+### The kick's outcome in the log
+
+- `kick: <gesture> start zone= target= aim=<gaze|nearest in front|punch lock|none (no enemy in reach)>`, then
+  ` lunge 2.1 m at 8.1 m/s (lunges N)` when it lunges, and with no target `; 3 in the fight, nearest 4.2 m` or
+  `; no enemy in a fight`.
+- `kick: <gesture> miss (started, hits, misses; N in the fight, nearest X m)`.
+
+### Point jump on the game's floor-crawl flag
+
+The game's floor-crawl flag (mover flag `0x1`, `Surface::floor`) marks a vent crawl, but also lights when he ducks
+under anything low, in fight poses and in rooftop parkour. The point jump refused it as "game crawl": 5 times in
+the beta3b log and 15 in the beta3c log, none in a duct. Since beta3f it is refused there only when a duct's roof
+has been seen over him (`FloorCrawlRoof::duct`, the headroom ray within 1.5 m of the feet), the check ground flips
+use since Nov 18 (`floorCrawlRefuses`, game_tracking.hpp). `motion.ventCrawl` still refuses. The game's own wall
+crawl keeps its rule (`point_jump_wall_cancel`). When a jump goes through that beta3e would have refused, the log
+says `point jump: on the game's floor-crawl flag with no duct roof over him - allowed (beta3e refused it as "game
+crawl")`. The quick sidestep's own floor-flag refusal is unchanged (not asked).
+
+### beta3f checklist
+
+1. **Kick lunge.**
+   - In a fight, from 3 to 4 m off a thug in the air (jump, point jump or a swing), hold Y + X and flick: up
+     (dive), straight up (double), the quarter circle (roundhouse), sideways (freeform). You should fly at him and
+     stop on the blow. Log: `kick: dive start ... lunge 2.3 m at 8.8 m/s`, then `kick: dive hit ...`.
+   - `kick_lunge_reach_cm` at 100, 250 and 400.
+   - Kick while on a web: the rope bends the lunge. Say whether it feels right.
+   - With `kick_lunge=0`, kicks should be beta3e's (no lunge, reach 1.85 m).
+2. **Kick feel.** Every kick you start should tick both controllers; a lunge thumps harder with the rush sound.
+   With it off, nothing on a start (as beta3e).
+3. **Outcome log.** Out of a fight a kick logs `no enemy in a fight`; in one, how many and the nearest distance.
+4. **Point jump.** A+B in fights, ducking under something low and in rooftop parkour should fire where it did
+   nothing. In a vent or duct it should still be refused (`the game's crawl in a duct (a roof over him)`).

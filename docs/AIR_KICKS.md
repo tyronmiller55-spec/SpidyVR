@@ -24,6 +24,12 @@ No new buttons. The swing kick (K1) keeps the flick it arms on while swinging (u
 - **Blow.** The foot's swept 10 cm sphere against **every** fighting enemy's capsule (nearest 12), not only the ringed one. Its speed (its own and the player's motion, per step) gives the strength: nothing under 3 m/s, full at 10 m/s. A blow of 0.7 or more flies him (a kinetic blow at 80% of the foot's speed along its way, a little up, at most 14 m/s, as every dive does); a softer one is a plain hit. One blow per kick. The player's own velocity is not changed (no recoil, no speed added).
 - **Legs.** A kick is the legs' top layer (`leg_layers::Layer::kick`): the pose is leg_control's angles, the spring is the same, quicker for a kick. Its spin reaction on the body goes through the legs' coupling, scaled by `kick_spin_pct` (30% by default: a roundhouse turns you a little).
 - A kick ends where it is (the legs ease back) if the player lands, touches a wall or the setting goes off.
+- **KICK LUNGE** (beta3f, `kick_lunge=1`, `kick_lunge_reach_cm=250`): an enemy up to that far past the reach above is
+  a target too (the same three ways of finding one), and the kick carries the body at him: the velocity toward him
+  rises to gap / the kick's window, at most 12 m/s (`Config::lungeReach`, `lungeSpeed`; `Swing::kickLunge`), the kick
+  aims along the line to him, and a blow off a lunge keeps 40% of the velocity (`lungeKeep`, `Swing::kickRecoil`).
+  In the air only; off, the player's velocity is untouched as before. **KICK FEEL** (`kick_feel=1`): a start ticks
+  both controllers, a lunge adds the strike rush's thump and sound. See [NA_BETA3.md](NA_BETA3.md) (beta3f).
 
 ## Where it lives
 

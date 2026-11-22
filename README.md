@@ -35,7 +35,10 @@ switch (off). It fixes auto Showtime for Y+B finishers, adds a double tap and ho
 web's line out, and lets arm spin, midair poses, the air dodge and the landing blend work while swinging.
 Build **beta3e** lets the point jump (A+B) take you off a wall grab, makes walls something you slide on until
 you grip them with a palm (then crawl as usual), and adds rope weight (200%) and rope drag sliders for the swing
-line. [Checklist](docs/NA_BETA3.md).
+line. Build **beta3f** starts on kicks: an air kick at an enemy a little out of reach flies you at him and stops
+you on the blow (KICK LUNGE), a kick you start ticks the controllers (KICK FEEL), and the log says who was in reach.
+The point jump now works in fights, ducking and on rooftops; it is refused on the floor-crawl flag only in a real
+duct. [Checklist](docs/NA_BETA3.md).
 
 **0.8.7-na-beta2** (CURRENT, Nov 21): point jumps play the game's whole jump sound set; Y+B finishers stay the
 game's own and a grip no longer cancels one; **air dodge on B** in SpidyVR's air (the left stick picks the way;

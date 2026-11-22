@@ -3,6 +3,23 @@
 Every build, newest first, with what changed, why, and what was measured.
 Per-check results are in [VALIDATION.md](VALIDATION.md).
 
+**0.8.7-na-beta3, build beta3f (November 22, the owner's t96u):** the same version, a sixth test package
+([checklist](NA_BETA3.md#beta3f-kick-lunge-kick-feel-the-kicks-outcome-in-the-log-point-jump-on-the-floor-crawl-flag));
+migration rev 22.
+
+- **Point jump on the floor-crawl flag.** A+B is refused on the game's floor-crawl flag only in a real duct (a roof
+  seen over him: `FloorCrawlRoof`), as ground flips are since Nov 18; fights, ducking and rooftop parkour no longer
+  refuse it (5 refusals in the beta3b log, 15 in beta3c's, none in a duct). `motion.ventCrawl` still refuses. No
+  switch: the refusal the owner asked to narrow.
+- **Kick lunge** (feel change, kicks only; `kick_lunge=1`, `kick_lunge_reach_cm=250`). An air kick at an enemy up to
+  2.5 m past the leg's reach carries you at him (the kick's window closes the gap, at most 12 m/s) and stops you
+  on the blow (40% kept). SpidyVR's air only. `AirKickAsk` v2, `AirKickLive` v4, `Swing::kickLunge`. Off: exactly
+  beta3e. In the beta3b and beta3c logs no kick ever had an enemy in the leg's reach.
+- **Kick feel** (`kick_feel=1`). A kick started ticks both controllers; a lunge adds the strike rush's thump and
+  sound. Off: exactly beta3e.
+- **The kick's outcome in the log.** Each kick's start (with no target) and miss say how many enemies were in the
+  fight and the nearest one's distance; a lunging start says the gap and speed.
+
 **0.8.7-na-beta3, build beta3e (November 22, the owner's t94u):** the same version, a fifth test package
 ([checklist](NA_BETA3.md#beta3e-point-jump-off-wall-grabs-grip-to-stick-rope-weight-and-drag)); migration rev 21.
 

@@ -24,7 +24,7 @@ In a game jump or move, tilt the left stick to break into SpidyVR's air. Or sque
 
 ## AIR KICKS
 
-In the air hold Y + X to engage your legs, then flick the right stick fast. From under 0.35 to past 0.75 within 150 ms; a slower push poses the legs. Up: dive. Up-left/right: one-leg dive. Quarter circle to the top: roundhouse. Other flicks: a quick kick. Kicks aim where you look (AIR KICK AIM, 40 deg).
+In the air hold Y + X to engage your legs, then flick the right stick fast. From under 0.35 to past 0.75 within 150 ms; a slower push poses the legs. Up: dive. Up-left/right: one-leg dive. Quarter circle to the top: roundhouse. Other flicks: a quick kick. Kicks aim where you look (AIR KICK AIM, 40 deg). An enemy up to 2.5 m past your leg: you fly at him and stop on the blow. A kick taken ticks both controllers; a lunge thumps with the rush sound.
 
 ## GROUND KICKS
 
