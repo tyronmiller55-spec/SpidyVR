@@ -3,6 +3,24 @@
 Every build, newest first, with what changed, why, and what was measured.
 Per-check results are in [VALIDATION.md](VALIDATION.md).
 
+**Crime Run prototype (November 22, the owner's t103u; branch `feat/crime-run`, on beta3g):** a roguelike
+random-crime mode, off by default (`crime_run=0`); everything else is beta3g. [docs/CRIME_RUN.md](CRIME_RUN.md).
+
+- **The run** (`crime_run::Run`, core + `tests/crime_run_tests.cpp`). Start anywhere from the phone's new CRIME RUN
+  app (A; A twice quits). Score from 20,000; a crime every 45 s (2 open at most) with a 120 s timer; a stop scores
+  1,000 + up to 100% for speed + 200 per enemy; a miss costs 2,000; lost at 0, won at 20 stops; ranks Rookie,
+  Street-Level, Friendly Neighborhood, Spectacular, Sensational, Amazing by share of the target; the best saved to
+  `spidy_vr.ini`. Every rule is a setting (launcher card "Crime Run (prototype)", `crime_*` keys).
+- **Real crimes.** The game's own enemies standing in play 40..400 m away become the crime (the biggest group);
+  stopped once reached and all of them are down. The census is the punches' own enemy list
+  (`game_targets::fighting`, not cocooned) via `game_punch::crimeCensus`, sent by the swing module as
+  `SpidyCrimeLive` while a run asks (`SpidyCrimeAsk`). No new address.
+- **Beacons.** Otherwise a point on a 150..400 m ring, its ground from a Havok ray down (the swing's world queries);
+  reach it and hold 3 s. Drawn as a 150 m pillar of light with a label and a ground ring; the HUD below the gaze
+  shows score, stops, rank and an arrow to the most urgent crime.
+- Not possible yet without new hooks: spawning enemies or starting the game's crimes, reading the game's crime
+  objects, native map markers (`AddPOI`), crime sounds (CRIME_RUN.md lists what each needs).
+
 **0.8.7-na-beta3, build beta3g (November 22, the owner's t97u, t98u, t100u):** the same version, a seventh test
 package ([checklist](NA_BETA3.md#beta3g-web-rope-physics-kick-animation-and-reach)); migration rev 23.
 
