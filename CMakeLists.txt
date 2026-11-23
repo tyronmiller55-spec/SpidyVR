@@ -41,7 +41,7 @@ add_library(spidy_core src/swing.cpp src/web_grab.cpp src/web_tie.cpp src/web_li
             src/web_visual.cpp src/body_ik.cpp src/punch.cpp src/shooter.cpp src/vr_settings.cpp
             src/body_calibration.cpp src/overlay_text.cpp src/slow_motion.cpp src/web_strike.cpp
             src/impact_sound.cpp src/prompt_buttons.cpp src/gadget_wheel.cpp src/spider_sense.cpp src/phone.cpp
-            src/body_haptics.cpp src/tech_marks.cpp)
+            src/body_haptics.cpp src/tech_marks.cpp src/crime_run.cpp)
 target_include_directories(spidy_core PUBLIC include)
 if(MSVC)
   target_compile_options(spidy_core PRIVATE /W4 /permissive-)
@@ -90,6 +90,10 @@ add_test(NAME vr_stabilize COMMAND spidy_vr_stabilize_tests)
 
 # AIR KICKS (air_kick.hpp): gestures, zone and gaze, the foot's bend, strength, timeline, leg poses and the kick
 # against enemies (portable).
+# CRIME RUN (prototype): the run's scoring, spawns, timers, ranks, bridge and drawing.
+add_executable(spidy_crime_run_tests tests/crime_run_tests.cpp)
+target_link_libraries(spidy_crime_run_tests PRIVATE spidy_core)
+add_test(NAME crime_run COMMAND spidy_crime_run_tests)
 add_executable(spidy_air_kick_tests tests/air_kick_tests.cpp)
 target_link_libraries(spidy_air_kick_tests PRIVATE spidy_core)
 add_test(NAME air_kick COMMAND spidy_air_kick_tests)
