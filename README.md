@@ -20,6 +20,13 @@ https://github.com/tyronmiller55-spec/SpidyVR . The original Spidy launcher name
 author credits, Discord and Ko-fi links are retained; Native Animation bugs do
 not belong in upstream Spidy's bug tracker. Source is provided under GPL-3.0.
 
+**Crime Run (prototype, branch `feat/crime-run`):** a roguelike random-crime mode, off by default. Turn **Crime
+Run** on in the launcher (Kicks & Combat page), then start a run anywhere in the open world from the phone's new
+**CRIME RUN** app. Crimes appear around you as pillars of light at regular times - beacons to reach and hold, or the
+game's own thugs to take down - each on a timer. You start at 20,000 points: stops add points (more the faster),
+misses take them away; hit zero and the run is lost, stop 20 crimes and it is won, with ranks from Rookie to Amazing
+on the way. No enemies are spawned and the game itself is unchanged. [docs/CRIME_RUN.md](docs/CRIME_RUN.md).
+
 Windows package: **Spidy-0.8.7-na-beta2-win64-<commit>.zip** (version **0.8.7-na-beta2**). Extract into a
 writable folder outside the game install. Never copy the mod into the game's folder.
 
