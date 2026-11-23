@@ -938,6 +938,23 @@ struct Values {
     // 60 ms rather than 0.2 s. Off: the stiff leg swung out, as beta3f.
     bool kickChamber = true;
     // BETA3 SETTINGS END
+    // CRIME RUN (prototype; the owner, Nov 22 t103u; crime_run.hpp): a roguelike random-crime mode. Off by default:
+    // a mode, started from the phone's CRIME RUN app (shown only while this is on). Off: as the build before it.
+    bool crimeRun = false;
+    // The run's rules (crime_run::Config, crimeConfig): the score it starts at, the seconds between crimes, the
+    // ring they appear on round the player (metres), each crime's timer (s), a stop's points and its speed bonus
+    // (%), the points for each enemy of a real crime, a miss's penalty, the stops that win, how many crimes may be
+    // open at once, a beacon's zone (metres across) and how long to stay in it (s), and whether the game's own
+    // enemies in play become crimes (REAL CRIMES).
+    int crimeStartScore = 20000, crimeSpawnS = 45, crimeRadiusMinM = 150, crimeRadiusMaxM = 400, crimeTimerS = 120;
+    int crimeStopPoints = 1000, crimeSpeedBonusPct = 100, crimeThugPoints = 200, crimeMissPenalty = 2000;
+    int crimeWinStops = 20, crimeMaxSites = 2, crimeReachM = 15, crimeHoldS = 3;
+    bool crimeRealCrimes = true;
+    // The run's HUD below the gaze (the beacons always show).
+    bool crimeHud = true;
+    // The best: the highest final score of a won run, and the most stops in any run (written by the game).
+    int crimeBest = 0, crimeBestStops = 0;
+    // CRIME RUN SETTINGS END
     // HERO ATTACK SOUND (beta polish A2; attack_sound, spidy_vr.ini only, no menu row): one of the game's sounds played
     // on Spidey as a punch is thrown or a kick starts (at most one a hand every 250 ms, hit_sound.hpp): the id's 32
     // bits as a signed decimal. 0 (the default): none - the game's own whoosh and effort ids are not captured yet

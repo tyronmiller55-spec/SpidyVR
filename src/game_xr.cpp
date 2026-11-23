@@ -1,6 +1,7 @@
 #include "spidy/eye_stall.hpp"
 #include "spidy/animation_cancel.hpp"
 #include "spidy/text_read.hpp"
+#include "spidy/crime_run.hpp"
 #include "spidy/frame_steps.hpp"
 #include "spidy/showtime.hpp"
 #include "spidy/showtime_body.hpp"
@@ -739,6 +740,10 @@ const game_swing::JumpPullLive* jumpPullLive{};
 // older module (no air kicks).
 BridgeCall airKick{};
 const game_swing::AirKickLive* airKickLive{};
+// CRIME RUN's ask to the swing (SpidyCrimeAsk: the census wanted, the sites' grounds) and its account
+// (SpidyCrimeLive); none in an older module (a run with beacons only, their ground unknown).
+BridgeCall crimeAskCall{};
+const crime_run::Live* crimeLive{};
 // GRIP ACROSS THE GAME's settings for the swing (SpidySwingGrip) and its account (SpidySwingGripLive); none
 // in an older module (the grip as before).
 BridgeCall swingGrip{};
@@ -1126,6 +1131,25 @@ bool writeTabOnly(const std::string& text) {
            MoveFileExW(written.c_str(), path.c_str(), MOVEFILE_REPLACE_EXISTING | MOVEFILE_WRITE_THROUGH);
 }
 // REALISTIC FLIPS and the rows under it, as the rig takes them.
+// CRIME RUN: the run's rules from the settings (crime_run::sanitized keeps them in range).
+crime_run::Config crimeConfig(const vr_settings::Values& v) {
+    crime_run::Config c;
+    c.startScore = v.crimeStartScore;
+    c.spawnSeconds = static_cast<float>(v.crimeSpawnS);
+    c.radiusMin = static_cast<float>(v.crimeRadiusMinM);
+    c.radiusMax = static_cast<float>(v.crimeRadiusMaxM);
+    c.timerSeconds = static_cast<float>(v.crimeTimerS);
+    c.stopPoints = v.crimeStopPoints;
+    c.speedBonusPct = v.crimeSpeedBonusPct;
+    c.thugPoints = v.crimeThugPoints;
+    c.missPenalty = v.crimeMissPenalty;
+    c.winStops = v.crimeWinStops;
+    c.maxSites = v.crimeMaxSites;
+    c.reachRadius = static_cast<float>(v.crimeReachM);
+    c.holdSeconds = static_cast<float>(v.crimeHoldS);
+    c.realCrimes = v.crimeRealCrimes;
+    return crime_run::sanitized(c);
+}
 RealisticFlipSettings realisticFlips(const vr_settings::Values& v) {
     return {v.realisticFlips,         v.automaticReleaseFlip, v.automaticStrength,     v.automaticSpeed,
             v.automaticMinimumSpeed,  v.automaticResponse,    v.automaticHandStrength, v.automaticFalloff,
@@ -1938,6 +1962,20 @@ DWORD WINAPI run(void*) {
         // GROUND KICKS: the player stands slow with the setting on (this frame); the kick under way began
         // standing, and its foot from the feet (the swing's account).
         bool groundStand{}, airOnGround{}, airZoneByJoints{};
+        // CRIME RUN (crime_run.hpp; off by default): the run, A on its phone app this frame and its start/quit, the
+        // frame's events, the last frame's clock, the census last seen and when, the ask's serial and when it was
+        // last renewed (the grounds cast again), when the run ended (its HUD stays a while), and the latest
+        // event's line for the HUD.
+        crime_run::Run crimeRun;
+        crime_run::Toggle crimeToggle;
+        bool crimePressed{};
+        std::vector<crime_run::Event> crimeEvents;
+        int64_t crimeLastQpc{}, crimeCensusAt{}, crimeAskedAt{}, crimeRenewedAt{}, crimeEndedAt{};
+        uint64_t crimeCensusSeen{};
+        uint32_t crimeAskSerial{}, crimeAsksRefused{};
+        char crimeFlash[64]{};
+        bool crimeFlashGood{};
+        int64_t crimeFlashAt{};
         // KICK TARGET RING (beta3g): the legs engaged with the ring on (this frame), and the swing's pick.
         bool kickRingWanted{};
         Vec3 kickRingPoint{};
@@ -2777,6 +2815,8 @@ DWORD WINAPI run(void*) {
                     // puts it away and the triggers step the volume, and none of
                     // its controls reaches the swing or the game.
                     {
+                        // CRIME RUN: its app on the phone while the mode is on.
+                        phone.setCrimeApp(values.crimeRun);
                         const auto use = phone.take(frame, phoneShown.gearCount);
                         const auto& e = use.controls;
                         if (e.x || e.y)
@@ -2820,6 +2860,9 @@ DWORD WINAPI run(void*) {
                             break;
                         case PhoneAction::menu:
                             menuTap = menuTapSeconds;
+                            break;
+                        case PhoneAction::crimeRun:
+                            crimePressed = true; // the run's block below starts or quits it
                             break;
                         case PhoneAction::none:
                         case PhoneAction::close:
@@ -13707,6 +13750,194 @@ DWORD WINAPI run(void*) {
                     hudHead = frame.head.position;
                     hudPlaced = true;
                     native_hud::follow(eyes.serial, frame.head.orientation.conjugate() * hudFacing);
+                    // CRIME RUN (crime_run.hpp; off by default): A on the phone's app starts a run where the player is;
+                    // its timers run while the game is played in the headset (the swing's account fresh). The swing
+                    // module counts the standing enemies and finds the beacons' ground (SpidyCrimeAsk / Live).
+                    {
+                        using namespace crime_run;
+                        const float crimeDt =
+                            crimeLastQpc ? static_cast<float>(static_cast<double>(now.QuadPart - crimeLastQpc) /
+                                                              static_cast<double>(frequency.QuadPart))
+                                         : 0.f;
+                        crimeLastQpc = now.QuadPart;
+                        const bool swingFresh = swingState.status && swingState.qpc &&
+                                                static_cast<int64_t>(swingState.qpc) > now.QuadPart - frequency.QuadPart / 4;
+                        const bool crimePlay = gameplay && viewing && !flatScreen && spiderMan && swingFresh;
+                        const Vec3 crimeFeet = swingState.position - Vec3{0, 1, 0};
+                        crimeEvents.clear();
+                        if (!values.crimeRun && crimeRun.running())
+                            crimeRun.abandon(crimeEvents);
+                        switch (crimeToggle.update(crimeDt, crimePressed && values.crimeRun, crimeRun.running())) {
+                        case Toggle::Ask::start:
+                            if (swingFresh && finite(crimeFeet)) {
+                                crimeRun.start(crimeConfig(values), crimeFeet,
+                                               static_cast<uint64_t>(now.QuadPart) ^ (GetTickCount64() << 20), crimeEvents);
+                                crimeCensusSeen = 0;
+                                crimeEndedAt = 0;
+                                phone.putAway();
+                            } else {
+                                diag_log::writef("crime run: not started - no position from the swing module yet");
+                            }
+                            break;
+                        case Toggle::Ask::confirm:
+                            runtime.haptic(1, .3f, .05f);
+                            break;
+                        case Toggle::Ask::quit:
+                            crimeRun.abandon(crimeEvents);
+                            phone.putAway();
+                            break;
+                        case Toggle::Ask::none:
+                            break;
+                        }
+                        crimePressed = false;
+                        // The swing's account: the standing enemies, and the grounds its rays found.
+                        Vec3 crimeThugs[16]{};
+                        Census census{};
+                        if (crimeRun.running() && crimeLive) {
+                            Live live{};
+                            const volatile Live* source = crimeLive;
+                            const int64_t before = source->sequence;
+                            std::memcpy(&live, const_cast<const Live*>(crimeLive), sizeof live);
+                            const int64_t after = source->sequence;
+                            if (before == after && !(before & 1) && valid(live)) {
+                                if (live.census && live.census != crimeCensusSeen) {
+                                    crimeCensusSeen = live.census;
+                                    crimeCensusAt = now.QuadPart;
+                                }
+                                for (uint32_t i = 0; i < live.groundCount; ++i)
+                                    if (live.grounds[i].hit)
+                                        crimeRun.ground(live.grounds[i].id, live.grounds[i].y);
+                                census.fresh = crimeCensusSeen &&
+                                               now.QuadPart - crimeCensusAt <
+                                                   static_cast<int64_t>(frequency.QuadPart * crimeRun.config().censusSeconds);
+                                census.count = std::min<size_t>(live.count, 16);
+                                for (size_t i = 0; i < census.count; ++i)
+                                    crimeThugs[i] = {live.thugs[i].x, live.thugs[i].y, live.thugs[i].z};
+                                census.feet = crimeThugs;
+                            }
+                        }
+                        if (crimePlay)
+                            crimeRun.update(crimeDt, crimeFeet, census, crimeEvents);
+                        // The ask, every 250 ms in a run: the census wanted, and the beacons whose ground is unknown
+                        // (renewed every second, so a miss is cast again: the city may stream in).
+                        if (crimeRun.running() && crimeAskCall && now.QuadPart - crimeAskedAt >= frequency.QuadPart / 4) {
+                            crimeAskedAt = now.QuadPart;
+                            Ask ask;
+                            for (size_t i = 0; i < crimeRun.siteCount() && ask.count < 4; ++i) {
+                                const Site& site = crimeRun.sites()[i];
+                                if (site.grounded)
+                                    continue;
+                                ask.ids[ask.count] = site.id;
+                                ask.x[ask.count] = site.point.x;
+                                ask.z[ask.count] = site.point.z;
+                                ask.top[ask.count] = std::max(crimeFeet.y, site.point.y) + 300;
+                                ++ask.count;
+                            }
+                            if (ask.count && now.QuadPart - crimeRenewedAt >= frequency.QuadPart) {
+                                crimeRenewedAt = now.QuadPart;
+                                ++crimeAskSerial;
+                            }
+                            ask.serial = crimeAskSerial;
+                            if (crimeAskCall(&ask) != 0)
+                                ++crimeAsksRefused;
+                        }
+                        // What happened: the log, the controllers, a sound, the HUD's line, and the best.
+                        for (const auto& e : crimeEvents) {
+                            const auto flash = [&](bool good, const char* format, auto... args) {
+                                std::snprintf(crimeFlash, sizeof crimeFlash, format, args...);
+                                crimeFlashGood = good;
+                                crimeFlashAt = now.QuadPart;
+                            };
+                            switch (e.what) {
+                            case What::started: {
+                                const auto& c = crimeRun.config();
+                                diag_log::writef("crime run: started at (%.0f, %.0f, %.0f): score %d, win at %d stops, a crime "
+                                                 "every %.0f s on a %.0f..%.0f m ring, %.0f s each, real crimes %s, enemy "
+                                                 "census %s",
+                                                 crimeFeet.x, crimeFeet.y, crimeFeet.z, c.startScore, c.winStops,
+                                                 c.spawnSeconds, c.radiusMin, c.radiusMax, c.timerSeconds,
+                                                 c.realCrimes ? "on" : "off",
+                                                 crimeLive ? "from the swing module" : "none (an older swing module)");
+                                flash(true, "CRIME RUN - STOP %d CRIMES", c.winStops);
+                                runtime.haptic(0, .5f, .1f);
+                                runtime.haptic(1, .5f, .1f);
+                                break;
+                            }
+                            case What::spawned: {
+                                const Site* site = nullptr;
+                                for (size_t i = 0; i < crimeRun.siteCount(); ++i)
+                                    if (crimeRun.sites()[i].id == e.site)
+                                        site = &crimeRun.sites()[i];
+                                diag_log::writef("crime run: crime #%u %s %.0f m away at (%.0f, %.0f, %.0f)%s", e.site,
+                                                 e.kind == Kind::thugs ? "at a real crime" : "beacon", e.distance,
+                                                 site ? site->point.x : 0.f, site ? site->point.y : 0.f,
+                                                 site ? site->point.z : 0.f,
+                                                 site && e.kind == Kind::thugs ? " (enemies standing there)" : "");
+                                flash(false, "NEW CRIME %d M", static_cast<int>(std::lround(e.distance)));
+                                runtime.haptic(0, .4f, .08f);
+                                runtime.haptic(1, .4f, .08f);
+                                break;
+                            }
+                            case What::reached:
+                                diag_log::writef("crime run: crime #%u reached (%.0f m from its middle)", e.site, e.distance);
+                                runtime.haptic(1, .3f, .04f);
+                                break;
+                            case What::stopped:
+                                diag_log::writef("crime run: crime #%u stopped (%s) +%d -> %d, stops %d/%d, rank %s", e.site,
+                                                 e.kind == Kind::thugs ? "its enemies down" : "held its zone", e.points,
+                                                 e.score, crimeRun.stops(), crimeRun.config().winStops, rankName(e.rank));
+                                flash(true, "CRIME STOPPED +%d", e.points);
+                                runtime.haptic(0, .8f, .12f);
+                                runtime.haptic(1, .8f, .12f);
+                                play(ImpactSound::Finisher);
+                                break;
+                            case What::missed:
+                                diag_log::writef("crime run: crime #%u missed %d -> %d (misses %d)", e.site, e.points, e.score,
+                                                 crimeRun.misses());
+                                flash(false, "CRIME MISSED %d", e.points);
+                                runtime.haptic(0, .25f, .3f);
+                                runtime.haptic(1, .25f, .3f);
+                                break;
+                            case What::ranked:
+                                diag_log::writef("crime run: rank %s", rankName(e.rank));
+                                flash(true, "RANK UP - %s", rankName(e.rank));
+                                break;
+                            case What::won:
+                            case What::lost:
+                            case What::abandoned: {
+                                const bool won = e.what == What::won;
+                                diag_log::writef("crime run: %s (asks refused %u)", crimeRun.summary().c_str(),
+                                                 crimeAsksRefused);
+                                if (e.what == What::abandoned)
+                                    flash(false, "RUN QUIT - %d STOPS", crimeRun.stops());
+                                else
+                                    flash(won, won ? "AMAZING! FINAL %d" : "THE CITY FELL - %d STOPS",
+                                          won ? crimeRun.score() : crimeRun.stops());
+                                crimeEndedAt = now.QuadPart;
+                                if (better(crimeRun.score(), crimeRun.stops(), won, values.crimeBest, values.crimeBestStops)) {
+                                    if (won)
+                                        values.crimeBest = std::max(values.crimeBest, crimeRun.score());
+                                    values.crimeBestStops = std::max(values.crimeBestStops, crimeRun.stops());
+                                    diag_log::writef("crime run: a new best - score %d, stops %d", values.crimeBest,
+                                                     values.crimeBestStops);
+                                    if (auto text = vr_settings::tabOnlyText(values); text != tabOnlySaved) {
+                                        if (writeTabOnly(text))
+                                            tabOnlySaved = std::move(text);
+                                        else
+                                            diag_log::writef("crime run: the best could not be saved to spidy_vr.ini");
+                                    }
+                                }
+                                runtime.haptic(0, won ? .9f : .4f, .25f);
+                                runtime.haptic(1, won ? .9f : .4f, .25f);
+                                break;
+                            }
+                            }
+                        }
+                        // An ended run's HUD stays 12 s, then the run is cleared.
+                        if (!crimeRun.running() && crimeRun.phase() != Phase::idle && crimeEndedAt &&
+                            now.QuadPart - crimeEndedAt > frequency.QuadPart * 12)
+                            crimeRun.clear();
+                    }
                     NativeEyeFrame saved;
                     saved.serial = eyes.serial;
                     saved.motion = motion;
@@ -13765,6 +13996,18 @@ DWORD WINAPI run(void*) {
                         auto& view = phoneShown;
                         view.screen = phone.ui().screen();
                         view.app = phone.ui().app();
+                        // CRIME RUN's app and its line.
+                        view.crimeApp = values.crimeRun;
+                        if (crimeToggle.confirming())
+                            strncpy_s(view.crimeNote, "A AGAIN TO QUIT", _TRUNCATE);
+                        else if (crimeRun.running())
+                            snprintf(view.crimeNote, sizeof view.crimeNote, "%d - %d/%d - A TO QUIT", crimeRun.score(),
+                                     crimeRun.stops(), crimeRun.config().winStops);
+                        else if (values.crimeBest || values.crimeBestStops)
+                            snprintf(view.crimeNote, sizeof view.crimeNote, "BEST %d - %d STOPS", values.crimeBest,
+                                     values.crimeBestStops);
+                        else
+                            view.crimeNote[0] = 0;
                         view.lit = phone.ui().button();
                         // GEAR: the gadget wheel's places in its order, the web
                         // shooter's first, and the one equipped as the wheel has it.
@@ -13817,6 +14060,31 @@ DWORD WINAPI run(void*) {
                     saved.linesByGame = native_webs::linesDrawn();
                     saved.lineTarget = lineState.target;
                     saved.lineTargetId = lineState.targetId;
+                    // CRIME RUN: the open crimes' beacons and the run's HUD.
+                    saved.crimeBeaconCount = 0;
+                    if (values.crimeRun && crimeRun.running())
+                        for (size_t i = 0; i < crimeRun.siteCount() && saved.crimeBeaconCount < saved.crimeBeacons.size(); ++i) {
+                            const auto& site = crimeRun.sites()[i];
+                            auto& b = saved.crimeBeacons[saved.crimeBeaconCount++];
+                            b.point = site.point;
+                            b.kind = site.kind;
+                            b.grounded = site.grounded;
+                            b.left = site.left;
+                            b.total = site.total;
+                            b.zone = site.kind == crime_run::Kind::thugs ? crimeRun.config().thugRadius
+                                                                         : crimeRun.config().reachRadius;
+                            b.hold = crimeRun.config().holdSeconds > 0 ? site.hold / crimeRun.config().holdSeconds : 0.f;
+                            b.thugs = site.thugs;
+                        }
+                    saved.crimeHud = crime_run::hudOf(crimeRun, swingState.position);
+                    saved.crimeHud.shown = saved.crimeHud.shown && values.crimeRun && values.crimeHud;
+                    saved.crimeHud.confirming = crimeToggle.confirming();
+                    std::memcpy(saved.crimeHud.flash, crimeFlash, sizeof crimeFlash);
+                    saved.crimeHud.good = crimeFlashGood;
+                    saved.crimeHud.flashAge =
+                        crimeFlashAt ? static_cast<float>(static_cast<double>(now.QuadPart - crimeFlashAt) /
+                                                          static_cast<double>(frequency.QuadPart))
+                                     : -1.f;
                     saved.kickTarget = kickRingPoint;
                     saved.kickTargetRadius = kickRingWanted && finite(kickRingPoint) ? kickRingRadius : 0.f;
                     saved.lineCount = 0;
@@ -14428,6 +14696,20 @@ DWORD WINAPI run(void*) {
                             view.frame.centre += travel;
                             appendGadgetWheel(translucent, view, viewer, pixelAngle, saved->uiStyle);
                         }
+                        // CRIME RUN: the crimes' pillars of light in the world, and the run's HUD below the gaze.
+                        if (feedback && !saved->flatScreen) {
+                            const float clock = static_cast<float>(std::fmod(static_cast<double>(shown) * 1e-9, 3600.));
+                            for (uint32_t i = 0; i < saved->crimeBeaconCount && i < saved->crimeBeacons.size(); ++i) {
+                                auto view = saved->crimeBeacons[i];
+                                view.clock = clock;
+                                crime_run::appendBeacon(translucent, view, viewer, pixelAngle);
+                            }
+                            if (saved->crimeHud.shown && validTrackedPose(rendered.headPose)) {
+                                Pose eyes = rendered.headPose;
+                                eyes.position += travel;
+                                crime_run::appendHud(translucent, saved->crimeHud, eyes);
+                            }
+                        }
                         // From here on the overlay is drawn about the eyes' middle,
                         // not the world's origin. The city is kilometres across, and
                         // a vertex there taken through the eye's view-projection in
@@ -14875,6 +15157,10 @@ extern "C" __declspec(dllexport) DWORD WINAPI SpidyXrStart(void* input) {
         jumpPullLive && (jumpPullLive->magic != expected.magic || jumpPullLive->version != expected.version ||
                          jumpPullLive->bytes != expected.bytes))
         jumpPullLive = nullptr;
+    crimeAskCall = reinterpret_cast<BridgeCall>(GetProcAddress(rays, "SpidyCrimeAsk"));
+    crimeLive = reinterpret_cast<const crime_run::Live*>(GetProcAddress(rays, "SpidyCrimeLive"));
+    if (crimeLive && !crime_run::valid(*crimeLive))
+        crimeLive = nullptr;
     airKick = reinterpret_cast<BridgeCall>(GetProcAddress(rays, "SpidyAirKick"));
     airKickLive = reinterpret_cast<const game_swing::AirKickLive*>(GetProcAddress(rays, "SpidyAirKickLive"));
     if (const game_swing::AirKickLive expected;

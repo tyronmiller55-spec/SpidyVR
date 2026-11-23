@@ -1331,6 +1331,22 @@ Values sanitized(Values v) {
     v.swingRopeDragPct = std::clamp(v.swingRopeDragPct, 0, 300);
     v.kickLungeReachCm = std::clamp(v.kickLungeReachCm, 0, 400);
     v.kickGroundSpeedCms = std::clamp(v.kickGroundSpeedCms, 100, 1000);
+    // CRIME RUN: the launcher's ranges (crime_run::sanitized keeps the run's own).
+    v.crimeStartScore = std::clamp(v.crimeStartScore, 1000, 100000);
+    v.crimeSpawnS = std::clamp(v.crimeSpawnS, 10, 300);
+    v.crimeRadiusMinM = std::clamp(v.crimeRadiusMinM, 30, 1000);
+    v.crimeRadiusMaxM = std::clamp(v.crimeRadiusMaxM, v.crimeRadiusMinM + 10, 1500);
+    v.crimeTimerS = std::clamp(v.crimeTimerS, 20, 600);
+    v.crimeStopPoints = std::clamp(v.crimeStopPoints, 0, 10000);
+    v.crimeSpeedBonusPct = std::clamp(v.crimeSpeedBonusPct, 0, 300);
+    v.crimeThugPoints = std::clamp(v.crimeThugPoints, 0, 2000);
+    v.crimeMissPenalty = std::clamp(v.crimeMissPenalty, 0, 20000);
+    v.crimeWinStops = std::clamp(v.crimeWinStops, 1, 200);
+    v.crimeMaxSites = std::clamp(v.crimeMaxSites, 1, 4);
+    v.crimeReachM = std::clamp(v.crimeReachM, 3, 60);
+    v.crimeHoldS = std::clamp(v.crimeHoldS, 0, 30);
+    v.crimeBest = std::clamp(v.crimeBest, 0, 10000000);
+    v.crimeBestStops = std::clamp(v.crimeBestStops, 0, 1000);
     v.swingRopeWeightPct = std::clamp(v.swingRopeWeightPct, 0, 300);
     v.wallSlideFriction = std::clamp(v.wallSlideFriction, 0, 100);
     v.swingReelOutSpeed = std::clamp(v.swingReelOutSpeed, 50, 1500);
@@ -3329,6 +3345,24 @@ constexpr TabOnly tabOnly[] = {
     {"kick_rope_assist", &Values::kickRopeAssist, nullptr},
     {"kick_ground_speed_cms", nullptr, &Values::kickGroundSpeedCms},
     {"kick_chamber", &Values::kickChamber, nullptr},
+    {"crime_run", &Values::crimeRun, nullptr},
+    {"crime_start_score", nullptr, &Values::crimeStartScore},
+    {"crime_spawn_s", nullptr, &Values::crimeSpawnS},
+    {"crime_radius_min_m", nullptr, &Values::crimeRadiusMinM},
+    {"crime_radius_max_m", nullptr, &Values::crimeRadiusMaxM},
+    {"crime_timer_s", nullptr, &Values::crimeTimerS},
+    {"crime_stop_points", nullptr, &Values::crimeStopPoints},
+    {"crime_speed_bonus_pct", nullptr, &Values::crimeSpeedBonusPct},
+    {"crime_thug_points", nullptr, &Values::crimeThugPoints},
+    {"crime_miss_penalty", nullptr, &Values::crimeMissPenalty},
+    {"crime_win_stops", nullptr, &Values::crimeWinStops},
+    {"crime_max_sites", nullptr, &Values::crimeMaxSites},
+    {"crime_reach_m", nullptr, &Values::crimeReachM},
+    {"crime_hold_s", nullptr, &Values::crimeHoldS},
+    {"crime_real_crimes", &Values::crimeRealCrimes, nullptr},
+    {"crime_hud", &Values::crimeHud, nullptr},
+    {"crime_best", nullptr, &Values::crimeBest},
+    {"crime_best_stops", nullptr, &Values::crimeBestStops},
     {"log_level", nullptr, &Values::logLevel},
     {"movement_defaults", nullptr, &Values::movementDefaults},
 };

@@ -165,14 +165,27 @@ const char* musicState(const PhoneView& view) {
     return view.failed ? "CAN'T PLAY" : view.playing ? "PLAYING" : "PAUSED";
 }
 // The home screen: a card for each app, the picked one red; under them what plays.
+// CRIME RUN's app: a siren - a dome on a base, its light's rays.
+void sirenIcon(std::vector<Vertex>& v, const Plane& p, float x, float y, float s, Vec3 c) {
+    constexpr float z = .0035f;
+    p.rounded(v, x, y - s * .28f, s * .7f, s * .14f, s * .04f, z, c);
+    p.rounded(v, x, y - s * .04f, s * .44f, s * .4f, s * .18f, z, c);
+    for (const float a : {-.7f, 0.f, .7f})
+        p.rounded(v, x + std::sin(a) * s * .42f, y + std::cos(a) * s * .36f, s * .08f, s * .16f, s * .03f, z, c);
+}
 void homeScreen(std::vector<Vertex>& v, const Plane& p, const PhoneView& view) {
-    const char* const names[phoneApps] = {"MUSIC", "MENU", "GEAR", "CAMERA"};
-    const char* const notes[phoneApps] = {view.pcMedia ? "WHAT THE PC PLAYS" : "YOUR SONGS",
-                                          "MAP, SUITS, SKILLS", "GADGETS AND XP", "THE GAME'S CAMERA"};
-    for (int i = 0; i < phoneApps; ++i) {
-        const float y = .045f - i * .0235f;
+    const char* const names[phoneApps + 1] = {"MUSIC", "MENU", "GEAR", "CAMERA", "CRIME RUN"};
+    const char* const notes[phoneApps + 1] = {view.pcMedia ? "WHAT THE PC PLAYS" : "YOUR SONGS",
+                                              "MAP, SUITS, SKILLS", "GADGETS AND XP", "THE GAME'S CAMERA",
+                                              view.crimeNote[0] ? view.crimeNote : "START A RUN HERE"};
+    // Five apps (CRIME RUN on) sit a little closer, the cards a little lower, above what plays.
+    const int apps = view.crimeApp ? phoneApps + 1 : phoneApps;
+    const float first = view.crimeApp ? .047f : .045f, pitch = view.crimeApp ? .0205f : .0235f,
+                card = view.crimeApp ? .0175f : .0195f;
+    for (int i = 0; i < apps; ++i) {
+        const float y = first - i * pitch;
         const bool lit = view.app == i;
-        p.rounded(v, 0, y, .068f, .0195f, .004f, .002f, lit ? red : dim);
+        p.rounded(v, 0, y, .068f, card, .004f, .002f, lit ? red : dim);
         const Vec3 ink = white, back = lit ? red : dim;
         p.rounded(v, -.0235f, y, .014f, .014f, .003f, .0025f, lit ? deepRed : Vec3{.1f, .1f, .12f});
         if (i == 0)
@@ -181,6 +194,8 @@ void homeScreen(std::vector<Vertex>& v, const Plane& p, const PhoneView& view) {
             menuIcon(v, p, -.0235f, y, .012f, ink);
         else if (i == 2)
             gearIcon(v, p, -.0235f, y, .012f, ink, back);
+        else if (i == phoneCrimeApp)
+            sirenIcon(v, p, -.0235f, y, .012f, ink);
         else
             cameraIcon(v, p, -.0235f, y, .012f, ink, back);
         p.text(v, names[i], -.012f, y, .0045f, .04f, white, 0);
@@ -400,9 +415,11 @@ PhoneAction PhoneUi::update(const PhoneControls::Event& e, int gearRows) {
             return PhoneAction::close;
         // The apps stand in a column: up and down, or left and right, go through them.
         if (const int step = e.y ? -e.y : e.x)
-            app_ = (app_ + step + phoneApps) % phoneApps;
+            app_ = (app_ + step + apps_) % apps_;
         if (e.pressed && app_ == phoneMenuApp)
             return PhoneAction::menu;
+        if (e.pressed && app_ == phoneCrimeApp && apps_ > phoneCrimeApp)
+            return PhoneAction::crimeRun;
         if (e.pressed && app_ == phoneCameraApp)
             return PhoneAction::camera;
         // MUSIC and GEAR, the apps with screens.

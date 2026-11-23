@@ -1,5 +1,6 @@
 #pragma once
 #include "body_calibration.hpp"
+#include "crime_run.hpp"
 #include "flip_reprojection.hpp"
 #include "gadget_wheel.hpp"
 #include "game_swing.hpp"
@@ -49,6 +50,10 @@ struct NativeEyeFrame {
     // KICK TARGET RING (beta3g): the enemy a kick would take now (radius 0: none shown).
     Vec3 kickTarget{};
     float kickTargetRadius{};
+    // CRIME RUN (crime_run.hpp): the open crimes' beacons, and the run's HUD (shown false: none).
+    std::array<crime_run::BeaconView, 4> crimeBeacons{};
+    uint32_t crimeBeaconCount{};
+    crime_run::HudView crimeHud{};
     // What each hand's grip press would do (game_swing::AimKind none while
     // the aim markers are off).
     std::array<game_swing::Aim, 2> aims{};

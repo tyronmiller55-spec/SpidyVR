@@ -25,6 +25,7 @@
 #include "spidy/air_kick.hpp"
 #include "spidy/game_joints.hpp"
 #include "spidy/swing_kick.hpp"
+#include "spidy/crime_run.hpp"
 #include <atomic>
 #include <cstring>
 #include <windows.h>
@@ -45,6 +46,8 @@ __declspec(dllexport) AirDodgeLive SpidyAirDodgeLive;
 __declspec(dllexport) SwingKickLive SpidySwingKickLive;
 // AIR KICKS' account (AirKickLive), for XR's log, legs and feel.
 __declspec(dllexport) AirKickLive SpidyAirKickLive;
+// CRIME RUN's account (crime_run::Live): the standing enemies and the asked sites' grounds, for XR.
+__declspec(dllexport) crime_run::Live SpidyCrimeLive;
 // The swing module's cost to the game thread, per 10 s window (SwingCostLive), for XR's diag.
 __declspec(dllexport) SwingCostLive SpidySwingCostLive;
 // JUMP PULL's account (JumpPullLive), for XR's log.
@@ -608,6 +611,59 @@ void fault(uint32_t error) {
 // What a grip press would do now with each free hand (AimData): the grab's
 // pick first, as a press makes it, then the swing's shot from where the
 // player stands. Once per input command, while sampled.
+// CRIME RUN (crime_run.hpp; SpidyCrimeAsk): XR's latest ask and when it came; when the account was last written, and
+// the ask whose grounds were last cast.
+SRWLOCK crimeLock = SRWLOCK_INIT;
+crime_run::Ask crimeAsk{};
+ULONGLONG crimeAskAt{}, crimeWrittenAt{};
+uint32_t crimeCastFor{};
+crime_run::Live::Ground crimeGrounds[4]{};
+uint32_t crimeGroundCount{};
+// While a run asks (within 2 s): the punches count the standing enemies, and every 250 ms their feet go out with
+// the grounds of the sites XR asked about - a ray straight down from each one's `top` (the swing's own world
+// queries, as the aim previews cast them). Last in the visit, as the previews: its rays never fault the swing.
+void crimeStep(const WorldQueries& world, Vec3 feet) {
+    AcquireSRWLockShared(&crimeLock);
+    const crime_run::Ask ask = crimeAsk;
+    const ULONGLONG askedAt = crimeAskAt;
+    ReleaseSRWLockShared(&crimeLock);
+    const ULONGLONG now = GetTickCount64();
+    if (!askedAt || now - askedAt > 2000)
+        return;
+    game_punch::wantCrimeCensus();
+    if (now - crimeWrittenAt < 250)
+        return;
+    crimeWrittenAt = now;
+    if (ask.serial != crimeCastFor) {
+        crimeCastFor = ask.serial;
+        crimeGroundCount = 0;
+        for (uint32_t i = 0; i < ask.count && i < 4; ++i) {
+            const Vec3 from{ask.x[i], ask.top[i], ask.z[i]};
+            const auto hit = world.raycast(from, {0, -1, 0}, crime_run::groundRay);
+            auto& g = crimeGrounds[crimeGroundCount++];
+            g.id = ask.ids[i];
+            g.hit = hit && finite(hit->point) ? 1u : 0u;
+            g.y = g.hit ? hit->point.y : 0.f;
+        }
+    }
+    crime_run::Live next;
+    Vec3 found[16]{};
+    uint64_t serial{};
+    next.count = static_cast<uint32_t>(game_punch::crimeCensus(feet, found, 16, serial));
+    next.census = serial;
+    for (uint32_t i = 0; i < next.count; ++i)
+        next.thugs[i] = {found[i].x, found[i].y, found[i].z, 0};
+    next.askSerial = crimeCastFor;
+    next.groundCount = crimeGroundCount;
+    for (uint32_t i = 0; i < crimeGroundCount; ++i)
+        next.grounds[i] = crimeGrounds[i];
+    AcquireSRWLockExclusive(&output);
+    InterlockedIncrement64(&SpidyCrimeLive.sequence);
+    next.sequence = SpidyCrimeLive.sequence;
+    std::memcpy(&SpidyCrimeLive, &next, sizeof next);
+    InterlockedIncrement64(&SpidyCrimeLive.sequence);
+    ReleaseSRWLockExclusive(&output);
+}
 void previewAims(const Command& c, const Input& in, const Body& player, const WorldQueries& world) {
     if (GetTickCount64() >= aimDeadline || c.serial == aimSerial)
         return;
@@ -1336,6 +1392,8 @@ void visit(const native_rays::QueryContext& world) {
             }
             if (enabled && !world.error())
                 previewAims(c, in, player, world);
+            if (enabled && !world.error())
+                crimeStep(world, feet);
         }
     } previews{c, in, player, world, sampleSeconds, at, focused};
     if ((motion.status != 1 && motion.status != 2) || motion.moverFlags & 0x80000000u) {
@@ -2875,6 +2933,23 @@ extern "C" __declspec(dllexport) DWORD WINAPI SpidyWallStick(void* input) {
     wallStickAsk = a;
     wallStickAt = GetTickCount64();
     ReleaseSRWLockExclusive(&wallStickLock);
+    return 0;
+}
+// CRIME RUN (crime_run.hpp): the VR worker's ask, every 250 ms while a run is under way. 2001: not an Ask; 1004: the
+// swing has not started; 0 taken. What it found: SpidyCrimeLive.
+extern "C" __declspec(dllexport) DWORD WINAPI SpidyCrimeAsk(void* input) {
+    crime_run::Ask a;
+    if (!input || !copy(&a, input, sizeof(a)) || !crime_run::valid(a))
+        return 2001;
+    AcquireSRWLockShared(&lifecycle);
+    const bool running = started;
+    ReleaseSRWLockShared(&lifecycle);
+    if (!running)
+        return 1004;
+    AcquireSRWLockExclusive(&crimeLock);
+    crimeAsk = a;
+    crimeAskAt = GetTickCount64();
+    ReleaseSRWLockExclusive(&crimeLock);
     return 0;
 }
 // GRIP ACROSS THE GAME (grip.hpp): the VR worker's settings. 2001: not a GripAsk; 1004: the swing has not
