@@ -408,6 +408,61 @@ int main() {
         const HudView v = hudOf(run, {});
         check(v.shown && v.target && v.score == 20000 && v.winStops == 20, "the HUD's view of a run");
     }
+    // ---- The settings: off by default, every key kept through spidy_vr.ini ----
+    {
+        using namespace spidy::vr_settings;
+        const Values d;
+        check(!d.crimeRun && d.crimeStartScore == 20000 && d.crimeRealCrimes && d.crimeHud && d.crimeBest == 0,
+              "CRIME RUN's defaults (off, 20,000, real crimes, HUD)");
+        Values v;
+        v.crimeRun = true;
+        v.crimeStartScore = 30000;
+        v.crimeWinStops = 7;
+        v.crimeRadiusMinM = 200;
+        v.crimeRadiusMaxM = 120; // under the inner one: kept 10 m past it
+        v.crimeRealCrimes = false;
+        v.crimeBest = 41230;
+        v.crimeBestStops = 9;
+        const Values back = withTabOnly(Values{}, tabOnlyText(v));
+        check(back.crimeRun && back.crimeStartScore == 30000 && back.crimeWinStops == 7 && !back.crimeRealCrimes &&
+                  back.crimeBest == 41230 && back.crimeBestStops == 9,
+              "CRIME RUN's settings did not survive spidy_vr.ini");
+        check(back.crimeRadiusMaxM >= back.crimeRadiusMinM + 10, "the ring was saved inside out");
+        const std::string text = tabOnlyText(Values{});
+        check(text.find("crime_run=0\n") != std::string::npos, "the ini did not carry crime_run=0");
+    }
+    // ---- The phone: a fifth app only while the mode is on ----
+    {
+        PhoneUi ui;
+        ui.reset();
+        using E = PhoneControls::Event;
+        check(ui.apps() == phoneApps, "the phone had more than its four apps with the mode off");
+        for (int i = 0; i < 4; ++i)
+            ui.update(E{0, -1}, 0);
+        check(ui.app() == 0, "four steps down did not wrap to MUSIC with four apps");
+        ui.setCrimeApp(true);
+        check(ui.apps() == phoneApps + 1, "the mode on did not add CRIME RUN");
+        for (int i = 0; i < 4; ++i)
+            ui.update(E{0, -1}, 0);
+        check(ui.app() == phoneCrimeApp, "four steps down did not reach CRIME RUN");
+        check(ui.update(E{0, 0, true}, 0) == PhoneAction::crimeRun && ui.screen() == PhoneScreen::home,
+              "A on CRIME RUN did not ask for the run");
+        ui.setCrimeApp(false);
+        check(ui.app() == 0 && ui.apps() == phoneApps, "the mode off left CRIME RUN picked");
+        // Its card draws.
+        PhoneView view;
+        view.open = true;
+        view.crimeApp = true;
+        view.app = phoneCrimeApp;
+        std::vector<Vertex> screen;
+        appendPhoneScreen(screen, view);
+        PhoneView four = view;
+        four.crimeApp = false;
+        four.app = 0;
+        std::vector<Vertex> fewer;
+        appendPhoneScreen(fewer, four);
+        check(screen.size() > fewer.size(), "the fifth app drew nothing");
+    }
     std::printf("%d/%d crime run checks passed\n", passed, passed);
     return 0;
 }

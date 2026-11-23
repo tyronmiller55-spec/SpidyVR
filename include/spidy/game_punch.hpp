@@ -200,6 +200,14 @@ struct KickCandidate {
     float height = 1.8f, radius = .3f;
 };
 size_t kickCandidates(KickCandidate* out, size_t max, Vec3 feet);
+// CRIME RUN (crime_run.hpp): the enemies standing anywhere the target scan sees them - every bot of the
+// punches' list (the game's component registry) who is fighting (an enemy, up, not held) and not webbed up
+// (cocooned) - counted from the punches' sample every crimeCensusMs while wanted (wantCrimeCensus within the last
+// 2 s), nothing otherwise. Their feet (world, metres), nearest `from` first, at most `max`; the count, and the
+// census' serial (0: none yet). No address of its own: game_targets' readers as the punches use them.
+constexpr uint32_t crimeCensusMs = 250;
+void wantCrimeCensus();
+size_t crimeCensus(Vec3 from, Vec3* out, size_t max, uint64_t& serial);
 // An air kick's foot met `target`: a blow of `strength` (0..1; the web strike's blows' scale). `fly`: a
 // kinetic blow sending him at `enemyVelocity` (world, real m/s), as every dive does; otherwise a plain hit.
 // False when nothing was sent.

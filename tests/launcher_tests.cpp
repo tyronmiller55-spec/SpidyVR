@@ -819,6 +819,9 @@ int main() {
                 continue;
             if (key == "swing_rope_weight_pct")
                 continue;
+            // CRIME RUN (prototype): a mode and its rules, the player's own (and the best, written by the game).
+            if (key.rfind("crime_", 0) == 0)
+                continue;
             if (key == "wall_slide_friction")
                 continue;
             if (key == "wall_grip_to_stick")

@@ -31,6 +31,9 @@ enum class PhoneScreen : int { home, music, gear };
 // that ask for photos: "add a camera option to the in-game phone"). VR play
 // has no Back or D-pad up of its own.
 constexpr int phoneApps = 4, phoneMenuApp = 1, phoneCameraApp = 3;
+// CRIME RUN (crime_run.hpp; prototype): a fifth app after CAMERA while the mode is on (PhoneUi::setCrimeApp). It has
+// no screen: A on it is PhoneAction::crimeRun (start a run; in one, A twice quits it). Off: the four apps as before.
+constexpr int phoneCrimeApp = 4;
 // The controllers while the phone is out, as steps: the stick pushed one way
 // (x: -1 left, 1 right; y: -1 down, 1 up), A, B, and the volume from the
 // triggers, a pull of the left one a step down and of the right one a step up
@@ -60,13 +63,22 @@ class PhoneControls {
 // In MUSIC left and right pick a button and A presses it; in GEAR up and down
 // scroll the list. A on MENU or CAMERA puts the phone away, each its own
 // action.
-enum class PhoneAction : int { none, close, previous, play, next, autoplay, camera, menu };
+enum class PhoneAction : int { none, close, previous, play, next, autoplay, camera, menu, crimeRun };
 class PhoneUi {
   public:
     // Rows GEAR shows at once.
     static constexpr int gearShown = 6;
     // gearRows: how many rows GEAR has now.
     PhoneAction update(const PhoneControls::Event& e, int gearRows);
+    // CRIME RUN's app on the home screen, or not (the one picked stays in range).
+    void setCrimeApp(bool on) {
+        apps_ = on ? phoneApps + 1 : phoneApps;
+        if (app_ >= apps_)
+            app_ = 0;
+    }
+    int apps() const {
+        return apps_;
+    }
     PhoneScreen screen() const {
         return screen_;
     }
@@ -90,6 +102,7 @@ class PhoneUi {
   private:
     PhoneScreen screen_ = PhoneScreen::home;
     int app_{}, gearTop_{};
+    int apps_ = phoneApps;
     PhoneButton button_ = PhoneButton::play;
 };
 // The volume's step, and where it starts until the player sets it, percent.
@@ -122,6 +135,9 @@ struct PhoneView {
     // noVolume: no volume of the app's to show.
     bool pcMedia{}, noVolume{};
     char source[24]{};
+    // CRIME RUN: its app shown (fifth, after CAMERA), and the line under its name.
+    bool crimeApp{};
+    char crimeNote[32]{};
 };
 // The phone as an eye image has it (NativeEyeFrame): open as the game rendered
 // it, and the image's own way from tracking space into its world. Where the
@@ -208,6 +224,13 @@ class Phone {
     }
     const PhoneUi& ui() const {
         return ui_;
+    }
+    // CRIME RUN: its app on the home screen or not (PhoneUi::setCrimeApp), and the phone put away (a run started).
+    void setCrimeApp(bool on) {
+        ui_.setCrimeApp(on);
+    }
+    void putAway() {
+        open_ = live_ = false;
     }
     // Whether the phone has any control (PhoneHold::any).
     bool holds() const {

@@ -3410,6 +3410,47 @@ void App::options(ImVec2 origin, ImVec2 size) {
                    S(150), [&] { fineSlider("##kickgroundspeed", tabOnly_.kickGroundSpeedCms, 100, 1000, 10, "%d cm/s", "Slow"); });
             // BETA3G LAUNCHER END
         });
+        // CRIME RUN (prototype; the owner, Nov 22 t103u; crime_run.hpp): a roguelike random-crime mode, off by default.
+        // The same spidy_vr.ini keys the game reads (crime_*); the best is written by the game.
+        group(kicksPage, 1, "Crime Run (prototype)", [&] {
+            settingOption(Item::none, "Crime Run", "A roguelike mode: start a run from anywhere in the open world with the phone's CRIME RUN app (pull the phone from your back pocket, pick CRIME RUN, press A; A twice quits). Crimes appear on a ring around you at regular times as pillars of light; reach each before its timer runs out. Where the game's own thugs are fighting near you, they become the crime and you stop it by taking them all down; otherwise you stop it by reaching the beacon and staying in its ring. Stops score points (more the faster you are), misses cost points. You start at 20,000: hit zero and the run is lost, stop enough crimes and it is won. Off: no app, nothing changes. Default: off.",
+                   S(42), [&] { flagToggle("##crimerun", tabOnly_.crimeRun); });
+            settingOption(Item::none, "Real crimes", "The game's own enemies in play near you become the crimes (take them all down to stop it). Off: always a beacon to reach. Default: on.",
+                   S(42), [&] { flagToggle("##crimereal", tabOnly_.crimeRealCrimes); });
+            settingOption(Item::none, "Run HUD", "The score, stops, rank and an arrow to the next crime, held below your gaze. The beacons show either way. Default: on.",
+                   S(42), [&] { flagToggle("##crimehud", tabOnly_.crimeHud); });
+            settingOption(Item::none, "Starting score", "Where the score starts; the run is lost at zero. Default: 20,000.",
+                   S(150), [&] { fineSlider("##crimestart", tabOnly_.crimeStartScore, 1000, 100000, 1000, "%d", nullptr); });
+            settingOption(Item::none, "Crimes to win", "Stops that win the run. The ranks (Rookie, Street-Level, Friendly Neighborhood, Spectacular, Sensational, Amazing) are shares of it. Default: 20.",
+                   S(150), [&] { fineSlider("##crimewin", tabOnly_.crimeWinStops, 1, 200, 1, "%d stops", nullptr); });
+            settingOption(Item::none, "Time between crimes", "How often a new crime appears (if fewer than the most at once are open). Default: 45 s.",
+                   S(150), [&] { fineSlider("##crimespawn", tabOnly_.crimeSpawnS, 10, 300, 5, "%d s", nullptr); });
+            settingOption(Item::none, "Time per crime", "Each crime's timer. Default: 120 s.",
+                   S(150), [&] { fineSlider("##crimetimer", tabOnly_.crimeTimerS, 20, 600, 5, "%d s", nullptr); });
+            settingOption(Item::none, "Most crimes at once", "How many crimes may be open together. Default: 2.",
+                   S(150), [&] { fineSlider("##crimemax", tabOnly_.crimeMaxSites, 1, 4, 1, "%d", nullptr); });
+            settingOption(Item::none, "Nearest beacon", "The ring beacons appear on: the nearest they come. Default: 150 m.",
+                   S(150), [&] { fineSlider("##crimermin", tabOnly_.crimeRadiusMinM, 30, 1000, 10, "%d m", nullptr); });
+            settingOption(Item::none, "Farthest beacon", "The farthest a crime appears (real crimes too). Default: 400 m.",
+                   S(150), [&] { fineSlider("##crimermax", tabOnly_.crimeRadiusMaxM, 40, 1500, 10, "%d m", nullptr); });
+            settingOption(Item::none, "Points per stop", "A stop's points before the speed bonus. Default: 1,000.",
+                   S(150), [&] { fineSlider("##crimepoints", tabOnly_.crimeStopPoints, 0, 10000, 100, "%d", nullptr); });
+            settingOption(Item::none, "Speed bonus", "A stop the moment a crime appears scores this much more; one at the last second scores none. Default: 100%.",
+                   S(150), [&] { fineSlider("##crimebonus", tabOnly_.crimeSpeedBonusPct, 0, 300, 10, "%d%%", nullptr); });
+            settingOption(Item::none, "Points per thug", "Added for each enemy a real crime had. Default: 200.",
+                   S(150), [&] { fineSlider("##crimethug", tabOnly_.crimeThugPoints, 0, 2000, 50, "%d", nullptr); });
+            settingOption(Item::none, "Miss penalty", "Points lost when a crime's timer runs out. Default: 2,000.",
+                   S(150), [&] { fineSlider("##crimemiss", tabOnly_.crimeMissPenalty, 0, 20000, 100, "%d", nullptr); });
+            settingOption(Item::none, "Beacon zone", "How close (across) counts as at a beacon; up to 25 m above or below once its ground is found. Default: 15 m.",
+                   S(150), [&] { fineSlider("##crimereach", tabOnly_.crimeReachM, 3, 60, 1, "%d m", nullptr); });
+            settingOption(Item::none, "Hold at a beacon", "How long to stay in a beacon's zone to stop it. Default: 3 s.",
+                   S(150), [&] { fineSlider("##crimehold", tabOnly_.crimeHoldS, 0, 30, 1, "%d s", "At once"); });
+            settingOption(Item::none, "Best", "The highest final score of a won run, and the most stops in any run, saved by the game.",
+                   S(150), [&] {
+                       ImGui::Text("%d  (%d stops)", tabOnly_.crimeBest, tabOnly_.crimeBestStops);
+                   });
+            // CRIME RUN LAUNCHER END
+        });
         // NA HELP (beta polish M5): the same pages as the game's NA · HELP tab (na_help.hpp), a card per topic.
         const int helpPage = static_cast<int>(Category::help);
         static const std::vector<std::pair<const char*, std::string>> helpTopics = [] {

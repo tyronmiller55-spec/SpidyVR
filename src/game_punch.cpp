@@ -53,6 +53,13 @@ std::atomic<bool> enabled{};
 SRWLOCK lifecycle = SRWLOCK_INIT, updating = SRWLOCK_INIT, output = SRWLOCK_INIT;
 game_targets::Watch watch;
 std::vector<game_targets::Candidate> bots;
+// CRIME RUN's census (crimeCensus): the standing enemies' feet, its serial and when it was counted, and when it
+// was last wanted (GetTickCount64 ms).
+SRWLOCK crimeLock = SRWLOCK_INIT;
+std::vector<Vec3> crimeFeet, crimeNext;
+uint64_t crimeSerial{};
+ULONGLONG crimeCountedAt{};
+std::atomic<ULONGLONG> crimeWantedAt{};
 std::vector<PunchTarget> inReach;
 std::vector<PunchEvent> events;
 Punches punches{PunchConfig{}};
@@ -827,6 +834,22 @@ Opened game_punch::update(float seconds, const Input& in, const Player& player, 
     if (!enabled)
         return opened;
     watch.current(bots);
+    // CRIME RUN: every crimeCensusMs while a run wants it, the enemies standing anywhere in the list.
+    if (const ULONGLONG nowMs = GetTickCount64();
+        nowMs - crimeWantedAt.load(std::memory_order_relaxed) < 2000 && nowMs - crimeCountedAt >= crimeCensusMs) {
+        crimeCountedAt = nowMs;
+        crimeNext.clear();
+        for (const auto& b : bots) {
+            Vec3 feet{};
+            if (game_targets::fighting(base, b) && !game_targets::cocooned(base, b) &&
+                game_targets::position(b, feet) && finite(feet))
+                crimeNext.push_back(feet);
+        }
+        AcquireSRWLockExclusive(&crimeLock);
+        crimeFeet.swap(crimeNext);
+        ++crimeSerial;
+        ReleaseSRWLockExclusive(&crimeLock);
+    }
     if (fighter.contactOnly != player.contactOnly) {
         punches.reset(); // no giant swept contact across the ownership edge
         turnSeen = false;
@@ -1146,6 +1169,31 @@ size_t game_punch::kickCandidates(KickCandidate* out, size_t max, Vec3 feet) {
         }
     }
     ReleaseSRWLockShared(&updating);
+    return count;
+}
+void game_punch::wantCrimeCensus() {
+    crimeWantedAt.store(GetTickCount64(), std::memory_order_relaxed);
+}
+size_t game_punch::crimeCensus(Vec3 from, Vec3* out, size_t max, uint64_t& serial) {
+    size_t count = 0;
+    AcquireSRWLockShared(&crimeLock);
+    serial = crimeSerial;
+    for (const Vec3& f : crimeFeet) {
+        if (!out || !max)
+            break;
+        // Nearest first, the list kept at `max`.
+        size_t at = count;
+        while (at > 0 && length(out[at - 1] - from) > length(f - from))
+            --at;
+        if (at >= max)
+            continue;
+        if (count < max)
+            ++count;
+        for (size_t i = count - 1; i > at; --i)
+            out[i] = out[i - 1];
+        out[at] = f;
+    }
+    ReleaseSRWLockShared(&crimeLock);
     return count;
 }
 bool game_punch::kickHit(uint64_t target, Vec3 point, Vec3 direction, float strength, bool fly, Vec3 enemyVelocity,
