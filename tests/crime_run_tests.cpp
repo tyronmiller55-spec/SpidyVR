@@ -325,6 +325,15 @@ int main() {
         t.update(3.1f, false, true);
         check(!t.confirming() && t.update(.01f, true, true) == Toggle::Ask::confirm, "the confirmation did not lapse");
     }
+    // ---- A paused frame (dt <= 0) does not run the 3 s quit window down ----
+    {
+        Toggle t;
+        check(t.update(.01f, true, false) == Toggle::Ask::start, "start for the pause test");
+        check(t.update(.01f, true, true) == Toggle::Ask::confirm && t.confirming(), "confirm for the pause test");
+        check(t.update(0, false, true) == Toggle::Ask::none && t.confirming(), "dt 0 cleared the quit confirm");
+        check(t.update(0, false, true) == Toggle::Ask::none && t.confirming(), "another paused frame cleared it");
+        check(t.update(.01f, true, true) == Toggle::Ask::quit, "A after a pause did not quit");
+    }
     // ---- Clock text ----
     check(clockText(65) == "1:05" && clockText(0) == "0:00" && clockText(-3) == "0:00" && clockText(59.2f) == "1:00",
           "clock text");

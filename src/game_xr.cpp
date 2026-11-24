@@ -13768,7 +13768,8 @@ DWORD WINAPI run(void*) {
                         crimeEvents.clear();
                         if (!values.crimeRun && crimeRun.running())
                             crimeRun.abandon(crimeEvents);
-                        switch (crimeToggle.update(crimeDt, crimePressed && values.crimeRun, crimeRun.running())) {
+                        switch (crimeToggle.update(crimePlay ? crimeDt : 0.f, crimePressed && values.crimeRun,
+                                                   crimeRun.running())) {
                         case Toggle::Ask::start:
                             if (swingFresh && finite(crimeFeet)) {
                                 crimeRun.start(crimeConfig(values), crimeFeet,
