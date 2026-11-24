@@ -9,12 +9,35 @@
 > edges, in both hands and while climbing, swing free until they fade, and hand over to stick-click web lines. A
 > new switch (on, 100%) makes the hanging line really pull on the swing. Settings revision 19.
 >
+> **Build beta3d** (same version; package `Spidy-0.8.7-na-beta3d-win64-<commit>.zip`): adds the
+> [beta3d section](#beta3d-showtime-strikes-vs-punches-finishers-fixed-reel-out-air-physics-on-a-swing) below.
+> Showtime steps out only for the game's own web strikes, Y+B finishers auto-Showtime correctly, a double tap and
+> hold on the reel trigger pays a web out, and air systems work while swinging. Settings revision 20.
+>
 > **Build beta3e** (same version; package `Spidy-0.8.7-na-beta3e-win64-<commit>.zip`): adds the
 > [beta3e section](#beta3e-point-jump-off-wall-grabs-grip-to-stick-rope-weight-and-drag) below. The point jump
 > cancels wall grabs, walls no longer stick you until you grip them, and the swing line gets weight and drag
 > sliders. Settings revision 21.
+>
+> **Build beta3f** (same version; package `Spidy-0.8.7-na-beta3f-win64-<commit>.zip`): adds the
+> [beta3f section](#beta3f-kick-lunge-kick-feel-the-kick-s-outcome-in-the-log-point-jump-on-the-floor-crawl-flag)
+> below. An air kick at an enemy a little out of reach flies you at him, a started kick ticks the controllers, and
+> the point jump works in fights and on rooftops (refused on the floor-crawl flag only in a real duct). Settings
+> revision 22.
+>
+> **Build beta3g** (same version; package `Spidy-0.8.7-na-beta3g-win64-<commit>.zip`): adds the
+> [beta3g section](#beta3g-web-rope-physics-kick-animation-and-reach) below. The web rope takes fixed steps, pulls
+> taut under your weight at the new 100% rope weight, and keeps its line through wraps. Kicks chamber, lean and
+> carry your travel, with a target ring, a ground lunge, a rebound and a rope assist. Settings revision 23.
+>
+> **Build beta3h-polish** (same version; package `Spidy-0.8.7-na-beta3h-polish-win64-<commit>.zip`): adds the
+> [beta3h-polish section](#beta3h-polish-runtime-saves-and-the-quit-confirm) below. Crime Run is in this package
+> (off by default). A failed save of the SPIDY VR tab is tried again, Crime Run's quit confirm and swing asks
+> freeze during a pause or load, and the overlay and Crime Run HUD no longer allocate every frame. No new setting
+> and no revision bump: off still equals beta3g with Crime Run off.
 
-A **test build** (branch `feat/087-beta3`, from `feat/087-beta2` 1418992). The testers' **CURRENT** build stays
+A **test build** (branch `feat/087-polish`, from Crime Run on `feat/087-crime-run`, itself from `feat/087-beta3` on
+`feat/087-beta2` 1418992). The testers' **CURRENT** build stays
 [0.8.7-na-beta2](NA_BETA2.md) until this one is played. What changed: [CHANGELOG.md](CHANGELOG.md).
 
 Every feature stays on. Settings files from before take migration revision 17: HANDOFF HEAD FIRST, LANDING VIEW
@@ -540,4 +563,49 @@ and one on the game's floor-crawl flag with no duct roof that beta3e would have 
 7. **Ground lunge.** Standing 2 to 3 m off a thug, kick: you should step in and land it. Walking at up to 4.5 m/s
    still kicks.
 8. **Rebound and rope assist.** Land an air kick: you spring up and back. Kick while on a web: the swing steers at him.
+
+## beta3h-polish: runtime, saves, and the quit confirm
+
+The owner, Nov 24 t45u: start the polish pass on the Crime Run port. The Drive folder of logs from his webs and
+kicks sessions could not be listed (it asks for a Google sign-in), and Crime Run itself has not been played in the
+headset yet. This build is the safe half of that plan: docs, runtime, error handling, and two state bugs. No
+play-feel change, no new setting, and no migration revision (still 23). Off still equals beta3g with Crime Run off.
+
+| Key | Default | What |
+| --- | --- | --- |
+| (none) | — | No new `spidy_vr.ini` key. Crime Run stays off by default, as in the port. |
+
+What changed:
+
+- **A failed save is tried again.** If writing the SPIDY VR tab's own settings fails, the last good text is kept, so
+  the next frame tries again instead of treating the failed write as saved.
+- **Quit confirm during a pause.** Crime Run's 3 s "A twice to quit" window no longer runs down while the game is
+  paused, loading, in a menu or on the flat screen. The second A still quits after you come back.
+- **Swing asks while paused.** While a run is frozen, Crime Run does not ask the swing for enemies or ground.
+- **Overlay lists reuse their buffers.** The aim marks and the translucent vertices (Crime Run's pillars and HUD go
+  here) are kept on the session and cleared each eye, instead of a new heap allocation every frame.
+- **Crime Run's HUD text.** Score, clock and event lines are formatted into stack buffers rather than building a
+  `std::string` for every line, every eye.
+- **Help and docs.** NA HELP has a Crime Run topic, and the close-code line now asks for a `.mdmp` if you have one.
+  The missing beta3d, beta3f and beta3g banners are in this file. The work-fork landing page and the Native
+  Animation repo description name CURRENT as 0.8.7-na-beta2 (text only; the CURRENT release itself is unchanged).
+- **Tests.** Crime Run's pause-confirm contract, and a portable "off equals the previous build" check for revision
+  23 and Crime Run's off default.
+
+### What was left for later
+
+Items that need Crime Run's own headset logs, a crash dump from a 0xC0000409 close, or a play-feel go from the
+owner, are listed in `/workspace/polish-pass-notes.md` (and the plan). Nothing in that list is in this package.
+
+### beta3h-polish checklist
+
+1. **Same as beta3g when Crime Run is off.** Webs, kicks, point jump, Showtime and the rope should play as in the
+   Crime Run zip (`1236723`) and beta3g. A saved off stays off.
+2. **Settings save.** Change a SPIDY VR tab value, confirm it sticks after a restart. If a write ever fails, the
+   "were not saved" line should appear and the next change should try again.
+3. **Quit confirm (once you try Crime Run).** Start a run, open the phone, press A once to confirm quit, then pause
+   the game for more than 3 s. After you resume, a second A should still quit. A pause mid-run should freeze the
+   crime timers, as before.
+4. **Close crash.** If the game still reports 0xC0000409 as it exits, keep the `.mdmp` if one is written (alongside
+   the logs). It is known since beta3d; this build does not guess at a fix.
 

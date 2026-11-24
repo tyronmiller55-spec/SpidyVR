@@ -20,7 +20,7 @@ https://github.com/tyronmiller55-spec/SpidyVR . The original Spidy launcher name
 author credits, Discord and Ko-fi links are retained; Native Animation bugs do
 not belong in upstream Spidy's bug tracker. Source is provided under GPL-3.0.
 
-**Crime Run (prototype, branch `feat/crime-run`):** a roguelike random-crime mode, off by default. Turn **Crime
+**Crime Run (prototype, branch `feat/087-crime-run`, also in `feat/087-polish`):** a roguelike random-crime mode, off by default. Turn **Crime
 Run** on in the launcher (Kicks & Combat page), then start a run anywhere in the open world from the phone's new
 **CRIME RUN** app. Crimes appear around you as pillars of light at regular times - beacons to reach and hold, or the
 game's own thugs to take down - each on a timer. You start at 20,000 points: stops add points (more the faster),
@@ -48,7 +48,10 @@ The point jump now works in fights, ducking and on rooftops; it is refused on th
 duct. Build **beta3g** reworks the web rope - steady fixed steps that settle, a line that pulls taut under your
 weight at the new 100% rope weight, and lines kept through wraps - and kick animation: a wind-up, snap and recoil,
 the chest leaning in, legs carrying your travel, plus a target ring, a ground lunge, a rebound off a landed air kick
-and a rope assist. [Checklist](docs/NA_BETA3.md).
+and a rope assist. Build **beta3h-polish** is the Crime Run port plus a polish pass: a failed save of the SPIDY VR
+tab is tried again, Crime Run's quit confirm and swing asks freeze during a pause or load, and the overlay and
+Crime Run HUD no longer allocate every frame. No new setting; off still equals beta3g with Crime Run off.
+[Checklist](docs/NA_BETA3.md).
 
 **0.8.7-na-beta2** (CURRENT, Nov 21): point jumps play the game's whole jump sound set; Y+B finishers stay the
 game's own and a grip no longer cancels one; **air dodge on B** in SpidyVR's air (the left stick picks the way;

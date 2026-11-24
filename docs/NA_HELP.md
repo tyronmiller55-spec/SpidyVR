@@ -34,6 +34,10 @@ Standing or walking (under 4.5 m/s), hold Y + X and flick the right stick: up a 
 
 While swinging, hold Y + X and flick the right stick up: a swing kick. AUTO DIVE KICK: a fast flight at the ringed enemy dives in feet first.
 
+## CRIME RUN
+
+Off by default. Turn CRIME RUN on under Kicks & Combat, then open the phone. The fifth app (a siren) starts a run here. A starts it; A twice in 3 s quits. Pillars mark beacons to reach and hold, or the game's own thugs to take down. Start at 20,000. Stops add points; a miss costs 2,000. 0 loses; 20 wins.
+
 ## MIDAIR POSES & LEGS
 
 Y + X with a slow push poses the legs: tuck, starfish, dive, superhero. MIDAIR POSES and DIRECTIONAL FLIPS have their own switches (BODY & LEGS).
@@ -80,7 +84,7 @@ Spidy chains its hooks in front of other mods (e.g. Manhattan Skies). If the SPI
 
 ## TROUBLESHOOTING
 
-A crash code 0xC0000409 as the game closes is known and harmless. Logs are in the reports folder: post the newest three files on Discord.
+A 0xC0000409 at close is known since beta3d. Send the .mdmp if you have one. Logs are in the reports folder: post the newest three files on Discord.
 
 ## Every NA setting and its default
 

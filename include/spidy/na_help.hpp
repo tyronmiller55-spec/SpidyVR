@@ -64,6 +64,15 @@ inline constexpr Page pages[] = {
     {"SWING KICK", "SWING KICK", "While swinging, hold Y + X and flick the right stick up: a swing kick."},
     {"SWING KICK", "  (2) AUTO DIVE KICK", "AUTO DIVE KICK: a fast flight at the ringed enemy dives in feet first."},
 
+    {"CRIME RUN", "CRIME RUN",
+     "Off by default. Turn CRIME RUN on under Kicks & Combat, then open the phone."},
+    {"CRIME RUN", "  (2) START",
+     "The fifth app (a siren) starts a run here. A starts it; A twice in 3 s quits."},
+    {"CRIME RUN", "  (3) THE RUN",
+     "Pillars mark beacons to reach and hold, or the game's own thugs to take down."},
+    {"CRIME RUN", "  (4) SCORE",
+     "Start at 20,000. Stops add points; a miss costs 2,000. 0 loses; 20 wins."},
+
     {"MIDAIR POSES & LEGS", "MIDAIR POSES & LEGS", "Y + X with a slow push poses the legs: tuck, starfish, dive, superhero."},
     {"MIDAIR POSES & LEGS", "  (2) SWITCHES", "MIDAIR POSES and DIRECTIONAL FLIPS have their own switches (BODY & LEGS)."},
 
@@ -126,7 +135,7 @@ inline constexpr Page pages[] = {
     {"OTHER MODS", "  (2) MISSING TABS", "If the SPIDY VR tabs or prompts go missing, the log's mods: line names the mod."},
     {"OTHER MODS", "  (3) TESTING", "Remove other DLL loaders (winmm, version, dinput8) to test. See MOD_COMPAT.md."},
 
-    {"TROUBLESHOOTING", "TROUBLESHOOTING", "A crash code 0xC0000409 as the game closes is known and harmless."},
+    {"TROUBLESHOOTING", "TROUBLESHOOTING", "A 0xC0000409 at close is known since beta3d. Send the .mdmp if you have one."},
     {"TROUBLESHOOTING", "  (2) LOGS", "Logs are in the reports folder: post the newest three files on Discord."},
 };
 inline constexpr size_t pageCount = sizeof(pages) / sizeof(pages[0]);

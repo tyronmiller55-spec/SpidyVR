@@ -33,6 +33,7 @@ module's census and ground rays (`game_punch::crimeCensus`, `crimeStep` / `Spidy
    **lost**; at **20 stops** it is **won**. The best (the highest final score of a won run, and the most stops in any
    run) is saved to `spidy_vr.ini` (`crime_best`, `crime_best_stops`) and shown in the launcher and on the app.
 6. Quit: phone, CRIME RUN, **A twice** within 3 s. Turning the mode off in the launcher or tab also ends a run.
+   A pause, a load or a menu does not run that 3 s window down: the second A still quits after you come back.
 
 Timers run only while you play in the headset (gameplay camera, Spider-Man, the swing module's account fresh): a
 pause, a menu, a cutscene or the flat screen freezes them.

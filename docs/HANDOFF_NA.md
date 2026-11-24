@@ -9,7 +9,8 @@ then [NA_BETA3.md](NA_BETA3.md) (every beta3 build's settings, logs and checklis
 - **What:** the Native Animation fork of SpidyVR (GPL-3.0), Ilya Mezerowsky's fan VR mod for Marvel's Spider-Man
   Remastered (PC). Insomniac's own animations play the body on the ground; SpidyVR owns the air. Keep the Spidy
   launcher's identity and the credits to Ilya and the upstream contributors.
-- **Repo (work):** `tyronmiller55-spec/SpidyVR`, remote `origin`. Branch in use: `feat/087-beta3`.
+- **Repo (work):** `tyronmiller55-spec/SpidyVR`. Branch in use: `feat/087-polish` (from `feat/087-crime-run`, itself
+  from `feat/087-beta3`). Push only to the fork; never to IlyaMez or `SpidyVR-builds`.
 - **Remote `builds`** (`tyronmiller55-spec/SpidyVR-builds`): **never push to it.**
 - **Release repo:** `tyronmiller55-spec/SpidyVR-NativeAnimation`. Its **CURRENT** release is still
   **0.8.7-na-beta2 at 1418992** (Nov 21). Update CURRENT **only when the owner asks**; the beta3 builds are test zips.
@@ -97,6 +98,8 @@ line names the build commit. Report findings with numbers (counts, medians, p90s
 | beta3e | 4272657 | 45033337280 | pass | Spidy-0.8.7-na-beta3e-win64-4272657.zip | 507b391dc487183e |
 | beta3f | 942f3ff | 45047830952 | 988/988 | Spidy-0.8.7-na-beta3f-win64-942f3ff.zip (18,580,839 B) | c8c3bfbcd0a37b8e |
 | beta3g | c488634 | 45081781847 | 994/994 | Spidy-0.8.7-na-beta3g-win64-c488634.zip (18,596,713 B) | 93eafa8e229da238 |
+| crime-run port | 1236723 (docs 70f3f8a) | 45267015225 | 48/48 CI; 2457 crime-run | Spidy-0.8.7-na-beta3g-crimerun-win64-1236723.zip (18,624,819 B) | 8c0e50bc1dfbd14f |
+| beta3h-polish | (this branch `feat/087-polish`) | CI after the docs commit | see notes | Spidy-0.8.7-na-beta3h-polish-win64-<sha7>.zip | in polish-pass-notes.md |
 
 beta3g commits: 4182819 web rope (steady steps, taut under load, wrap keep, weight rescale); d67e992 kick chamber,
 lean, momentum; 6c6600c kick target ring, ground lunge, rebound, rope assist, ground kick speed; c488634 docs.

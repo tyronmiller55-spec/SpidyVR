@@ -3,7 +3,25 @@
 Every build, newest first, with what changed, why, and what was measured.
 Per-check results are in [VALIDATION.md](VALIDATION.md).
 
-**Crime Run prototype (November 22, the owner's t103u; branch `feat/crime-run`, on beta3g):** a roguelike
+**0.8.7-na-beta3, build beta3h-polish (November 24, the owner's t45u; branch `feat/087-polish`, on the Crime Run
+port):** the same version, an eighth test package
+([checklist](NA_BETA3.md#beta3h-polish-runtime-saves-and-the-quit-confirm)). No new setting; revision still 23.
+Off equals beta3g with Crime Run off. The Drive folder of webs and kicks logs could not be read (it asks for a
+Google sign-in); Crime Run has not been played in the headset yet. Play-feel items and anything that needs those
+logs or a `.mdmp` were left for later.
+
+- **A failed save of the SPIDY VR tab is tried again**, not treated as saved.
+- **Crime Run's 3 s quit confirm no longer lapses** during a pause, a load or a menu; the second A still quits
+  after you come back. Swing asks for enemies and ground are also skipped while the run is frozen.
+- **Runtime:** the overlay keeps its aim marks and translucent vertices from frame to frame; Crime Run's score HUD
+  is formatted without a heap allocation each eye.
+- **Docs and help.** NA HELP has Crime Run pages; the 0xC0000409 close line asks for a `.mdmp`. Missing beta3d,
+  beta3f and beta3g banners are in [NA_BETA3.md](NA_BETA3.md). Landing-page text names CURRENT as 0.8.7-na-beta2
+  (the CURRENT release itself is unchanged).
+- **Tests:** the quit-confirm pause contract, and a portable check that Crime Run stays off and a later 0 stays
+  (off equals the previous build).
+
+**Crime Run prototype (November 22, the owner's t103u; branch `feat/087-crime-run` on this fork, on beta3g):** a roguelike
 random-crime mode, off by default (`crime_run=0`); everything else is beta3g. [docs/CRIME_RUN.md](CRIME_RUN.md).
 
 - **The run** (`crime_run::Run`, core + `tests/crime_run_tests.cpp`). Start anywhere from the phone's new CRIME RUN
