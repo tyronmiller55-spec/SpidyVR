@@ -1970,6 +1970,10 @@ DWORD WINAPI run(void*) {
         crime_run::Toggle crimeToggle;
         bool crimePressed{};
         std::vector<crime_run::Event> crimeEvents;
+        // Overlay marks and translucent vertices: kept and cleared each eye, so the path does not
+        // heap-allocate every frame (Crime Run's pillars and HUD go into the translucent list).
+        std::vector<AimMarker> overlayMarks;
+        std::vector<Vertex> overlayTranslucent;
         int64_t crimeLastQpc{}, crimeCensusAt{}, crimeAskedAt{}, crimeRenewedAt{}, crimeEndedAt{};
         uint64_t crimeCensusSeen{};
         uint32_t crimeAskSerial{}, crimeAsksRefused{};
@@ -14466,7 +14470,10 @@ DWORD WINAPI run(void*) {
                         // web, on the line that hand points along in this image, that
                         // line steadied from image to image. Translucent, the farthest
                         // drawn first.
-                        std::vector<AimMarker> marks;
+                        auto& marks = overlayMarks;
+                        marks.clear();
+                        if (marks.capacity() < 16)
+                            marks.reserve(16);
                         for (unsigned hand = 0; hand < 2; ++hand) {
                             auto& steady = aimMotion[hand];
                             const auto& input = rendered.swing.hands[hand];
@@ -14573,7 +14580,10 @@ DWORD WINAPI run(void*) {
                         std::sort(marks.begin(), marks.end(), [&](const AimMarker& a, const AimMarker& b) {
                             return length(a.point - viewer) > length(b.point - viewer);
                         });
-                        std::vector<Vertex> translucent;
+                        auto& translucent = overlayTranslucent;
+                        translucent.clear();
+                        if (translucent.capacity() < 2048)
+                            translucent.reserve(2048);
                         for (const auto& mark : marks)
                             appendAimMarker(translucent, mark, viewer, pixelAngle * markerPixels,
                                             saved->uiStyle);
