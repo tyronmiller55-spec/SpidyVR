@@ -5428,9 +5428,10 @@ DWORD WINAPI run(void*) {
                         ++settingChanges;
                         applySettings();
                         if (auto text = vr_settings::tabOnlyText(values); text != tabOnlySaved) {
-                            if (!writeTabOnly(text))
+                            if (writeTabOnly(text))
+                                tabOnlySaved = std::move(text);
+                            else
                                 message(3, 0, "VR settings: the SPIDY VR tab's own settings were not saved");
-                            tabOnlySaved = std::move(text);
                         }
                     }
                     game_menu::publish(values);
