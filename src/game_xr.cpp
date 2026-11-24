@@ -7391,12 +7391,22 @@ DWORD WINAPI run(void*) {
                                                      what == 2 ? "hit" : "miss", kl->assist, kl->steer, who,
                                                      kl->cone, kl->speed, kl->distance, kl->armed, kl->hits,
                                                      kl->misses);
-                                else if (what == 4)
-                                    diag_log::writef("swing kick: refused (%s) target=%llu cone=%.1f "
-                                                     "speed=%.1f distance=%.1f",
-                                                     swing_kick::refusalName(
-                                                         static_cast<swing_kick::Refusal>(kl->refusal)),
-                                                     who, kl->cone, kl->speed, kl->distance);
+                                else if (what == 4) {
+                                    // A flick off the web is refused here and started as an air kick
+                                    // below: do not log that as a missed or refused kick.
+                                    const volatile game_swing::AirKickLive* air = airKickLive;
+                                    const bool takenAsAir =
+                                        kl->refusal == static_cast<uint32_t>(swing_kick::Refusal::notSwinging) &&
+                                        air && air->events != airEventsSeen && air->lastEvent == 1;
+                                    if (takenAsAir)
+                                        diag_log::writef("swing kick: not swinging; the flick started an air kick");
+                                    else
+                                        diag_log::writef("swing kick: refused (%s) target=%llu cone=%.1f "
+                                                         "speed=%.1f distance=%.1f",
+                                                         swing_kick::refusalName(
+                                                             static_cast<swing_kick::Refusal>(kl->refusal)),
+                                                         who, kl->cone, kl->speed, kl->distance);
+                                }
                             }
                         }
                         // AIR KICKS: the swing's account of it (AirKickLive): its events in the log, and the

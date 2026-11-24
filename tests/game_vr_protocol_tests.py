@@ -2245,6 +2245,26 @@ class ProtocolTests(unittest.TestCase):
             self.assertEqual(game_mdmp(folder), old)
             self.assertIsNone(game_mdmp(folder/'missing'))
 
+    def test_a_swing_kick_flick_that_starts_an_air_kick_is_not_logged_as_refused(self):
+        """A flick off the web starts an air kick on the same frame; the swing-kick live event was still
+        logged as 'refused (not swinging)', which looked like a missed kick."""
+        root = pathlib.Path(__file__).resolve().parents[1]
+        worker = (root/'src/game_xr.cpp').read_text(encoding='utf-8')
+        self.assertIn('swing kick: not swinging; the flick started an air kick', worker)
+        self.assertIn('swing kick: refused (%s)', worker)
+        start = worker.find('else if (what == 4)')
+        # The first 'what == 4' in the swing-kick live block, not the later air-kick refusal.
+        block = worker[start:worker.find('// AIR KICKS:', start)]
+        self.assertIn('takenAsAir', block)
+        self.assertIn('Refusal::notSwinging', block)
+        self.assertIn('lastEvent == 1', block)
+        refused = block.find('swing kick: refused (%s)')
+        taken = block.find('swing kick: not swinging; the flick started an air kick')
+        self.assertGreater(refused, 0)
+        self.assertGreater(taken, 0)
+        self.assertIn('if (takenAsAir)', block)
+        self.assertIn('else', block[taken:])
+
     def test_the_forearm_aim_line_is_formatted_from_named_fields(self):
         """v6 (78a43ed) passed two arguments more than its format to the forearm aim: snprintf; the last %s
         read palm.x's double as a pointer and the game crashed at the first solved forearm. The line is
