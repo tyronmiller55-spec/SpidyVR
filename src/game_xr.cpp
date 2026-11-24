@@ -13822,7 +13822,8 @@ DWORD WINAPI run(void*) {
                             crimeRun.update(crimeDt, crimeFeet, census, crimeEvents);
                         // The ask, every 250 ms in a run: the census wanted, and the beacons whose ground is unknown
                         // (renewed every second, so a miss is cast again: the city may stream in).
-                        if (crimeRun.running() && crimeAskCall && now.QuadPart - crimeAskedAt >= frequency.QuadPart / 4) {
+                        if (crimePlay && crimeRun.running() && crimeAskCall &&
+                            now.QuadPart - crimeAskedAt >= frequency.QuadPart / 4) {
                             crimeAskedAt = now.QuadPart;
                             Ask ask;
                             for (size_t i = 0; i < crimeRun.siteCount() && ask.count < 4; ++i) {
