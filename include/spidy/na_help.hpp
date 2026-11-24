@@ -135,7 +135,7 @@ inline constexpr Page pages[] = {
     {"OTHER MODS", "  (2) MISSING TABS", "If the SPIDY VR tabs or prompts go missing, the log's mods: line names the mod."},
     {"OTHER MODS", "  (3) TESTING", "Remove other DLL loaders (winmm, version, dinput8) to test. See MOD_COMPAT.md."},
 
-    {"TROUBLESHOOTING", "TROUBLESHOOTING", "A 0xC0000409 at close is known since beta3d. Send the .mdmp if you have one."},
+    {"TROUBLESHOOTING", "TROUBLESHOOTING", "A 0xC0000409 at close is not a crash. A mid-play fault writes a .mdmp."},
     {"TROUBLESHOOTING", "  (2) LOGS", "Logs are in the reports folder: post the newest three files on Discord."},
 };
 inline constexpr size_t pageCount = sizeof(pages) / sizeof(pages[0]);

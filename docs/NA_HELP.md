@@ -84,7 +84,7 @@ Spidy chains its hooks in front of other mods (e.g. Manhattan Skies). If the SPI
 
 ## TROUBLESHOOTING
 
-A 0xC0000409 at close is known since beta3d. Send the .mdmp if you have one. Logs are in the reports folder: post the newest three files on Discord.
+A 0xC0000409 at close is not a crash. A mid-play fault writes a .mdmp. Logs are in the reports folder: post the newest three files on Discord.
 
 ## Every NA setting and its default
 

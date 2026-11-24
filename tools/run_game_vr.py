@@ -2149,12 +2149,34 @@ CRASH_CODES = {0xC0000005: 'an access violation', 0xC0000409: 'a stack buffer ov
                0xC0000374: 'a heap corruption', 0xE06D7363: 'an unhandled C++ exception'}
 
 
-def crash_advice(code, stage=None):
-    """The console's line when the game ended with a crash's exit code, else None. November 3: three sessions
-    'froze' in the headset (the compositor keeps the last frame); the game had crashed, an access violation,
-    and only the game's own log said so."""
+def game_mdmp(folder=None, since=None):
+    """The newest .mdmp beside the game's log, or None.
+
+    `since` is a Unix time: dumps from an earlier session are ignored, so a leftover .mdmp (November 21's
+    access violation, for example) is not treated as a crash for this close.
+    """
+    folder = pathlib.Path(folder) if folder is not None else documents_folder()/GAME_NAME
+    try:
+        dumps = [p for p in folder.glob('*.mdmp') if since is None or p.stat().st_mtime >= since]
+    except OSError:
+        return None
+    return max(dumps, key=lambda p: p.stat().st_mtime) if dumps else None
+
+
+def crash_advice(code, stage=None, mdmp=False):
+    """The console's line when the game ended with a crash's exit code, else a close note, else None.
+
+    November 3: three sessions 'froze' in the headset (the compositor keeps the last frame); the game had
+    crashed, an access violation, and only the game's own log said so. 0xC0000409 is STATUS_STACK_BUFFER_OVERRUN,
+    also used by __fastfail / abort() when the window is closed: without a new .mdmp from this session, that
+    is not reported as a crash.
+    """
     if code is None or code < 0xC0000000:
         return None
+    if code == 0xC0000409 and not mdmp:
+        return ('The game ended (exit code 0xC0000409), often after the window is closed; '
+                'that is not necessarily a crash'
+                + (f'. Last stage: {stage}' if stage else '') + '.')
     what = CRASH_CODES.get(code, 'an error')
     return (f'The game crashed (exit code 0x{code:08X}, {what})'
             + (f' at stage: {stage}' if stage else '') +
@@ -3295,7 +3317,12 @@ def session(a, startup):
                       f"of a second each ({stalls['seconds']} s in all). That is the stream to the headset, not "
                       'the game' + (': this PC was on Wi-Fi.' if links.get('wifi') else '.'), flush=True)
             tell_device_lost()
-            crashed = crash_advice(exit_status(game), diag_log.stage)
+            dump = None
+            try:
+                dump = game_mdmp(since=first_check)
+            except (OSError, AttributeError):
+                pass
+            crashed = crash_advice(exit_status(game), diag_log.stage, mdmp=bool(dump))
             if crashed:
                 diag_log._out(crashed)
             if diag_log.lines:
