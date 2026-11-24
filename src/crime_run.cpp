@@ -5,6 +5,7 @@
 #include <cmath>
 #include <cstdio>
 #include <cstring>
+#include <string_view>
 
 namespace spidy::crime_run {
 namespace {
@@ -16,19 +17,46 @@ float across(Vec3 a, Vec3 b) {
     const float x = a.x - b.x, z = a.z - b.z;
     return std::sqrt(x * x + z * z);
 }
-// 23450 as "23,450".
-std::string grouped(int n) {
-    const bool negative = n < 0;
-    std::string digits = std::to_string(negative ? -static_cast<long long>(n) : static_cast<long long>(n));
-    std::string out;
-    for (size_t i = 0; i < digits.size(); ++i) {
-        if (i && (digits.size() - i) % 3 == 0)
-            out += ',';
-        out += digits[i];
+// 23450 as "23,450". Writes into out (at least 16 bytes) and returns it.
+char* grouped(int n, char* out, size_t cap) {
+    if (!out || cap < 2) {
+        if (out && cap)
+            out[0] = 0;
+        return out;
     }
-    return negative ? "-" + out : out;
+    const bool negative = n < 0;
+    const unsigned long long v = negative ? static_cast<unsigned long long>(-static_cast<long long>(n))
+                                          : static_cast<unsigned long long>(n);
+    char digits[24];
+    const int count = std::snprintf(digits, sizeof digits, "%llu", v);
+    if (count <= 0) {
+        out[0] = '0';
+        out[1] = 0;
+        return out;
+    }
+    size_t i = 0;
+    if (negative && i + 1 < cap)
+        out[i++] = '-';
+    for (int d = 0; d < count && i + 1 < cap; ++d) {
+        if (d && (count - d) % 3 == 0 && i + 1 < cap)
+            out[i++] = ',';
+        out[i++] = digits[d];
+    }
+    out[i] = 0;
+    return out;
+}
+// "1:05". Writes into out (at least 8 bytes) and returns it.
+char* clockTextBuf(float seconds, char* out, size_t cap) {
+    const int s = std::isfinite(seconds) ? std::max(0, static_cast<int>(std::ceil(seconds - 1e-3f))) : 0;
+    std::snprintf(out, cap, "%d:%02d", s / 60, s % 60);
+    return out;
 }
 } // namespace
+
+std::string clockText(float seconds) {
+    char text[16];
+    return clockTextBuf(seconds, text, sizeof text);
+}
 
 Config sanitized(Config c) {
     const Config d;
@@ -370,13 +398,13 @@ std::string Run::summary() const {
                           : abandoned_            ? "QUIT"
                           : phase_ == Phase::running ? "UNDER WAY"
                                                      : "NOT STARTED";
-    char line[200];
+    char line[200], score[16], time[16], won[16], lost[16];
     std::snprintf(line, sizeof line,
                   "CRIME RUN %s: score %s, stops %d/%d, misses %d, rank %s, time %s, best streak %d, crimes %u "
                   "(real %u), +%s -%s",
-                  outcome, grouped(score_).c_str(), stops_, config_.winStops, misses_, rankName(rank()),
-                  clockText(elapsed_).c_str(), bestStreak_, spawned_, real_, grouped(won_).c_str(),
-                  grouped(lost_).c_str());
+                  outcome, grouped(score_, score, sizeof score), stops_, config_.winStops, misses_, rankName(rank()),
+                  clockTextBuf(elapsed_, time, sizeof time), bestStreak_, spawned_, real_, grouped(won_, won, sizeof won),
+                  grouped(lost_, lost, sizeof lost));
     return line;
 }
 bool better(int score, int stops, bool won, int bestScore, int bestStops) {
@@ -400,12 +428,6 @@ Toggle::Ask Toggle::update(float dt, bool pressed, bool running) {
     return Ask::confirm;
 }
 
-std::string clockText(float seconds) {
-    const int s = std::isfinite(seconds) ? std::max(0, static_cast<int>(std::ceil(seconds - 1e-3f))) : 0;
-    char text[16];
-    std::snprintf(text, sizeof text, "%d:%02d", s / 60, s % 60);
-    return text;
-}
 
 // ---- What the eyes show ----
 namespace {
@@ -479,10 +501,12 @@ void appendBeacon(std::vector<Vertex>& out, const BeaconView& view, Vec3 viewer,
         const float at = std::max(length(anchor - viewer), .5f);
         char text[48];
         const int metres = static_cast<int>(std::lround(flat));
+        char left[16];
         if (view.kind == Kind::thugs)
-            std::snprintf(text, sizeof text, "CRIME %u  %s  %d M", view.thugs, clockText(view.left).c_str(), metres);
+            std::snprintf(text, sizeof text, "CRIME %u  %s  %d M", view.thugs, clockTextBuf(view.left, left, sizeof left),
+                          metres);
         else
-            std::snprintf(text, sizeof text, "CRIME  %s  %d M", clockText(view.left).c_str(), metres);
+            std::snprintf(text, sizeof text, "CRIME  %s  %d M", clockTextBuf(view.left, left, sizeof left), metres);
         TextStyle style;
         style.height = 22 * pixelAngle * at;
         style.weight = .16f;
@@ -554,32 +578,32 @@ void appendHud(std::vector<Vertex>& out, const HudView& view, Pose head) {
     TextStyle style;
     style.weight = .14f;
     style.round = true;
-    const auto line = [&](const std::string& text, float y, float height, Vec3 color, float x = -.38f) {
+    const auto line = [&](std::string_view text, float y, float height, Vec3 color, float x = -.38f) {
         style.height = std::min(height, fittedHeight(text, height, .76f));
         style.color = color;
         style.soft = style.height * .05f;
         appendText(out, text, at(x, y), right, u, style);
     };
     const Vec3 white{1, 1, 1}, gold{1, .82f, .2f}, green{.3f, 1, .4f}, red{1, .25f, .2f};
-    char top[96];
-    std::snprintf(top, sizeof top, "CRIME RUN  %s  STOPS %d/%d  %s", grouped(view.score).c_str(), view.stops,
+    char top[96], score[16], left[16];
+    std::snprintf(top, sizeof top, "CRIME RUN  %s  STOPS %d/%d  %s", grouped(view.score, score, sizeof score), view.stops,
                   view.winStops, rankName(view.rank));
     line(top, .055f, .026f, gold);
     char middle[96];
     if (view.phase == Phase::won)
-        std::snprintf(middle, sizeof middle, "RUN WON - FINAL %s", grouped(view.score).c_str());
+        std::snprintf(middle, sizeof middle, "RUN WON - FINAL %s", grouped(view.score, score, sizeof score));
     else if (view.phase == Phase::lost)
         std::snprintf(middle, sizeof middle, "RUN LOST - THE CITY FELL - %d STOPS", view.stops);
     else if (view.target) {
         const float metres = across(view.targetPoint, head.position);
         if (view.targetKind == Kind::thugs)
             std::snprintf(middle, sizeof middle, "CRIME %d M  %s  %u STANDING", static_cast<int>(std::lround(metres)),
-                          clockText(view.targetLeft).c_str(), view.targetThugs);
+                          clockTextBuf(view.targetLeft, left, sizeof left), view.targetThugs);
         else
             std::snprintf(middle, sizeof middle, "CRIME %d M  %s", static_cast<int>(std::lround(metres)),
-                          clockText(view.targetLeft).c_str());
+                          clockTextBuf(view.targetLeft, left, sizeof left));
     } else
-        std::snprintf(middle, sizeof middle, "NEXT CRIME IN %s", clockText(view.nextSpawn).c_str());
+        std::snprintf(middle, sizeof middle, "NEXT CRIME IN %s", clockTextBuf(view.nextSpawn, left, sizeof left));
     line(middle, .01f, .03f, view.target && view.targetLeft < 20 ? red : white, -.3f);
     // The arrow to the crime, turned as it lies from the way the head faces.
     if (view.target && view.phase == Phase::running) {
