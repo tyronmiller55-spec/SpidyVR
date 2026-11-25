@@ -766,3 +766,50 @@ GPU start (D3D lists, command hooks, present hook swapchain).
 4. **Other runtimes.** Virtual Desktop or SteamVR as the OpenXR runtime, or
    rolling Meta Quest Link back to 1.208, remain useful if this still dies.
 
+## beta3l: start the GPU bridge before the OpenXR session begins
+
+The owner, Nov 25 t60u: beta3k (`990d384`) still crashed. The start log this time
+names the exact step.
+
+What the beta3k session showed:
+
+- Build confirmed: **0.8.7-na-beta3k**, commit `990d38424c`, folder
+  `C:\Games\Spidy-0.8.7-player-torso-990d384`.
+- Runtime: **Oculus 1.210.0**, 37 extensions offered; only `XR_KHR_D3D12_enable`
+  was enabled. The 37th offered extension is `XR_LOGITECH_mx_ink_stylus_interaction`
+  (not enabled).
+- Session create and begin both succeeded. Frame 1: `shouldRender=0`,
+  `xrWaitFrame`, `xrBeginFrame` and `xrLocateViews` all returned ok, then
+  `prepare` started the GPU bridge.
+- **Last flushed line: `GPU creating D3D12 lists`.** There is no
+  `GPU enabling command hooks`, no present-hook swapchain, no
+  `GPU bridge started`, and the session never went FOCUSED. Moving the start
+  to an earlier unfocused frame did not help, because that start still ran
+  after `xrBeginFrame`, in the middle of a compositor frame.
+- The overlay had already created D3D12 objects on the game's device
+  successfully after `xrCreateSession` and before `xrBeginSession`. So the
+  overflow is not "any command list after the session exists"; it is creating
+  the GPU bridge's lists after `xrBeginFrame`.
+
+This build starts the GPU bridge right after the overlay is created, before
+`xrBeginSession` and before the first `xrWaitFrame`. The start log now names
+each CreateCommandAllocator / CreateCommandList / Close / CreateFence step.
+How the game plays is unchanged. No new settings, no new migration revision.
+There is no playable fallback that skips the GPU bridge (the headset would
+get no eye images). Virtual Desktop, SteamVR, or Meta Link 1.208 remain
+workarounds if this still dies.
+
+### beta3l checklist
+
+1. **Use this zip, not official 0.8.8.** Leave the launcher's Update button alone.
+   The current NVIDIA driver is fine.
+2. **If VR starts and a frame reaches the headset**, play as in beta3i. The start
+   log should show `GPU bridge started` *before* `begin session`, then later
+   `first headset frame submitted`.
+3. **If it crashes again**, upload the usual logs *and* `spidy-vr-start.log` from
+   `reports\stereo-modules\…\`, plus a new `.mdmp`. The last line will now
+   name the exact GPU-create or hook step, if it dies during start, or the
+   OpenXR call if it dies later.
+4. **Other runtimes.** Virtual Desktop or SteamVR as the OpenXR runtime, or
+   rolling Meta Quest Link back to 1.208, remain useful if this still dies.
+
