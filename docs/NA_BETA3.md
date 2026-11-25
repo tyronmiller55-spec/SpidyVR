@@ -669,3 +669,56 @@ leaving from the wrist, not those poses.
 6. **Force close.** Closing the game window should not be reported as a 0xC0000409 crash. If a real crash writes a
    new `.mdmp`, keep it with the logs.
 
+
+## beta3j-diag: flushed VR-start log for the Meta 1.210 crash
+
+The owner, Nov 25 t54u–t57u: beta3i, then a rolled-back NVIDIA driver, then a Crime Run
+port launch (`1236723`, not vanilla beta3g `c488634`) all died the same way after Meta
+Quest Link updated from 1.208 to 1.210. Official 0.8.8 is not a fix for this and was
+not ported. This build does not change how the game plays. It writes a flushed step
+log through the first headset frame so the next crash names the last OpenXR call.
+
+What the earlier sessions showed:
+
+- The crash is a stack overflow (`0xC00000FD`) in NVIDIA's user-mode D3D driver,
+  about 3 seconds after the headset session goes FOCUSED, after 56–59 VR-loop frames
+  and **no** frame submitted to the headset. None of the new beta3i hand or line code
+  had run (no web, no punch).
+- It is the same on the Nov 20 NVIDIA driver and the Oct 27 driver after a rollback.
+  The Nov 20 driver is not the cause; going back to it is fine.
+- It is the same on the Crime Run port (`1236723`, Crime Run off, revision 23) as on
+  beta3i (`3c7bb41`). That port does not change the OpenXR or D3D start path versus
+  beta3g, so the later NA commits are not required for the crash.
+- The last good headset sessions were beta3g on Oculus runtime **1.208**. From late
+  morning on Nov 25 the machine offers **1.210** (37 extensions instead of 36). This
+  console sometimes omits the "openxr: runtime Oculus …" line; the start log always
+  writes it, and the full list of offered extensions.
+- Official 0.8.8 (`cf0b279`) adds first-time VR setup and the comfort vignette. It
+  does not mention this crash. The launcher's Update button is only a notice that
+  Ilya released 0.8.8; **do not press it**, or this folder would be replaced by
+  official 0.8.8.
+
+What this build adds (no new settings, no new migration revision):
+
+- **`spidy-vr-start.log`**, beside the stereo module in the Spidy folder (and also
+  in the usual `-diag.log` once the launcher can poll). Each OpenXR wait, begin,
+  acquire, copy and end is written and flushed to disk *before* the call and again
+  after it succeeds, until the first headset frame is submitted. If the game dies
+  in the first seconds, the last line is the last call that started.
+- The 3-second "no eye images" stop is also written first, so it cannot be lost in
+  a crash during unwind.
+
+### beta3j-diag checklist
+
+1. **Use this zip, not official 0.8.8.** Leave the launcher's Update button alone.
+2. **If VR starts and a frame reaches the headset**, play as in beta3i. The new log
+   should end with "first headset frame submitted". You can then look at Crime Run
+   and the hand / line work as before.
+3. **If it crashes again**, upload the usual logs *and* `spidy-vr-start.log` from the
+   Spidy folder (next to the stereo module, the same place as this zip's DLLs), plus
+   a new `.mdmp` if the game writes one.
+4. **Other runtimes.** If you can, try Virtual Desktop or SteamVR as the OpenXR
+   runtime. A good session there would confirm this is Meta 1.210's path. Rolling
+   Meta Quest Link back to 1.208, or opting out of a Public Test Channel build if
+   1.210 arrived that way, is also worth a try.
+
