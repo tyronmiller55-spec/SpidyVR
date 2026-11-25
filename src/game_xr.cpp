@@ -10616,15 +10616,12 @@ DWORD WINAPI run(void*) {
                         }
                         InterlockedIncrement64(&d.sequence);
                     }
-                    // Copies of the game's presented frame, for the screen.
-                    if (gpuStarted)
-                        native_gpu::wantScreen(viewing && !vrPlay && !fpScene);
-                    showScreen = screen && !fpScene && !fpPending;
-                    if (!viewing)
-                        return false;
+                    // The GPU bridge (Present hooks, a throwaway swapchain) starts as soon
+                    // as the OpenXR session is running, not on the first focused frame.
+                    // Under Meta runtime 1.210, starting it when shouldRender first became 1
+                    // overflowed the NVIDIA driver (beta3j-diag, 13:03 PT Nov 25: xrBeginFrame
+                    // on that frame succeeded; Headset active was never logged).
                     if (!gpuStarted) {
-                        // From here the headset shows the game: its screen until
-                        // gameplay, then the eye views.
                         native_gpu::Config gpu;
                         gpu.pid = config.pid;
                         gpu.base = config.base;
@@ -10632,14 +10629,24 @@ DWORD WINAPI run(void*) {
                         gpu.durationMs = moduleDuration;
                         gpu.copyToXr = 2;
                         gpu.captureImages = config.options & 1;
+                        diag_log::durable("vr start: starting GPU bridge");
                         check(native_gpu::start(&gpu), "Start native GPU bridge");
                         gpuStarted = true;
                         nativeDeadline =
                             config.durationMs ? GetTickCount64() + config.durationMs : UINT64_MAX;
+                        diag_log::durable("vr start: GPU bridge started");
+                    }
+                    // Copies of the game's presented frame, for the screen.
+                    native_gpu::wantScreen(viewing && !vrPlay && !fpScene);
+                    showScreen = screen && !fpScene && !fpPending;
+                    if (!viewing)
+                        return false;
+                    // First focused frame: the bridge is already up. One interval to
+                    // tell the player the headset is active, as before.
+                    if (startupStages.mark(diag_log::Stages::headset, GetTickCount64())) {
                         message(3, 0, "Headset active");
-                        if (startupStages.mark(diag_log::Stages::headset, GetTickCount64()))
-                            stageLine(diag_log::Stages::headset);
-                        return false; // initialization can exceed one predicted display interval
+                        stageLine(diag_log::Stages::headset);
+                        return false;
                     }
                     // Without gameplay the screen shows the game's presented
                     // frame; until it is up, the last image stays. The eye

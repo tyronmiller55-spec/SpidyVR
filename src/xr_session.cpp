@@ -147,11 +147,24 @@ void XrRuntime::initialize(
             enabled += (enabled.empty() ? "" : " ") + std::string(name);
         note("openxr: runtime " + runtimeName_ + " " + version(properties.runtimeVersion) + ", API 1.0.0, " +
              std::to_string(count) + " extensions offered; enabled: " + enabled);
-        std::string offered;
-        for (const auto& e : extensions)
-            offered += (offered.empty() ? "" : " ") + std::string(e.extensionName);
-        if (startTrace)
-            startTrace("openxr: extensions offered: " + offered);
+        // Several short lines so a 37-name list is not cut off in the log.
+        std::string batch;
+        unsigned n = 0;
+        auto flushOffered = [&](bool last) {
+            if (batch.empty() || (!last && n % 8 != 0))
+                return;
+            if (startTrace)
+                startTrace("openxr: extensions offered: " + batch);
+            batch.clear();
+        };
+        for (const auto& e : extensions) {
+            if (!batch.empty())
+                batch += ' ';
+            batch += e.extensionName;
+            ++n;
+            flushOffered(false);
+        }
+        flushOffered(true);
     }
     // Virtual Desktop's calls itself VirtualDesktopXR.
     virtualDesktop_ = std::strstr(properties.runtimeName, "VirtualDesktop") != nullptr;
@@ -940,7 +953,9 @@ bool XrRuntime::frameStereo(const std::function<bool(const XrFrame&)>& prepare,
         locateInfo.viewConfigurationType = XR_VIEW_CONFIGURATION_TYPE_PRIMARY_STEREO;
         locateInfo.displayTime = state.predictedDisplayTime;
         locateInfo.space = space_;
+        trace("locate", "calling xrLocateViews");
         xr(xrLocateViews(session_, &locateInfo, &validity, 2, &count, views.data()), "Locate stereo views");
+        trace("locate", "ok");
         constexpr XrViewStateFlags required =
             XR_VIEW_STATE_POSITION_VALID_BIT | XR_VIEW_STATE_ORIENTATION_VALID_BIT;
         tracked.valid = tracked.valid && count == 2 && (validity.viewStateFlags & required) == required;
@@ -955,6 +970,7 @@ bool XrRuntime::frameStereo(const std::function<bool(const XrFrame&)>& prepare,
             }
         frameTiming_.tracking = elapsed(phase);
         phase = Clock::now();
+        trace("prepare", "calling prepare");
         const bool ready = prepare(tracked); // one pose batch for the complete pair
         frameTiming_.prepare = elapsed(phase);
         if (tracing) {

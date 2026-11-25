@@ -1,4 +1,5 @@
 #include "spidy/native_eye_gpu.hpp"
+#include "spidy/diag_log.hpp"
 #include "spidy/copy_eye_texture.hpp"
 #include "spidy/eye_pair_state.hpp"
 #include "spidy/hud_capture.hpp"
@@ -1599,6 +1600,7 @@ DWORD start(void* input) {
     if (queue->GetDesc().Type != D3D12_COMMAND_LIST_TYPE_DIRECT ||
         FAILED(queue->GetDevice(IID_PPV_ARGS(&device))))
         return 1002;
+    diag_log::durable("vr start: GPU creating D3D12 lists");
     if (FAILED(device->CreateCommandAllocator(D3D12_COMMAND_LIST_TYPE_DIRECT, IID_PPV_ARGS(&allocator))) ||
         FAILED(device->CreateCommandList(0, D3D12_COMMAND_LIST_TYPE_DIRECT, allocator.Get(), nullptr,
                                          IID_PPV_ARGS(&command))) ||
@@ -1630,6 +1632,7 @@ DWORD start(void* input) {
     hooked = true;
     deadline = c.durationMs ? GetTickCount64() + c.durationMs : UINT64_MAX;
     enabled = true;
+    diag_log::durable("vr start: GPU enabling command hooks");
     // Under one freeze of the game's threads (stereo_probe.cpp says why).
     for (auto h : hooks)
         if (s == MH_OK)
@@ -1647,6 +1650,7 @@ DWORD start(void* input) {
     // nothing while gameplay is unavailable, as before.
     void* presentAddress{};
     void* present1Address{};
+    diag_log::durable("vr start: GPU creating present hook swapchain");
     if (presentEntries(presentAddress, present1Address) &&
         MH_CreateHook(presentAddress, reinterpret_cast<void*>(present), reinterpret_cast<void**>(&originalPresent)) ==
             MH_OK) {
@@ -1660,6 +1664,9 @@ DWORD start(void* input) {
                 hookedPresent = MH_QueueEnableHook(h) == MH_OK && hookedPresent;
         hookedPresent = MH_ApplyQueued() == MH_OK && hookedPresent;
         publishScreen(hookedPresent ? 1 : 2, nullptr, 0);
+        diag_log::durable(hookedPresent ? "vr start: GPU present hooks on" : "vr start: GPU present hooks failed");
+    } else {
+        diag_log::durable("vr start: GPU present hook swapchain skipped");
     }
     std::lock_guard lock(telemetry);
     InterlockedIncrement64(&SpidyGpuData.sequence);
