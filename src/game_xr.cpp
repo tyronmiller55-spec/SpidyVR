@@ -1244,6 +1244,27 @@ DWORD WINAPI run(void*) {
         connecting = false;
         D3D12Renderer overlay;
         overlay.initialize(device.Get(), queue);
+        // The GPU bridge creates command lists on the game's device. Under
+        // Meta runtime 1.210 those creates overflowed the NVIDIA driver when
+        // they ran after xrBeginFrame (beta3k start log, 990d384: last line
+        // "GPU creating D3D12 lists", no "GPU bridge started"). The overlay
+        // already created D3D12 objects successfully at this point, after
+        // xrCreateSession and before xrBeginSession. Start the bridge here,
+        // not mid-frame.
+        {
+            native_gpu::Config gpu;
+            gpu.pid = config.pid;
+            gpu.base = config.base;
+            gpu.queue = config.queue;
+            gpu.durationMs = config.durationMs ? config.durationMs + 3000 : 0;
+            gpu.copyToXr = 2;
+            gpu.captureImages = config.options & 1;
+            diag_log::durable("vr start: starting GPU bridge before OpenXR session begins");
+            check(native_gpu::start(&gpu), "Start native GPU bridge");
+            gpuStarted = true;
+            nativeDeadline = config.durationMs ? GetTickCount64() + config.durationMs : UINT64_MAX;
+            diag_log::durable("vr start: GPU bridge started");
+        }
         // The session report's copies of the left eye live in the overlay's
         // readback buffer; withdraw the last one before the overlay goes.
         struct WithdrawSnapshot {
@@ -10616,26 +10637,10 @@ DWORD WINAPI run(void*) {
                         }
                         InterlockedIncrement64(&d.sequence);
                     }
-                    // The GPU bridge (Present hooks, a throwaway swapchain) starts as soon
-                    // as the OpenXR session is running, not on the first focused frame.
-                    // Under Meta runtime 1.210, starting it when shouldRender first became 1
-                    // overflowed the NVIDIA driver (beta3j-diag, 13:03 PT Nov 25: xrBeginFrame
-                    // on that frame succeeded; Headset active was never logged).
-                    if (!gpuStarted) {
-                        native_gpu::Config gpu;
-                        gpu.pid = config.pid;
-                        gpu.base = config.base;
-                        gpu.queue = config.queue;
-                        gpu.durationMs = moduleDuration;
-                        gpu.copyToXr = 2;
-                        gpu.captureImages = config.options & 1;
-                        diag_log::durable("vr start: starting GPU bridge");
-                        check(native_gpu::start(&gpu), "Start native GPU bridge");
-                        gpuStarted = true;
-                        nativeDeadline =
-                            config.durationMs ? GetTickCount64() + config.durationMs : UINT64_MAX;
-                        diag_log::durable("vr start: GPU bridge started");
-                    }
+                    // The GPU bridge starts before xrBeginSession (see run(),
+                    // after the overlay is created). Do not start it here:
+                    // mid-frame CreateCommandList overflowed the NVIDIA
+                    // driver under Meta 1.210 (beta3k).
                     // Copies of the game's presented frame, for the screen.
                     native_gpu::wantScreen(viewing && !vrPlay && !fpScene);
                     showScreen = screen && !fpScene && !fpPending;

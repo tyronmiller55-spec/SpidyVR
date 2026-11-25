@@ -1600,16 +1600,24 @@ DWORD start(void* input) {
     if (queue->GetDesc().Type != D3D12_COMMAND_LIST_TYPE_DIRECT ||
         FAILED(queue->GetDevice(IID_PPV_ARGS(&device))))
         return 1002;
-    diag_log::durable("vr start: GPU creating D3D12 lists");
-    if (FAILED(device->CreateCommandAllocator(D3D12_COMMAND_LIST_TYPE_DIRECT, IID_PPV_ARGS(&allocator))) ||
-        FAILED(device->CreateCommandList(0, D3D12_COMMAND_LIST_TYPE_DIRECT, allocator.Get(), nullptr,
-                                         IID_PPV_ARGS(&command))) ||
-        FAILED(command->Close()) ||
-        FAILED(device->CreateFence(0, D3D12_FENCE_FLAG_NONE, IID_PPV_ARGS(&fence))))
+    diag_log::durable("vr start: GPU creating command allocator");
+    if (FAILED(device->CreateCommandAllocator(D3D12_COMMAND_LIST_TYPE_DIRECT, IID_PPV_ARGS(&allocator))))
         return 1003;
+    diag_log::durable("vr start: GPU creating command list");
+    if (FAILED(device->CreateCommandList(0, D3D12_COMMAND_LIST_TYPE_DIRECT, allocator.Get(), nullptr,
+                                         IID_PPV_ARGS(&command))))
+        return 1003;
+    diag_log::durable("vr start: GPU closing command list");
+    if (FAILED(command->Close()))
+        return 1003;
+    diag_log::durable("vr start: GPU creating fence");
+    if (FAILED(device->CreateFence(0, D3D12_FENCE_FLAG_NONE, IID_PPV_ARGS(&fence))))
+        return 1003;
+    diag_log::durable("vr start: GPU creating fence event");
     fenceEvent = CreateEventW(nullptr, FALSE, FALSE, nullptr);
     if (!fenceEvent)
         return 1004;
+    diag_log::durable("vr start: GPU creating command hooks");
     auto vt = *reinterpret_cast<void***>(command.Get());
     hooks = {vt[26], vt[10], (*reinterpret_cast<void***>(queue.Get()))[10], vt[53]}; // EndQuery
     auto s = MH_Initialize();
