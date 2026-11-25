@@ -25619,7 +25619,9 @@ int main() {
                  // Beta polish A4/A5: JUMP SOUNDS and WALL JUMP SOUND, NA · POINT JUMP's in-game rows; AIR DODGE (beta 2).
                  row.item != Item::pointJumpSound && row.item != Item::wallJumpSound && row.item != Item::airDodge &&
                  row.item != Item::showtimeRayFan &&
-                 row.item != Item::handstandSticky && row.item != Item::swingLineFullLength);
+                 row.item != Item::handstandSticky && row.item != Item::swingLineFullLength &&
+                 row.item != Item::animatedWebGrip && row.item != Item::animatedPunchFists &&
+                 row.item != Item::webHoldInHand && row.item != Item::thickSwingLine);
             check(row.place == (row.item == Item::view ? Place::page
                                 : row.item == Item::helpPage ? Place::tab
                                 : naRetired(row.item)    ? Place::launcher
@@ -25629,7 +25631,7 @@ int main() {
                   "a row in the wrong place");
         }
         check(std::count_if(all.begin(), all.end(), [](const Row& r) { return r.place == Place::tab; }) ==
-                  178 + na_help::pageCount, // (beta 2: +4 AIR DODGE, SHOWTIME RAY FAN, STICKY HANDSTANDS, FULL-LENGTH SWING LINES) (beta polish A4/A5: +2 JUMP SOUNDS, WALL JUMP SOUND) (beta polish M5: + NA HELP's pages) (beta polish M4: +9 NA rows players tune in the headset, -4 retired legacy rows hidden) (Nov 18 1:09 PM: +2 DIRECTIONAL FLIPS, MIDAIR POSES) (Nov 18: +7 HANDOFF TIMING) (Nov 14: +15 SHOWTIME) November 11: +8 (SHOOTERS, LOCK STRENGTH, CAMERA MOTION, PITCH, ROLL, BOB x2, HEAD ANGLE), -5 old wrist rows; +6 POINT JUMP; November 12: +1 PUNCH VIEW EASE, +3 MOVE HAPTICS, VIEW YAW SOURCE, SOUND TRACE, +2 JUMP TO SPIDYVR, AIR VIEW EASE, +2 ANIM YAW SWAY, TURN-IN-PLACE ANGLE, +4 PASSIVE LEGS, PASSIVE COUPLING, AIR CROUCH, REACH SPREAD
+                  182 + na_help::pageCount, // (beta 3i: +4 WEB GRIP, PUNCH FISTS, WEB IN HAND, THICK SWING LINE) (beta 2: +4 AIR DODGE, SHOWTIME RAY FAN, STICKY HANDSTANDS, FULL-LENGTH SWING LINES) (beta polish A4/A5: +2 JUMP SOUNDS, WALL JUMP SOUND) (beta polish M5: + NA HELP's pages) (beta polish M4: +9 NA rows players tune in the headset, -4 retired legacy rows hidden) (Nov 18 1:09 PM: +2 DIRECTIONAL FLIPS, MIDAIR POSES) (Nov 18: +7 HANDOFF TIMING) (Nov 14: +15 SHOWTIME) November 11: +8 (SHOOTERS, LOCK STRENGTH, CAMERA MOTION, PITCH, ROLL, BOB x2, HEAD ANGLE), -5 old wrist rows; +6 POINT JUMP; November 12: +1 PUNCH VIEW EASE, +3 MOVE HAPTICS, VIEW YAW SOURCE, SOUND TRACE, +2 JUMP TO SPIDYVR, AIR VIEW EASE, +2 ANIM YAW SWAY, TURN-IN-PLACE ANGLE, +4 PASSIVE LEGS, PASSIVE COUPLING, AIR CROUCH, REACH SPREAD
               "the tab's own rows");
         check(all[1].item == Item::webStyle && std::strcmp(all[1].title, "WEB STYLE") == 0 &&
                   all[1].choices.size() == 2 && std::strcmp(all[1].choices[0], "REALISTIC") == 0 &&
