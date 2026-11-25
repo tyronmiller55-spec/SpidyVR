@@ -722,3 +722,47 @@ What this build adds (no new settings, no new migration revision):
    Meta Quest Link back to 1.208, or opting out of a Public Test Channel build if
    1.210 arrived that way, is also worth a try.
 
+
+## beta3k: start the GPU bridge before the headset goes focused
+
+The owner, Nov 25 t58u–t59u: beta3j-diag (`6fa2418`) crashed again on the current
+NVIDIA driver, Meta runtime **1.210.0**. The flushed start log (also copied into
+the console) names the last call.
+
+What the 13:03 PM Pacific session showed:
+
+- Build confirmed: **0.8.7-na-beta3j-diag**, commit `6fa24188a0`, folder
+  `C:\Games\Spidy-0.8.7-player-torso-6fa2418`.
+- Runtime: **Oculus 1.210.0**, 37 extensions offered; only `XR_KHR_D3D12_enable`
+  was enabled (the new 37th extension is not used). The offered-name line was
+  cut off in the log after `XR_KHR_convert_time`; this build writes the list in
+  shorter lines.
+- Frames 1–33: `shouldRender=0`, empty `xrEndFrame` (0 layers) all succeeded.
+- Then the session went VISIBLE and FOCUSED. Frame 34: `xrWaitFrame` returned
+  `shouldRender=1`, `xrBeginFrame` returned ok. **Headset active was never
+  logged.** The crash is a stack overflow (`0xC00000FD`) in NVIDIA's user-mode
+  driver `nvwgf2umx.dll+0x396e7e` (the Nov 20 driver, the current one). The
+  faulting thread's stack was not in the dump, but the last Spidy step is
+  certain: we died inside `native_gpu::start` (Present hooks and a throwaway
+  swapchain) on the first focused frame.
+
+This build starts that GPU bridge on an earlier unfocused frame, while the
+compositor is still not rendering, and keeps the usual "Headset active" pause
+for the first focused frame. How the game plays is unchanged. No new settings,
+no new migration revision. The start log now also names each step inside the
+GPU start (D3D lists, command hooks, present hook swapchain).
+
+### beta3k checklist
+
+1. **Use this zip, not official 0.8.8.** Leave the launcher's Update button alone.
+   The current NVIDIA driver is fine.
+2. **If VR starts and a frame reaches the headset**, play as in beta3i. The start
+   log should show `GPU bridge started` *before* the session goes FOCUSED, then
+   `first headset frame submitted`.
+3. **If it crashes again**, upload the usual logs *and* `spidy-vr-start.log` from
+   the Spidy folder (next to the stereo module, under `reports/stereo-modules\…\`,
+   or as the console line `writing flushed steps to …` names it), plus a new
+   `.mdmp`. The last line will say which GPU-start or OpenXR step it died on.
+4. **Other runtimes.** Virtual Desktop or SteamVR as the OpenXR runtime, or
+   rolling Meta Quest Link back to 1.208, remain useful if this still dies.
+
