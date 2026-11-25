@@ -121,13 +121,16 @@ void flushDurableFile() {
 #endif
 }
 
+void durableAnchor() {}
+
 void defaultDurablePath(char* out, std::size_t n) {
 #ifdef _WIN32
     char module[MAX_PATH]{};
     HMODULE handle{};
+    const auto* here = reinterpret_cast<LPCSTR>(reinterpret_cast<const void*>(&durableAnchor));
     if (GetModuleHandleExA(GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS |
                                GET_MODULE_HANDLE_EX_FLAG_UNCHANGED_REFCOUNT,
-                           reinterpret_cast<LPCSTR>(&diag_log::durableBegin), &handle) &&
+                           here, &handle) &&
         GetModuleFileNameA(handle, module, MAX_PATH)) {
         char* slash = std::strrchr(module, '\\');
         if (!slash)
