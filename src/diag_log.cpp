@@ -1,7 +1,15 @@
 // The session's diagnostics (diag_log.hpp).
 #include "spidy/diag_log.hpp"
 #include <cstdarg>
+#include <cstdio>
+#include <cstddef>
+#include <cstring>
 #include <windows.h>
+#ifdef _WIN32
+#include <io.h>
+#else
+#include <unistd.h>
+#endif
 #ifndef SPIDY_VERSION
 #define SPIDY_VERSION ""
 #endif
@@ -21,6 +29,9 @@ diag_log::Ring<diag_log::headLines> headRing;
 ULONGLONG firstTick{};
 std::atomic<bool> on{};
 diag_log::Throttle throttle;
+FILE* durableFile{};
+char durablePathBuf[260]{};
+void (*publishHook)();
 } // namespace
 
 void diag_log::enable(bool wanted) {
@@ -96,4 +107,148 @@ void diag_log::copyOut(Data& out) {
 const char* diag_log::build() {
     static const std::string id = buildId(SPIDY_VERSION, SPIDY_BUILD_COMMIT, SPIDY_BUILD_STAMP);
     return id.c_str();
+}
+
+namespace {
+void flushDurableFile() {
+    if (!durableFile)
+        return;
+    fflush(durableFile);
+#ifdef _WIN32
+    FlushFileBuffers(reinterpret_cast<HANDLE>(_get_osfhandle(_fileno(durableFile))));
+#else
+    fsync(fileno(durableFile));
+#endif
+}
+
+void defaultDurablePath(char* out, std::size_t n) {
+#ifdef _WIN32
+    char module[MAX_PATH]{};
+    HMODULE handle{};
+    if (GetModuleHandleExA(GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS |
+                               GET_MODULE_HANDLE_EX_FLAG_UNCHANGED_REFCOUNT,
+                           reinterpret_cast<LPCSTR>(&diag_log::durableBegin), &handle) &&
+        GetModuleFileNameA(handle, module, MAX_PATH)) {
+        char* slash = std::strrchr(module, '\\');
+        if (!slash)
+            slash = std::strrchr(module, '/');
+        if (slash) {
+            slash[1] = 0;
+            _snprintf_s(out, n, _TRUNCATE, "%sspidy-vr-start.log", module);
+            return;
+        }
+    }
+    _snprintf_s(out, n, _TRUNCATE, "spidy-vr-start.log");
+#else
+    std::snprintf(out, n, "/tmp/spidy-vr-start.log");
+#endif
+}
+
+void openDurable(const char* path) {
+    if (durableFile) {
+        fclose(durableFile);
+        durableFile = nullptr;
+    }
+    durablePathBuf[0] = 0;
+    if (!path || !path[0])
+        return;
+#ifdef _WIN32
+    if (fopen_s(&durableFile, path, "wb") != 0)
+        durableFile = nullptr;
+#else
+    durableFile = std::fopen(path, "wb");
+#endif
+    if (!durableFile)
+        return;
+#ifdef _WIN32
+    _snprintf_s(durablePathBuf, sizeof(durablePathBuf), _TRUNCATE, "%s", path);
+#else
+    std::snprintf(durablePathBuf, sizeof(durablePathBuf), "%s", path);
+#endif
+}
+
+void forceRing(const char* text) {
+    char line[diag_log::lineChars];
+    AcquireSRWLockExclusive(&lock);
+    const ULONGLONG now = GetTickCount64();
+    if (!firstTick)
+        firstTick = now;
+    const double seconds = static_cast<double>(now - firstTick) / 1000.0;
+    _snprintf_s(line, sizeof(line), _TRUNCATE, "[%8.3f] %s", seconds, text);
+    if (const auto channel = diag_log::channelOf(text); channel == diag_log::Channel::aim)
+        aimRing.push(line);
+    else if (channel == diag_log::Channel::head)
+        headRing.push(line);
+    else
+        mainRing.push(line);
+    ReleaseSRWLockExclusive(&lock);
+}
+} // namespace
+
+void diag_log::durableClose() {
+    if (durableFile) {
+        flushDurableFile();
+        fclose(durableFile);
+        durableFile = nullptr;
+    }
+}
+
+void diag_log::durableBegin(const char* path) {
+    char chosen[260]{};
+    if (path && path[0]) {
+#ifdef _WIN32
+        _snprintf_s(chosen, sizeof(chosen), _TRUNCATE, "%s", path);
+#else
+        std::snprintf(chosen, sizeof(chosen), "%s", path);
+#endif
+    } else {
+        defaultDurablePath(chosen, sizeof(chosen));
+    }
+    openDurable(chosen);
+    if (!durableFile)
+        return;
+    char header[lineChars];
+    _snprintf_s(header, sizeof(header), _TRUNCATE, "spidy vr-start log: %s", build());
+    std::fputs(header, durableFile);
+    std::fputc('\n', durableFile);
+    flushDurableFile();
+}
+
+void diag_log::durableBegin() {
+    durableBegin(nullptr);
+}
+
+void diag_log::durable(const char* text) {
+    if (!text)
+        return;
+    if (!durableFile)
+        durableBegin();
+    const ULONGLONG now = GetTickCount64();
+    if (!firstTick)
+        firstTick = now;
+    const double seconds = static_cast<double>(now - firstTick) / 1000.0;
+    if (durableFile) {
+        std::fprintf(durableFile, "[%8.3f] %s\n", seconds, text);
+        flushDurableFile();
+    }
+    forceRing(text);
+    if (publishHook)
+        publishHook();
+}
+
+void diag_log::durablef(const char* format, ...) {
+    char text[lineChars];
+    va_list args;
+    va_start(args, format);
+    _vsnprintf_s(text, sizeof(text), _TRUNCATE, format, args);
+    va_end(args);
+    durable(text);
+}
+
+const char* diag_log::durablePath() {
+    return durablePathBuf[0] ? durablePathBuf : "";
+}
+
+void diag_log::setPublishHook(void (*fn)()) {
+    publishHook = fn;
 }

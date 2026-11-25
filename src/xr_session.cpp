@@ -2,6 +2,7 @@
 #include "spidy/eye_resolution.hpp"
 #include "spidy/vd_eyes.hpp"
 #include <chrono>
+#include <cstdio>
 #include <cstring>
 #include <iostream>
 #include <optional>
@@ -40,6 +41,8 @@ void XrRuntime::note(const std::string& line) {
     std::cout << line << '\n';
     if (log)
         log(line);
+    if (startTrace)
+        startTrace(line);
 }
 XrRuntime::~XrRuntime() {
     for (auto& e : eyes_)
@@ -144,6 +147,11 @@ void XrRuntime::initialize(
             enabled += (enabled.empty() ? "" : " ") + std::string(name);
         note("openxr: runtime " + runtimeName_ + " " + version(properties.runtimeVersion) + ", API 1.0.0, " +
              std::to_string(count) + " extensions offered; enabled: " + enabled);
+        std::string offered;
+        for (const auto& e : extensions)
+            offered += (offered.empty() ? "" : " ") + std::string(e.extensionName);
+        if (startTrace)
+            startTrace("openxr: extensions offered: " + offered);
     }
     // Virtual Desktop's calls itself VirtualDesktopXR.
     virtualDesktop_ = std::strstr(properties.runtimeName, "VirtualDesktop") != nullptr;
@@ -586,6 +594,8 @@ void XrRuntime::poll() {
                 xr(began, "Begin session");
                 running_ = true;
                 previousTime_ = 0;
+                startFrames_ = 0;
+                startTraceDone_ = false;
             }
             if (state_ == XR_SESSION_STATE_STOPPING && running_) {
                 const auto ended = xrEndSession(session_);
@@ -880,12 +890,31 @@ bool XrRuntime::frameStereo(const std::function<bool(const XrFrame&)>& prepare,
         std::this_thread::sleep_for(std::chrono::milliseconds(20));
         return true;
     }
+    const unsigned frameNo = ++startFrames_;
+    const bool tracing = static_cast<bool>(startTrace) && !startTraceDone_ && frameNo <= 90;
+    auto trace = [&](const char* step, const char* extra = nullptr) {
+        if (!tracing || !startTrace)
+            return;
+        char line[384];
+        if (extra && extra[0])
+            std::snprintf(line, sizeof(line), "vr start: frame %u %s %s", frameNo, step, extra);
+        else
+            std::snprintf(line, sizeof(line), "vr start: frame %u %s", frameNo, step);
+        startTrace(line);
+    };
     XrFrameWaitInfo wait{XR_TYPE_FRAME_WAIT_INFO};
     XrFrameState state{XR_TYPE_FRAME_STATE};
     auto phase = Clock::now();
     {
         frame_steps::Steps::Scope step(steps, frame_steps::waitFrame);
+        trace("wait", "calling xrWaitFrame");
         xr(xrWaitFrame(session_, &wait, &state), "Wait frame");
+        if (tracing) {
+            char extra[160];
+            std::snprintf(extra, sizeof(extra), "ok shouldRender=%d period=%.1f ms",
+                          state.shouldRender ? 1 : 0, state.predictedDisplayPeriod * 1e-6);
+            trace("wait", extra);
+        }
     }
     frameTiming_.wait = elapsed(phase);
     frameTiming_.period = state.predictedDisplayPeriod * 1e-6;
@@ -893,7 +922,9 @@ bool XrRuntime::frameStereo(const std::function<bool(const XrFrame&)>& prepare,
     XrFrameBeginInfo begin{XR_TYPE_FRAME_BEGIN_INFO};
     {
         frame_steps::Steps::Scope step(steps, frame_steps::beginFrame);
+        trace("begin", "calling xrBeginFrame");
         xr(xrBeginFrame(session_, &begin), "Begin frame");
+        trace("begin", "ok");
     }
     XrFrameEndInfo end{XR_TYPE_FRAME_END_INFO};
     end.displayTime = state.predictedDisplayTime;
@@ -926,6 +957,12 @@ bool XrRuntime::frameStereo(const std::function<bool(const XrFrame&)>& prepare,
         phase = Clock::now();
         const bool ready = prepare(tracked); // one pose batch for the complete pair
         frameTiming_.prepare = elapsed(phase);
+        if (tracing) {
+            char extra[160];
+            std::snprintf(extra, sizeof(extra), "shouldRender=%d views=%d ready=%d",
+                          state.shouldRender ? 1 : 0, tracked.valid ? 1 : 0, ready ? 1 : 0);
+            trace("prepare", extra);
+        }
         bool drawn = false;
         std::array<XrCompositionLayerProjectionView, 2> projectionViews{
             {{XR_TYPE_COMPOSITION_LAYER_PROJECTION_VIEW}, {XR_TYPE_COMPOSITION_LAYER_PROJECTION_VIEW}}};
@@ -940,6 +977,7 @@ bool XrRuntime::frameStereo(const std::function<bool(const XrFrame&)>& prepare,
             try {
                 phase = Clock::now();
                 std::optional<frame_steps::Steps::Scope> imagesStep(std::in_place, steps, frame_steps::eyeImages);
+                trace("acquire", "calling xrAcquireSwapchainImage");
                 for (unsigned i = 0; i < 2; ++i) {
                     auto& eye = eyes_[i];
                     uint32_t image{};
@@ -957,9 +995,16 @@ bool XrRuntime::frameStereo(const std::function<bool(const XrFrame&)>& prepare,
                 }
                 frameTiming_.acquire = elapsed(phase);
                 imagesStep.reset();
+                trace("acquire", "ok");
                 {
                     frame_steps::Steps::Scope step(steps, frame_steps::gpuCopy);
+                    trace("copy", "drawing eye images");
                     drawn = draw(targets);
+                    if (tracing) {
+                        char extra[48];
+                        std::snprintf(extra, sizeof(extra), "drawn=%d", drawn ? 1 : 0);
+                        trace("copy", extra);
+                    }
                 }
                 for (unsigned i = 0; i < 2; ++i) {
                     projectionViews[i].pose = targets[i].view.pose;
@@ -1035,15 +1080,34 @@ bool XrRuntime::frameStereo(const std::function<bool(const XrFrame&)>& prepare,
         phase = Clock::now();
         {
             frame_steps::Steps::Scope step(steps, frame_steps::endFrame);
+            if (tracing) {
+                char extra[200];
+                std::snprintf(extra, sizeof(extra),
+                              "calling xrEndFrame layers=%u shouldRender=%d views=%d ready=%d drawn=%d",
+                              end.layerCount, state.shouldRender ? 1 : 0, tracked.valid ? 1 : 0, ready ? 1 : 0,
+                              drawn ? 1 : 0);
+                trace("end", extra);
+            }
             xr(xrEndFrame(session_, &end), "Submit stereo frame");
         }
         frameTiming_.end = elapsed(phase);
         frameTiming_.total = elapsed(start);
         lastFrameSubmitted_ = end.layerCount != 0;
+        if (tracing) {
+            char extra[80];
+            std::snprintf(extra, sizeof(extra), "ok submitted=%d layers=%u", lastFrameSubmitted_ ? 1 : 0,
+                          end.layerCount);
+            trace("end", extra);
+            if (lastFrameSubmitted_) {
+                startTraceDone_ = true;
+                startTrace("vr start: first headset frame submitted, stopping per-frame traces");
+            }
+        }
     } catch (...) {
         if (!endCalled) {
             end.layerCount = 0;
             end.layers = nullptr;
+            trace("end", "calling xrEndFrame after an error, layers=0");
             xrEndFrame(session_, &end);
         }
         throw;

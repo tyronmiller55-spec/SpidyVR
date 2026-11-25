@@ -2,7 +2,7 @@ cmake_minimum_required(VERSION 3.24)
 project(Spidy VERSION 0.8.7 LANGUAGES C CXX)
 # The version players see (the launcher, the log's build line, the modules' version strings): the NA beta of
 # 0.8.7 (beta polish D8). The numbers stay 0.8.7 for the update check and the version resource.
-set(SPIDY_VERSION_LABEL "${PROJECT_VERSION}-na-beta3")
+set(SPIDY_VERSION_LABEL "${PROJECT_VERSION}-na-beta3j-diag")
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_EXTENSIONS OFF)
@@ -165,6 +165,11 @@ add_test(NAME direction_report COMMAND spidy_direction_report_tests)
 # POLISH PASS, slice 6: the longest visit's sections, the LOW FPS watch, the quiet log's new kinds, the new defaults.
 add_executable(spidy_polish_runtime_tests tests/polish_runtime_tests.cpp)
 target_link_libraries(spidy_polish_runtime_tests PRIVATE spidy_core)
+if(WIN32)
+  # The flushed VR-start log (diag_log::durable) is in the stereo module; the test
+  # covers it on Windows, where that file already builds.
+  target_sources(spidy_polish_runtime_tests PRIVATE src/diag_log.cpp)
+endif()
 add_test(NAME polish_runtime COMMAND spidy_polish_runtime_tests)
 # BETA POLISH PASS (Nov 19): eye stall watch, kick miss reasons, minimum stints, landings, sound cues, settings checks.
 add_executable(spidy_beta_polish_tests tests/beta_polish_tests.cpp)

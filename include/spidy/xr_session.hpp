@@ -21,6 +21,11 @@ class XrRuntime {
     // long a headset wait took, and every session state with its time. Set
     // before initialize; also printed as before.
     std::function<void(const std::string&)> log;
+    // VR-start breadcrumbs, flushed to disk by the session (diag_log::durable):
+    // each OpenXR wait, begin, acquire, copy and end until the first headset
+    // frame is submitted, so a crash in the first seconds still names the
+    // last call. Set before initialize. Not shown on the HUD.
+    std::function<void(const std::string&)> startTrace;
     // While the runtime calls the headset unavailable at the start
     // (XR_ERROR_FORM_FACTOR_UNAVAILABLE): the seconds waited so far and the
     // attempt; false stops the wait. Up to headsetWait.limitSeconds; 0 (the
@@ -216,6 +221,9 @@ class XrRuntime {
     // When the session was created, for the state changes' times.
     double createdAt_{};
     bool lastFrameSubmitted_{};
+    // Per-frame traces until the first submitted headset frame (or 90 frames).
+    unsigned startFrames_{};
+    bool startTraceDone_{};
     bool flatScreen_{}, stereoScreen_{}, headLocked_{};
     Pose screenPose_{};
     float screenAspect_ = 16.f / 9, screenWidth_ = 3.2f;

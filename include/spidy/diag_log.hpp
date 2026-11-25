@@ -318,4 +318,17 @@ void writef(const char* format, ...);
 void copyOut(Data& out);
 // This build's id (buildId with what CMake gave diag_log.cpp).
 const char* build();
+// A VR-start breadcrumb: kept in the diagnostics ring (even when RUN LOGS is
+// off, and not throttled) and also appended to spidy-vr-start.log beside this
+// module, then flushed to disk. A crash before the launcher's next poll still
+// leaves the last OpenXR step. durableBegin truncates the file at VR start;
+// the path form is for tests.
+void durableBegin();
+void durableBegin(const char* path);
+void durable(const char* text);
+void durablef(const char* format, ...);
+const char* durablePath();
+void durableClose();
+// Called after each durable line is on disk (game_xr publishes SpidyDiagData).
+void setPublishHook(void (*fn)());
 } // namespace spidy::diag_log

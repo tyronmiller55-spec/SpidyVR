@@ -147,6 +147,27 @@ int main() {
         const std::string rev2 = "movement_defaults=2\n";
         check(vr_settings::withMovementDefaults(saved, rev2).steadyVerticalMs == 350, "a file that has seen it keeps its own");
     }
+#if defined(_WIN32)
+    // The flushed VR-start log (diag_log::durable): a crash before the launcher's
+    // next poll still leaves the last OpenXR step on disk.
+    {
+        const char* path = "spidy-vr-start-test.log";
+        std::remove(path);
+        diag_log::durableBegin(path);
+        check(std::strcmp(diag_log::durablePath(), path) == 0, "durable path");
+        diag_log::durable("vr start: frame 1 wait calling xrWaitFrame");
+        diag_log::durableClose();
+        std::FILE* f = std::fopen(path, "rb");
+        check(f != nullptr, "durable file exists");
+        char buf[1024]{};
+        const auto n = f ? std::fread(buf, 1, sizeof(buf) - 1, f) : 0;
+        if (f)
+            std::fclose(f);
+        std::remove(path);
+        check(n > 0 && std::strstr(buf, "spidy vr-start log:") != nullptr, "durable header");
+        check(std::strstr(buf, "vr start: frame 1 wait calling xrWaitFrame") != nullptr, "durable step");
+    }
+#endif
     std::printf("polish runtime: %d checks passed\n", passed);
     return 0;
 }

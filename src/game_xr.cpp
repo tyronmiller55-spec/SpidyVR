@@ -811,7 +811,10 @@ void publishDiag() {
     InterlockedIncrement64(&g.sequence);
 }
 void stageLine(int stage, const char* detail = nullptr) {
-    diag_log::writef("stage: %s%s%s", diag_log::Stages::name(stage), detail ? " - " : "", detail ? detail : "");
+    char line[diag_log::lineChars];
+    snprintf(line, sizeof(line), "stage: %s%s%s", diag_log::Stages::name(stage), detail ? " - " : "",
+             detail ? detail : "");
+    diag_log::durable(line);
 }
 // The system's free commit, MB (what it can still promise: RAM and page file), for the lines of a stop, a lost
 // session, a freeze and a dropped headset (November 17); 0 when Windows does not say.
@@ -1188,6 +1191,17 @@ DWORD WINAPI run(void*) {
             if (connecting)
                 message(1, 0, line.c_str());
         };
+        // Flushed VR-start breadcrumbs (diag_log::durable): a start crash still
+        // names the last OpenXR call in spidy-vr-start.log beside this module.
+        diag_log::setPublishHook(publishDiag);
+        diag_log::durableBegin();
+        runtime.startTrace = [](const std::string& line) { diag_log::durable(line.c_str()); };
+        if (diag_log::durablePath()[0]) {
+            char line[diag_log::lineChars];
+            snprintf(line, sizeof(line), "vr start: writing flushed steps to %s", diag_log::durablePath());
+            game_prompts::note(line);
+            diag_log::durable(line);
+        }
         // A headset the runtime calls unavailable is waited for (November 11: Meta Quest Link said so
         // five starts in a row, seconds after the launcher's probe had found it), up to two minutes,
         // telling the player; stopping VR ends the wait.
@@ -2791,8 +2805,10 @@ DWORD WINAPI run(void*) {
             // for a few seconds while the headset shows the last one, which
             // ended VR (pull request #36). Only nothing shown at all does.
             const bool eyesWanted = motion.active && !flatScreen;
-            if (eyesWanted && firstImageDeadline && !lastPresentedMs && GetTickCount64() >= firstImageDeadline)
+            if (eyesWanted && firstImageDeadline && !lastPresentedMs && GetTickCount64() >= firstImageDeadline) {
+                diag_log::durable("vr start: no native eye images reached OpenXR within 3 seconds");
                 throw std::runtime_error("No native eye images reached OpenXR within 3 seconds");
+            }
             if (eyesWanted && lastPresentedMs) {
                 const uint64_t nowMs = GetTickCount64();
                 const eye_stall::Verdict stall = eye_stall::judge(nowMs, lastPresentedMs, eyeStartWatch);
