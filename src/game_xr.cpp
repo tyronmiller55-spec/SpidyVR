@@ -2335,6 +2335,7 @@ DWORD WINAPI run(void*) {
         // its own web holds (attachedBefore); and an enemy is marked or
         // within a fist's reach.
         HandPoser fingers[2];
+        bool poseHeld[2]{};
         Vec3 gripsBefore[2]{};
         bool gripsSeen[2]{};
         bool ballShot[2]{}, webTaken[2]{}, fightNear{};
@@ -12536,11 +12537,34 @@ DWORD WINAPI run(void*) {
                             doing.shot = ballShot[i];
                             doing.fighting = fightNear;
                             doing.airFists = values.airFists;
+                            // While the animation has the body, WEB GRIP (on by default) closes a hand on
+                            // its web; off keeps the animation's fingers, as beta3h. Punch fists are still
+                            // the animation's until that switch lands. The VR-owned body is unchanged.
+                            if (armsWanted) {
+                                if (!values.animatedWebGrip) {
+                                    doing.gripping = false;
+                                    doing.holding = false;
+                                    doing.shot = false;
+                                    doing.web = 0;
+                                }
+                                doing.speed = 0;
+                                doing.fighting = false;
+                                doing.airFists = false;
+                                doing.squeeze = 0;
+                            }
+                            const bool wasHolding = poseHeld[i];
                             ballShot[i] = false;
                             const auto fingered = fingers[i].update(seconds, doing);
                             pose.hands[i] = {motion.grips[i].position - motion.anchor, motion.grips[i].orientation,
                                              tracked ? 1u : 0u, fingered.fist};
                             pose.shoot[i] = fingered.shoot;
+                            if (armsWanted && doing.holding != wasHolding) {
+                                diag_log::writef("hand pose: %s web %s fist=%.2f shoot=%.2f",
+                                                 i == 0 ? "left" : "right",
+                                                 doing.holding ? "hold" : "release", fingered.fist,
+                                                 fingered.shoot);
+                            }
+                            poseHeld[i] = doing.holding;
                             armSamples[i].fist = fingered.fist;
                             armSamples[i].shoot = fingered.shoot;
                         }

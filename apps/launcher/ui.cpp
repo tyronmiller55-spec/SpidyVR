@@ -2351,6 +2351,10 @@ void App::options(ImVec2 origin, ImVec2 size) {
                "A hand moved fast closes into a fist even with nobody to punch. Off: only with an enemy "
                "marked or within reach, so hands at rest never close.",
                S(42), [&] { tabToggle("##airfists", Item::airFists); });
+        settingOption(Item::animatedWebGrip, "Web grip",
+               "While the animation has the body, a hand on its web closes on the line (the game's own fist "
+               "pose) and opens when the web lets go. Off: the animation's fingers stay, as before. Default: on.",
+               S(42), [&] { tabToggle("##animatedwebgrip", Item::animatedWebGrip); });
         // The guards (game_guard::setEnemyTypes has the choice from the game's settings, spidy_vr.ini's
         // enemy_types).
         settingOption(Item::enemyTypes, "Enemy types",

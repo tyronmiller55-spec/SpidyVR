@@ -11695,7 +11695,7 @@ int main() {
                            "the row is not the launcher's switch");
                  }
              check(found == 1, "the row is not there once");
-             check(static_cast<unsigned>(Item::enemyTypes) + 8 == static_cast<unsigned>(Item::helpPage) &&
+             check(static_cast<unsigned>(Item::enemyTypes) + 9 == static_cast<unsigned>(Item::helpPage) &&
                        vr_settings::lastItem == Item::helpPage,
                    "enemy types is not the last setting (NA HELP's pages follow it)");
              vr_settings::Values on;
@@ -25520,7 +25520,7 @@ int main() {
                   "the movement defaults overrode a choice made after them");
             check(withMovementDefaults(withTabOnly({}, ""), "").runCurve,
                   "no file: not the movement defaults");
-            check(tabOnlyText(migrated).find("movement_defaults=23\n") != std::string::npos,
+            check(tabOnlyText(migrated).find("movement_defaults=24\n") != std::string::npos,
                   "the migration is not remembered");
         }
         {
@@ -26053,7 +26053,7 @@ int main() {
                   "crime_best=0\n"
                   "crime_best_stops=0\n"
                   "log_level=1\n"
-                  "movement_defaults=23\n",
+                  "movement_defaults=24\n",
               "the defaults' text");
         Values changed = defaults;
         changed.recordingFov = 140;
@@ -33542,7 +33542,7 @@ int main() {
     test("Native Animation: combined menu inventory and upstream-compatible v39 settings packet", [] {
         using namespace vr_settings;
         const auto& all = rows();
-        check(all.size() == 239 + na_help::pageCount && static_cast<unsigned>(lastItem) < 256, "row/Item bounds");
+        check(all.size() == 240 + na_help::pageCount && static_cast<unsigned>(lastItem) < 256, "row/Item bounds");
         std::array<unsigned, 256> seen{};
         size_t start = all.size();
         for (size_t i = 0; i < all.size(); ++i) {

@@ -225,12 +225,50 @@ static void forearmShare() {
     check(std::abs(c.forearmRoll - .3f) < 1e-6f, "SA4: the forearm takes other than 0.3 of the hand's twist");
 }
 
+// WEB GRIP (t50u): on the animation overlay, fist=0 leaves the game's fingers;
+// a full fist closes them with the measured native pose (no restHand).
+static void overlayFingers() {
+    const auto b = testBody(false, true);
+    const int tip = b.rig.arms[0].fingers[1][4]; // left middle fingertip (hero hand)
+    body::State state;
+    auto run = [&](float fist) {
+        Frame f;
+        f.data = b.rest;
+        body::Pose pose(f.data.data(), static_cast<int>(b.rig.parent.size()));
+        body::Targets t;
+        t.armsOnly = t.viewMapped = true;
+        t.armWeight = {1, 1};
+        t.eyes = {0, 1.66f, 0};
+        t.facing = Quat::yaw(3.14159265f);
+        const Vec3 handAt = b.at(b.rest, b.rig.arms[0].hand) + Vec3{0, 0, .15f};
+        t.hands[0] = {true, handAt, Quat{}, fist, 0};
+        t.hands[1] = {true, Vec3{-handAt.x, handAt.y, handAt.z}, Quat{}, 0, 0};
+        body::Config config;
+        config.hideHead = false;
+        config.handOrientation = false;
+        f.result = body::solve(pose, b.rig, t, config, state, true, 1.f / 90, 1.f, 1.f);
+        return f;
+    };
+    const int wrist = b.rig.arms[0].hand;
+    const auto tipReach = [&](const std::vector<float>& data) {
+        return dist(b.at(data, tip), b.at(data, wrist));
+    };
+    const float restReach = tipReach(b.rest);
+    const auto open = run(0.f);
+    check(std::abs(tipReach(open.data) - restReach) < .002f,
+          "WEB GRIP off (fist 0) moved the animation's fingers");
+    const auto closed = run(1.f);
+    check(tipReach(closed.data) < restReach - .02f,
+          "WEB GRIP a full fist did not close the fingers over the animation's pose");
+}
+
 int main() {
     boneLength();
     heroArms();
     elbowRange();
     elbowHold();
     forearmShare();
+    overlayFingers();
     if (failures) {
         std::fprintf(stderr, "%d body_ik check(s) failed\n", failures);
         return 1;

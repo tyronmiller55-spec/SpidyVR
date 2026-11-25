@@ -1002,6 +1002,8 @@ template <class V> auto switchOf(Item item, V& v) -> decltype(&v.aimMarkers) {
         return &v.webLines;
     case Item::airFists:
         return &v.airFists;
+    case Item::animatedWebGrip:
+        return &v.animatedWebGrip;
     case Item::pointJump:
         return &v.pointJump;
     case Item::view:
@@ -1705,6 +1707,10 @@ const std::array<Row, rowTotal>& rows() {
          "AIR FISTS",
          "A fast hand closes into a fist with nobody to punch. Off: only near enemies.",
          {}},
+        {Item::animatedWebGrip,
+         "WEB GRIP",
+         "While the animation has the body, a hand on its web closes on the line and opens when it lets go. Off: the animation's fingers stay.",
+         {}},
         {Item::shooterMode, "SHOOTERS",
          "Where webs leave. LOCKED TO ARM: along the arm you see. CONTROLLER: as before.",
          shooterModeChoices},
@@ -2205,7 +2211,7 @@ const std::array<Screen, categoryCount>& screens() {
         Item::spidyRun, Item::spidyRunFromStanding, Item::spidyRunJump, Item::momentumLeap,
         Item::earlyJump, Item::softLanding, Item::webLandingSmooth, Item::webLandingImpact,
         Item::handClimb, Item::joystickRunCamera, Item::wallRunCameraTilt, Item::combatResponsive,
-        Item::combatVisuals, Item::halfPunchDamage, Item::airFists, Item::enemyTypes, Item::runLogs,
+        Item::combatVisuals, Item::halfPunchDamage, Item::airFists, Item::animatedWebGrip, Item::enemyTypes, Item::runLogs,
     };
     static constexpr Item flips[] = {
         Item::realisticFlips, Item::flips, Item::controlledFlips, Item::flipSpeed,
@@ -3175,6 +3181,7 @@ constexpr TabOnly tabOnly[] = {
     {"air_poses", &Values::airPoses, nullptr},
     {"directional_flips", &Values::directionalFlips, nullptr},
     {"air_fists", &Values::airFists, nullptr},
+    {"animated_web_grip", &Values::animatedWebGrip, nullptr},
     {"camera_pitch_pct", nullptr, &Values::cameraPitchPct},
     {"camera_roll_pct", nullptr, &Values::cameraRollPct},
     {"camera_bob_vertical_pct", nullptr, &Values::cameraBobVerticalPct},
@@ -3638,6 +3645,11 @@ Values withMovementDefaults(Values v, std::string_view text) {
                                    ? 100
                                    : static_cast<int>(std::lround(std::clamp(v.swingRopeWeightPct, 0, 300) / 25.f)) * 10;
         // BETA3G MIGRATION END
+    }
+    if (seen < 24) {
+        // Revision 24 (the owner, Nov 25 t50u: grab, hold and release the web lines, using the native
+        // hand poses): WEB GRIP comes on once (a new key); a 0 chosen after this revision stays.
+        v.animatedWebGrip = true;
     }
     v.movementDefaults = movementDefaultsRevision;
     return sanitized(v);

@@ -181,6 +181,10 @@ struct Values {
     // A fast hand closes into a fist with nobody to punch too (the tab's AIR
     // FISTS; hand_pose.hpp). Off: only with an enemy marked or within reach.
     bool airFists = true;
+    // WEB GRIP (0.8.7-na next, settings revision 24; the owner, Nov 25 t50u): while the animation has the
+    // body, a hand whose web holds or that grips the other hand's web closes on the line (the measured native
+    // fist, body_ik::poseFingers) and opens when the web lets go. Off: the animation's fingers stay, as before.
+    bool animatedWebGrip = true;
     // Aiming with the eyes (the tab's EYE AIM; eyeAimShots, eyeAimZips): web
     // balls go where the eyes look, from the hand that pulled; a zip goes to
     // the point the eyes look at, the game's camera being turned onto it.
@@ -302,7 +306,7 @@ struct Values {
     // from before it gets RUN CURVE on and EARLY JUMP QUICK TAP once (the
     // user: "movement fixes will be defaults"); after that the player's own
     // choice stands. Not a row. movement_defaults.
-    int movementDefaults = 23; // movementDefaultsRevision: a new file has seen them
+    int movementDefaults = 24; // movementDefaultsRevision: a new file has seen them
     // SOFT LANDING (the tab's SOFT LANDING; Swing::allowSoftLanding,
     // run_update::softLandVertical): a fall the swing flies, with no web
     // holding, eases to 9 m/s down over its last 3 m (or 0.35 s), its speed
@@ -1400,6 +1404,8 @@ enum class Item : uint8_t {
     handstandSticky,
     // FULL-LENGTH SWING LINES (beta2).
     swingLineFullLength,
+    // WEB GRIP (revision 24): while the animation has the body, a hand on its web closes on the line.
+    animatedWebGrip,
     // NA HELP (beta polish M5, na_help.hpp): the NA · HELP tab's pages, one item for all of them (a page has no
     // value: one choice, READ). Its rows are the catalog's last.
     helpPage,
@@ -1434,8 +1440,8 @@ struct Row {
     Place place{};
 };
 // Stable row/setting numbers; categories below determine presentation order.
-// The catalog: the settings' rows (239), then NA HELP's pages.
-inline constexpr size_t settingRowCount = 239;
+// The catalog: the settings' rows (240), then NA HELP's pages.
+inline constexpr size_t settingRowCount = 240;
 inline constexpr size_t rowTotal = settingRowCount + na_help::pageCount;
 const std::array<Row, rowTotal>& rows();
 const Row* rowFor(Item);
@@ -1502,7 +1508,7 @@ std::string tabOnlyText(const Values&);
 // key, or whose value is no whole number, is passed over.
 Values withTabOnly(Values, std::string_view text);
 // The movement defaults' revision (Values::movementDefaults) this build has.
-inline constexpr int movementDefaultsRevision = 23;
+inline constexpr int movementDefaultsRevision = 24;
 // November 12 movement cleanup: a settings file (that text) older than
 // movementDefaultsRevision gets the new movement defaults once - RUN CURVE
 // on, EARLY JUMP at least QUICK TAP - and is marked as having seen them; a

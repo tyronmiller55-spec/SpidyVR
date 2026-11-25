@@ -531,6 +531,115 @@ bool solvedGrip(const Pose& pose, const Rig& rig, const Config& c, unsigned hand
     return true;
 }
 
+// Close a hand toward a fist and/or the web-shooting pose, `fist` and `shoot`
+// of the way (0..1) from the pose as it stands. The angles are the ones
+// measured from the game's own fist (docs/BODY.md, docs/VALIDATION.md: Fingers
+// in a fist; tools/probe_game_body.py --fists). Does not reset the hand to
+// rest: on the animation overlay the game's fingers stay until a close starts,
+// and each pose job starts from the game's frame again when the close ends.
+void poseFingers(Pose& pose, const Rig& rig, const Config& c, int side, float fist, float shoot, float s,
+                 float arms) {
+    if (side < 0 || side > 1)
+        return;
+    fist = std::clamp(std::isfinite(fist) ? fist : 0.f, 0.f, 1.f);
+    shoot = std::clamp(std::isfinite(shoot) ? shoot : 0.f, 0.f, 1.f);
+    if (fist <= 0 && shoot <= 0)
+        return;
+    const auto& arm = rig.arms[side];
+    const auto hingeAt = [&](const std::vector<int16_t>& chain, size_t k, Vec3 local, Vec3& hinge) {
+        hinge = normalized(pose.direction(chain[k - 1], local));
+        return length(hinge) > .5f ? bendAbout(pose, chain[k - 1], chain[k], chain[k + 1], hinge)
+                                   : std::numeric_limits<float>::quiet_NaN();
+    };
+    const auto bendTo = [&](const std::vector<int16_t>& chain, size_t k, Vec3 local, float angle, float share) {
+        Vec3 hinge;
+        if (const float now = hingeAt(chain, k, local, hinge); std::isfinite(now))
+            pose.turn(rig.below[static_cast<size_t>(chain[k])], axisAngle(hinge, (angle - now) * share),
+                      pose.position(chain[k]));
+    };
+    const auto gather = [&](const std::vector<int16_t>& chain, Vec3 local, float share) {
+        if (share <= 0 || chain.size() < 3)
+            return;
+        const Vec3 hinge = normalized(pose.direction(chain[0], local));
+        const Vec3 bone = normalized(pose.position(chain[2]) - pose.position(chain[1]));
+        const Vec3 flat = bone - hinge * dot(bone, hinge);
+        if (length(hinge) < .5f || length(bone) < .5f || length(flat) < .17f)
+            return;
+        pose.turn(rig.below[static_cast<size_t>(chain[1])], partial(between(bone, normalized(flat)), share),
+                  pose.position(chain[1]));
+    };
+    const auto& hinges = rig.fingerHinges[side];
+    const size_t fingers = std::min(arm.fingers.size(), hinges.size());
+    const auto bendFinger = [&](size_t f, size_t k, float angle, float share) {
+        const auto& chain = arm.fingers[f];
+        const Vec3 hinge = normalized(pose.direction(chain[0], hinges[f][0]));
+        const float now = length(hinge) > .5f ? bendAbout(pose, chain[k - 1], chain[k], chain[k + 1], hinge)
+                                              : std::numeric_limits<float>::quiet_NaN();
+        if (std::isfinite(now))
+            pose.turn(rig.below[static_cast<size_t>(chain[k])], axisAngle(hinge, (angle - now) * share),
+                      pose.position(chain[k]));
+    };
+    if (fist > 0)
+        for (size_t f = 0; f < fingers; ++f) {
+            gather(arm.fingers[f], hinges[f][0], fist);
+            for (size_t k = 1; k <= 3 && k + 1 < arm.fingers[f].size(); ++k)
+                bendFinger(f, k, c.fistBend[k - 1], fist);
+        }
+    const auto& thumb = arm.thumbChain;
+    Vec3 onto{};
+    int middles = 0;
+    for (size_t f = 0; f < arm.fingers.size() && f < 2; ++f)
+        if (const auto& finger = arm.fingers[f]; finger.size() >= 4) {
+            onto += (pose.position(finger[2]) + pose.position(finger[3])) / 2;
+            ++middles;
+        }
+    if (fist > 0 && thumb.size() >= 4 && middles) {
+        const Vec3 palm = normalized(pose.direction(arm.hand, rig.handPalm[side]));
+        onto = onto / static_cast<float>(middles) + palm * (c.thumbRest * s * arms);
+        bendTo(thumb, 2, rig.thumbHinges[side][1], c.thumbBend, fist);
+        const Vec3 base = pose.position(thumb[0]), knuckle = pose.position(thumb[1]);
+        Vec3 hinge;
+        if (const float now = hingeAt(thumb, 1, rig.thumbHinges[side][0], hinge); std::isfinite(now)) {
+            const Vec3 tip = pose.position(thumb.back());
+            const float want = length(onto - base);
+            float best = std::clamp(now, 0.f, c.thumbBendMax), miss = std::numeric_limits<float>::infinity();
+            for (const float turn : turnsToDistance(knuckle, hinge, tip, base, want)) {
+                const float b = std::clamp(wrap(now + turn), 0.f, c.thumbBendMax);
+                const float off =
+                    std::abs(length(knuckle + axisAngle(hinge, b - now).rotate(tip - knuckle) - base) - want);
+                if (off < miss) {
+                    miss = off;
+                    best = b;
+                }
+            }
+            pose.turn(rig.below[static_cast<size_t>(thumb[1])], axisAngle(hinge, (best - now) * fist), knuckle);
+        }
+        pose.turn(rig.below[static_cast<size_t>(thumb[0])],
+                  partial(between(pose.position(thumb.back()) - base, onto - base), fist), base);
+    }
+    if (shoot <= 0)
+        return;
+    for (size_t f = 0; f < fingers; ++f) {
+        const bool out = fingers >= 3 && (f == 0 || f + 1 == fingers);
+        if (!out)
+            gather(arm.fingers[f], hinges[f][0], shoot);
+        for (size_t k = 1; k <= 3 && k + 1 < arm.fingers[f].size(); ++k)
+            bendFinger(f, k, (out ? c.shootOut : c.shootPress)[k - 1], shoot);
+    }
+    if (thumb.size() >= 3 && length(rig.handThumb[side]) > .5f) {
+        for (size_t k = 1; k <= 2 && k + 1 < thumb.size(); ++k)
+            bendTo(thumb, k, rig.thumbHinges[side][k - 1], c.shootThumbBend, shoot);
+        const Vec3 base = pose.position(thumb[0]);
+        const Vec3 along = normalized(pose.direction(arm.hand, rig.handFingers[side]));
+        const Vec3 aside = normalized(pose.direction(arm.hand, rig.handThumb[side]));
+        pose.turn(rig.below[static_cast<size_t>(thumb[0])],
+                  partial(between(pose.position(thumb.back()) - base,
+                                  along * std::cos(c.shootThumb) + aside * std::sin(c.shootThumb)),
+                          shoot),
+                  base);
+    }
+}
+
 Result solve(Pose& pose, const Rig& rig, const Targets& targets, const Config& c, State& state, bool wanted,
              float dt, float scale, float armScale) {
     Result r;
@@ -910,9 +1019,17 @@ Result solve(Pose& pose, const Rig& rig, const Targets& targets, const Config& c
                           elbow);
                 pose.turn(rig.below[arm.hand], partial(handTurn(), aw), pose.position(arm.hand));
             }
-            // Leave finger bones to the game anim (no restHand): idle return
-            // keeps authored hand poses; fist/shoot still drive web systems
-            // outside this overlay.
+            // Leave finger bones to the game anim when the hand holds nothing
+            // (no restHand): idle return keeps authored hand poses. A web grip
+            // or a punch (Hand::fist / Hand::shoot) closes over that pose with
+            // the measured native fist, and fades back as the game's next frame
+            // arrives with the close off.
+            {
+                const auto& hand = handsRemapped[i];
+                const float fist = std::clamp(std::isfinite(hand.fist) ? hand.fist : 0.f, 0.f, 1.f) * aw;
+                const float shoot = std::clamp(std::isfinite(hand.shoot) ? hand.shoot : 0.f, 0.f, 1.f) * aw;
+                poseFingers(pose, rig, c, i, fist, shoot, s, arms);
+            }
         }
         // GROUND KICKS: one leg out at the foot's target on the game's standing pose (the pelvis and the other
         // leg stay), eased in and out; the knee bends forward. Only a leg whose joints are all in the rig.
@@ -2388,25 +2505,6 @@ Result solve(Pose& pose, const Rig& rig, const Targets& targets, const Config& c
                 pose.turn(rig.below[static_cast<size_t>(chain[k])], axisAngle(hinge, (angle - now) * share),
                           pose.position(chain[k]));
         };
-        // A closing finger gathers in: its first bone turns `share` of the
-        // way into the plane its knuckle bends in, about the knuckle. The rest
-        // pose spreads the fingers (the index 9 degrees one way, the ring and
-        // the little finger 12 and 16 the other), and a bend about each one's
-        // own hinge kept that spread: closed, their tips stood 4 cm apart where
-        // the knuckles are 2.3, a fanned claw ("when your hand closes your
-        // hand looks off", October 16). Gathered, the tips are as far apart
-        // as the knuckles.
-        const auto gather = [&](const std::vector<int16_t>& chain, Vec3 local, float share) {
-            if (share <= 0 || chain.size() < 3)
-                return;
-            const Vec3 hinge = normalized(pose.direction(chain[0], local));
-            const Vec3 bone = normalized(pose.position(chain[2]) - pose.position(chain[1]));
-            const Vec3 flat = bone - hinge * dot(bone, hinge);
-            if (length(hinge) < .5f || length(bone) < .5f || length(flat) < .17f)
-                return;
-            pose.turn(rig.below[static_cast<size_t>(chain[1])],
-                      partial(between(bone, normalized(flat)), share), pose.position(chain[1]));
-        };
         const auto& hinges = rig.fingerHinges[i];
         const size_t fingers = std::min(arm.fingers.size(), hinges.size());
         // A finger's joints all bend about its knuckle's hinge, the one axis
@@ -2446,73 +2544,9 @@ Result solve(Pose& pose, const Rig& rig, const Targets& targets, const Config& c
         if (arm.thumbChain.size() >= 4)
             for (size_t k = 1; k <= 2; ++k)
                 bendTo(arm.thumbChain, k, rig.thumbHinges[i][k - 1], c.openThumb, own);
-        if (fist > 0)
-            for (size_t f = 0; f < fingers; ++f) {
-                gather(arm.fingers[f], hinges[f][0], fist);
-                for (size_t k = 1; k <= 3 && k + 1 < arm.fingers[f].size(); ++k)
-                    bendFinger(f, k, c.fistBend[k - 1], fist);
-            }
-        // The thumb lies across the curled fingers, its tip on the middle
-        // bones of the first two, out of the fist: its last joint bends to a
-        // set bend, the one before it as far as puts the tip as far from the
-        // base as that place, and the base swings the tip there.
-        const auto& thumb = arm.thumbChain;
-        Vec3 onto{};
-        int middles = 0;
-        for (size_t f = 0; f < arm.fingers.size() && f < 2; ++f)
-            if (const auto& finger = arm.fingers[f]; finger.size() >= 4) {
-                onto += (pose.position(finger[2]) + pose.position(finger[3])) / 2;
-                ++middles;
-            }
-        if (fist > 0 && thumb.size() >= 4 && middles) {
-            const Vec3 palm = normalized(pose.direction(arm.hand, rig.handPalm[i]));
-            onto = onto / static_cast<float>(middles) + palm * (c.thumbRest * s * arms);
-            bendTo(thumb, 2, rig.thumbHinges[i][1], c.thumbBend, fist);
-            const Vec3 base = pose.position(thumb[0]), knuckle = pose.position(thumb[1]);
-            Vec3 hinge;
-            if (const float now = hingeAt(thumb, 1, rig.thumbHinges[i][0], hinge); std::isfinite(now)) {
-                const Vec3 tip = pose.position(thumb.back());
-                const float want = length(onto - base);
-                float best = std::clamp(now, 0.f, c.thumbBendMax), miss = std::numeric_limits<float>::infinity();
-                for (const float turn : turnsToDistance(knuckle, hinge, tip, base, want)) {
-                    const float b = std::clamp(wrap(now + turn), 0.f, c.thumbBendMax);
-                    const float off =
-                        std::abs(length(knuckle + axisAngle(hinge, b - now).rotate(tip - knuckle) - base) - want);
-                    if (off < miss) {
-                        miss = off;
-                        best = b;
-                    }
-                }
-                pose.turn(rig.below[static_cast<size_t>(thumb[1])], axisAngle(hinge, (best - now) * fist), knuckle);
-            }
-            pose.turn(rig.below[static_cast<size_t>(thumb[0])],
-                      partial(between(pose.position(thumb.back()) - base, onto - base), fist), base);
-        }
-        if (shoot <= 0)
-            continue;
-        // Shooting a web, over whatever the fist left: the fingers between
-        // the first and the last press the web shooter's trigger in the palm,
-        // those two stay out, and the thumb straightens and points out to its
-        // side. All of the way at 1, however the hand was closed.
-        for (size_t f = 0; f < fingers; ++f) {
-            const bool out = fingers >= 3 && (f == 0 || f + 1 == fingers);
-            if (!out)
-                gather(arm.fingers[f], hinges[f][0], shoot);
-            for (size_t k = 1; k <= 3 && k + 1 < arm.fingers[f].size(); ++k)
-                bendFinger(f, k, (out ? c.shootOut : c.shootPress)[k - 1], shoot);
-        }
-        if (thumb.size() >= 3 && length(rig.handThumb[i]) > .5f) {
-            for (size_t k = 1; k <= 2 && k + 1 < thumb.size(); ++k)
-                bendTo(thumb, k, rig.thumbHinges[i][k - 1], c.shootThumbBend, shoot);
-            const Vec3 base = pose.position(thumb[0]);
-            const Vec3 along = normalized(pose.direction(arm.hand, rig.handFingers[i]));
-            const Vec3 aside = normalized(pose.direction(arm.hand, rig.handThumb[i]));
-            pose.turn(rig.below[static_cast<size_t>(thumb[0])],
-                      partial(between(pose.position(thumb.back()) - base,
-                                      along * std::cos(c.shootThumb) + aside * std::sin(c.shootThumb)),
-                              shoot),
-                      base);
-        }
+        // A fist or the shooting pose, from this hand as it stands after the
+        // open pose (or, on the overlay, from the game's own fingers).
+        poseFingers(pose, rig, c, i, fist, shoot, s, arms);
     }
     // 7. A flip turns the whole body with the player, about the eyes.
     if (tilted)
