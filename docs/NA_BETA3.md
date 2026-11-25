@@ -35,6 +35,11 @@
 > (off by default). A failed save of the SPIDY VR tab is tried again, Crime Run's quit confirm and swing asks
 > freeze during a pause or load, and the overlay and Crime Run HUD no longer allocate every frame. No new setting
 > and no revision bump: off still equals beta3g with Crime Run off.
+>
+> **Build beta3i** (same version; package `Spidy-0.8.7-na-beta3i-win64-<commit>.zip`): adds the
+> [beta3i section](#beta3i-web-in-hand-thick-swing-line-grip-and-fists) below. A held web leaves from inside the
+> closed hand, a thicker overlay follows the swing line, the animation can close a hand on its web or a punch, and
+> two log wording fixes from the polish pass are in. Settings revision 24.
 
 A **test build** (branch `feat/087-polish`, from Crime Run on `feat/087-crime-run`, itself from `feat/087-beta3` on
 `feat/087-beta2` 1418992). The testers' **CURRENT** build stays
@@ -608,4 +613,59 @@ owner, are listed in `/workspace/polish-pass-notes.md` (and the plan). Nothing i
    crime timers, as before.
 4. **Close crash.** If the game still reports 0xC0000409 as it exits, keep the `.mdmp` if one is written (alongside
    the logs). It is known since beta3d; this build does not guess at a fix.
+
+## beta3i: web in hand, thick swing line, grip and fists
+
+The owner, Nov 25 t49u-t53u: prepare the next build (skip further beta3h testing). A held web was leaving from the
+wrist shooter while the fist closed over empty air (t51u: "I swing from the wrist shooters"). That is not a beta3
+regression: since October 18 every web leaves from the suit's nozzle (`webShooter`, the rig's webStart joint),
+which is right for a shot and left a gap once the hand closed on a hold. The swing physics rope is the game's own
+web, laid by `swing_line`; it looks thin in the headset (t52u). This build puts a held line in the fist, thickens
+the visible line, and ships the wording, WEB GRIP and PUNCH FISTS work prepared locally after beta3h.
+
+| Key | Default | What |
+| --- | --- | --- |
+| `animated_web_grip` | 1 | While the animation has the body, a hand on its web closes on the line and opens when it lets go. Off: the animation's fingers stay, as in beta3h. |
+| `animated_punch_fists` | 1 | While the animation has the body, a punching hand closes into a fist. Off: the animation's fingers stay. The VR-owned body already fists a punch. |
+| `web_hold_in_hand` | 1 | A held web leaves from inside the closed hand (the measured knuckles, 15.5 cm along the hand from the web shooter, [BODY.md](BODY.md)). A shot still leaves from the wrist shooter. Off: every line leaves from the shooter, as in beta3h. |
+| `thick_swing_line` | 1 | A thicker, brighter overlay (2.4 cm) follows the swing physics rope so it is easier to see. Off: only the game's own web, as in beta3h. |
+
+Launcher: **VR MOVEMENT** tab, after AIR FISTS: **WEB GRIP**, **PUNCH FISTS**, **WEB IN HAND**, **THICK SWING LINE**.
+Settings files from before take migration revision 24: those four come on once (a 0 chosen after it stays).
+
+What changed:
+
+- **WEB IN HAND.** While a hand holds its web, the game's rope and the overlay start at the knuckles, not the
+  wrist shooter. A shot, and a hand that is not holding, still leave from the shooter. The same rule applies
+  whether VR or the animation has the body.
+- **THICK SWING LINE.** The physics line is still the game's own web mesh. A 2.4 cm bright overlay now follows the
+  same line so it stays readable against the sky.
+- **WEB GRIP and PUNCH FISTS.** While the animation has the body, a hand on its web closes on the line, and a
+  punching hand balls into a fist, using the fist measured from the game's own model (no verified grab/punch clip
+  IDs). Off keeps the animation's fingers, as in beta3h. The VR-owned body already did both. Kicks do not close
+  the hands.
+- **Log wording (no play-feel change).** Closing the game window is no longer reported as a 0xC0000409 crash
+  unless a new session `.mdmp` exists. A swing-kick flick that starts an air kick no longer looks like a missed
+  kick in the log.
+- **Still in from beta3h-polish.** Crime Run (off by default), the save retry, the quit-confirm and swing-ask
+  freeze during a pause, and the overlay / HUD reuse.
+
+AIR FISTS and a squeezed grip still close a fist as in beta3h; the empty-fist look while swinging was the line
+leaving from the wrist, not those poses.
+
+### beta3i checklist
+
+1. **Held web in the hand.** Swing with VR driving the body: the line should run out of the closed fist, not from
+   the wrist shooter. A new shot should still leave from the shooter, then move into the hand once it holds. Turn
+   WEB IN HAND off: it should look like beta3h again (line from the shooter, fist over the line's start).
+2. **Animation body.** With Native Animation on and WEB GRIP on, a hand should close on its held line and open
+   when you let go. A punch should fist (PUNCH FISTS). Off: the animation's fingers stay.
+3. **Thick swing line.** The swing line should be easier to see, including against the sky. Turn THICK SWING LINE
+   off: only the game's own web, as in beta3h.
+4. **Shots and punches.** Web balls, aim markers and punches still leave from / land at the shooter and knuckles
+   as before. Kicks do not close the hands.
+5. **Same as beta3h when the new switches are off.** Webs, kicks, point jump, Showtime and the rope should play as
+   in the polish zip (`5c1c749`). Crime Run stays off unless you turn it on.
+6. **Force close.** Closing the game window should not be reported as a 0xC0000409 crash. If a real crash writes a
+   new `.mdmp`, keep it with the logs.
 

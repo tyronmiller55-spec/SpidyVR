@@ -3,6 +3,27 @@
 Every build, newest first, with what changed, why, and what was measured.
 Per-check results are in [VALIDATION.md](VALIDATION.md).
 
+**0.8.7-na-beta3, build beta3i (November 25, the owner's t49u-t53u; branch `feat/087-next`, on beta3h-polish):**
+the same version, a ninth test package
+([checklist](NA_BETA3.md#beta3i-web-in-hand-thick-swing-line-grip-and-fists)). Settings revision 24. The four new
+switches come on once; off of each equals beta3h.
+
+- **WEB IN HAND** (`web_hold_in_hand=1`). A held web's line starts inside the closed fist (the measured knuckles,
+  15.5 cm along the hand from the web shooter, [BODY.md](BODY.md)). A shot still leaves from the wrist shooter.
+  Not a beta3 regression: since October 18 every web left from the suit's nozzle, which is right for a shot and
+  left the fist closing over empty air once the hand held the line (t51u). Off: every line leaves from the
+  shooter, as in beta3h.
+- **THICK SWING LINE** (`thick_swing_line=1`). The swing physics rope is the game's own web, laid by `swing_line`.
+  A 2.4 cm bright overlay now follows that same line so it is easier to see in the headset (t52u). Off: only the
+  game's web, as in beta3h.
+- **WEB GRIP and PUNCH FISTS** (`animated_web_grip=1`, `animated_punch_fists=1`). While the animation has the body,
+  a hand on its web closes on the line, and a punching hand balls into a fist, using the fist measured from the
+  game's own model. Off keeps the animation's fingers. The VR-owned body already did both. Kicks do not close the
+  hands.
+- **Log wording.** Closing the game window is no longer reported as a 0xC0000409 crash unless a new session
+  `.mdmp` exists. A swing-kick flick that starts an air kick no longer looks like a missed kick in the log.
+- Crime Run, the save retry and the pause-frozen quit confirm stay as in beta3h-polish. CURRENT is unchanged.
+
 **0.8.7-na-beta3, build beta3h-polish (November 24, the owner's t45u; branch `feat/087-polish`, on the Crime Run
 port):** the same version, an eighth test package
 ([checklist](NA_BETA3.md#beta3h-polish-runtime-saves-and-the-quit-confirm)). No new setting; revision still 23.

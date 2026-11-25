@@ -51,6 +51,8 @@ the chest leaning in, legs carrying your travel, plus a target ring, a ground lu
 and a rope assist. Build **beta3h-polish** is the Crime Run port plus a polish pass: a failed save of the SPIDY VR
 tab is tried again, Crime Run's quit confirm and swing asks freeze during a pause or load, and the overlay and
 Crime Run HUD no longer allocate every frame. No new setting; off still equals beta3g with Crime Run off.
+Build **beta3i** puts a held web in the closed hand, adds a thicker swing-line overlay, closes animated hands on a
+web or a punch, and fixes two log wording issues. Settings revision 24; off of each new switch equals beta3h.
 [Checklist](docs/NA_BETA3.md).
 
 **0.8.7-na-beta2** (CURRENT, Nov 21): point jumps play the game's whole jump sound set; Y+B finishers stay the
