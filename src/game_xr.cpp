@@ -14453,10 +14453,12 @@ DWORD WINAPI run(void*) {
                             const Vec3 start = webLineStart(grip, hand, holdLine);
                             shooters[hand] = start;
                             shooterHands |= 1u << hand;
+                            const WebLook look = values.thickSwingLine ? thickSwingLook() : WebLook{};
+                            const bool drawOverlay = !gameWeb || values.thickSwingLine;
                             if (gameWeb) {
                                 // The game draws the piece between the hands
                                 // itself where it can (native_webs::Held).
-                                if (lower && !native_webs::drawsHeld()) {
+                                if (lower && !native_webs::drawsHeld() && !values.thickSwingLine) {
                                     between(start);
                                     appendWeb(vertices, line, viewer, pixelAngle);
                                 } else if (web.attached && slot == static_cast<int>(hand) &&
@@ -14464,32 +14466,36 @@ DWORD WINAPI run(void*) {
                                     ropeHands |= 1u << hand;
                                     webGap = std::max(webGap, length(shooters[hand] - ropeStarts[hand]));
                                 }
-                                continue;
-                            } else if (lower) {
-                                between(start);
-                                appendWeb(vertices, line, viewer, pixelAngle);
-                            } else if (web.attached) {
-                                line.start = start;
-                                line.end = web.anchor;
-                                line.slack = web.tension > 0 ? 0.f
-                                                             : std::max(web.length - length(line.end - line.start), 0.f);
-                                if (saved->webFlight.durations[hand] > 0) {
-                                    line.extended = 1;
-                                    if (saved->flightVisual[hand].flying()) {
-                                        line.end = saved->flightVisual[hand].tip();
-                                        line.splat = false;
-                                        line.slack = 0;
-                                        line.flightProgress = saved->flightVisual[hand].progress();
-                                        line.flightAge = saved->flightVisual[hand].age();
-                                        line.flightDirection = saved->flightVisual[hand].direction();
-                                    }
-                                } else
-                                    line.extended =
-                                        WebAnimation::extended((shown - timing.attachedAt) * 1e-9f);
-                                appendWeb(vertices, line, viewer, pixelAngle);
-                            } else if (WebAnimation::released((shown - timing.releasedAt) * 1e-9f, start,
-                                                              timing.anchor, line)) {
-                                appendWeb(vertices, line, viewer, pixelAngle);
+                                if (!drawOverlay)
+                                    continue;
+                            }
+                            if (drawOverlay) {
+                                if (lower) {
+                                    between(start);
+                                    appendWeb(vertices, line, viewer, pixelAngle, look);
+                                } else if (web.attached) {
+                                    line.start = start;
+                                    line.end = web.anchor;
+                                    line.slack = web.tension > 0 ? 0.f
+                                                                 : std::max(web.length - length(line.end - line.start), 0.f);
+                                    if (saved->webFlight.durations[hand] > 0) {
+                                        line.extended = 1;
+                                        if (saved->flightVisual[hand].flying()) {
+                                            line.end = saved->flightVisual[hand].tip();
+                                            line.splat = false;
+                                            line.slack = 0;
+                                            line.flightProgress = saved->flightVisual[hand].progress();
+                                            line.flightAge = saved->flightVisual[hand].age();
+                                            line.flightDirection = saved->flightVisual[hand].direction();
+                                        }
+                                    } else
+                                        line.extended =
+                                            WebAnimation::extended((shown - timing.attachedAt) * 1e-9f);
+                                    appendWeb(vertices, line, viewer, pixelAngle, look);
+                                } else if (WebAnimation::released((shown - timing.releasedAt) * 1e-9f, start,
+                                                                  timing.anchor, line)) {
+                                    appendWeb(vertices, line, viewer, pixelAngle, look);
+                                }
                             }
                         }
                         // The web tie's webs: from the surface to the enemy held on it,

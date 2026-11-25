@@ -86,6 +86,7 @@ inline constexpr std::string_view personalProfileSettings[] = {
     "animated_web_grip",
     "animated_punch_fists",
     "web_hold_in_hand",
+    "thick_swing_line",
     "enemy_types", // the player's choice, not a preset's: a preset tunes how Spidy moves
     "near_clip_mm",
     "seated",

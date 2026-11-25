@@ -195,6 +195,10 @@ struct Values {
     // still leaves from the wrist shooter. Off: every line leaves from the
     // shooter, as beta3h.
     bool webHoldInHand = true;
+    // THICK SWING LINE (0.8.7-na-beta3i, settings revision 24; the owner, Nov 25 t52u):
+    // a thicker, brighter overlay follows the swing physics rope so it is easier
+    // to see in the headset. Off: only the game's own web, as before.
+    bool thickSwingLine = true;
     // Aiming with the eyes (the tab's EYE AIM; eyeAimShots, eyeAimZips): web
     // balls go where the eyes look, from the hand that pulled; a zip goes to
     // the point the eyes look at, the game's camera being turned onto it.
@@ -1420,6 +1424,7 @@ enum class Item : uint8_t {
     animatedPunchFists,
     // WEB IN HAND / THICK SWING LINE (revision 24, beta3i).
     webHoldInHand,
+    thickSwingLine,
     // NA HELP (beta polish M5, na_help.hpp): the NA · HELP tab's pages, one item for all of them (a page has no
     // value: one choice, READ). Its rows are the catalog's last.
     helpPage,
@@ -1454,8 +1459,8 @@ struct Row {
     Place place{};
 };
 // Stable row/setting numbers; categories below determine presentation order.
-// The catalog: the settings' rows (242), then NA HELP's pages.
-inline constexpr size_t settingRowCount = 242;
+// The catalog: the settings' rows (243), then NA HELP's pages.
+inline constexpr size_t settingRowCount = 243;
 inline constexpr size_t rowTotal = settingRowCount + na_help::pageCount;
 const std::array<Row, rowTotal>& rows();
 const Row* rowFor(Item);

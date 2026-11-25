@@ -90,6 +90,14 @@ struct WebLook {
     float minPixels = 1.6f; // on-screen width floor, so distant webs stay continuous
     Vec3 core{.86f, .87f, .9f}, edge{.32f, .36f, .44f};
 };
+// THICK SWING LINE (revision 24): a more visible overlay along the swing
+// physics rope. The default look is 5 mm half-width (1 cm) and pale grey,
+// which is hard to see in the headset against the sky. This is 12 mm
+// half-width (2.4 cm) with a brighter core. Off, only the game's own web
+// is drawn, as before.
+inline WebLook thickSwingLook() {
+    return WebLook{.012f, 2.8f, {.93f, .94f, .97f}, {.50f, .54f, .62f}};
+}
 // Camera-facing braided strand with a twisting sheen, parabolic sag when
 // slack, a travelling tip during the shot, and a splat at the anchor.
 // pixelAngle is the eye's angular size of one pixel, in radians.

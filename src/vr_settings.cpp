@@ -1008,6 +1008,8 @@ template <class V> auto switchOf(Item item, V& v) -> decltype(&v.aimMarkers) {
         return &v.animatedPunchFists;
     case Item::webHoldInHand:
         return &v.webHoldInHand;
+    case Item::thickSwingLine:
+        return &v.thickSwingLine;
     case Item::pointJump:
         return &v.pointJump;
     case Item::view:
@@ -1723,6 +1725,10 @@ const std::array<Row, rowTotal>& rows() {
          "WEB IN HAND",
          "A held web leaves from inside the closed hand. A shot still leaves from the wrist shooter. Off: from the shooter, as before.",
          {}},
+        {Item::thickSwingLine,
+         "THICK SWING LINE",
+         "A thicker, brighter overlay follows the swing line so it is easier to see in the headset. Off: only the game's own web.",
+         {}},
         {Item::shooterMode, "SHOOTERS",
          "Where webs leave. LOCKED TO ARM: along the arm you see. CONTROLLER: as before.",
          shooterModeChoices},
@@ -2223,7 +2229,7 @@ const std::array<Screen, categoryCount>& screens() {
         Item::spidyRun, Item::spidyRunFromStanding, Item::spidyRunJump, Item::momentumLeap,
         Item::earlyJump, Item::softLanding, Item::webLandingSmooth, Item::webLandingImpact,
         Item::handClimb, Item::joystickRunCamera, Item::wallRunCameraTilt, Item::combatResponsive,
-        Item::combatVisuals, Item::halfPunchDamage, Item::airFists, Item::animatedWebGrip, Item::animatedPunchFists, Item::webHoldInHand, Item::enemyTypes, Item::runLogs,
+        Item::combatVisuals, Item::halfPunchDamage, Item::airFists, Item::animatedWebGrip, Item::animatedPunchFists, Item::webHoldInHand, Item::thickSwingLine, Item::enemyTypes, Item::runLogs,
     };
     static constexpr Item flips[] = {
         Item::realisticFlips, Item::flips, Item::controlledFlips, Item::flipSpeed,
@@ -3196,6 +3202,7 @@ constexpr TabOnly tabOnly[] = {
     {"animated_web_grip", &Values::animatedWebGrip, nullptr},
     {"animated_punch_fists", &Values::animatedPunchFists, nullptr},
     {"web_hold_in_hand", &Values::webHoldInHand, nullptr},
+    {"thick_swing_line", &Values::thickSwingLine, nullptr},
     {"camera_pitch_pct", nullptr, &Values::cameraPitchPct},
     {"camera_roll_pct", nullptr, &Values::cameraRollPct},
     {"camera_bob_vertical_pct", nullptr, &Values::cameraBobVerticalPct},
@@ -3661,11 +3668,12 @@ Values withMovementDefaults(Values v, std::string_view text) {
         // BETA3G MIGRATION END
     }
     if (seen < 24) {
-        // Revision 24 (the owner, Nov 25 t50u-t51u): WEB GRIP, PUNCH FISTS and WEB IN HAND come on once
-        // (new keys); a 0 chosen after this revision stays.
+        // Revision 24 (the owner, Nov 25 t50u-t52u): WEB GRIP, PUNCH FISTS, WEB IN HAND and THICK SWING
+        // LINE come on once (new keys); a 0 chosen after this revision stays.
         v.animatedWebGrip = true;
         v.animatedPunchFists = true;
         v.webHoldInHand = true;
+        v.thickSwingLine = true;
     }
     v.movementDefaults = movementDefaultsRevision;
     return sanitized(v);
