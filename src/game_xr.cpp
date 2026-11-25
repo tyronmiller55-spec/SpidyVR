@@ -2335,7 +2335,7 @@ DWORD WINAPI run(void*) {
         // its own web holds (attachedBefore); and an enemy is marked or
         // within a fist's reach.
         HandPoser fingers[2];
-        bool poseHeld[2]{};
+        bool poseHeld[2]{}, posePunch[2]{};
         Vec3 gripsBefore[2]{};
         bool gripsSeen[2]{};
         bool ballShot[2]{}, webTaken[2]{}, fightNear{};
@@ -12537,9 +12537,9 @@ DWORD WINAPI run(void*) {
                             doing.shot = ballShot[i];
                             doing.fighting = fightNear;
                             doing.airFists = values.airFists;
-                            // While the animation has the body, WEB GRIP (on by default) closes a hand on
-                            // its web; off keeps the animation's fingers, as beta3h. Punch fists are still
-                            // the animation's until that switch lands. The VR-owned body is unchanged.
+                            // While the animation has the body, WEB GRIP and PUNCH FISTS (on by default)
+                            // close a hand on its web or a punch; off keeps the animation's fingers, as
+                            // beta3h. The VR-owned body is unchanged.
                             if (armsWanted) {
                                 if (!values.animatedWebGrip) {
                                     doing.gripping = false;
@@ -12547,12 +12547,15 @@ DWORD WINAPI run(void*) {
                                     doing.shot = false;
                                     doing.web = 0;
                                 }
-                                doing.speed = 0;
-                                doing.fighting = false;
-                                doing.airFists = false;
+                                if (!values.animatedPunchFists) {
+                                    doing.speed = 0;
+                                    doing.fighting = false;
+                                    doing.airFists = false;
+                                }
                                 doing.squeeze = 0;
                             }
                             const bool wasHolding = poseHeld[i];
+                            const bool wasPunch = posePunch[i];
                             ballShot[i] = false;
                             const auto fingered = fingers[i].update(seconds, doing);
                             pose.hands[i] = {motion.grips[i].position - motion.anchor, motion.grips[i].orientation,
@@ -12564,7 +12567,14 @@ DWORD WINAPI run(void*) {
                                                  doing.holding ? "hold" : "release", fingered.fist,
                                                  fingered.shoot);
                             }
+                            const bool punching = armsWanted && values.animatedPunchFists &&
+                                                  doing.speed >= 2.5f;
+                            if (punching && !wasPunch) {
+                                diag_log::writef("hand pose: %s punch fist=%.2f",
+                                                 i == 0 ? "left" : "right", fingered.fist);
+                            }
                             poseHeld[i] = doing.holding;
+                            posePunch[i] = punching;
                             armSamples[i].fist = fingered.fist;
                             armSamples[i].shoot = fingered.shoot;
                         }

@@ -123,6 +123,7 @@ inline constexpr ProfileSetting profileSettings[] = {
     tabOnly("half_punch_damage", Item::halfPunchDamage, &Values::halfPunchDamage),
     tabOnly("air_fists", Item::airFists, &Values::airFists),
     tabOnly("animated_web_grip", Item::animatedWebGrip, &Values::animatedWebGrip),
+    tabOnly("animated_punch_fists", Item::animatedPunchFists, &Values::animatedPunchFists),
     // Enemy types: the enemies that block in the base game block base attacks until they are webbed or
     // stunned; off, nobody guards. A profile from before it leaves the setting as it is.
     tabOnly("enemy_types", Item::enemyTypes, &Values::enemyTypes),

@@ -2355,6 +2355,10 @@ void App::options(ImVec2 origin, ImVec2 size) {
                "While the animation has the body, a hand on its web closes on the line (the game's own fist "
                "pose) and opens when the web lets go. Off: the animation's fingers stay, as before. Default: on.",
                S(42), [&] { tabToggle("##animatedwebgrip", Item::animatedWebGrip); });
+        settingOption(Item::animatedPunchFists, "Punch fists",
+               "While the animation has the body, a punching hand closes into a fist (the game's own fist "
+               "pose). Off: the animation's fingers stay, as before. Default: on.",
+               S(42), [&] { tabToggle("##animatedpunchfists", Item::animatedPunchFists); });
         // The guards (game_guard::setEnemyTypes has the choice from the game's settings, spidy_vr.ini's
         // enemy_types).
         settingOption(Item::enemyTypes, "Enemy types",

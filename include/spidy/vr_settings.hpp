@@ -185,6 +185,10 @@ struct Values {
     // body, a hand whose web holds or that grips the other hand's web closes on the line (the measured native
     // fist, body_ik::poseFingers) and opens when the web lets go. Off: the animation's fingers stay, as before.
     bool animatedWebGrip = true;
+    // PUNCH FISTS (0.8.7-na next, settings revision 24; the owner, Nov 25 t50u): while the animation has the
+    // body, a punching hand closes into a fist (the same measured native pose). Off: the animation's fingers
+    // stay, as before. The VR-owned body already fists a punch.
+    bool animatedPunchFists = true;
     // Aiming with the eyes (the tab's EYE AIM; eyeAimShots, eyeAimZips): web
     // balls go where the eyes look, from the hand that pulled; a zip goes to
     // the point the eyes look at, the game's camera being turned onto it.
@@ -1404,8 +1408,10 @@ enum class Item : uint8_t {
     handstandSticky,
     // FULL-LENGTH SWING LINES (beta2).
     swingLineFullLength,
-    // WEB GRIP (revision 24): while the animation has the body, a hand on its web closes on the line.
+    // WEB GRIP / PUNCH FISTS (revision 24): while the animation has the body, a hand on its web or a punch
+    // closes with the measured native fist.
     animatedWebGrip,
+    animatedPunchFists,
     // NA HELP (beta polish M5, na_help.hpp): the NA · HELP tab's pages, one item for all of them (a page has no
     // value: one choice, READ). Its rows are the catalog's last.
     helpPage,
@@ -1440,8 +1446,8 @@ struct Row {
     Place place{};
 };
 // Stable row/setting numbers; categories below determine presentation order.
-// The catalog: the settings' rows (240), then NA HELP's pages.
-inline constexpr size_t settingRowCount = 240;
+// The catalog: the settings' rows (241), then NA HELP's pages.
+inline constexpr size_t settingRowCount = 241;
 inline constexpr size_t rowTotal = settingRowCount + na_help::pageCount;
 const std::array<Row, rowTotal>& rows();
 const Row* rowFor(Item);
