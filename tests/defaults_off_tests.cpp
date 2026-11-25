@@ -1,7 +1,7 @@
 // Off equals the previous build: beta3g's new switches come on once at revision 23,
 // a 0 chosen after that stays, rope weight 200% becomes 100%, Crime Run stays off
 // with no revision bump (missing keys take the struct defaults), and revision 24
-// turns WEB GRIP and PUNCH FISTS on once.
+// turns WEB GRIP, PUNCH FISTS and WEB IN HAND on once.
 #include "spidy/vr_settings.hpp"
 #include <cstdio>
 #include <cstdlib>
@@ -30,8 +30,8 @@ int main() {
     const Values fromFile = withMovementDefaults(withTabOnly({}, onlyRev), onlyRev);
     check(!fromFile.crimeRun && fromFile.crimeStartScore == 20000,
           "a revision 23 file without crime_* keys did not stay off");
-    check(fromFile.animatedWebGrip && fromFile.animatedPunchFists,
-          "revision 24 did not turn WEB GRIP and PUNCH FISTS on once");
+    check(fromFile.animatedWebGrip && fromFile.animatedPunchFists && fromFile.webHoldInHand,
+          "revision 24 did not turn WEB GRIP, PUNCH FISTS and WEB IN HAND on once");
     const std::string prior = "movement_defaults=22\n";
     check(!withMovementDefaults(withTabOnly({}, prior), prior).crimeRun,
           "an older file turned Crime Run on (it has no migration and must stay off)");
@@ -57,9 +57,9 @@ int main() {
           "a rope weight chosen after revision 23 was rescaled");
 
     Values already;
-    already.animatedWebGrip = already.animatedPunchFists = false;
+    already.animatedWebGrip = already.animatedPunchFists = already.webHoldInHand = false;
     const Values chosen24 = withMovementDefaults(already, "movement_defaults=24\n");
-    check(!chosen24.animatedWebGrip && !chosen24.animatedPunchFists,
+    check(!chosen24.animatedWebGrip && !chosen24.animatedPunchFists && !chosen24.webHoldInHand,
           "a 0 chosen after revision 24 was overwritten");
 
     const std::string text = tabOnlyText(Values{});

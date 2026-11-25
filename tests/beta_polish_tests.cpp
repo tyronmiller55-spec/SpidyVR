@@ -2,6 +2,7 @@
 // the batch 4 feel items that have no suite of their own. Portable.
 #include "spidy/diag_log.hpp"
 #include "spidy/eye_stall.hpp"
+#include "spidy/tracking.hpp"
 #include "spidy/vr_settings.hpp"
 #include <algorithm>
 #include <cmath>
@@ -92,13 +93,27 @@ int main(int argc, char** argv) {
         for (unsigned i = 1; i <= static_cast<unsigned>(lastItem); ++i)
             (isNativeAnimation(static_cast<Item>(i)) ? na : upstream) += 1;
         check(upstream == 89, "upstream 0.8.7 has 89 settings (its Item has 90 with none)");
-        check(na == 145, "the fork's settings are Native Animation's (135, G2b's class rules, NA HELP's page "
-                         "item, JUMP SOUNDS and WALL JUMP SOUND)");
+        check(na == 146, "the fork's settings are Native Animation's (135, G2b's class rules, NA HELP's page "
+                         "item, JUMP SOUNDS and WALL JUMP SOUND, and WEB IN HAND)");
         check(isNativeAnimation(Item::showtime) && isNativeAnimation(Item::headProbe) &&
                   isNativeAnimation(Item::swingKickManual) && !isNativeAnimation(Item::webLines) &&
                   !isNativeAnimation(Item::airFists) && !isNativeAnimation(Item::enemyTypes) &&
                   !isNativeAnimation(Item::smoothTurn) && !isNativeAnimation(Item::none),
               "the NA flag by example");
+        // WEB IN HAND: the hold point is the measured knuckles (docs/BODY.md, fistAhead 15.5 cm), not an invented offset.
+        {
+            const Pose grip{};
+            const Pose shooter = webShooter(grip, 1);
+            check(length(webLineStart(grip, 1, false) - shooter.position) < 1e-6f,
+                  "a shot leaves from the wrist shooter");
+            const Vec3 held = webLineStart(grip, 1, true);
+            check(std::abs(length(held - shooter.position) - fistAhead) < 1e-5f,
+                  "a held line starts 15.5 cm along the hand from the shooter");
+            const Vec3 expect = shooter.position + Vec3{0, -fistAhead, 0};
+            check(length(held - expect) < 1e-5f,
+                  "the hold point is the knuckles along the shooter's -Z (grip -Y)");
+        }
+        check(Values{}.webHoldInHand, "WEB IN HAND is on by default");
         std::array<unsigned, 256> inScreens{};
         for (const auto& screen : screens())
             for (Item item : screen.items)

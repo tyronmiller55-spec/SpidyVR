@@ -8216,9 +8216,11 @@ DWORD WINAPI run(void*) {
                                 hand.tracked = motion.swing.hands[from].tracked;
                                 hand.attachedAt = rope.key;
                                 hand.anchor = trail ? trailEnds[from] : swingState.webs[from].anchor;
-                                hand.wrist = webShooter(actionGrips[from], from).position;
                                 if (hand.attached == 1 && flightVisual[from].flying())
                                     hand.anchor = flightVisual[from].tip();
+                                hand.wrist = webLineStart(actionGrips[from], from,
+                                                          values.webHoldInHand && hand.attached == 1 &&
+                                                              !flightVisual[from].flying());
                                 if (hand.attached == 1 && flightVisual[from].flying() &&
                                     native_webs::drawsHeld()) {
                                     bent[i].count = native_webs::maxRopeBends;
@@ -8503,7 +8505,7 @@ DWORD WINAPI run(void*) {
                                         rope.tracked = 1;
                                         rope.attachedAt = static_cast<int64_t>(lineState.zipKey);
                                         rope.anchor = lineState.zipTo;
-                                        rope.wrist = webShooter(actionGrips[hand], hand).position;
+                                        rope.wrist = webLineStart(actionGrips[hand], hand, values.webHoldInHand);
                                         bent[i].count = 0;
                                         break;
                                     }
@@ -8514,7 +8516,7 @@ DWORD WINAPI run(void*) {
                                 const auto lower = static_cast<unsigned>(1 - upper);
                                 const int slot = webRopes.slot(lower);
                                 if (slot >= 0 && motion.swing.hands[lower].tracked) {
-                                    const Vec3 wrist = webShooter(actionGrips[lower], lower).position;
+                                    const Vec3 wrist = webLineStart(actionGrips[lower], lower, values.webHoldInHand);
                                     webs.held.rope = static_cast<uint32_t>(slot) + 1;
                                     webs.held.wrist = wrist;
                                     webs.held.slack =
@@ -14421,7 +14423,11 @@ DWORD WINAPI run(void*) {
                                 auto other = rendered.grips[static_cast<size_t>(upper)];
                                 other.position += travel;
                                 line.start = start;
-                                line.end = webShooter(other, static_cast<unsigned>(upper)).position;
+                                const auto& otherWeb = saved->webs[static_cast<size_t>(upper)];
+                                const bool otherHold = values.webHoldInHand && otherWeb.attached &&
+                                                       saved->webFlight.durations[static_cast<size_t>(upper)] == 0 &&
+                                                       !saved->flightVisual[static_cast<size_t>(upper)].flying();
+                                line.end = webLineStart(other, static_cast<unsigned>(upper), otherHold);
                                 line.slack = std::max(
                                     web.length - saved->webs[static_cast<size_t>(upper)].length -
                                         length(line.end - line.start),
@@ -14441,14 +14447,17 @@ DWORD WINAPI run(void*) {
                             }
                             auto grip = rendered.grips[hand];
                             grip.position += travel;
-                            const Vec3 shooter = webShooter(grip, hand).position;
-                            shooters[hand] = shooter;
+                            const bool holdLine =
+                                values.webHoldInHand && web.attached &&
+                                !(saved->webFlight.durations[hand] > 0 && saved->flightVisual[hand].flying());
+                            const Vec3 start = webLineStart(grip, hand, holdLine);
+                            shooters[hand] = start;
                             shooterHands |= 1u << hand;
                             if (gameWeb) {
                                 // The game draws the piece between the hands
                                 // itself where it can (native_webs::Held).
                                 if (lower && !native_webs::drawsHeld()) {
-                                    between(shooter);
+                                    between(start);
                                     appendWeb(vertices, line, viewer, pixelAngle);
                                 } else if (web.attached && slot == static_cast<int>(hand) &&
                                            native_eyes::renderWebStart(imageGeneration, hand, ropeStarts[hand])) {
@@ -14457,10 +14466,10 @@ DWORD WINAPI run(void*) {
                                 }
                                 continue;
                             } else if (lower) {
-                                between(shooter);
+                                between(start);
                                 appendWeb(vertices, line, viewer, pixelAngle);
                             } else if (web.attached) {
-                                line.start = shooter;
+                                line.start = start;
                                 line.end = web.anchor;
                                 line.slack = web.tension > 0 ? 0.f
                                                              : std::max(web.length - length(line.end - line.start), 0.f);
@@ -14478,7 +14487,7 @@ DWORD WINAPI run(void*) {
                                     line.extended =
                                         WebAnimation::extended((shown - timing.attachedAt) * 1e-9f);
                                 appendWeb(vertices, line, viewer, pixelAngle);
-                            } else if (WebAnimation::released((shown - timing.releasedAt) * 1e-9f, shooter,
+                            } else if (WebAnimation::released((shown - timing.releasedAt) * 1e-9f, start,
                                                               timing.anchor, line)) {
                                 appendWeb(vertices, line, viewer, pixelAngle);
                             }
