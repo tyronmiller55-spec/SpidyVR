@@ -1715,19 +1715,19 @@ const std::array<Row, rowTotal>& rows() {
          {}},
         {Item::animatedWebGrip,
          "WEB GRIP",
-         "While the animation has the body, a hand on its web closes on the line and opens when it lets go. Off: the animation's fingers stay.",
+         "A hand on its web closes on the line. Off: the animation's fingers stay.",
          {}},
         {Item::animatedPunchFists,
          "PUNCH FISTS",
-         "While the animation has the body, a punching hand closes into a fist. Off: the animation's fingers stay.",
+         "A punching hand closes into a fist. Off: the animation's fingers stay.",
          {}},
         {Item::webHoldInHand,
          "WEB IN HAND",
-         "A held web leaves from inside the closed hand. A shot still leaves from the wrist shooter. Off: from the shooter, as before.",
+         "A held web leaves from the closed hand. A shot still leaves from the shooter.",
          {}},
         {Item::thickSwingLine,
          "THICK SWING LINE",
-         "A thicker, brighter overlay follows the swing line so it is easier to see in the headset. Off: only the game's own web.",
+         "A thicker overlay follows the swing line. Off: only the game's own web.",
          {}},
         {Item::shooterMode, "SHOOTERS",
          "Where webs leave. LOCKED TO ARM: along the arm you see. CONTROLLER: as before.",
@@ -2229,7 +2229,7 @@ const std::array<Screen, categoryCount>& screens() {
         Item::spidyRun, Item::spidyRunFromStanding, Item::spidyRunJump, Item::momentumLeap,
         Item::earlyJump, Item::softLanding, Item::webLandingSmooth, Item::webLandingImpact,
         Item::handClimb, Item::joystickRunCamera, Item::wallRunCameraTilt, Item::combatResponsive,
-        Item::combatVisuals, Item::halfPunchDamage, Item::airFists, Item::animatedWebGrip, Item::animatedPunchFists, Item::webHoldInHand, Item::thickSwingLine, Item::enemyTypes, Item::runLogs,
+        Item::combatVisuals, Item::halfPunchDamage, Item::airFists, Item::enemyTypes, Item::runLogs,
     };
     static constexpr Item flips[] = {
         Item::realisticFlips, Item::flips, Item::controlledFlips, Item::flipSpeed,
@@ -2279,7 +2279,8 @@ const std::array<Screen, categoryCount>& screens() {
         Item::shooterMode,   Item::shooterLock,  Item::webAngle,
         Item::webAimSource,  Item::forearmBlend, Item::forearmAimLimit,
         Item::wristShooters, Item::palmShooters, Item::animForearmFallback,
-        Item::swingLineFullLength,
+        Item::swingLineFullLength, Item::animatedWebGrip, Item::animatedPunchFists,
+        Item::webHoldInHand, Item::thickSwingLine,
     };
     // NA · BODY & LEGS (LEGS (ADVANCED) since November 11): shown even while unavailable, the help saying why
     // (shownWhenInactive); the flips' NA rows and the handstand with it.

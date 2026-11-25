@@ -630,7 +630,7 @@ the visible line, and ships the wording, WEB GRIP and PUNCH FISTS work prepared 
 | `web_hold_in_hand` | 1 | A held web leaves from inside the closed hand (the measured knuckles, 15.5 cm along the hand from the web shooter, [BODY.md](BODY.md)). A shot still leaves from the wrist shooter. Off: every line leaves from the shooter, as in beta3h. |
 | `thick_swing_line` | 1 | A thicker, brighter overlay (2.4 cm) follows the swing physics rope so it is easier to see. Off: only the game's own web, as in beta3h. |
 
-Launcher: **VR MOVEMENT** tab, after AIR FISTS: **WEB GRIP**, **PUNCH FISTS**, **WEB IN HAND**, **THICK SWING LINE**.
+Launcher: **NA · WEB SHOOTERS** tab, after FULL-LENGTH SWING LINES: **WEB GRIP**, **PUNCH FISTS**, **WEB IN HAND**, **THICK SWING LINE**.
 Settings files from before take migration revision 24: those four come on once (a 0 chosen after it stays).
 
 What changed:

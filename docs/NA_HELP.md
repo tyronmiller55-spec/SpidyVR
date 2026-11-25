@@ -240,6 +240,10 @@ A 0xC0000409 at close is not a crash. A mid-play fault writes a .mdmp. Logs are 
 | PALM SHOOTERS (OLD) | OFF | launcher |
 | ARM AIM FALLBACK | 60 DEG | launcher |
 | FULL-LENGTH SWING LINES | ON | game and launcher |
+| WEB GRIP | ON | game and launcher |
+| PUNCH FISTS | ON | game and launcher |
+| WEB IN HAND | ON | game and launcher |
+| THICK SWING LINE | ON | game and launcher |
 
 ### NA · POINT JUMP
 
