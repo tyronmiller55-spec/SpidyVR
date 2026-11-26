@@ -435,10 +435,12 @@ def link_warning(links, runtime_name):
     if links.get('cable'):
         return (f"WARNING: this PC is on Wi-Fi ({links['wifi']}) as well as on a network cable. A headset that "
                 "connected over the Wi-Fi keeps using it, and its picture then stalls for a second or two at a "
-                "time. Turn this PC's Wi-Fi off and connect the headset again.")
+                "time. Turn this PC's Wi-Fi off and connect the headset again. (This is the PC's own network: a "
+                "headset on a Link cable does not use it.)")
     return (f"WARNING: this PC is on Wi-Fi ({links['wifi']}), not on a network cable. A wireless headset's "
             'picture then crosses the Wi-Fi twice and stalls for a second or two at a time, whatever the frame '
-            'rate. Connect this PC to the router by cable.')
+            'rate. Connect this PC to the router by cable. (This is the PC\'s own network: a headset on a Link '
+            'cable does not use it.)')
 
 
 def stream_stalls(samples):
@@ -3313,9 +3315,11 @@ def session(a, startup):
             hand_over_settings(samples[-1] if samples else None)
             stalls = stream_stalls(list(samples))
             if stalls['rounds'] >= 5:
+                # The PC's own network (links: its Wi-Fi adapter, a cable) is not how the headset connects: a Link
+                # cable's stream never crosses it (the owner, Nov 26 t143u-t144u, on a cable while this blamed Wi-Fi).
                 print(f"The headset's picture stalled: the VR runtime held {stalls['rounds']} frames for a tenth "
-                      f"of a second each ({stalls['seconds']} s in all). That is the stream to the headset, not "
-                      'the game' + (': this PC was on Wi-Fi.' if links.get('wifi') else '.'), flush=True)
+                      f"of a second each ({stalls['seconds']} s in all), waiting on the runtime rather than on the "
+                      "game's own work.", flush=True)
             tell_device_lost()
             dump = None
             try:
