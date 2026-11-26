@@ -4,7 +4,7 @@
 // turns WEB GRIP, PUNCH FISTS and WEB IN HAND on once (THICK SWING LINE was removed in beta3n), and
 // revision 25 (beta3n) turns WALL RUN PUSH, WALL FLING ANY WAY, STICKY PALMS and
 // GRIP HOLDS THE HANDSTAND on once, and revision 26 (beta3o) WALL SLIDE POSE and
-// GRIP LOCKS THE WALL JUMP and ROPE GRIP.
+// GRIP LOCKS THE WALL JUMP and ROPE GRIP, and revision 27 (beta3p) LEVEL KEEPS HIM WITH YOU.
 #include "spidy/vr_settings.hpp"
 #include <cstdio>
 #include <cstdlib>
@@ -26,7 +26,7 @@ void check(bool ok, const char* what) {
 }
 
 int main() {
-    check(movementDefaultsRevision == 26, "this tree is not at revision 26");
+    check(movementDefaultsRevision == 27, "this tree is not at revision 27");
     check(!Values{}.crimeRun && Values{}.crimeStartScore == 20000 && Values{}.crimeHud && Values{}.crimeRealCrimes,
           "Crime Run's defaults (off, 20,000, HUD, real crimes)");
     const std::string onlyRev = "movement_defaults=23\n";
@@ -67,7 +67,7 @@ int main() {
 
     const std::string text = tabOnlyText(Values{});
     check(text.find("crime_run=0\n") != std::string::npos, "the defaults' text did not carry crime_run=0");
-    check(text.find("movement_defaults=26\n") != std::string::npos, "the defaults' text did not carry movement_defaults=26");
+    check(text.find("movement_defaults=27\n") != std::string::npos, "the defaults' text did not carry movement_defaults=27");
 
     // Revision 25 (beta3n): the walls' feel comes on once; a 0 chosen after it stays; off is beta3m's wall.
     const std::string rev24 = "movement_defaults=24\nwall_run_push=0\nwall_fling_any_way=0\nsticky_palms=0\nhandstand_grip_hold=0\n";
@@ -90,6 +90,14 @@ int main() {
     const std::string kept26 = "movement_defaults=26\nwall_slide_pose=0\nwall_grip_jump_lock=0\nweb_rope_grip=0\n";
     const Values k26 = withMovementDefaults(withTabOnly({}, kept26), kept26);
     check(!k26.wallSlidePose && !k26.wallGripJumpLock && !k26.webRopeGrip, "a 0 chosen after revision 26 was overwritten");
+
+    // Revision 27 (beta3p): LEVEL KEEPS HIM WITH YOU comes on once; a 0 chosen after it stays.
+    const std::string rev26 = "movement_defaults=26\nlevel_head_lock=0\n";
+    check(withMovementDefaults(withTabOnly({}, rev26), rev26).levelHeadLock,
+          "revision 27 did not turn LEVEL KEEPS HIM WITH YOU on once");
+    const std::string kept27 = "movement_defaults=27\nlevel_head_lock=0\n";
+    check(!withMovementDefaults(withTabOnly({}, kept27), kept27).levelHeadLock,
+          "a 0 chosen after revision 27 was overwritten");
 
     // Off of Crime Run matches "no mode": the previous build has no run, no HUD key, no fifth app.
     Values off;

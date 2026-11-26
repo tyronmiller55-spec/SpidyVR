@@ -1814,6 +1814,17 @@ void App::nativeAnimation(ImVec2 origin, ImVec2 size) {
             "Head",
             "Full follows the animated head, including flips. Level keeps the horizon level; Off unlocks it.",
             S(150), [&] { tabCombo("##nativehead", Item::animatedHead); });
+        option("Level keeps him with you",
+               "Head Level with Hybrid and Headset first: the view's turn is yours alone (headset, right stick, "
+               "snap realign) and Spider-Man is turned back under it after dodges, rolls and landings, so you "
+               "don't end up behind him. The view stays level. Off: Level as beta3o. Default: on.",
+               S(42), [&] {
+                   bool on = tabOnly_.levelHeadLock;
+                   if (toggle("##levelheadlock", &on)) {
+                       tabOnly_.levelHeadLock = on;
+                       tabChanged = true;
+                   }
+               });
         option("Smoothing",
                "How much animation wobble is calmed while Native Animation owns the view. "
                "Off is as now. Headset look, leaning and travel stay with you.",

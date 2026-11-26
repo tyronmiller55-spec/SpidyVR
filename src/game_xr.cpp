@@ -35,6 +35,7 @@
 #include "spidy/air_kick.hpp"
 #include "spidy/ground_kick.hpp"
 #include "spidy/game_fp.hpp"
+#include "spidy/level_head_lock.hpp"
 #include "spidy/game_joints.hpp"
 #include "spidy/web_aim.hpp"
 #include "spidy/game_grab.hpp"
@@ -5056,6 +5057,10 @@ DWORD WINAPI run(void*) {
                         Mat4 headMat{};
                         const bool levelHead = animated_moves::headFollow(values.animatedHead) ==
                                                animated_moves::HeadFollow::level;
+                        // LEVEL KEEPS HIM WITH YOU (level_head_lock.hpp): LEVEL on the head lock steers as FULL.
+                        const bool levelOwnTurn =
+                            levelHead && !level_head_lock::joins(values.levelHeadLock, true, hybridMode,
+                                                                 values.headsetFirst);
                         // The head bone as animated (never the lock's turn): heroHead.
                         if (levelHead ? game_fp::frameLevel(headMat) : game_fp::heroHead(headMat)) {
                             const Vec3 ahead{headMat[8], headMat[9], headMat[10]};
@@ -5070,7 +5075,7 @@ DWORD WINAPI run(void*) {
                                 const float headBoneYaw = hybrid_handoff::lookYaw(ahead);
                                 const float headTurnNow = animHeadRefSet ? animHeadTurn : 0.f;
                                 hybridInputIntentYaw = stable_yaw::wrap(trackedYaw - refYaw + headTurnNow);
-                                if (hybridMode && viewLockActive && hybridHeading.set && !levelHead) {
+                                if (hybridMode && viewLockActive && hybridHeading.set && !levelOwnTurn) {
                                     // HYBRID: he runs along the heading (the right stick's);
                                     // the headset's own turn never steers.
                                     stableHeading.reset();
@@ -5122,10 +5127,10 @@ DWORD WINAPI run(void*) {
                         // looks - latched at the press, then only the player's own head and right-stick
                         // turns - never from the heading the body is brought onto or a turn in progress.
                         // Resting, it is the live view (also in the air).
-                        const bool headsetFirstNow = values.headsetFirst && hybridMode && viewLockActive &&
-                                                     hybridHeading.set &&
-                                                     animated_moves::headFollow(values.animatedHead) !=
-                                                         animated_moves::HeadFollow::level;
+                        const bool headsetFirstNow =
+                            values.headsetFirst && hybridMode && viewLockActive && hybridHeading.set &&
+                            (animated_moves::headFollow(values.animatedHead) != animated_moves::HeadFollow::level ||
+                             values.levelHeadLock);
                         if (headsetFirstNow) {
                             float hmdRel = NAN;
                             if (animHeadRefSet && validTrackedPose(frame.head))
@@ -13199,6 +13204,12 @@ DWORD WINAPI run(void*) {
                         const bool followFull = animHeadMode == animated_moves::HeadFollow::full;
                         const bool followSoftlock =
                             animHeadMode == animated_moves::HeadFollow::softlock;
+                        // LEVEL KEEPS HIM WITH YOU (level_head_lock.hpp): LEVEL on FULL's head lock, still level.
+                        const bool followLevelLock = level_head_lock::joins(
+                            values.levelHeadLock, animHeadMode == animated_moves::HeadFollow::level,
+                            hybrid_movement::modeOf(values.movementMode) == hybrid_movement::Mode::hybrid,
+                            values.headsetFirst);
+                        game_fp::levelHeadLock(followLevelLock);
                         eyes.anchored = followFull ? 2u : 4u;
                         // Level only: right stick turns the view, as in cutscenes with
                         // head tracking off (softlock leaves R-stick to AIR SPIN /
@@ -13221,7 +13232,7 @@ DWORD WINAPI run(void*) {
                                   view_yaw_lock::lockOn(animated_moves::headFollow(values.animatedHead) ==
                                                             animated_moves::HeadFollow::full,
                                                         true, values.animYawSwayPct))) &&
-                                (followFull || followSoftlock) && animHeadRefSet;
+                                (followFull || followSoftlock || followLevelLock) && animHeadRefSet;
                             // HEADSET FIRST: the head bone's yaw sway is never shown (the view is the player's).
                             const float sway = hybridLock ? (values.headsetFirst ? 0.f : hybridHeading.swayWeight)
                                                           : view_yaw_lock::swayOf(values.animYawSwayPct);
@@ -13274,7 +13285,10 @@ DWORD WINAPI run(void*) {
                                 turnInPlace.reset();
                             }
                             viewLockActive = lockWanted && viewLock.set;
-                            fullLockGate = viewLockActive && followFull;
+                            fullLockGate = viewLockActive && (followFull || followLevelLock);
+                            // LEVEL KEEPS HIM WITH YOU: the right stick turns the lock (above), not LEVEL's own turn.
+                            if (followLevelLock && viewLockActive)
+                                levelTurnGate = false;
                             // FACING CHECK, the animation's side: the view (the lock + sway +
                             // headset, or the head bone + headset without the lock) and the
                             // hero's facing against what SpidyVR showed / the view before.
@@ -13646,7 +13660,7 @@ DWORD WINAPI run(void*) {
                                         viewLock.yaw * toDeg, boneYaw * toDeg, heroYawNow * toDeg, shown * toDeg,
                                         hmd * toDeg, viewYaw * toDeg, stable_yaw::wrap(viewYaw - heroYawNow) * toDeg,
                                         stable_yaw::wrap(shown - boneYaw) * toDeg, values.animYawSwayPct,
-                                        followFull ? "full" : "softlock");
+                                        followFull ? "full" : followLevelLock ? "level" : "softlock");
                                 }
                                 if (!viewDivergenceAt)
                                     viewDivergenceAt = eyeBlendNow;
@@ -13696,6 +13710,7 @@ DWORD WINAPI run(void*) {
                         viewLock.reset();
                         turnInPlace.reset();
                         viewLockActive = fullLockGate = false;
+                        game_fp::levelHeadLock(false);
                         view_yaw_lock::publish({});
                         eyes.anchored = 1;
                         for (unsigned i = 0; i < 2; ++i) {

@@ -52,6 +52,10 @@ bool followingHero();
 // Re-latch frameLevel axes (as a cut): call when midair softlock begins so the
 // level forward settles to the current torso/head facing without a nausea pop.
 void relatchHeadFrame();
+// LEVEL KEEPS HIM WITH YOU (level_head_lock.hpp): the XR worker, every frame the view is on the hero's head:
+// on, frameLevel's level frame takes the view yaw lock's heading while the lock is live, and its latch skips the
+// one-metre jump cuts and the crown's yaw; off, frameLevel as beta3o.
+void levelHeadLock(bool on);
 // The XR worker, once per headset frame, with want(): what the view is where no head is found. 0: nothing,
 // the scene goes to the theatre screen. 1: the scene's own camera, where no head can be found (a head is
 // looked for all the same, and takes over when it is found). 2: the scene's own camera always (launcher:

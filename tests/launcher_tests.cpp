@@ -829,7 +829,7 @@ int main() {
                 continue;
             if (key == "wall_run_push" || key == "wall_run_blend_ms" || key == "wall_fling_any_way" ||
                 key == "sticky_palms" || key == "sticky_palms_pct" || key == "wall_slide_pose" ||
-                key == "wall_grip_jump_lock" || key == "web_rope_grip")
+                key == "wall_grip_jump_lock" || key == "web_rope_grip" || key == "level_head_lock")
                 continue;
             if (key == "wall_slide_friction")
                 continue;

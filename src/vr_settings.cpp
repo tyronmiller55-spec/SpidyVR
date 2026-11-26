@@ -3362,6 +3362,7 @@ constexpr TabOnly tabOnly[] = {
     {"wall_slide_pose", &Values::wallSlidePose, nullptr},
     {"wall_grip_jump_lock", &Values::wallGripJumpLock, nullptr},
     {"web_rope_grip", &Values::webRopeGrip, nullptr},
+    {"level_head_lock", &Values::levelHeadLock, nullptr},
     {"swing_rope_weight_pct", nullptr, &Values::swingRopeWeightPct},
     {"swing_rope_drag_pct", nullptr, &Values::swingRopeDragPct},
     {"kick_lunge", &Values::kickLunge, nullptr},
@@ -3701,6 +3702,12 @@ Values withMovementDefaults(Values v, std::string_view text) {
         // ROPE GRIP comes on once (t149u, a new key); a 0 chosen after this revision stays.
         v.webRopeGrip = true;
         // BETA3O MIGRATION END
+    }
+    if (seen < 27) {
+        // Revision 27 (0.8.7-na-beta3p; the owner, Nov 26 t151u and "Build A"): LEVEL KEEPS HIM WITH YOU comes on
+        // once (a new key); a 0 chosen after this revision stays.
+        v.levelHeadLock = true;
+        // BETA3P MIGRATION END
     }
     v.movementDefaults = movementDefaultsRevision;
     return sanitized(v);

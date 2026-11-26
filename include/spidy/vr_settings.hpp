@@ -324,7 +324,7 @@ struct Values {
     // from before it gets RUN CURVE on and EARLY JUMP QUICK TAP once (the
     // user: "movement fixes will be defaults"); after that the player's own
     // choice stands. Not a row. movement_defaults.
-    int movementDefaults = 26; // movementDefaultsRevision: a new file has seen them
+    int movementDefaults = 27; // movementDefaultsRevision: a new file has seen them
     // SOFT LANDING (the tab's SOFT LANDING; Swing::allowSoftLanding,
     // run_update::softLandVertical): a fall the swing flies, with no web
     // holding, eases to 9 m/s down over its last 3 m (or 0.35 s), its speed
@@ -395,6 +395,14 @@ struct Values {
     // like finishers (anchored 4 Level / 2 Full). Full keeps anim pitch/roll
     // in air too; Level only when chosen (animated_moves.hpp).
     int animatedHead = 2;
+    // LEVEL KEEPS HIM WITH YOU (0.8.7-na-beta3p, settings revision 27; the owner, Nov 26 t151u: LEVEL "felt
+    // great ... the body and the head had no cohesion, so you'd frequently be looking backwards after moves",
+    // and his answer "Build A"; level_head_lock.hpp): with HEAD LEVEL, HYBRID and HEADSET FIRST, LEVEL joins
+    // FULL's head lock - the view's yaw is the lock's (the right stick, snap realign, recenter) plus the
+    // headset, never the animation's, and the game's own turns bring him back under the view after a dodge,
+    // roll or landing - while the view stays level. Its latch, where the lock is not live, no longer re-latches
+    // on a fast dive's one-metre test or onto the crown's yaw looking up. Off: LEVEL as beta3o.
+    bool levelHeadLock = true;
     // SMOOTHING (the tab's SMOOTHING; Off|Low|Medium|High|Max, default Off):
     // ease the view toward the headset's look. Translation stays current, so
     // leaning and travel do not trail. Not a Settings / Command field.
@@ -1578,7 +1586,7 @@ std::string tabOnlyText(const Values&);
 // key, or whose value is no whole number, is passed over.
 Values withTabOnly(Values, std::string_view text);
 // The movement defaults' revision (Values::movementDefaults) this build has.
-inline constexpr int movementDefaultsRevision = 26;
+inline constexpr int movementDefaultsRevision = 27;
 // November 12 movement cleanup: a settings file (that text) older than
 // movementDefaultsRevision gets the new movement defaults once - RUN CURVE
 // on, EARLY JUMP at least QUICK TAP - and is marked as having seen them; a
