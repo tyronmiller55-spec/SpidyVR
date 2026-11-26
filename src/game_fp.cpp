@@ -1673,10 +1673,14 @@ std::atomic<bool> headYawKnown{}, levelYawKnown{};
 uint64_t prevSource{};
 float prevPos[3]{};
 bool prevSet{};
-// frameLevel's heading, latched at the start of a scene and at each cut (the render thread).
+// frameLevel's heading, latched at the start of a scene and at each cut.
 float levelAxes[16]{};
 bool levelSet{};
 uint32_t levelCut{};
+// The render thread (the eyes) and the XR worker (the hands, the steering) both call heroHead and
+// frameLevel: the cut test's last position and frameLevel's latch are read and written under this lock, so
+// the two threads never latch at different moments or read a half-written frame (beta3p).
+SRWLOCK latchLock = SRWLOCK_INIT;
 } // namespace
 
 void setHeadAxes(Vec3 forward, Vec3 up, Vec3 eyes) {
@@ -1914,6 +1918,7 @@ bool heroHead(Mat4& head) {
         // A cut: another skeleton plays the view, or the head is somewhere else (more than a metre in a
         // frame).
         {
+            AcquireSRWLockExclusive(&latchLock);
             const float dx = world[12] - prevPos[0], dy = world[13] - prevPos[1], dz = world[14] - prevPos[2];
             if (prevSet && (static_cast<uint64_t>(source) != prevSource || dx * dx + dy * dy + dz * dz > 1.f))
                 ++cutCount;
@@ -1922,6 +1927,7 @@ bool heroHead(Mat4& head) {
             prevPos[1] = world[13];
             prevPos[2] = world[14];
             prevSet = true;
+            ReleaseSRWLockExclusive(&latchLock);
         }
         std::memcpy(lastHead, world, sizeof(world));
         haveHead = true;
@@ -2047,6 +2053,7 @@ bool frameLevel(Mat4& out) {
     if (!frame(head))
         return false;
     const uint32_t cut = cutCount.load();
+    AcquireSRWLockExclusive(&latchLock);
     if (!levelSet || cut != levelCut) {
         // Where the character faces now, level: the head's forward without its height, or, looking steeply up
         // or down, where its crown points (ahead looking down, behind looking up).
@@ -2067,12 +2074,14 @@ bool frameLevel(Mat4& out) {
         }
     }
     if (!levelSet) {
+        ReleaseSRWLockExclusive(&latchLock);
         out = head; // straight up or down from the start: the head as it is until it faces somewhere
         return true;
     }
     levelYaw.store(std::atan2(-levelAxes[8], -levelAxes[10]), std::memory_order_relaxed);
     levelYawKnown.store(true, std::memory_order_relaxed);
     std::memcpy(out.data(), levelAxes, sizeof(levelAxes));
+    ReleaseSRWLockExclusive(&latchLock);
     out[12] = head[12];
     out[13] = head[13];
     out[14] = head[14];

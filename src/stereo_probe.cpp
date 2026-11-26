@@ -756,18 +756,45 @@ void resolveScene(native_eyes::Command& c) {
         return;
     Mat4 head{};
     if (c.anchored == 4 ? game_fp::frameLevel(head) : game_fp::frame(head)) {
-        static headset_smoothing::Filter parentSmooth;
-        static ULONGLONG lastMs{};
-        const ULONGLONG nowMs = GetTickCount64();
-        const float dt = lastMs ? (nowMs - lastMs) * 0.001f : 0.f;
-        lastMs = nowMs;
+        // SMOOTHING CLOCK (beta3p): one step a frame, timed on the performance counter. GetTickCount64 moves
+        // in 15.6 ms steps, so at a 20 ms frame dt read 15.6 or 31.2 ms and the blend swung from frame to frame;
+        // and the head is resolved twice a frame (commandHead, then the render path's fresher head), which
+        // stepped the shared filter twice when a tick fell between them. The frame's first call takes the
+        // frame's dt and keeps the filters as they were before it; a later call in the same frame redoes that
+        // one step from there with the newer head, so each frame is filtered once, with the newest head.
+        static headset_smoothing::Filter parentSmooth, frameStartSmooth;
+        static camera_motion::Bob parentBob, frameStartBob;
+        static int64_t lastTicks{}, ticksPerSecond{};
+        static uint64_t steppedFrame{~0ull};
+        static float frameDt{};
+        if (steppedFrame != frameIndex) {
+            if (!ticksPerSecond) {
+                LARGE_INTEGER f{};
+                ticksPerSecond = QueryPerformanceFrequency(&f) && f.QuadPart > 0 ? f.QuadPart : 1;
+            }
+            LARGE_INTEGER t{};
+            QueryPerformanceCounter(&t);
+            frameDt = lastTicks && ticksPerSecond > 1
+                          ? static_cast<float>(static_cast<double>(t.QuadPart - lastTicks) /
+                                               static_cast<double>(ticksPerSecond))
+                          : 0.f;
+            if (!(frameDt >= 0.f) || frameDt > 1.f)
+                frameDt = 0.f; // a stall or a clock fault: start over rather than leap
+            lastTicks = t.QuadPart;
+            steppedFrame = frameIndex;
+            frameStartSmooth = parentSmooth;
+            frameStartBob = parentBob;
+        } else {
+            parentSmooth = frameStartSmooth;
+            parentBob = frameStartBob;
+        }
+        const float dt = frameDt;
         // CAMERA SMOOTHING: the worker's params (fromValues, with the old
         // SMOOTHING level folded in); the travel relative to the hero's feet.
         Vec3 feet{};
         const bool haveFeet = heroPosition(feet) && finite(feet);
         // CAMERA MOTION first: how much of the animation's tilt and bob, and
         // HEAD ANGLE (camera_motion::live; the identity unless set).
-        static camera_motion::Bob parentBob;
         head = camera_motion::stabilize(head, camera_motion::live(), &parentBob, haveFeet ? &feet : nullptr, dt);
         // ANIM HEAD RIDE: the yaw of the bone's head held on harder (headset_smoothing::withRide).
         const auto smoothing = headset_smoothing::live();
