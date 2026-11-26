@@ -860,7 +860,7 @@ How the game plays is unchanged. No new settings, no new migration revision.
 4. **If it crashes**, upload the usual logs, `spidy-vr-start.log` and the new
    `.mdmp`.
 
-## beta3n: wall running back, wall fling any way, sticky palms; the thick swing line gone
+## beta3n: wall running back, wall fling any way, sticky palms, grip-held handstands; the thick swing line gone
 
 The owner, Nov 26 (t141u): beta3m ran with no crash. He asked to remove the extra white line along the swing
 web, to leave a rule for bots (nothing without his signoff), and to bring wall running back with his wall feel.
@@ -894,10 +894,24 @@ This build:
    run to go faster, down to lift, or the way you are going to brake. Off: a palm does nothing until it grips
    (beta3m).
 
-All three are on SpidyVR's own walls only. The game's own wall crawl and wall run, and the ground, have no
+6. **GRIP HOLDS THE HANDSTAND** (`handstand_grip_hold=1`; the owner, Nov 26 t146u: "I want handstands to lock
+   easily, and grip to be used to 'hold' the stance"). Upside down near the floor (inverted at least the catch
+   angle, 60 degrees, spinning under 5 rad/s), a squeezed grip is the intent: the hands-over-head test and its
+   hold wait are skipped, and the palms count from 2.0 m over the floor (the tip-in's reach) instead of 1.6 m.
+   While a grip is held the handstand is locked: no fall (the centre of mass is kept inside the palms'
+   support), no step-down or miss, no push, no leap; the grip shoots no web and A is no jump. Let go of the grip
+   and everything is as before. A push or a stick still held as you let go fires at once: letting go is the
+   launch, as with the grip fling. A lost tracking still ends it. Off: a squeeze after the catch ends the
+   handstand (beta3m). On walls the same rule already holds: a squeezed grip sticks you, an open palm is the
+   soft sticky palm, and letting go of a grip is the fling.
+7. **Launcher text.** A stalled headset picture no longer blames Wi-Fi. That line came from the PC's own network
+   adapter, not from the headset's connection (the owner is on a Link cable).
+
+The wall pieces are on SpidyVR's own walls only. The game's own wall crawl and wall run, and the ground, have no
 validated hook (docs/REFERENCE.md), so sticky palms do nothing there. The wall jump and its sound are unchanged.
-No view yaw is written. Settings revision **25** turns the three switches on once; a 0 chosen after it stays.
-The tunables are in the launcher's **Walls** group (Legs page), next to Grip to stick.
+No view yaw is written. Settings revision **25** turns the four switches on once; a 0 chosen after it stays.
+The wall tunables are in the launcher's **Walls** group (Legs page), next to Grip to stick; Grip holds the
+handstand is in its **Handstand** group.
 
 ### beta3n checklist
 
@@ -913,7 +927,11 @@ The tunables are in the launcher's **Walls** group (Legs page), next to Grip to 
 6. **Sticky palms.** Sliding, lay an open hand on the wall and hold it still: the slide slows but does not stop
    dead. Wall running, sweep the open hand backward along the wall: you speed up. Try **Sticky palms: strength**
    at 50% and 200%.
-7. **Off checks.** Turn each switch off in turn: that piece plays like beta3m.
-8. **Logs.** The swing log line `grip to stick: ...; wall run push: on (250 ms); wall fling any way: on; sticky
+7. **Grip handstand.** Flip upside down toward the floor with a grip squeezed and your hands anywhere: the
+   handstand should catch. Keep squeezing: lean, lift your palms, press A, push the stick - it stays. Let go and
+   push into the floor: you launch. Let go and lift the palms: you step down. Grip again after the catch: it
+   holds, it does not drop you.
+8. **Off checks.** Turn each switch off in turn: that piece plays like beta3m.
+9. **Logs.** The swing log line `grip to stick: ...; wall run push: on (250 ms); wall fling any way: on; sticky
    palms: on (100%)` confirms the settings reached the swing.
 

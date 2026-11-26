@@ -3,9 +3,9 @@
 Every build, newest first, with what changed, why, and what was measured.
 Per-check results are in [VALIDATION.md](VALIDATION.md).
 
-**0.8.7-na-beta3n (November 26, the owner's t141u; branch `feat/087-next`, on beta3m):** a test package
-([checklist](NA_BETA3.md#beta3n-wall-running-back-wall-fling-any-way-sticky-palms-the-thick-swing-line-gone)).
-Settings revision 25: the three new switches come on once; off of each equals beta3m. CURRENT is unchanged.
+**0.8.7-na-beta3n (November 26, the owner's t141u and t146u; branch `feat/087-next`, on beta3m):** a test package
+([checklist](NA_BETA3.md#beta3n-wall-running-back-wall-fling-any-way-sticky-palms-grip-held-handstands-the-thick-swing-line-gone)).
+Settings revision 25: the four new switches come on once; off of each equals beta3m. CURRENT is unchanged.
 
 - **THICK SWING LINE removed.** The extra white line along the swing web (beta3i) was never asked for. Swings
   show only the game's own web again; an old `thick_swing_line` key is ignored.
@@ -18,7 +18,12 @@ Settings revision 25: the three new switches come on once; off of each equals be
   it points out of the wall (0.3 m/s; it was a 2 m/s push straight out).
 - **Sticky palms** (`sticky_palms=1`, `sticky_palms_pct=100`). An open palm on the wall you slide or run on holds
   softly while it touches: still, it slows the slide; swept, it strokes you the other way (1.3x).
-- SpidyVR's own walls only; the game's wall crawl and the ground have no hook. The wall jump is unchanged.
+- **Grip holds the handstand** (`handstand_grip_hold=1`). A grip squeezed upside down near the floor catches the
+  handstand without the hands-over-head test (palms from 2.0 m, not 1.6 m); while held it is locked (no fall,
+  step-down, push or leap; no web, no jump). Let go to push, leap or step out, as before.
+- **Launcher text.** The stall line no longer blames Wi-Fi from the PC's own network adapter.
+- The wall pieces are SpidyVR's own walls only; the game's wall crawl and the ground have no hook. The wall jump is
+  unchanged.
 
 **0.8.7-na-beta3m (November 26, the owner's t133u-t138u; branch `feat/087-next`, on beta3l):** a test package
 ([checklist](NA_BETA3.md#beta3m-a-bigger-vr-thread-stack-for-the-0xc00000fd-crash)). No new setting; how the game

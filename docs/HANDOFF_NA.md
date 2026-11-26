@@ -109,7 +109,10 @@ All of these are on `tyronmiller55-spec/SpidyVR`. Do not rewrite them.
 | `e11f17b` | Wall running is back: the stick at the wall runs a slide (beta3n) |
 | `52a3c72` | A grip fling throws you off a wall in any direction (beta3n) |
 | `c544f24` | Sticky palms (beta3n) |
-| (next) | Docs: 0.8.7-na-beta3n |
+| `51915aa` | Docs: 0.8.7-na-beta3n |
+| `6250345` | Grip holds the handstand (beta3n) |
+| `bd2065b` | Launcher: a stalled picture no longer blames Wi-Fi |
+| (next) | Docs: beta3n's handstand and launcher text |
 
 ---
 
@@ -123,7 +126,8 @@ page). OFF plays like beta3m. SpidyVR's own walls only (`include/spidy/wall_feel
 - `wall_run_push` / `wall_run_blend_ms` (250) — WALL RUN PUSH. On a slide, the stick toward the wall blends into the stick's wall run. Root cause of the beta3e break: GRIP TO STICK's slide returned before the run in `Swing::wallMotion`.
 - `wall_fling_any_way` — a grip fling off a wall leaves along the whole fling with 0.3 m/s out of the wall (was 2 m/s).
 - `sticky_palms` / `sticky_palms_pct` (100) — open palms on the wall drag a slide, or stroke the body the other way of their sweep (1.3x).
-- They reach the swing on `WallStickAsk` version 2 (flags bits 1-3, `runBlendMs`, `stickyPct`); version 1 is still taken.
+- `handstand_grip_hold` — GRIP HOLDS THE HANDSTAND (`handstand.hpp` Params::gripHold, launcher Handstand group). A grip is the catch's intent (no arms-over-head test, tip-in reach 2.0 m) and locks the stance while held; release to push, leap or step out.
+- The wall pieces reach the swing on `WallStickAsk` version 2 (flags bits 1-3, `runBlendMs`, `stickyPct`); version 1 is still taken.
 
 beta3i's switches, **ON by default**, on the **NA · WEB SHOOTERS** tab and the Movement tab. OFF plays like beta3h / pre-beta3i:
 
@@ -244,9 +248,9 @@ Public search did not turn up a matching Meta 1.210 / OpenXR / D3D12 / NVIDIA st
 
 ## 9. Ranked next steps
 
-**Status, Nov 26:** beta3m fixed the crash (the owner: "No MDMP, game ran fine"). beta3n's code is committed and
-pushed to the fork, but **not built**: the owner said to hold the build and batch more requests into it. Do not run
-CI or package until he says so. The list below is the older crash plan, kept for history.
+**Status, Nov 26:** beta3m fixed the crash (the owner: "No MDMP, game ran fine"). beta3n adds the owner's t141u and
+t146u requests (above) and is built as a test zip (CI publish=false). The list below is the older crash plan, kept
+for history.
 
 1. **Get beta3l evidence first.** Ask the owner to install `Spidy-0.8.7-na-beta3l-win64-3baaecf.zip`, launch the **`3baaecf`** folder, not press Update, and if it dies, send the usual logs, `spidy-vr-start.log` from `reports\stereo-modules\<hash>\`, and a new `.mdmp`. Confirm the console build line. The last start-log line decides the next code change. Do not guess a beta3m without that.
 2. **Bisect the runtime vs our code.** Ask the owner to run **official 0.8.7** and/or **official 0.8.8** once on the same Link 1.210 + current NVIDIA driver (in a separate folder; do not use Update to overwrite NA). If official also dies, this is a Meta 1.210 / NVIDIA interop bug and a workaround or a runtime rollback is the path. If official runs, diff Ilya's start path (`cf0b279`) against ours and match the safe parts.
