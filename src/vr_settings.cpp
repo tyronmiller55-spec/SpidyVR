@@ -1008,8 +1008,6 @@ template <class V> auto switchOf(Item item, V& v) -> decltype(&v.aimMarkers) {
         return &v.animatedPunchFists;
     case Item::webHoldInHand:
         return &v.webHoldInHand;
-    case Item::thickSwingLine:
-        return &v.thickSwingLine;
     case Item::pointJump:
         return &v.pointJump;
     case Item::view:
@@ -2133,10 +2131,6 @@ const std::array<Row, rowTotal>& rows() {
          "WEB IN HAND",
          "A held web leaves from the closed hand. A shot still leaves from the shooter.",
          {}},
-        {Item::thickSwingLine,
-         "THICK SWING LINE",
-         "A thicker overlay follows the swing line. Off: only the game's own web.",
-         {}},
     }};
     static const std::array<Row, rowTotal> all = [] {
         std::array<Row, rowTotal> a{};
@@ -2280,7 +2274,7 @@ const std::array<Screen, categoryCount>& screens() {
         Item::webAimSource,  Item::forearmBlend, Item::forearmAimLimit,
         Item::wristShooters, Item::palmShooters, Item::animForearmFallback,
         Item::swingLineFullLength, Item::animatedWebGrip, Item::animatedPunchFists,
-        Item::webHoldInHand, Item::thickSwingLine,
+        Item::webHoldInHand,
     };
     // NA · BODY & LEGS (LEGS (ADVANCED) since November 11): shown even while unavailable, the help saying why
     // (shownWhenInactive); the flips' NA rows and the handstand with it.
@@ -3203,7 +3197,6 @@ constexpr TabOnly tabOnly[] = {
     {"animated_web_grip", &Values::animatedWebGrip, nullptr},
     {"animated_punch_fists", &Values::animatedPunchFists, nullptr},
     {"web_hold_in_hand", &Values::webHoldInHand, nullptr},
-    {"thick_swing_line", &Values::thickSwingLine, nullptr},
     {"camera_pitch_pct", nullptr, &Values::cameraPitchPct},
     {"camera_roll_pct", nullptr, &Values::cameraRollPct},
     {"camera_bob_vertical_pct", nullptr, &Values::cameraBobVerticalPct},
@@ -3669,12 +3662,12 @@ Values withMovementDefaults(Values v, std::string_view text) {
         // BETA3G MIGRATION END
     }
     if (seen < 24) {
-        // Revision 24 (the owner, Nov 25 t50u-t52u): WEB GRIP, PUNCH FISTS, WEB IN HAND and THICK SWING
-        // LINE come on once (new keys); a 0 chosen after this revision stays.
+        // Revision 24 (the owner, Nov 25 t50u-t52u): WEB GRIP, PUNCH FISTS and WEB IN HAND come on once
+        // (new keys); a 0 chosen after this revision stays. (THICK SWING LINE, also revision 24, was removed
+        // in beta3n at the owner's request, Nov 26 t141u; an old file's thick_swing_line key is ignored.)
         v.animatedWebGrip = true;
         v.animatedPunchFists = true;
         v.webHoldInHand = true;
-        v.thickSwingLine = true;
     }
     v.movementDefaults = movementDefaultsRevision;
     return sanitized(v);

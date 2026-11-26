@@ -94,8 +94,8 @@ int main(int argc, char** argv) {
         for (unsigned i = 1; i <= static_cast<unsigned>(lastItem); ++i)
             (isNativeAnimation(static_cast<Item>(i)) ? na : upstream) += 1;
         check(upstream == 89, "upstream 0.8.7 has 89 settings (its Item has 90 with none)");
-        check(na == 147, "the fork's settings are Native Animation's (135, G2b's class rules, NA HELP's page "
-                         "item, JUMP SOUNDS and WALL JUMP SOUND, WEB IN HAND and THICK SWING LINE)");
+        check(na == 146, "the fork's settings are Native Animation's (135, G2b's class rules, NA HELP's page "
+                         "item, JUMP SOUNDS and WALL JUMP SOUND, WEB IN HAND; THICK SWING LINE removed in beta3n)");
         check(isNativeAnimation(Item::showtime) && isNativeAnimation(Item::headProbe) &&
                   isNativeAnimation(Item::swingKickManual) && !isNativeAnimation(Item::webLines) &&
                   !isNativeAnimation(Item::airFists) && !isNativeAnimation(Item::enemyTypes) &&
@@ -114,10 +114,7 @@ int main(int argc, char** argv) {
             check(length(held - expect) < 1e-5f,
                   "the hold point is the knuckles along the shooter's -Z (grip -Y)");
         }
-        check(Values{}.webHoldInHand && Values{}.thickSwingLine,
-              "WEB IN HAND and THICK SWING LINE are on by default");
-        check(thickSwingLook().radius > WebLook{}.radius && thickSwingLook().minPixels > WebLook{}.minPixels,
-              "the thick swing look is wider than the default overlay strand");
+        check(Values{}.webHoldInHand, "WEB IN HAND is on by default");
         std::array<unsigned, 256> inScreens{};
         for (const auto& screen : screens())
             for (Item item : screen.items)

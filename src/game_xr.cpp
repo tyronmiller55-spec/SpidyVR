@@ -14503,12 +14503,12 @@ DWORD WINAPI run(void*) {
                             const Vec3 start = webLineStart(grip, hand, holdLine);
                             shooters[hand] = start;
                             shooterHands |= 1u << hand;
-                            const WebLook look = values.thickSwingLine ? thickSwingLook() : WebLook{};
-                            const bool drawOverlay = !gameWeb || values.thickSwingLine;
+                            const WebLook look{};
+                            const bool drawOverlay = !gameWeb;
                             if (gameWeb) {
                                 // The game draws the piece between the hands
                                 // itself where it can (native_webs::Held).
-                                if (lower && !native_webs::drawsHeld() && !values.thickSwingLine) {
+                                if (lower && !native_webs::drawsHeld()) {
                                     between(start);
                                     appendWeb(vertices, line, viewer, pixelAngle);
                                 } else if (web.attached && slot == static_cast<int>(hand) &&
