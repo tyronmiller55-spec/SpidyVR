@@ -5,7 +5,7 @@ Insomniac's original animation suite keeps playing while SpidyVR controls,
 your headset and controller-tracked arms are layered over it. Inspired by
 **vrfloofy's first-person mod**. GPL-3.0; not an official Marvel or Insomniac product.
 
-The testers' **CURRENT** build is **0.8.7-na-beta2**, from the Releases page of
+The testers' **CURRENT** build is **0.8.7-na-beta3p** (`b426479`, Nov 26), from the Releases page of
 [SpidyVR-NativeAnimation](https://github.com/tyronmiller55-spec/SpidyVR-NativeAnimation/releases/latest).
 Open **Spidy Launcher.exe** and select **Native Animation**, between Options and
 Controls. The headset has the same settings under the **NA ·** tabs. New
@@ -55,7 +55,9 @@ Build **beta3i** puts a held web in the closed hand, adds a thicker swing-line o
 web or a punch, and fixes two log wording issues. Settings revision 24; off of each new switch equals beta3h.
 [Checklist](docs/NA_BETA3.md).
 
-**0.8.7-na-beta2** (CURRENT, Nov 21): point jumps play the game's whole jump sound set; Y+B finishers stay the
+**0.8.7-na-beta3p** (CURRENT, Nov 26): the beta3 series - the 0xC00000FD crash fix, HEAD LEVEL as the default with Level keeps him with you, the smoothing clock fix, wall running back with sticky palms and wall fling any way, grip-held handstands, the web held in the fist; see the [checklist](docs/NA_BETA3.md).
+
+**0.8.7-na-beta2** (CURRENT before beta3p, Nov 21): point jumps play the game's whole jump sound set; Y+B finishers stay the
 game's own and a grip no longer cancels one; **air dodge on B** in SpidyVR's air (the left stick picks the way;
 A+B, X+B and Y+B keep their chords); a **Showtime ray fan** that pulls the camera in before walls and trails less
 at speed; **sticky handstands** that survive short tracking drops; wrist shooters LOCKED TO ARM that stay on the

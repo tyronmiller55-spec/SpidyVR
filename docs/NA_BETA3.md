@@ -42,8 +42,8 @@
 > two log wording fixes from the polish pass are in. Settings revision 24.
 
 A **test build** (branch `feat/087-polish`, from Crime Run on `feat/087-crime-run`, itself from `feat/087-beta3` on
-`feat/087-beta2` 1418992). The testers' **CURRENT** build stays
-[0.8.7-na-beta2](NA_BETA2.md) until this one is played. What changed: [CHANGELOG.md](CHANGELOG.md).
+`feat/087-beta2` 1418992). The testers' **CURRENT** build was
+[0.8.7-na-beta2](NA_BETA2.md) until **beta3p** (`b426479`) became CURRENT on Nov 26. What changed: [CHANGELOG.md](CHANGELOG.md).
 
 Every feature stays on. Settings files from before take migration revision 17: HANDOFF HEAD FIRST, LANDING VIEW
 SNAP, HEAD SEAT PULL and SHOWTIME AUTO: FINISHERS AND STRIKES come on once (a 0 chosen after it stays), and a saved
