@@ -3394,6 +3394,8 @@ void App::options(ImVec2 origin, ImVec2 size) {
                    S(150), [&] { fineSlider("##stickypalmspct", tabOnly_.stickyPalmsPct, 0, 200, 10, "%d%%", "None"); });
             settingOption(Item::none, "Wall slide pose", "Looks only: while you slide down one of SpidyVR's walls (before a grip sticks you), his legs brace in a crouch - knees up and wide, one foot higher - like the classic wall slide. A slide you run along the wall keeps the wall run's legs. Off: the crawl's or the run's legs, as beta3n. Default: on.",
                    S(42), [&] { flagToggle("##wallslidepose", tabOnly_.wallSlidePose); });
+            settingOption(Item::none, "Grip locks the wall jump", "Changes the feel: while you grip one of SpidyVR's walls, A does not jump off it - let go of the grip first. A+B, the point jump, still fires through the grip. Off: A wall jumps with a grip held, as beta3n. Default: on.",
+                   S(42), [&] { flagToggle("##wallgripjumplock", tabOnly_.wallGripJumpLock); });
             // BETA3E LAUNCHER END
         });
         // KICKS (0.8.7-na-beta3f): the air kick's lunge and the kicks' feel, each on by default for testing. The same

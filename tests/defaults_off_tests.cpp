@@ -3,7 +3,8 @@
 // with no revision bump (missing keys take the struct defaults), and revision 24
 // turns WEB GRIP, PUNCH FISTS and WEB IN HAND on once (THICK SWING LINE was removed in beta3n), and
 // revision 25 (beta3n) turns WALL RUN PUSH, WALL FLING ANY WAY, STICKY PALMS and
-// GRIP HOLDS THE HANDSTAND on once, and revision 26 (beta3o) WALL SLIDE POSE.
+// GRIP HOLDS THE HANDSTAND on once, and revision 26 (beta3o) WALL SLIDE POSE and
+// GRIP LOCKS THE WALL JUMP.
 #include "spidy/vr_settings.hpp"
 #include <cstdio>
 #include <cstdlib>
@@ -80,11 +81,14 @@ int main() {
     check(!k.wallRunPush && k.wallRunBlendMs == 0 && !k.wallFlingAnyWay && !k.stickyPalms && k.stickyPalmsPct == 30 && !k.handstandGripHold, "a 0 chosen after revision 25 was overwritten");
     check(withTabOnly({}, "wall_run_blend_ms=5000\n").wallRunBlendMs == 1000, "the blend is not held to 1000 ms");
 
-    // Revision 26 (beta3o): WALL SLIDE POSE comes on once; a 0 chosen after it stays.
-    const std::string rev25 = "movement_defaults=25\nwall_slide_pose=0\n";
-    check(withMovementDefaults(withTabOnly({}, rev25), rev25).wallSlidePose, "revision 26 did not turn WALL SLIDE POSE on once");
-    const std::string kept26 = "movement_defaults=26\nwall_slide_pose=0\n";
-    check(!withMovementDefaults(withTabOnly({}, kept26), kept26).wallSlidePose, "a 0 chosen after revision 26 was overwritten");
+    // Revision 26 (beta3o): WALL SLIDE POSE and GRIP LOCKS THE WALL JUMP come on once; a 0 chosen after it stays.
+    const std::string rev25 = "movement_defaults=25\nwall_slide_pose=0\nwall_grip_jump_lock=0\n";
+    const Values r26 = withMovementDefaults(withTabOnly({}, rev25), rev25);
+    check(r26.wallSlidePose, "revision 26 did not turn WALL SLIDE POSE on once");
+    check(r26.wallGripJumpLock, "revision 26 did not turn GRIP LOCKS THE WALL JUMP on once");
+    const std::string kept26 = "movement_defaults=26\nwall_slide_pose=0\nwall_grip_jump_lock=0\n";
+    const Values k26 = withMovementDefaults(withTabOnly({}, kept26), kept26);
+    check(!k26.wallSlidePose && !k26.wallGripJumpLock, "a 0 chosen after revision 26 was overwritten");
 
     // Off of Crime Run matches "no mode": the previous build has no run, no HUD key, no fifth app.
     Values off;

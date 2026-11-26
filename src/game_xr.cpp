@@ -111,6 +111,7 @@
 #include "spidy/sound_trace.hpp"
 #include "spidy/stable_yaw.hpp"
 #include "spidy/view_yaw_lock.hpp"
+#include "spidy/grip_jump.hpp"
 #include "spidy/leg_layers.hpp"
 #include "spidy/facing_check.hpp"
 #include "spidy/hybrid_movement.hpp"
@@ -1671,6 +1672,10 @@ DWORD WINAPI run(void*) {
         ground_flip::TapTrigger groundFlipTap; // side flips: a directional A tap
         bool torsoChannelLogged{}; // TORSO CHANNEL (J1): last logged on/off
         bool wallSlidePoseOn{};    // WALL SLIDE POSE (beta3o): the legs' slide pose shows (and was logged so)
+        // GRIP LOCKS THE WALL JUMP (beta3o, grip_jump.hpp): an A pressed while a grip holds SpidyVR's wall is
+        // swallowed until let go of; the count for the log.
+        grip_jump::Lock gripJumpLock;
+        uint32_t gripJumpLocked{};
         unsigned groundFlips{}, groundFlipDenied{}, groundFlipRefused{}, groundFlipReleasedSeen{}, groundFlipLapsedSeen{};
         // DOUBLE-TAP A: UPSIDE DOWN: the rig's count logged, and whether a hold was on.
         unsigned airFlipInvertSeen{};
@@ -4239,6 +4244,29 @@ DWORD WINAPI run(void*) {
                                              static_cast<unsigned>(swingState.wall),
                                              std::isfinite(swingState.velocity.y) ? swingState.velocity.y : 0.f);
                         }
+                    }
+                    // GRIP LOCKS THE WALL JUMP (wall_grip_jump_lock, beta3o; grip_jump.hpp): on SpidyVR's own wall
+                    // with a grip squeezed (no web in that hand), A is no jump for the swing or the game until let
+                    // go of; A+B's point jump took its own path above and still fires.
+                    {
+                        const bool gjFresh = swingState.status && swingState.qpc &&
+                                             static_cast<int64_t>(swingState.qpc) > now.QuadPart - frequency.QuadPart / 10;
+                        grip_jump::Hand gjHands[2];
+                        for (unsigned i = 0; i < 2; ++i) {
+                            gjHands[i].tracked = frame.hands[i].valid;
+                            gjHands[i].squeeze = frame.hands[i].squeeze;
+                            gjHands[i].webbed = (swingState.webs[i].attached & 1u) != 0;
+                        }
+                        const bool gjLocked =
+                            values.wallGripJumpLock && gjFresh && swingState.owned &&
+                            swingState.wall == static_cast<uint32_t>(game_swing::Surface::wall) &&
+                            grip_jump::wallGripHeld(true, gjHands[0], gjHands[1]);
+                        const auto gj = gripJumpLock.update(frame.jump, gjLocked);
+                        if (gj.lockedNow)
+                            diag_log::writef("grip jump lock: A held back on the wall (a grip holds it; let go to "
+                                             "wall jump, or A+B to point jump), #%u",
+                                             ++gripJumpLocked);
+                        frame.jump = gj.a;
                     }
                     if (!frame.jump)
                         jumpFromScreen = false;

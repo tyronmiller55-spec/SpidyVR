@@ -26026,6 +26026,7 @@ int main() {
                   "sticky_palms=1\n"
                   "sticky_palms_pct=100\n"
                   "wall_slide_pose=1\n"
+                  "wall_grip_jump_lock=1\n"
                   "swing_rope_weight_pct=100\n"
                   "swing_rope_drag_pct=100\n"
                   "kick_lunge=1\n"

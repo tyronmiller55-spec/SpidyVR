@@ -924,6 +924,12 @@ struct Values {
     // higher - in place of the wall crawl's planted legs or the wall run's stride. A slide the stick runs along the
     // wall keeps the wall run. Off: as beta3n.
     bool wallSlidePose = true;
+    // GRIP LOCKS THE WALL JUMP (0.8.7-na-beta3o, settings revision 26; the owner, Nov 26 t147u: "Only point jumps
+    // should work through the grip. Normal jumps should stay locked."; a feel change, grip_jump.hpp): on one of
+    // SpidyVR's walls with a grip squeezed (no web in that hand), A is no wall jump - for the swing or the game -
+    // until it is let go of; A+B's point jump still fires through the grip. Let go of the grip to wall jump. Off:
+    // as beta3n (A wall jumps with a grip held).
+    bool wallGripJumpLock = true;
     // (%, 0 to 300) ROPE WEIGHT (0.8.7-na-beta3e; the owner, Nov 22 t94u: "I want a weight slider for the webs,
     // right now they're so light I can't control the swing"): the swing line's mass for ROPE PHYSICS, the sim and
     // the pull alike (swing_line::Input::weight). Heavier hangs and swings on with what it has - more inertia to
