@@ -9,6 +9,10 @@ Talk about code in **#spidy-dev** on [Discord](https://discord.gg/x27ZXDpdNt)
 
 ## Before you write code
 
+> **Assistants and bots (the Native Animation fork):** do not add any feature, visual, overlay, setting or
+> behavior the owner did not explicitly ask for. Propose it and get the owner's signoff first. Example: THICK
+> SWING LINE, an unasked white overlay line along the swing web, removed in beta3n. See [AGENTS.md](AGENTS.md).
+
 For anything larger than a small fix, say what you plan first, in #spidy-dev or
 in an issue. Ilya decides what goes into Spidy, and asking first saves you from
 building something that won't be merged.

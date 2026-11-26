@@ -22,6 +22,7 @@ Written the morning of Thursday, November 26, 2026 (America/Los_Angeles), so a f
 
 Follow these unless the owner explicitly overrides one.
 
+- **No additions without the owner's signoff (Nov 26, t141u).** Do not add any feature, visual, overlay, setting or behavior the owner did not explicitly ask for. Propose it and get the owner's signoff first. Example: the owner said the webs were hard to see, and a bot added THICK SWING LINE, a second bright white line along the swing web that he never asked for and found garish. It was removed in beta3n. See also [AGENTS.md](../AGENTS.md).
 - Never push to upstream IlyaMez or open PRs there without an explicit ask.
 - Never send Discord or other messages as the user. Draft them only.
 - Never force-push or rewrite existing branches.
@@ -111,7 +112,7 @@ New switches, **ON by default**, on the **NA · WEB SHOOTERS** tab and the Movem
 - `animated_web_grip` — WEB GRIP. A hand closes on its attached web while the game's animation drives the body.
 - `animated_punch_fists` — PUNCH FISTS. A punching hand balls into a fist (pose measured from the game's own model; no verified clip IDs).
 - `web_hold_in_hand` — WEB IN HAND. A held web leaves from the closed fist (~15.5 cm ahead of `webShooter` / `webStart`, `fistAhead` in `game_punch.cpp`). A new shot still fires from the wrist shooter.
-- `thick_swing_line` — THICK SWING LINE. A thicker, brighter line follows the game's own (thin) swing web so it is visible in the headset.
+- `thick_swing_line` — THICK SWING LINE. **Removed in beta3n** (the owner: unasked, garish). Do not bring it back.
 
 **Crime Run** stays **off by default**. Turn it on under Kicks & Combat; start a run from the fifth app on the phone (the siren). With it off, play should match the parent build.
 
