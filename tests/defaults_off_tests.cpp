@@ -2,7 +2,7 @@
 // a 0 chosen after that stays, rope weight 200% becomes 100%, Crime Run stays off
 // with no revision bump (missing keys take the struct defaults), and revision 24
 // turns WEB GRIP, PUNCH FISTS and WEB IN HAND on once (THICK SWING LINE was removed in beta3n), and
-// revision 25 (beta3n) turns WALL RUN PUSH on once.
+// revision 25 (beta3n) turns WALL RUN PUSH, WALL FLING ANY WAY and STICKY PALMS on once.
 #include "spidy/vr_settings.hpp"
 #include <cstdio>
 #include <cstdlib>
@@ -68,13 +68,14 @@ int main() {
     check(text.find("movement_defaults=25\n") != std::string::npos, "the defaults' text did not carry movement_defaults=25");
 
     // Revision 25 (beta3n): the walls' feel comes on once; a 0 chosen after it stays; off is beta3m's wall.
-    const std::string rev24 = "movement_defaults=24\nwall_run_push=0\nwall_fling_any_way=0\n";
+    const std::string rev24 = "movement_defaults=24\nwall_run_push=0\nwall_fling_any_way=0\nsticky_palms=0\n";
     const Values n = withMovementDefaults(withTabOnly({}, rev24), rev24);
     check(n.wallRunPush && n.wallRunBlendMs == 250, "revision 25 did not turn WALL RUN PUSH on once");
     check(n.wallFlingAnyWay, "revision 25 did not turn WALL FLING ANY WAY on once");
-    const std::string kept25 = "movement_defaults=25\nwall_run_push=0\nwall_run_blend_ms=0\nwall_fling_any_way=0\n";
+    check(n.stickyPalms && n.stickyPalmsPct == 100, "revision 25 did not turn STICKY PALMS on once");
+    const std::string kept25 = "movement_defaults=25\nwall_run_push=0\nwall_run_blend_ms=0\nwall_fling_any_way=0\nsticky_palms=0\nsticky_palms_pct=30\n";
     const Values k = withMovementDefaults(withTabOnly({}, kept25), kept25);
-    check(!k.wallRunPush && k.wallRunBlendMs == 0 && !k.wallFlingAnyWay, "a 0 chosen after revision 25 was overwritten");
+    check(!k.wallRunPush && k.wallRunBlendMs == 0 && !k.wallFlingAnyWay && !k.stickyPalms && k.stickyPalmsPct == 30, "a 0 chosen after revision 25 was overwritten");
     check(withTabOnly({}, "wall_run_blend_ms=5000\n").wallRunBlendMs == 1000, "the blend is not held to 1000 ms");
 
     // Off of Crime Run matches "no mode": the previous build has no run, no HUD key, no fifth app.

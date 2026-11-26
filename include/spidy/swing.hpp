@@ -720,6 +720,23 @@ class Swing {
     bool wallFlingAnyWayEnabled() const {
         return flingAnyWay_;
     }
+    // STICKY PALMS (0.8.7-na-beta3n, wall_feel.hpp; off: beta3m's). An open palm (no grip) touching the wall the
+    // body slides or runs on holds it softly, only while it touches: the body follows the palm's sweep along
+    // the wall (wall_feel::palms, `pct` of wall_feel::stickyRate, 0 to 200) - a still palm slows a slide, a palm
+    // swept back carries a run or a jump's speed on, one swept down lifts.
+    void stickyPalms(bool on, int pct) {
+        stickyPalms_ = on;
+        stickyStrength_ = static_cast<float>(std::clamp(pct, 0, 200)) / 100.f;
+        if (!on)
+            palms_ = {};
+    }
+    bool stickyPalmsEnabled() const {
+        return stickyPalms_;
+    }
+    // Which palms hold the wall now (bit 0 left, bit 1 right).
+    unsigned stickyPalmHands() const {
+        return (palms_[0].touching ? 1u : 0u) | (palms_[1].touching ? 2u : 0u);
+    }
     // How far the slide has blended into the stick's run (0..1).
     float wallRunBlend() const {
         return runBlend_;
@@ -1215,6 +1232,17 @@ class Swing {
     // WALL RUN PUSH (beta3n): the switch, the run's blend (0..1) and its time.
     bool runPush_{}, flingAnyWay_{};
     float runBlendSeconds_ = wall_feel::defaultBlendMs / 1000.f, runBlend_{};
+    // STICKY PALMS (beta3n): the switch, its strength (0..2), and each palm: on the wall now, its sweep (m/s,
+    // smoothed) and the tracking it was measured from.
+    bool stickyPalms_{};
+    float stickyStrength_ = wall_feel::defaultStickyPct / 100.f;
+    struct Palm {
+        bool touching{}, have{};
+        Vec3 sweep{}, previous{};
+        float yaw{};
+    };
+    std::array<Palm, 2> palms_{};
+    void palmInputs(const Input&, const WorldQueries&);
     Vec3 wallRun(Vec3 along, Vec3 n, const Input&, float dt) const;
     float climbSeconds_{};
     void climbInputs(const Input&, const WorldQueries&);

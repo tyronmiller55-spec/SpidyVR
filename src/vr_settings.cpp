@@ -1356,6 +1356,7 @@ Values sanitized(Values v) {
     v.swingRopeWeightPct = std::clamp(v.swingRopeWeightPct, 0, 300);
     v.wallSlideFriction = std::clamp(v.wallSlideFriction, 0, 100);
     v.wallRunBlendMs = std::clamp(v.wallRunBlendMs, 0, 1000);
+    v.stickyPalmsPct = std::clamp(v.stickyPalmsPct, 0, 200);
     v.swingReelOutSpeed = std::clamp(v.swingReelOutSpeed, 50, 1500);
     v.swingReelOutTapMs = std::clamp(v.swingReelOutTapMs, 150, 600);
     v.showtimeAutoPunchCooldownMs = std::clamp(v.showtimeAutoPunchCooldownMs, 0, 60000);
@@ -3355,6 +3356,8 @@ constexpr TabOnly tabOnly[] = {
     {"wall_run_push", &Values::wallRunPush, nullptr},
     {"wall_run_blend_ms", nullptr, &Values::wallRunBlendMs},
     {"wall_fling_any_way", &Values::wallFlingAnyWay, nullptr},
+    {"sticky_palms", &Values::stickyPalms, nullptr},
+    {"sticky_palms_pct", nullptr, &Values::stickyPalmsPct},
     {"swing_rope_weight_pct", nullptr, &Values::swingRopeWeightPct},
     {"swing_rope_drag_pct", nullptr, &Values::swingRopeDragPct},
     {"kick_lunge", &Values::kickLunge, nullptr},
@@ -3679,6 +3682,8 @@ Values withMovementDefaults(Values v, std::string_view text) {
         v.wallRunPush = true;
         // WALL FLING ANY WAY comes on once (t141u, a new key); a 0 chosen after this revision stays.
         v.wallFlingAnyWay = true;
+        // STICKY PALMS comes on once (t141u, a new key); a 0 chosen after this revision stays.
+        v.stickyPalms = true;
         // BETA3N MIGRATION END
     }
     v.movementDefaults = movementDefaultsRevision;

@@ -6,6 +6,7 @@
 #include <cmath>
 #include <cstdio>
 #include <cstdlib>
+#include <tuple>
 #include <utility>
 
 using namespace spidy;
@@ -203,6 +204,71 @@ int main() {
         // Pulled away from the wall (a fling into it) still strokes along it, on or off.
         const auto [inOn, inV] = fling(true, Vec3{-1, 0, 1});
         check(inOn && inV.z < -.5f, "a fling into the wall left it, or did not stroke along it");
+    }
+    // STICKY PALMS: an open palm on the slide's wall holds softly, only while it touches.
+    {
+        check(near(length(wall_feel::palms({0, -6, 0}, {-1, 0, 0}, {}, 1, 1, .5f, 65)), 6 * std::exp(-2.f), .01f),
+              "a still palm's half second");
+        check(near(wall_feel::palms({0, -6, 0}, {-1, 0, 0}, {}, 0, 1, .5f, 65).y, -6), "no palm, no hold");
+        check(near(wall_feel::palms({0, -6, 0}, {-1, 0, 0}, {}, 1, 0, .5f, 65).y, -6), "0%, no hold");
+        check(wall_feel::palms({0, 0, -8}, {-1, 0, 0}, {0, 0, 3}, 1, 1, .1f, 65).z < -8.5f, "a back sweep added nothing");
+        check(wall_feel::palms({0, 0, -8}, {-1, 0, 0}, {0, 0, -3}, 1, 1, .1f, 65).z > -7.5f, "a forward sweep did not brake");
+        check(near(wall_feel::palms({0, 0, -8}, {-1, 0, 0}, {5, 0, 0}, 1, 1, .1f, 65).x, 0), "a palm pushed into the wall");
+        check(length(wall_feel::palms({0, 0, -8}, {-1, 0, 0}, {0, 0, 40}, 2, 2, 1, 10)) <= 10.001f, "past the most");
+        check(length(wall_feel::smoothSweep({}, {0, 0, 30}, .01f)) == 0, "a tracking jump taken as a sweep");
+        const auto slide = [](bool on, float squeeze, Vec3 sweepPerSecond, float seconds) {
+            WallRig r;
+            r.s.stickyPalms(on, 100);
+            r.onWall();
+            r.advance(20);
+            auto& h = r.in.hands[1];
+            h.tracked = true;
+            h.aim.orientation = arc({0, 0, -1}, {1, 0, 0});
+            h.gripRelativeToHead = {.4f, 0, 0};
+            h.wallGrip = squeeze;
+            const float before = r.body.velocity.y;
+            unsigned touched = 0;
+            for (int i = 0; i < static_cast<int>(seconds * 60); ++i) {
+                h.wallPosition = {4.95f, r.body.position.y, r.body.position.z};
+                h.gripRelativeToHead += sweepPerSecond / 60.f;
+                r.advance();
+                touched |= r.s.stickyPalmHands();
+            }
+            return std::tuple{before, r.body.velocity, touched, r.s.wall().stuck};
+        };
+        // Held still on the wall: the slide slows, it does not stop dead or stick.
+        const auto [before, still, touched, stuck] = slide(true, 0, {}, .5f);
+        check(touched == 2u && !stuck, "the open palm did not touch, or it stuck the body");
+        check(before < -2 && still.y > before * .5f && still.y < -.05f, "a still palm did not slow the slide softly");
+        // Off: beta3m, the palm does nothing.
+        const auto [offBefore, off, offTouched, offStuck] = slide(false, 0, {}, .5f);
+        check(!offTouched && off.y < offBefore, "off, a palm held the slide");
+        // A palm squeezed is a grip, not a palm (GRIP TO STICK sticks the body).
+        const auto [gb, gv, gripTouched, gripStuck] = slide(true, 1, {}, .1f);
+        check(!gripTouched && gripStuck, "a grip counted as a palm");
+        // Swept back along the wall (+z, the body runs -z): the run gains speed along the wall.
+        WallRig run;
+        run.s.stickyPalms(true, 100);
+        run.s.wallRunPush(true, 0);
+        run.body.velocity = {6, 0, -8};
+        run.onWall();
+        run.in.move = normalized(Vec3{.5f, 0, -1});
+        run.advance(10);
+        const float runSpeed = -run.body.velocity.z;
+        auto& h = run.in.hands[0];
+        h.tracked = true;
+        h.aim.orientation = arc({0, 0, -1}, {1, 0, 0});
+        h.gripRelativeToHead = {.4f, 0, 0};
+        for (int i = 0; i < 20; ++i) {
+            h.wallPosition = {4.95f, run.body.position.y, run.body.position.z};
+            h.gripRelativeToHead.z += 3.f / 60; // a 3 m/s stroke back
+            run.advance();
+        }
+        check(-run.body.velocity.z > runSpeed + 1, "a palm swept back did not push the run on");
+        // Let go of the wall: nothing holds.
+        h.wallPosition = {3.5f, run.body.position.y, 0};
+        run.advance();
+        check(run.s.stickyPalmHands() == 0, "a palm off the wall still held");
     }
     std::printf("%d wall feel checks passed\n", passed);
     return 0;

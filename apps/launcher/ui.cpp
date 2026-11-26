@@ -3380,6 +3380,10 @@ void App::options(ImVec2 origin, ImVec2 size) {
                    S(150), [&] { fineSlider("##wallrunblend", tabOnly_.wallRunBlendMs, 0, 1000, 25, "%d ms", "At once"); });
             settingOption(Item::none, "Wall fling any way", "Changes the feel: holding a wall with a grip, pull and let go to fling off it in any direction - up, down, sideways or out. A fling into the wall still carries you along it. Needs Grip fling on. Off: only a hard push straight out leaves the wall, as beta3m. Default: on.",
                    S(42), [&] { flagToggle("##wallflinganyway", tabOnly_.wallFlingAnyWay); });
+            settingOption(Item::none, "Sticky palms", "Changes the feel: an open hand touching the wall you slide or run on holds softly, only while it touches. Hold it still to slow a slide; sweep it back along a wall run to push on faster; sweep it down to lift. SpidyVR's walls only. Off: a palm does nothing until you grip, as beta3m. Default: on.",
+                   S(42), [&] { flagToggle("##stickypalms", tabOnly_.stickyPalms); });
+            settingOption(Item::none, "Sticky palms: strength", "How firmly a touching palm holds. 100%: a still palm takes a quick slide to a crawl in about half a second. 0%: none. Default: 100%.",
+                   S(150), [&] { fineSlider("##stickypalmspct", tabOnly_.stickyPalmsPct, 0, 200, 10, "%d%%", "None"); });
             // BETA3E LAUNCHER END
         });
         // KICKS (0.8.7-na-beta3f): the air kick's lunge and the kicks' feel, each on by default for testing. The same

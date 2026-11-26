@@ -303,6 +303,8 @@ void Swing::leaveWall() {
     wallLost_ = 0;
     wrapWay_ = {};
     runBlend_ = 0;
+    for (auto& p : palms_)
+        p.touching = false;
 }
 void Swing::joinWall(const RayHit& hit) {
     const Vec3 n = hit.normal;
@@ -383,6 +385,34 @@ void Swing::stickInputs(const Input& in, const WorldQueries& world) {
             body_.velocity = wall_.normal * dot(body_.velocity, wall_.normal);
             return;
         }
+    }
+}
+void Swing::palmInputs(const Input& in, const WorldQueries& world) {
+    // STICKY PALMS (wall_feel.hpp): which open palms touch the wall the body slides or runs on (hand climbing's
+    // palm test, GRIP TO STICK's wall), and how each sweeps: its motion against the head, turned into the world.
+    if (!stickyPalms_)
+        return;
+    const float dt = climbSeconds_;
+    const bool onSlide = gripToStick_ && wall_.on && !wall_.stuck && in.focused && length(wrapWay_) <= .5f;
+    for (int i = 0; i < 2; ++i) {
+        auto& p = palms_[i];
+        const auto& h = in.hands[i];
+        const bool valid = in.focused && h.tracked && finite(h.gripRelativeToHead) && std::isfinite(in.trackingYaw);
+        if (!valid) {
+            p = {};
+            continue;
+        }
+        const bool turned = !p.have || dt > .1f || std::abs(std::remainder(in.trackingYaw - p.yaw, 6.2831853f)) > .12f;
+        if (!turned && dt > 0)
+            p.sweep = wall_feel::smoothSweep(p.sweep, trackingTurn(in).rotate(h.gripRelativeToHead - p.previous) / dt, dt);
+        else
+            p.sweep = {};
+        p.previous = h.gripRelativeToHead;
+        p.yaw = in.trackingYaw;
+        p.have = true;
+        const float squeeze = std::isfinite(h.wallGrip) ? h.wallGrip : 0.f;
+        p.touching = onSlide && !webs_[i].attached && !climbing_[i].attached && squeeze <= wall_feel::openPalm &&
+                     finite(h.wallPosition) && pointsAtWall(h) && wallContact(h, world).has_value();
     }
 }
 void Swing::senseWall(float dt, const Input& in, const WorldQueries& world) {
@@ -888,6 +918,19 @@ void Swing::wallMotion(float dt, const Input& in) {
             if (runBlend_ > 0)
                 along = wall_feel::mix(along, wallRun(now, n, in, dt), runBlend_);
         }
+        // STICKY PALMS: open palms on the wall hold the slide or the run softly, only while they touch.
+        if (stickyPalms_) {
+            Vec3 sweep{};
+            unsigned count{};
+            for (const auto& p : palms_)
+                if (p.touching) {
+                    sweep += p.sweep;
+                    ++count;
+                }
+            if (count)
+                along = wall_feel::palms(along, n, sweep / static_cast<float>(count), count, stickyStrength_, dt,
+                                         config_.maxSpeed);
+        }
         body_.velocity = limited(along + n * (press_ ? -config_.pressSpeed : out), config_.maxSpeed);
         return;
     }
@@ -1208,6 +1251,7 @@ void Swing::inputs(float dt, const Input& in, const WorldQueries& world) {
     climbSeconds_ = dt;
     climbInputs(in, world);
     stickInputs(in, world);
+    palmInputs(in, world);
     gripInputs(in, world);
     // JUMP ALWAYS: a press while the swing runs the body on the ground
     // (SPIDY RUN, the landing carry) ends that run; the game has the body

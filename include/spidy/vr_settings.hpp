@@ -898,6 +898,17 @@ struct Values {
     // out of the wall - up, down, sideways or out. A fling into the wall still strokes along it. Off: as beta3m
     // (only a push 2 m/s or more straight out leaves; the rest strokes along the wall).
     bool wallFlingAnyWay = true;
+    // STICKY PALMS (0.8.7-na-beta3n, settings revision 25; the owner, Nov 26 t141u: "I want a softer "sticky" palm
+    // whenever my palms touch a surface. This active-when-in-contact soft friction can be tied to the momentum,
+    // and can use it to slow slides, or gain momentum off of wallruns or jumps"; a feel change, wall_feel.hpp):
+    // an open palm (no grip) touching the SpidyVR wall the body slides or runs on holds it softly, only while it
+    // touches - the body follows the palm: held still it slows the slide, swept back along a run it pushes the
+    // run on, swept down it lifts. SpidyVR's walls only: the game's own wall crawl and the ground have no hook.
+    // Off: as beta3m (a palm does nothing until it grips).
+    bool stickyPalms = true;
+    // (%, 0 to 200) STICKY PALMS' strength: how firmly a touching palm holds. 100: a still palm takes a 6 m/s
+    // slide under 1 m/s in about half a second.
+    int stickyPalmsPct = 100;
     // (%, 0 to 300) ROPE WEIGHT (0.8.7-na-beta3e; the owner, Nov 22 t94u: "I want a weight slider for the webs,
     // right now they're so light I can't control the swing"): the swing line's mass for ROPE PHYSICS, the sim and
     // the pull alike (swing_line::Input::weight). Heavier hangs and swings on with what it has - more inertia to
