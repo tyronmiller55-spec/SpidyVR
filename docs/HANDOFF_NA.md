@@ -112,13 +112,25 @@ All of these are on `tyronmiller55-spec/SpidyVR`. Do not rewrite them.
 | `51915aa` | Docs: 0.8.7-na-beta3n |
 | `6250345` | Grip holds the handstand (beta3n) |
 | `bd2065b` | Launcher: a stalled picture no longer blames Wi-Fi |
-| (next) | Docs: beta3n's handstand and launcher text |
+| `61f3c80` | Docs: beta3n's handstand and launcher text |
+| `46d3589` | Wall slide pose (beta3o) |
+| `29996b0` | Grip locks the wall jump; point jumps go through the grip (beta3o) |
+| `bb9796e` | Web in hand: the held line starts in the fist's channel (beta3o) |
+| `193ea31` | Rope grip (beta3o) |
+| (next) | Docs: 0.8.7-na-beta3o |
 
 ---
 
 ## 4. Settings revision and toggles
 
-`movementDefaultsRevision` is **25** (set at beta3n). It was 24 at beta3i, 23 at beta3g / Crime Run / polish.
+`movementDefaultsRevision` is **26** (set at beta3o). It was 25 at beta3n, 24 at beta3i, 23 at beta3g / Crime Run / polish.
+
+beta3o's switches, **ON by default** (revision 26 turns them on once). OFF plays like beta3n:
+
+- `wall_slide_pose` — WALL SLIDE POSE (`leg_layers::wallSlidePose`, `Layer::wallSlide`; launcher Walls group). Visual. The pose is an approximation of the owner's picture (unreadable to the build): tune the one table.
+- `wall_grip_jump_lock` — GRIP LOCKS THE WALL JUMP (`grip_jump.hpp`, game_xr before the controller frame; launcher Walls group). Point jumps go through (their chord is read first).
+- `web_rope_grip` — ROPE GRIP (`HandPoseInput::ropeGrip`, `Targets::Hand::rope`, `native_body::setRopeGrip`; launcher Combat group). Fingers only.
+- WEB IN HAND's held line now starts at `body::solvedFistChannel` (published as `OverlayTracking::holdLocal`, carried in `NativeEyeFrame::fistHold`), else the grip point; `webHoldPoint` (the knuckles) is no longer used for held lines. Option C (wrist/elbow along the rope) is held by the owner.
 
 beta3n's switches, **ON by default** (revision 25 turns them on once), in the launcher's **Walls** group (Legs
 page). OFF plays like beta3m. SpidyVR's own walls only (`include/spidy/wall_feel.hpp`):
@@ -247,6 +259,9 @@ Public search did not turn up a matching Meta 1.210 / OpenXR / D3D12 / NVIDIA st
 ---
 
 ## 9. Ranked next steps
+
+**Status, Nov 26 (later):** beta3o adds the owner's t147u-t149u (above): the wall slide pose, the grip jump lock,
+the held line in the fist and the rope grip, built as a test zip (CI publish=false).
 
 **Status, Nov 26:** beta3m fixed the crash (the owner: "No MDMP, game ran fine"). beta3n adds the owner's t141u and
 t146u requests (above) and is built as a test zip (CI publish=false). The list below is the older crash plan, kept

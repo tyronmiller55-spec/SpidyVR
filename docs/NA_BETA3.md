@@ -860,6 +860,72 @@ How the game plays is unchanged. No new settings, no new migration revision.
 4. **If it crashes**, upload the usual logs, `spidy-vr-start.log` and the new
    `.mdmp`.
 
+## beta3o: grip locks the wall jump, a wall slide pose, the held line inside the fist, a rope grip
+
+The owner, Nov 26: "Only point jumps should work through the grip. Normal jumps should stay locked. Also, we need
+an animation for wall sliding. Maybe we can pose his legs like the image whenever he's sliding, similar to the old
+classic Spiderman 2 Playstation game" (t147u); "I want an animation so that Spiderman actually holds the line while
+swinging. Currently, it just floats outside his fist" (t148u), and yes to options A and B of the web-in-hand study
+(t149u: the fist-centre line and the rope grip; C, the wrist and elbow along the rope, is held).
+
+**Why the line floated.** WEB IN HAND (beta3i) started a held line at the punch point, 15.5 cm along the hand from
+the web shooter: 5 cm past the grip pose's point, the front of the fist. The game draws its web where we say
+(beta3m's `web_hand_gap_mean_m` 0.0098), so the start point was the whole of it.
+
+This build:
+
+1. **WALL SLIDE POSE** (`wall_slide_pose=1`; visual only, `leg_layers::wallSlidePose`). While SpidyVR's own wall
+   slides you (GRIP TO STICK, before a grip sticks you) mostly down or slowly, his legs take a braced crouch:
+   the left thigh 1.2 rad up and 0.55 out with the knee bent 1.2, the right 0.7 up and 0.5 out with the knee 1.1
+   (within leg_control's limits), eased in and out by the legs' spring, turning nothing on the body. The wall
+   crawl's planted legs and the wall run's stride stand down while it shows. A slide the stick runs along or up
+   the wall keeps the wall run (it starts while the speed across is under the speed down plus 0.3 m/s, and stays
+   while under 1.5 times it plus 0.6). **An approximation:** the owner's reference picture could not be read by
+   the build, so the pose is the classic wall-slide crouch as described; the angles are one table in
+   `leg_layers.hpp` to match the picture. Off: the crawl's or the run's legs (beta3n).
+2. **GRIP LOCKS THE WALL JUMP** (`wall_grip_jump_lock=1`; `grip_jump.hpp`). On one of SpidyVR's walls with a grip
+   squeezed past 0.65 (Grip to stick's squeeze) on a hand holding no web, a press of A is no jump - not the swing's
+   wall jump, not the game's A - until it is let go of. Letting go of the grip mid-press does not jump; a press
+   begun before the grip goes on. A+B, the point jump, is read before the lock and fires through the grip (as
+   POINT JUMP CANCELS WALL GRABS has it). The handstand's grip has held A since beta3n. The game's own wall crawl
+   has no hook and is unchanged. Off: A wall jumps with a grip held (beta3n).
+3. **WEB IN HAND: the line from the fist's channel** (a fix inside `web_hold_in_hand`, no new key). Each body solve
+   measures the closed fist's loop from the drawn hand's own finger bones (`body::solvedFistChannel`: for the
+   middle and ring fingers, the midpoints of the bone in the palm and of the bone after the knuckle, averaged; no
+   constant) and publishes it in the solved grip's frame. A held line starts there on the drawn glove - both
+   hands, the one-web-in-both-hands strand, the XR loop and the eye-frame history alike. With no solved hand it
+   starts at the OpenXR grip pose's own point (the centre of the grasp), not the knuckles. A channel more than 15
+   cm from the grip point is refused. Visual only: the swing, aim and punches don't read it. Off (web in hand
+   off): the shooter, as before. On the test rig's hero hand the channel sits 3.0 cm from the grip point, where
+   the old point sat 5.1 cm out past it.
+4. **ROPE GRIP** (`web_rope_grip=1`; fingers only, `hand_pose.hpp`, `body_ik` poseFingers). A hand on a held web
+   closes fully - with the animation owning the body too, where the squeeze is zeroed and the fist followed the
+   web button's travel - and the fist's thumb tucks onto the index finger's middle bone (its target moves from the
+   first two fingers' middle bones to the index's alone, at the fist's own thumb rest), a ring the line comes out
+   of. It eases out with the fist on release. The measured fist bends are unchanged; no wrist, forearm or elbow
+   change. Off: the beta3n fist.
+
+No view yaw is written; nothing else changes how the game plays. Settings revision **26** turns the three new
+switches on once; a 0 chosen after it stays. Wall slide pose and Grip locks the wall jump are in the launcher's
+**Walls** group (Legs page); Rope grip is in the Combat group after Punch fists. Not verified in a headset yet;
+the fist channel and the thumb tuck want one look against the game's own hand (`probe_game_body.py --fists 1`).
+
+### beta3o checklist
+
+1. **Slide pose.** Jump at one of SpidyVR's walls and slide down it without gripping: his legs brace in the
+   crouch, knees up and wide. Look down at them and in a mirror view or recording. Grip to stick: the crawl's legs
+   come back. Push the stick at the wall to wall run: the run's legs. The log has `legs: wall slide pose on`.
+   Tell me how far the pose is from your picture (which leg higher, how wide, how bent).
+2. **Jump lock.** Grip the wall (palm on it, squeeze) and press A: nothing. Keep A held and let go of the grip:
+   still nothing. Release A and press it again: you wall jump. The log has `grip jump lock: A held back`.
+3. **Point jump through the grip.** Gripping the wall, A+B: the point jump fires off the wall.
+4. **Held line.** Swing and look at each fist, with the anchor overhead and out in front: the line should come out
+   of the closed fist, not float in front of the knuckles. Two-hand hold: both ends sit in the fists. The log has
+   `web in hand: held lines from the fist's channel - left bones ..., right bones ...`.
+5. **Rope grip.** On a held web the fist closes fully and the thumb sits on the first finger, while the animation
+   has the body too (a swing begun from the ground). Let go: the hand opens as before.
+6. **Off checks.** Turn each switch off in turn (and Web in hand off): that piece plays like beta3n.
+
 ## beta3n: wall running back, wall fling any way, sticky palms, grip-held handstands; the thick swing line gone
 
 The owner, Nov 26 (t141u): beta3m ran with no crash. He asked to remove the extra white line along the swing

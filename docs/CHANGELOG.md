@@ -3,6 +3,21 @@
 Every build, newest first, with what changed, why, and what was measured.
 Per-check results are in [VALIDATION.md](VALIDATION.md).
 
+**0.8.7-na-beta3o (November 26, the owner's t147u-t149u; branch `feat/087-next`, on beta3n):** a test package
+([checklist](NA_BETA3.md#beta3o-grip-locks-the-wall-jump-a-wall-slide-pose-the-held-line-inside-the-fist-a-rope-grip)).
+Settings revision 26: the three new switches come on once; off of each equals beta3n. CURRENT is unchanged.
+
+- **Wall slide pose** (`wall_slide_pose=1`). Sliding down one of SpidyVR's walls, mostly down or slowly, his legs
+  brace in a crouch (knees up and wide, the left higher); a run along the wall keeps the run's legs. An
+  approximation of the owner's picture, which the build could not read.
+- **Grip locks the wall jump** (`wall_grip_jump_lock=1`). Gripping one of SpidyVR's walls, A is no jump for the
+  swing or the game until let go of; A+B's point jump still fires through the grip.
+- **Web in hand from the fist.** A held line starts in the fist's channel, measured each solve from the drawn
+  hand's finger bones (no constant), else at the grip pose's point - not 5 cm out past the knuckles. Inside
+  `web_hold_in_hand`.
+- **Rope grip** (`web_rope_grip=1`). On a held web the hand closes fully (with the animation owning the body too)
+  and the thumb tucks onto the first finger. Fingers only.
+
 **0.8.7-na-beta3n (November 26, the owner's t141u and t146u; branch `feat/087-next`, on beta3m):** a test package
 ([checklist](NA_BETA3.md#beta3n-wall-running-back-wall-fling-any-way-sticky-palms-grip-held-handstands-the-thick-swing-line-gone)).
 Settings revision 25: the four new switches come on once; off of each equals beta3m. CURRENT is unchanged.
