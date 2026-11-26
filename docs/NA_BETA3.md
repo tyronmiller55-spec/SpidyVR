@@ -860,3 +860,60 @@ How the game plays is unchanged. No new settings, no new migration revision.
 4. **If it crashes**, upload the usual logs, `spidy-vr-start.log` and the new
    `.mdmp`.
 
+## beta3n: wall running back, wall fling any way, sticky palms; the thick swing line gone
+
+The owner, Nov 26 (t141u): beta3m ran with no crash. He asked to remove the extra white line along the swing
+web, to leave a rule for bots (nothing without his signoff), and to bring wall running back with his wall feel.
+
+**Why wall running broke.** GRIP TO STICK (beta3e, `6657b76`) returns from `Swing::wallMotion` with the slide
+step for every wall the body is not stuck to. That return sits before the stick's wall run. A wall met in the air
+slides until a grip sticks it, so the stick never ran it, and gravity plus the 50% friction took the run's
+speed. Only after a grip stuck you did the stick crawl the wall again.
+
+This build:
+
+1. **THICK SWING LINE is removed** (`thick_swing_line`, beta3i). Swings show only the game's own web, as before
+   beta3i. An old file's key is ignored. The web is not made more visible: no documented native web width or
+   brightness parameter exists (docs/REFERENCE.md, docs/VALIDATION.md, `native_webs.hpp`), and no new line or
+   overlay is added.
+2. **No additions without the owner's signoff**: [AGENTS.md](../AGENTS.md), [HANDOFF_NA.md](HANDOFF_NA.md) §2,
+   [CONTRIBUTING.md](../CONTRIBUTING.md).
+3. **WALL RUN PUSH** (`wall_run_push=1`, `wall_run_blend_ms=250`). Near a wall you slide, as in beta3e to beta3m.
+   Push the stick toward the wall and the slide blends into the wall run in the stick's direction over the
+   blend time: straight at the wall runs up it, angled runs up and along it, and a faster run keeps its speed.
+   Let go of the stick, or point it only along the wall, and it blends back into the slide. Off: the stick does
+   nothing on a slide (beta3m).
+4. **WALL FLING ANY WAY** (`wall_fling_any_way=1`). Holding a wall with a grip, a grip fling leaves the wall along
+   the whole fling once any of it (0.3 m/s) points out of the wall: up, down, sideways or out. A fling into the
+   wall still strokes along it. Needs GRIP FLING (on by default). Off: only a push of 2 m/s or more straight out
+   leaves (beta3m).
+5. **STICKY PALMS** (`sticky_palms=1`, `sticky_palms_pct=100`). An open palm (grip not squeezed) touching the wall
+   you slide or run on holds softly, only while it touches. Held still it slows the slide: at 100%, a 6 m/s slide
+   drops under 1 m/s in about half a second. It never holds you like a grip. Swept, it strokes: you gain 1.3
+   times the sweep the other way, and the drag fades out as the sweep reaches 2 m/s. Sweep it back along a wall
+   run to go faster, down to lift, or the way you are going to brake. Off: a palm does nothing until it grips
+   (beta3m).
+
+All three are on SpidyVR's own walls only. The game's own wall crawl and wall run, and the ground, have no
+validated hook (docs/REFERENCE.md), so sticky palms do nothing there. The wall jump and its sound are unchanged.
+No view yaw is written. Settings revision **25** turns the three switches on once; a 0 chosen after it stays.
+The tunables are in the launcher's **Walls** group (Legs page), next to Grip to stick.
+
+### beta3n checklist
+
+1. **The web.** Swing: only the game's own web shows, with no second white line.
+2. **Slide.** Jump at a wall: you slide down and along it, as in beta3m.
+3. **Wall run.** While sliding, push the stick toward the wall. Within about a quarter second the slide turns
+   into a run up the wall, with no snap. Angle the stick to run up and along it. Let go and you slide again.
+   Try a fast swing into a wall with the stick angled along it: the run should keep its speed.
+4. **Blend.** Set **Wall run push: blend** to 0 ms (instant) and to 1000 ms, and feel the difference.
+5. **Fling any way.** Grip the wall (palm on it, squeeze), pull, let go. Pull down and you go up and off. Pull
+   sideways and you go sideways. Pull toward the wall and you go out. Pull away from the wall and you stay on it,
+   carried along.
+6. **Sticky palms.** Sliding, lay an open hand on the wall and hold it still: the slide slows but does not stop
+   dead. Wall running, sweep the open hand backward along the wall: you speed up. Try **Sticky palms: strength**
+   at 50% and 200%.
+7. **Off checks.** Turn each switch off in turn: that piece plays like beta3m.
+8. **Logs.** The swing log line `grip to stick: ...; wall run push: on (250 ms); wall fling any way: on; sticky
+   palms: on (100%)` confirms the settings reached the swing.
+

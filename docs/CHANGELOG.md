@@ -3,6 +3,23 @@
 Every build, newest first, with what changed, why, and what was measured.
 Per-check results are in [VALIDATION.md](VALIDATION.md).
 
+**0.8.7-na-beta3n (November 26, the owner's t141u; branch `feat/087-next`, on beta3m):** a test package
+([checklist](NA_BETA3.md#beta3n-wall-running-back-wall-fling-any-way-sticky-palms-the-thick-swing-line-gone)).
+Settings revision 25: the three new switches come on once; off of each equals beta3m. CURRENT is unchanged.
+
+- **THICK SWING LINE removed.** The extra white line along the swing web (beta3i) was never asked for. Swings
+  show only the game's own web again; an old `thick_swing_line` key is ignored.
+- **Rule for contributors.** No feature, visual, overlay, setting or behavior without the owner's signoff
+  (AGENTS.md, HANDOFF_NA.md, CONTRIBUTING.md).
+- **Wall running is back** (`wall_run_push=1`, `wall_run_blend_ms=250`). Since beta3e's GRIP TO STICK, a slide
+  returned before the stick's wall run, so the stick never ran a wall you slid on. Now, pushing the stick toward
+  the wall blends the slide into that run in the stick's direction, and back when let go.
+- **Wall fling any way** (`wall_fling_any_way=1`). A grip fling off a wall leaves along the whole fling once any of
+  it points out of the wall (0.3 m/s; it was a 2 m/s push straight out).
+- **Sticky palms** (`sticky_palms=1`, `sticky_palms_pct=100`). An open palm on the wall you slide or run on holds
+  softly while it touches: still, it slows the slide; swept, it strokes you the other way (1.3x).
+- SpidyVR's own walls only; the game's wall crawl and the ground have no hook. The wall jump is unchanged.
+
 **0.8.7-na-beta3m (November 26, the owner's t133u-t138u; branch `feat/087-next`, on beta3l):** a test package
 ([checklist](NA_BETA3.md#beta3m-a-bigger-vr-thread-stack-for-the-0xc00000fd-crash)). No new setting; how the game
 plays is unchanged. CURRENT is unchanged.

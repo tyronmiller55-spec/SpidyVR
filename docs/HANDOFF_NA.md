@@ -100,14 +100,32 @@ All of these are on `tyronmiller55-spec/SpidyVR`. Do not rewrite them.
 | `990d384` | Docs: 0.8.7-na-beta3k |
 | `c8e4fda` | The GPU bridge starts before the OpenXR session begins (beta3l) |
 | `3baaecf` | Docs: 0.8.7-na-beta3l |
+| `f141fab` | The VR thread gets a 16 MB stack (beta3m, the 0xC00000FD fix) |
+| `9790ed0` | The eye-frame history lives on the heap (beta3m) |
+| `41c8b27` | The VR start log names the VR thread's stack size (beta3m) |
+| `19bebec` | Docs: 0.8.7-na-beta3m |
+| `bbf763d` | The extra white line along the swing web is gone (beta3n) |
+| `912988a` | Docs: no feature, visual or setting without the owner's signoff |
+| `e11f17b` | Wall running is back: the stick at the wall runs a slide (beta3n) |
+| `52a3c72` | A grip fling throws you off a wall in any direction (beta3n) |
+| `c544f24` | Sticky palms (beta3n) |
+| (next) | Docs: 0.8.7-na-beta3n |
 
 ---
 
 ## 4. Settings revision and toggles
 
-`movementDefaultsRevision` is **24** (set at beta3i). It was 23 at beta3g / Crime Run / polish.
+`movementDefaultsRevision` is **25** (set at beta3n). It was 24 at beta3i, 23 at beta3g / Crime Run / polish.
 
-New switches, **ON by default**, on the **NA · WEB SHOOTERS** tab and the Movement tab. OFF plays like beta3h / pre-beta3i:
+beta3n's switches, **ON by default** (revision 25 turns them on once), in the launcher's **Walls** group (Legs
+page). OFF plays like beta3m. SpidyVR's own walls only (`include/spidy/wall_feel.hpp`):
+
+- `wall_run_push` / `wall_run_blend_ms` (250) — WALL RUN PUSH. On a slide, the stick toward the wall blends into the stick's wall run. Root cause of the beta3e break: GRIP TO STICK's slide returned before the run in `Swing::wallMotion`.
+- `wall_fling_any_way` — a grip fling off a wall leaves along the whole fling with 0.3 m/s out of the wall (was 2 m/s).
+- `sticky_palms` / `sticky_palms_pct` (100) — open palms on the wall drag a slide, or stroke the body the other way of their sweep (1.3x).
+- They reach the swing on `WallStickAsk` version 2 (flags bits 1-3, `runBlendMs`, `stickyPct`); version 1 is still taken.
+
+beta3i's switches, **ON by default**, on the **NA · WEB SHOOTERS** tab and the Movement tab. OFF plays like beta3h / pre-beta3i:
 
 - `animated_web_grip` — WEB GRIP. A hand closes on its attached web while the game's animation drives the body.
 - `animated_punch_fists` — PUNCH FISTS. A punching hand balls into a fist (pose measured from the game's own model; no verified clip IDs).
@@ -172,7 +190,8 @@ C++20 OpenXR / D3D12 mod, DLL injection, MinHook hooks. Do not invent addresses.
 | Hand poses (VR-owned body). Fist bend 83/95/63 from the game's own fist (`docs/VALIDATION.md`, `probe_game_body.py --fists`). No verified native grab/punch clip IDs | `include/spidy/hand_pose.hpp` |
 | Punch / `fistAhead` (~15.5 cm) | `src/game_punch.cpp` |
 | Swing rope layout | `include/spidy/swing_line.hpp` |
-| Drawing the game's web mesh; thick line overlay | `include/spidy/native_webs.hpp` |
+| Drawing the game's web mesh | `include/spidy/native_webs.hpp` |
+| Walls: slide (GRIP TO STICK), wall run push, fling any way, sticky palms | `include/spidy/wall_slide.hpp`, `include/spidy/wall_feel.hpp`, `src/swing.cpp` (`wallMotion`, `wallRun`, `palmInputs`), `tests/wall_feel_tests.cpp` |
 | Settings, revision, catalog | `include/spidy/vr_settings.hpp`, `src/vr_settings.cpp` |
 | Launcher, exit-code wording, Update banner | `tools/run_game_vr.py` (around `crash_advice`; force-close `0xC0000409` is a non-bug, fixed in `9198c87`) |
 | Minidump inspector (candidates, not an unwound stack) | `tools/inspect_minidump.py` |
@@ -224,6 +243,10 @@ Public search did not turn up a matching Meta 1.210 / OpenXR / D3D12 / NVIDIA st
 ---
 
 ## 9. Ranked next steps
+
+**Status, Nov 26:** beta3m fixed the crash (the owner: "No MDMP, game ran fine"). beta3n's code is committed and
+pushed to the fork, but **not built**: the owner said to hold the build and batch more requests into it. Do not run
+CI or package until he says so. The list below is the older crash plan, kept for history.
 
 1. **Get beta3l evidence first.** Ask the owner to install `Spidy-0.8.7-na-beta3l-win64-3baaecf.zip`, launch the **`3baaecf`** folder, not press Update, and if it dies, send the usual logs, `spidy-vr-start.log` from `reports\stereo-modules\<hash>\`, and a new `.mdmp`. Confirm the console build line. The last start-log line decides the next code change. Do not guess a beta3m without that.
 2. **Bisect the runtime vs our code.** Ask the owner to run **official 0.8.7** and/or **official 0.8.8** once on the same Link 1.210 + current NVIDIA driver (in a separate folder; do not use Update to overwrite NA). If official also dies, this is a Meta 1.210 / NVIDIA interop bug and a workaround or a runtime rollback is the path. If official runs, diff Ilya's start path (`cf0b279`) against ours and match the safe parts.
