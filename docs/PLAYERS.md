@@ -27,6 +27,9 @@ Inspired by **vrfloofy's first-person mod**: keep Insomniac's animation suite wh
 SpidyVR controls and your tracked arms sit on top. GPL-3.0. Not an official Marvel
 or Insomniac product. Community support/source: `tyronmiller55-spec/SpidyVR`.
 
+**New to Native Animation?** See [how it differs from SpidyVR](NA_VS_SPIDYVR.md): what plays
+differently, where each setting is, and what official 0.8.8 has that NA doesn't.
+
 Use **Spidy Launcher.exe > Native Animation** (after Options), or the headset's
 **NA ·** tabs (CORE, CAMERA, HANDOFF, BODY & LEGS, KICKS & COMBAT, WEB SHOOTERS,
 POINT JUMP, SHOWTIME) and **NA · HELP**. HELP says what to try in this beta and

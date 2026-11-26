@@ -11,7 +11,7 @@ Open **Spidy Launcher.exe** and select **Native Animation**, between Options and
 Controls. The headset has the same settings under the **NA ·** tabs. New
 installations start in the recommended mode, with the current features on so you
 can try them; existing saved settings are migrated once (revision 16). [Player
-guide](docs/PLAYERS.md). The **NA · HELP** tab (the same pages as the launcher's
+guide](docs/PLAYERS.md). [How Native Animation differs from SpidyVR](docs/NA_VS_SPIDYVR.md). The **NA · HELP** tab (the same pages as the launcher's
 Help and [docs/NA_HELP.md](docs/NA_HELP.md)) says what to try and how to report
 it.
 
