@@ -3361,6 +3361,7 @@ constexpr TabOnly tabOnly[] = {
     {"sticky_palms_pct", nullptr, &Values::stickyPalmsPct},
     {"wall_slide_pose", &Values::wallSlidePose, nullptr},
     {"wall_grip_jump_lock", &Values::wallGripJumpLock, nullptr},
+    {"web_rope_grip", &Values::webRopeGrip, nullptr},
     {"swing_rope_weight_pct", nullptr, &Values::swingRopeWeightPct},
     {"swing_rope_drag_pct", nullptr, &Values::swingRopeDragPct},
     {"kick_lunge", &Values::kickLunge, nullptr},
@@ -3697,6 +3698,8 @@ Values withMovementDefaults(Values v, std::string_view text) {
         v.wallSlidePose = true;
         // GRIP LOCKS THE WALL JUMP comes on once (t147u, a new key); a 0 chosen after this revision stays.
         v.wallGripJumpLock = true;
+        // ROPE GRIP comes on once (t149u, a new key); a 0 chosen after this revision stays.
+        v.webRopeGrip = true;
         // BETA3O MIGRATION END
     }
     v.movementDefaults = movementDefaultsRevision;

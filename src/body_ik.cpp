@@ -567,7 +567,7 @@ bool solvedFistChannel(const Pose& pose, const Rig& rig, unsigned hand, Vec3& ou
 // rest: on the animation overlay the game's fingers stay until a close starts,
 // and each pose job starts from the game's frame again when the close ends.
 void poseFingers(Pose& pose, const Rig& rig, const Config& c, int side, float fist, float shoot, float s,
-                 float arms) {
+                 float arms, float rope = 0) {
     if (side < 0 || side > 1)
         return;
     fist = std::clamp(std::isfinite(fist) ? fist : 0.f, 0.f, 1.f);
@@ -624,7 +624,14 @@ void poseFingers(Pose& pose, const Rig& rig, const Config& c, int side, float fi
         }
     if (fist > 0 && thumb.size() >= 4 && middles) {
         const Vec3 palm = normalized(pose.direction(arm.hand, rig.handPalm[side]));
-        onto = onto / static_cast<float>(middles) + palm * (c.thumbRest * s * arms);
+        onto = onto / static_cast<float>(middles);
+        // ROPE GRIP: onto the index finger's middle bone alone, the ring closed around the line.
+        rope = std::clamp(std::isfinite(rope) ? rope : 0.f, 0.f, 1.f);
+        if (rope > 0 && arm.fingers[0].size() >= 4) {
+            const auto& index = arm.fingers[0];
+            onto += ((pose.position(index[2]) + pose.position(index[3])) / 2 - onto) * rope;
+        }
+        onto += palm * (c.thumbRest * s * arms);
         bendTo(thumb, 2, rig.thumbHinges[side][1], c.thumbBend, fist);
         const Vec3 base = pose.position(thumb[0]), knuckle = pose.position(thumb[1]);
         Vec3 hinge;
@@ -1057,7 +1064,7 @@ Result solve(Pose& pose, const Rig& rig, const Targets& targets, const Config& c
                 const auto& hand = handsRemapped[i];
                 const float fist = std::clamp(std::isfinite(hand.fist) ? hand.fist : 0.f, 0.f, 1.f) * aw;
                 const float shoot = std::clamp(std::isfinite(hand.shoot) ? hand.shoot : 0.f, 0.f, 1.f) * aw;
-                poseFingers(pose, rig, c, i, fist, shoot, s, arms);
+                poseFingers(pose, rig, c, i, fist, shoot, s, arms, hand.rope);
             }
         }
         // GROUND KICKS: one leg out at the foot's target on the game's standing pose (the pelvis and the other
@@ -2575,7 +2582,7 @@ Result solve(Pose& pose, const Rig& rig, const Targets& targets, const Config& c
                 bendTo(arm.thumbChain, k, rig.thumbHinges[i][k - 1], c.openThumb, own);
         // A fist or the shooting pose, from this hand as it stands after the
         // open pose (or, on the overlay, from the game's own fingers).
-        poseFingers(pose, rig, c, i, fist, shoot, s, arms);
+        poseFingers(pose, rig, c, i, fist, shoot, s, arms, hand.rope);
     }
     // 7. A flip turns the whole body with the player, about the eyes.
     if (tilted)

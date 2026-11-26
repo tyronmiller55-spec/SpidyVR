@@ -252,6 +252,9 @@ struct Targets {
         // two middle fingers pressed into the palm, the first and the little
         // one out, the thumb out to its side.
         float shoot{};
+        // ROPE GRIP (beta3o): how far the fist's thumb tucks onto the index finger's middle bone (at the fist's
+        // own thumbRest from it) instead of over the first two fingers' middle bones, 0 to 1.
+        float rope{};
     };
     std::array<Hand, 2> hands{}; // 0 the left controller, 1 the right
     // A flip's tilt of the player, model space (the identity while level):

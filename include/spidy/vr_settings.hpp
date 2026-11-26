@@ -197,6 +197,12 @@ struct Values {
     // OpenXR grip pose's own point. A shot still leaves from the wrist shooter. Off: every line leaves
     // from the shooter, as beta3h.
     bool webHoldInHand = true;
+    // ROPE GRIP (0.8.7-na-beta3o, settings revision 26; the owner, Nov 26 t148u: "I want an animation so that
+    // Spiderman actually holds the line while swinging", t149u: yes to the rope grip; fingers only,
+    // hand_pose.hpp): a hand on a held web closes fully - with the animation owning the body too, where it
+    // followed the web button's travel - and its thumb tucks onto the index finger, a ring the line runs
+    // through. The wrist, forearm and elbow are unchanged. Off: as beta3n.
+    bool webRopeGrip = true;
     // Aiming with the eyes (the tab's EYE AIM; eyeAimShots, eyeAimZips): web
     // balls go where the eyes look, from the hand that pulled; a zip goes to
     // the point the eyes look at, the game's camera being turned onto it.

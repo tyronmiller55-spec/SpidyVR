@@ -105,6 +105,7 @@ std::array<body::Targets::LegAngles, 2> legControlAngles{};
 float legControlAmount = 1.f; // PASSIVE LEGS' shown share (setLegControl)
 // TORSO CHANNEL (setTorsoControl): mapped onto Targets::torsoControl when airborne.
 bool torsoControlOn{};
+float ropeGripShare[2]{}; // ROPE GRIP (setRopeGrip)
 body::Targets::TorsoAngles torsoControlAngles{};
 float torsoControlAmount = 1.f;
 // GROUND KICKS (setGroundKick): the standing kick's leg, mapped onto Targets::groundKick in the armsOnly path.
@@ -640,6 +641,7 @@ void solveHero(float* out, uintptr_t job, uintptr_t instance) {
                 const auto& h = wanted.hands[i];
                 t.hands[i] = {h.tracked != 0, toModel.rotate(h.grip), toModel * h.orientation, h.fist,
                               wanted.shoot[i]};
+                t.hands[i].rope = ropeGripShare[i];
             }
             lastTargets = t;
             lastBodyTargets = t;
@@ -670,6 +672,7 @@ void solveHero(float* out, uintptr_t job, uintptr_t instance) {
                 // tracked so the overlay can place the wrist.
                 t.hands[i] = {h.tracked != 0, toModel.rotate(h.grip), toModel * h.orientation, h.fist,
                               wanted.shoot[i]};
+                t.hands[i].rope = ropeGripShare[i];
                 if (!h.tracked)
                     t.armWeight[i] = 0.f;
             }
@@ -1313,6 +1316,13 @@ void native_body::setLegControl(bool on, const std::array<body::Targets::LegAngl
         legControlAngles = legs;
         legControlAmount = std::isfinite(amount) ? std::clamp(amount, 0.f, 1.f) : 1.f;
     }
+    ReleaseSRWLockExclusive(&solveLock);
+}
+
+void native_body::setRopeGrip(float left, float right) {
+    AcquireSRWLockExclusive(&solveLock);
+    ropeGripShare[0] = std::isfinite(left) ? std::clamp(left, 0.f, 1.f) : 0.f;
+    ropeGripShare[1] = std::isfinite(right) ? std::clamp(right, 0.f, 1.f) : 0.f;
     ReleaseSRWLockExclusive(&solveLock);
 }
 

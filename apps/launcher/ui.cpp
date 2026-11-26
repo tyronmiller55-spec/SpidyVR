@@ -2359,6 +2359,14 @@ void App::options(ImVec2 origin, ImVec2 size) {
                "While the animation has the body, a punching hand closes into a fist (the game's own fist "
                "pose). Off: the animation's fingers stay, as before. Default: on.",
                S(42), [&] { tabToggle("##animatedpunchfists", Item::animatedPunchFists); });
+        settingOption(Item::none, "Rope grip", "Looks only: a hand holding a web closes all the way around it and the thumb tucks onto the first finger, so the line runs through a closed ring - while the animation has the body too. The wrist, forearm and elbow don't change. Off: the fist as beta3n. Default: on.",
+               S(42), [&] {
+                   bool on = tabOnly_.webRopeGrip;
+                   if (toggle("##webropegrip", &on)) {
+                       tabOnly_.webRopeGrip = on;
+                       tabChanged = true;
+                   }
+               });
         // The guards (game_guard::setEnemyTypes has the choice from the game's settings, spidy_vr.ini's
         // enemy_types).
         settingOption(Item::enemyTypes, "Enemy types",

@@ -44,9 +44,14 @@ struct HandPoseInput {
     // AIR FISTS: a fast hand is a fist with nobody to punch too.
     bool airFists{};
     bool wallContact{}; // sticky palm, never a fist or a web-shooting pose
+    // ROPE GRIP (beta3o, web_rope_grip; the owner, Nov 26 t148u/t149u): a hand on a web closes fully (not to the
+    // web button's travel) and its thumb tucks onto the index finger (HandPose::rope), a ring the line runs
+    // through. Off: as beta3n.
+    bool ropeGrip{};
 };
 struct HandPose {
     float fist{}, shoot{}; // each 0..1; the shooting pose goes over the fist
+    float rope{};          // ROPE GRIP: the thumb's tuck onto the index, 0..1 (on a web; eases out with the fist)
 };
 struct HandPoseTuning {
     // A hand faster than slowSpeed closes, to a fist at fistSpeed (m/s), and
@@ -69,7 +74,7 @@ class HandPoser {
     // One headset frame, `seconds` after the last.
     HandPose update(float seconds, const HandPoseInput& in) {
         if (!in.tracked || in.wallContact) {
-            fist_ = shoot_ = ball_ = held_ = 0;
+            fist_ = shoot_ = ball_ = held_ = rope_ = 0;
             pressed_ = false;
             return {};
         }
@@ -90,14 +95,16 @@ class HandPoser {
         shoot_ = wanted > shoot_ ? std::min(wanted, shoot_ + t_.in * dt) : std::max(wanted, shoot_ - t_.out * dt);
         // A clenched or a fast hand, and one that grips a web (with the
         // trigger as the web button the grip itself is open).
-        const float closed = std::max({squeeze, punch, onWeb ? web : 0.f});
+        const bool rope = onWeb && in.ropeGrip;
+        const float closed = std::max({squeeze, punch, onWeb ? (rope ? 1.f : web) : 0.f});
         fist_ = std::max(closed, fist_ - t_.open * dt);
-        return {fist_, shoot_ * (in.fighting ? 1 - punch : 1.f)};
+        rope_ = rope ? 1.f : std::max(0.f, rope_ - t_.open * dt);
+        return {fist_, shoot_ * (in.fighting ? 1 - punch : 1.f), std::min(rope_, fist_)};
     }
 
   private:
     HandPoseTuning t_;
-    float fist_{}, shoot_{}, ball_{}, held_{};
+    float fist_{}, shoot_{}, ball_{}, held_{}, rope_{};
     bool pressed_{};
 };
 } // namespace spidy

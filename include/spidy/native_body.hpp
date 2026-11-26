@@ -319,6 +319,9 @@ float tuckWeight();
 // TORSO CHANNEL (J1; body::Targets::torso): the midair poses' curl / arch, side bend and twist, radians (clamped to
 // body::torsoMaxRadians), shown at `amount`; only in the air. Off eases it out.
 void setTorsoControl(bool on, const body::Targets::TorsoAngles& torso, float amount = 1.f);
+// ROPE GRIP (beta3o, hand_pose.hpp HandPose::rope): each hand's thumb tuck onto the index, 0..1 (body::Targets::
+// Hand::rope); 0 both: as before.
+void setRopeGrip(float left, float right);
 // The torso channel's eased share, 0..1 (the solve's).
 float torsoWeight();
 // LEG CONTROL (leg_control.hpp): each leg's hip angles and knee bend for the

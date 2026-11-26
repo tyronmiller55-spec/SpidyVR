@@ -4,7 +4,7 @@
 // turns WEB GRIP, PUNCH FISTS and WEB IN HAND on once (THICK SWING LINE was removed in beta3n), and
 // revision 25 (beta3n) turns WALL RUN PUSH, WALL FLING ANY WAY, STICKY PALMS and
 // GRIP HOLDS THE HANDSTAND on once, and revision 26 (beta3o) WALL SLIDE POSE and
-// GRIP LOCKS THE WALL JUMP.
+// GRIP LOCKS THE WALL JUMP and ROPE GRIP.
 #include "spidy/vr_settings.hpp"
 #include <cstdio>
 #include <cstdlib>
@@ -82,13 +82,14 @@ int main() {
     check(withTabOnly({}, "wall_run_blend_ms=5000\n").wallRunBlendMs == 1000, "the blend is not held to 1000 ms");
 
     // Revision 26 (beta3o): WALL SLIDE POSE and GRIP LOCKS THE WALL JUMP come on once; a 0 chosen after it stays.
-    const std::string rev25 = "movement_defaults=25\nwall_slide_pose=0\nwall_grip_jump_lock=0\n";
+    const std::string rev25 = "movement_defaults=25\nwall_slide_pose=0\nwall_grip_jump_lock=0\nweb_rope_grip=0\n";
     const Values r26 = withMovementDefaults(withTabOnly({}, rev25), rev25);
     check(r26.wallSlidePose, "revision 26 did not turn WALL SLIDE POSE on once");
     check(r26.wallGripJumpLock, "revision 26 did not turn GRIP LOCKS THE WALL JUMP on once");
-    const std::string kept26 = "movement_defaults=26\nwall_slide_pose=0\nwall_grip_jump_lock=0\n";
+    check(r26.webRopeGrip, "revision 26 did not turn ROPE GRIP on once");
+    const std::string kept26 = "movement_defaults=26\nwall_slide_pose=0\nwall_grip_jump_lock=0\nweb_rope_grip=0\n";
     const Values k26 = withMovementDefaults(withTabOnly({}, kept26), kept26);
-    check(!k26.wallSlidePose && !k26.wallGripJumpLock, "a 0 chosen after revision 26 was overwritten");
+    check(!k26.wallSlidePose && !k26.wallGripJumpLock && !k26.webRopeGrip, "a 0 chosen after revision 26 was overwritten");
 
     // Off of Crime Run matches "no mode": the previous build has no run, no HUD key, no fifth app.
     Values off;

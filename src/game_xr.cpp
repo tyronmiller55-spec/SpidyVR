@@ -12669,6 +12669,7 @@ DWORD WINAPI run(void*) {
                                          (motion.eyes[0][14] + motion.eyes[1][14]) / 2} -
                                     motion.anchor;
                         pose.facing = motion.headPose.orientation;
+                        float ropeShare[2]{};
                         for (unsigned i = 0; i < 2; ++i) {
                             const auto& hand = frame.hands[i];
                             const bool tracked = hand.valid && validTrackedPose(hand.grip);
@@ -12692,6 +12693,7 @@ DWORD WINAPI run(void*) {
                             doing.shot = ballShot[i];
                             doing.fighting = fightNear;
                             doing.airFists = values.airFists;
+                            doing.ropeGrip = values.webRopeGrip; // ROPE GRIP (beta3o)
                             // While the animation has the body, WEB GRIP and PUNCH FISTS (on by default)
                             // close a hand on its web or a punch; off keeps the animation's fingers, as
                             // beta3h. The VR-owned body is unchanged.
@@ -12717,10 +12719,10 @@ DWORD WINAPI run(void*) {
                                              tracked ? 1u : 0u, fingered.fist};
                             pose.shoot[i] = fingered.shoot;
                             if (armsWanted && doing.holding != wasHolding) {
-                                diag_log::writef("hand pose: %s web %s fist=%.2f shoot=%.2f",
+                                diag_log::writef("hand pose: %s web %s fist=%.2f shoot=%.2f rope=%.2f",
                                                  i == 0 ? "left" : "right",
                                                  doing.holding ? "hold" : "release", fingered.fist,
-                                                 fingered.shoot);
+                                                 fingered.shoot, fingered.rope);
                             }
                             const bool punching = armsWanted && values.animatedPunchFists &&
                                                   doing.speed >= 2.5f;
@@ -12732,7 +12734,10 @@ DWORD WINAPI run(void*) {
                             posePunch[i] = punching;
                             armSamples[i].fist = fingered.fist;
                             armSamples[i].shoot = fingered.shoot;
+                            ropeShare[i] = fingered.rope;
                         }
+                        // ROPE GRIP (beta3o): the thumbs' tuck to the solve, once a frame.
+                        native_body::setRopeGrip(ropeShare[0], ropeShare[1]);
                         // Hybrid G→T: enabled=false ramps overlay 1→0 over ~blendOut;
                         // keep calling update + armsOverlay so the crossfade reaches bodyOn.
                         animated_arms::update(animatedArmsState, armDt, armsWanted, motion.anchor, armSamples,
