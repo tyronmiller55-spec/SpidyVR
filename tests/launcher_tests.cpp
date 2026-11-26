@@ -805,6 +805,8 @@ int main() {
                 continue;
             if (key == "handstand_sticky")
                 continue;
+            if (key == "handstand_grip_hold")
+                continue;
             if (key == "handstand_sticky_grace_ms")
                 continue;
             if (key == "showtime_ray_fan")

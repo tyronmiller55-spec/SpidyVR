@@ -2924,6 +2924,14 @@ void App::options(ImVec2 origin, ImVec2 size) {
                 "Upside down at least this far with your hands over your head, you are tipped into the handstand "
                 "from up to 2 m (45 to 180). 60 by default (120 before beta3).",
                 S(150), [&] { degreeSlider("##handstandtipindeg", tabOnly_.handstandTipInDeg, 45, 180); });
+            settingOption(Item::none, "Grip holds the handstand", "Changes the feel: upside down near the floor, squeeze a grip and the handstand catches without the hands-over-head check. While you hold a grip the handstand stays locked - no falling, stepping down, pushing off or leaping, and the grip shoots no web. Let go of the grip to push off, leap or step out, as before. Off: a squeeze ends the handstand, as beta3m. Default: on.",
+                S(42), [&] {
+                    bool on = tabOnly_.handstandGripHold;
+                    if (toggle("##handstandgriphold", &on)) {
+                        tabOnly_.handstandGripHold = on;
+                        tabChanged = true;
+                    }
+                });
         });
         // BODY & LEGS / KICKS & COMBAT (beta polish M4): the NA rows that lived on MOVEMENT and FLIPS.
         group(legsPage, 0, "Flips (Native Animation)", [&] {

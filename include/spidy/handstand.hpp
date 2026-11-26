@@ -155,6 +155,18 @@ struct Params {
     bool sticky = false;
     float rigShift = .3f, stickyGrace = .4f, holdReachScale = 1.5f, offSeconds = .15f;
     float entrySlack = .05f, stickyHold = .08f;
+    // GRIP HOLDS THE HANDSTAND (0.8.7-na-beta3n, handstand_grip_hold; the owner, Nov 26 t146u: "I want handstands to
+    // lock easily, and grip to be used to 'hold' the stance. Everything else would stay the same, and pushing out of
+    // it, or pushing off of anything, requires me to let go of the grip"). Off here, on from the settings:
+    //  - the catch: a grip squeezed (Input::grip) near the floor, inverted at least catchDegrees and not spinning past
+    //    catchSpin, is the intent - the arms-over-head test and its hold are not asked, and the palms count from as
+    //    far as the tip-in's reach (tipInReach, 2 m, not touchdownReach's 1.6 m), as the tip-in's do;
+    //  - the hold: while a grip is held the handstand is locked - no fall (the centre of mass kept inside the
+    //    support), no step-down or miss, no push, no leap; a squeeze no longer ends it (Exit::grip);
+    //  - the way out: let go of the grip, then everything is as before (push, leap, step-down, fall). A push or a
+    //    stick held through the release goes at once: letting go is the launch, as the grip fling's.
+    // Tracking lost and the switch turned off still end it.
+    bool gripHold = false;
 };
 
 template <class V> Params paramsOf(const V& v) {
@@ -186,6 +198,7 @@ template <class V> Params paramsOf(const V& v) {
     p.tipInReach = std::clamp(v.handstandTipInReachCm, 60, 300) / 100.f;
     // STICKY HANDSTANDS (above): the wider entry and the longer holds, from the settings.
     p.sticky = v.handstandSticky;
+    p.gripHold = v.handstandGripHold;
     if (p.sticky) {
         p.stickyGrace = std::clamp(v.handstandStickyGraceMs, 250, 1000) / 1000.f;
         p.trackingGrace = std::max(p.trackingGrace, p.stickyGrace);
@@ -399,6 +412,16 @@ class Balance {
     void shift(Vec3 by) {
         x_ += Vec3{by.x, 0, by.z};
     }
+    // GRIP HOLDS THE HANDSTAND: the centre of mass kept inside the support, still once it reaches its edge.
+    void steady(const Support& s) {
+        bool inside = true;
+        const Vec3 c = s.clamp(x_, &inside);
+        if (!inside) {
+            x_ = c;
+            v_ = {};
+        }
+        outside_ = 0;
+    }
     // The fall timer starts again (the catching phase is a settle, not a balance yet).
     void forgive() {
         outside_ = 0;
@@ -509,6 +532,9 @@ class Handstand {
         float floorY = NAN;
         unsigned failed{};  // every gate that failed at the touchdown (refusalBit); 0: none or no touchdown
         bool gripCarried{}; // the catch took a squeezed grip: it lets go only after a release
+        // GRIP HOLDS THE HANDSTAND: a grip holds the handstand locked this frame (no exit but tracking or off), and
+        // this frame's catch took the grip as its intent.
+        bool gripLocked{}, gripCatch{};
         // The touchdown's inputs as judged (for the log of a landing that was not judged).
         bool touchdownSeen{}, aloftSeen{}, vrAirSeen{};
         float airAge{};
@@ -654,6 +680,9 @@ class Handstand {
         const bool tipIntent = p.tipIn && state_ == State::off && nearFloor && invertedNow >= p.tipInDegrees &&
                                spinNow <= p.catchSpin && (overBoth || armsRecent);
         out.tipIn = tipIntent;
+        // GRIP HOLDS THE HANDSTAND: a grip squeezed is the intent too, at the catch's own angle.
+        const bool gripIntent = p.gripHold && in.grip && state_ == State::off && nearFloor &&
+                                invertedNow >= p.catchDegrees && spinNow <= p.catchSpin;
         bool armsOk = true, reachOk = true;
         if (in.floorKnown && std::isfinite(in.floorY)) {
             out.floorY = in.floorY;
@@ -663,7 +692,7 @@ class Handstand {
                 out.palmGaps[i] = gap < 1e8f ? gap : NAN;
                 const float reach =
                     state_ == State::off
-                        ? (tipIntent ? std::max(p.touchdownReach, p.tipInReach) : p.touchdownReach)
+                        ? (tipIntent || gripIntent ? std::max(p.touchdownReach, p.tipInReach) : p.touchdownReach)
                         : p.floorReach * (p.sticky ? p.holdReachScale : 1.f);
                 // The touchdown's reach path also needs the arms up: ARMS OVER HEAD, the palm over the head as the
                 // player holds it (no tracked offset: no test; or both over it within the grace); 0, the old world
@@ -672,7 +701,7 @@ class Handstand {
                     p.armsOverHead > 0.f
                         ? !in.palmRelKnown[i] || !finite(in.palmRel[i]) || in.palmRel[i].y >= p.armsOverHead
                         : !in.headKnown || gap + p.armsBelowHead <= headGap;
-                const bool armsUp = armUpNow || armsRecent;
+                const bool armsUp = armUpNow || armsRecent || gripIntent;
                 if (armsUp && !armUpNow && nearFloor && state_ == State::off)
                     out.armsFromGrace = true;
                 armsOk = armsOk && armsUp;
@@ -690,7 +719,7 @@ class Handstand {
             armsHeld_ = reachBoth && nearFloor ? std::min(armsHeld_ + dt, 10.f) : 0.f;
         const bool heldBefore = armsUpRun_ >= p.armsHoldSeconds && armsUpAge_ <= p.armsGraceBefore;
         if (state_ != State::off || armsHeld_ >= p.armsHoldSeconds || ((in.floorPalms & 3u) == 3u) ||
-            (reachBoth && (tipIntent || heldBefore)))
+            (reachBoth && (tipIntent || heldBefore || gripIntent)))
             palmsDown |= reachDown;
         out.armsUp = reachBoth;
         out.reachDown = reachDown & 3u;
@@ -785,6 +814,7 @@ class Handstand {
             last_.x = last_.xi = x0;
             gripCarried_ = in.grip;
             out.gripCarried = gripCarried_;
+            out.gripCatch = gripIntent;
             offFor_ = 0.f;
             state_ = State::catching;
             age_ = 0;
@@ -806,6 +836,13 @@ class Handstand {
             out.offFor = offFor_;
             if (!in.grip)
                 gripCarried_ = false; // released once: a new squeeze lets go
+            // GRIP HOLDS THE HANDSTAND: held, the stance is locked; the palms' time off the floor starts after it.
+            const bool locked = p.gripHold && in.grip;
+            out.gripLocked = locked;
+            if (locked) {
+                offFor_ = 0.f;
+                out.offFor = 0.f;
+            }
             Exit why = Exit::none;
             if (!p.enabled)
                 why = Exit::disabled;
@@ -813,9 +850,11 @@ class Handstand {
                 why = Exit::tracking;
             else if (out.glitch)
                 ; // TRACKING LOST: held through the grace (no other test on a glitching frame)
+            else if (locked)
+                ; // GRIP HOLDS THE HANDSTAND: no push, leap, step-down or miss until the grip is let go of
             else if (p.leap && (jumpPress || stickHeld_ >= p.leapStickSeconds))
                 why = Exit::leap;
-            else if (in.grip && !gripCarried_)
+            else if (in.grip && !gripCarried_ && !p.gripHold)
                 why = Exit::grip;
             else if (pushed > p.pushSpeed && palmsDown)
                 why = Exit::push;
@@ -847,6 +886,13 @@ class Handstand {
                 // A catch is a settle for its first fallGrace: no fall test, and its timer starts clean.
                 if (age_ < std::max(p.fallGrace, p.catchGrace)) {
                     balance_.forgive();
+                    last_.fell = false;
+                }
+                // GRIP HOLDS THE HANDSTAND: no fall while held; the centre of mass stays over the palms.
+                if (locked) {
+                    balance_.steady(support_);
+                    last_.x = balance_.x();
+                    last_.v = balance_.v();
                     last_.fell = false;
                 }
                 if (last_.fell)

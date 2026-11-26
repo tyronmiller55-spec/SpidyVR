@@ -1244,6 +1244,13 @@ GameMotionFrame GameTrackingRig::update(const XrFrame& f, Vec3 feet, Vec3 gameFo
         // The leap's A is the leap: the game and the swing do not also jump (a second, straight-up jump).
         if (handstandOut_.exitNow == handstand::Exit::leap)
             out.swing.jump = false;
+        // GRIP HOLDS THE HANDSTAND (handstand_grip_hold): held, the grip is the hold - it shoots no web, and A is no
+        // jump for the swing or the game; let go first.
+        if (handstandOut_.gripLocked) {
+            out.swing.jump = false;
+            for (auto& hand : out.swing.hands)
+                hand.grip = 0;
+        }
         if (handstandOut_.caughtNow)
             handstandCatchTilt_ = automatic_.orientation();
         if (wasSupporting && !handstandOut_.supporting) {
@@ -1310,7 +1317,7 @@ GameMotionFrame GameTrackingRig::update(const XrFrame& f, Vec3 feet, Vec3 gameFo
         out.nativeKeys |= 1u << 2;
     if (right > .3f)
         out.nativeKeys |= 1u << 3;
-    if (f.jump && !controlledFlipAir)
+    if (f.jump && !controlledFlipAir && !handstandOut_.gripLocked)
         out.nativeKeys |= 1u << 4;
     // Kept from the feet: a recenter keeps the head where it was, stand-off
     // apart, and its heading as it stands, a flip's tilt aside.

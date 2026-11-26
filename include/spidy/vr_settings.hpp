@@ -769,6 +769,14 @@ struct Values {
     // floor line 1.5 x HANDSTAND HOLD with 0.15 s off the floor before it ends. The arms still have to be up.
     bool handstandSticky = true;
     int handstandStickyGraceMs = 400;
+    // GRIP HOLDS THE HANDSTAND (0.8.7-na-beta3n, settings revision 25; the owner, Nov 26 t146u: "I want handstands to
+    // lock easily, and grip to be used to 'hold' the stance. Everything else would stay the same, and pushing out of
+    // it, or pushing off of anything, requires me to let go of the grip"; a feel change, handstand.hpp
+    // Params::gripHold): a grip squeezed upside down near the floor catches the handstand without the arms-over-head
+    // test (palms from the tip-in's reach), and while a grip is held the handstand stays locked - no fall, step-down,
+    // push or leap, and the grip shoots no web. Let go of the grip to push, leap or step out, as before. Off: as
+    // beta3m (a squeeze after the catch ends the handstand).
+    bool handstandGripHold = true;
     // FULL-LENGTH SWING LINES (beta2, swing_line.hpp; the owner, Nov 20 t81u: "Yes, reel should shorten one-for-one,
     // the line should stay full. Let's add this as a toggle option."): a swing web is drawn as long as it was when it
     // caught, its slack hanging (the combat webs' rope), shortened only by the reel. Visual only: the swing is as

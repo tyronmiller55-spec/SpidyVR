@@ -3317,6 +3317,7 @@ constexpr TabOnly tabOnly[] = {
     {"showtime_speed_lead_pct", nullptr, &Values::showtimeSpeedLeadPct},
     {"handstand_sticky", &Values::handstandSticky, nullptr},
     {"handstand_sticky_grace_ms", nullptr, &Values::handstandStickyGraceMs},
+    {"handstand_grip_hold", &Values::handstandGripHold, nullptr},
     {"swing_line_full_length", &Values::swingLineFullLength, nullptr},
     {"handoff_head_first", &Values::handoffHeadFirst, nullptr},
     {"landing_view_snap", &Values::landingViewSnap, nullptr},
@@ -3684,6 +3685,8 @@ Values withMovementDefaults(Values v, std::string_view text) {
         v.wallFlingAnyWay = true;
         // STICKY PALMS comes on once (t141u, a new key); a 0 chosen after this revision stays.
         v.stickyPalms = true;
+        // GRIP HOLDS THE HANDSTAND comes on once (t146u, a new key); a 0 chosen after this revision stays.
+        v.handstandGripHold = true;
         // BETA3N MIGRATION END
     }
     v.movementDefaults = movementDefaultsRevision;

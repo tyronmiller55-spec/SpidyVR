@@ -25983,7 +25983,7 @@ int main() {
                   "marker_switch_hold_ms=150\n"
                   "air_dodge=1\nair_dodge_speed=9\nair_dodge_chord_ms=50\nair_dodge_cooldown_ms=500\n"
                   "showtime_ray_fan=1\nshowtime_speed_lead_pct=60\n"
-                  "handstand_sticky=1\nhandstand_sticky_grace_ms=400\n"
+                  "handstand_sticky=1\nhandstand_sticky_grace_ms=400\nhandstand_grip_hold=1\n"
                   "swing_line_full_length=1\n"
                   "handoff_head_first=1\n"
                   "landing_view_snap=1\n"
