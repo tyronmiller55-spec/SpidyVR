@@ -316,7 +316,7 @@ struct Values {
     // from before it gets RUN CURVE on and EARLY JUMP QUICK TAP once (the
     // user: "movement fixes will be defaults"); after that the player's own
     // choice stands. Not a row. movement_defaults.
-    int movementDefaults = 24; // movementDefaultsRevision: a new file has seen them
+    int movementDefaults = 25; // movementDefaultsRevision: a new file has seen them
     // SOFT LANDING (the tab's SOFT LANDING; Swing::allowSoftLanding,
     // run_update::softLandVertical): a fall the swing flies, with no web
     // holding, eases to 9 m/s down over its last 3 m (or 0.35 s), its speed
@@ -882,6 +882,16 @@ struct Values {
     // (%, 0 to 100) GRIP TO STICK's slide: friction as a share of gravity. 0 slides freely; 100 holds a body at
     // rest (a moving one still slows to a stop).
     int wallSlideFriction = 50;
+    // WALL RUN PUSH (0.8.7-na-beta3n, settings revision 25; the owner, Nov 26 t141u: "when adding wall grip and
+    // slide, wall running broke. Add that back ... it's a slide anytime you're near the wall, and pushing the
+    // stick towards the wall smoothly initiates the wallrun in that direction"; a feel change, wall_feel.hpp): on
+    // a wall SpidyVR's own the body slides on (GRIP TO STICK), the stick pushed toward the wall blends the slide
+    // into the stick's wall run - the run a stuck wall has (its part at the wall up it, along it along it, a
+    // faster run keeping its speed) - over wallRunBlendMs; let go, it blends back into the slide. The game's own
+    // wall run is the game's (no hook). Off: as beta3m (the stick does nothing on a slide).
+    bool wallRunPush = true;
+    // (ms, 0 to 1000) WALL RUN PUSH's blend from the slide into the run and back. 0: at once.
+    int wallRunBlendMs = 250;
     // (%, 0 to 300) ROPE WEIGHT (0.8.7-na-beta3e; the owner, Nov 22 t94u: "I want a weight slider for the webs,
     // right now they're so light I can't control the swing"): the swing line's mass for ROPE PHYSICS, the sim and
     // the pull alike (swing_line::Input::weight). Heavier hangs and swings on with what it has - more inertia to
@@ -1522,7 +1532,7 @@ std::string tabOnlyText(const Values&);
 // key, or whose value is no whole number, is passed over.
 Values withTabOnly(Values, std::string_view text);
 // The movement defaults' revision (Values::movementDefaults) this build has.
-inline constexpr int movementDefaultsRevision = 24;
+inline constexpr int movementDefaultsRevision = 25;
 // November 12 movement cleanup: a settings file (that text) older than
 // movementDefaultsRevision gets the new movement defaults once - RUN CURVE
 // on, EARLY JUMP at least QUICK TAP - and is marked as having seen them; a

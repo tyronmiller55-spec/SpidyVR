@@ -2014,6 +2014,9 @@ void visit(const native_rays::QueryContext& world) {
             const bool fresh = GetTickCount64() - wallStickAt <= 200;
             ReleaseSRWLockShared(&wallStickLock);
             solver.wallGripToStick(fresh && (ws.flags & 1u), static_cast<int>(ws.frictionPct));
+            // WALL RUN PUSH (beta3n, wall_feel.hpp): version 2's; a version 1 ask has it off.
+            const bool v2 = fresh && ws.version >= 2;
+            solver.wallRunPush(v2 && (ws.flags & 2u), static_cast<int>(v2 ? ws.runBlendMs : 0u));
             volatile WallStickLive& wl = SpidyWallStickLive;
             const auto& wall = solver.wall();
             wl.on = solver.wallGripToStickEnabled() ? 1u : 0u;

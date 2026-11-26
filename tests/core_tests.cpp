@@ -25520,7 +25520,7 @@ int main() {
                   "the movement defaults overrode a choice made after them");
             check(withMovementDefaults(withTabOnly({}, ""), "").runCurve,
                   "no file: not the movement defaults");
-            check(tabOnlyText(migrated).find("movement_defaults=24\n") != std::string::npos,
+            check(tabOnlyText(migrated).find("movement_defaults=25\n") != std::string::npos,
                   "the migration is not remembered");
         }
         {
@@ -26020,6 +26020,8 @@ int main() {
                   "point_jump_wall_cancel=1\n"
                   "wall_grip_to_stick=1\n"
                   "wall_slide_friction=50\n"
+                  "wall_run_push=1\n"
+                  "wall_run_blend_ms=250\n"
                   "swing_rope_weight_pct=100\n"
                   "swing_rope_drag_pct=100\n"
                   "kick_lunge=1\n"
@@ -26055,7 +26057,7 @@ int main() {
                   "crime_best=0\n"
                   "crime_best_stops=0\n"
                   "log_level=1\n"
-                  "movement_defaults=24\n",
+                  "movement_defaults=25\n",
               "the defaults' text");
         Values changed = defaults;
         changed.recordingFov = 140;

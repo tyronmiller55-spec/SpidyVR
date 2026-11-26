@@ -3374,6 +3374,10 @@ void App::options(ImVec2 origin, ImVec2 size) {
                    S(42), [&] { flagToggle("##wallgriptostick", tabOnly_.wallGripToStick); });
             settingOption(Item::none, "Wall slide friction", "How hard a wall you slide on holds you back, as a share of gravity: 0% slides freely, 100% stops you. Default: 50%.",
                    S(150), [&] { fineSlider("##wallslidefriction", tabOnly_.wallSlideFriction, 0, 100, 5, "%d%%", "Free"); });
+            settingOption(Item::none, "Wall run push", "Changes the feel: sliding on a wall, push the stick toward the wall and the slide smoothly turns into a wall run in the stick's direction (straight at the wall runs up it, angled runs up and along). Let go and you slide again. Off: the stick does nothing while you slide, as beta3m. Default: on.",
+                   S(42), [&] { flagToggle("##wallrunpush", tabOnly_.wallRunPush); });
+            settingOption(Item::none, "Wall run push: blend", "How long the slide takes to become the run, and the run the slide again. 0 ms: at once. Default: 250 ms.",
+                   S(150), [&] { fineSlider("##wallrunblend", tabOnly_.wallRunBlendMs, 0, 1000, 25, "%d ms", "At once"); });
             // BETA3E LAUNCHER END
         });
         // KICKS (0.8.7-na-beta3f): the air kick's lunge and the kicks' feel, each on by default for testing. The same

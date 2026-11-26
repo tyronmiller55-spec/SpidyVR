@@ -5,6 +5,7 @@
 #include "math.hpp"
 #include "reel_out.hpp"
 #include "swing_kick.hpp"
+#include "wall_feel.hpp"
 #include "wall_slide.hpp"
 #include "web_landing.hpp"
 #include <algorithm>
@@ -696,6 +697,23 @@ class Swing {
     float wallSlideFriction() const {
         return slideFriction_;
     }
+    // WALL RUN PUSH (0.8.7-na-beta3n, wall_feel.hpp; off: beta3m's slide). On a wall the body slides on
+    // (GRIP TO STICK), the stick pushed toward the wall blends the slide into the stick's wall run (the one a
+    // stuck wall has, in the stick's direction: its part at the wall goes up it) over `blendMs`; the stick
+    // let go of, it blends back into the slide.
+    void wallRunPush(bool on, int blendMs) {
+        runPush_ = on;
+        runBlendSeconds_ = static_cast<float>(std::clamp(blendMs, 0, 1000)) / 1000.f;
+        if (!on)
+            runBlend_ = 0;
+    }
+    bool wallRunPushEnabled() const {
+        return runPush_;
+    }
+    // How far the slide has blended into the stick's run (0..1).
+    float wallRunBlend() const {
+        return runBlend_;
+    }
     // How many times the body has come onto a wall sliding, and has been stuck
     // to one (by a grip, a mount or carried on) since the start.
     std::uint32_t wallSlides() const {
@@ -1184,6 +1202,10 @@ class Swing {
     std::uint32_t wallSlides_{}, wallSticks_{};
     void stickWall();
     void stickInputs(const Input&, const WorldQueries&);
+    // WALL RUN PUSH (beta3n): the switch, the run's blend (0..1) and its time.
+    bool runPush_{};
+    float runBlendSeconds_ = wall_feel::defaultBlendMs / 1000.f, runBlend_{};
+    Vec3 wallRun(Vec3 along, Vec3 n, const Input&, float dt) const;
     float climbSeconds_{};
     void climbInputs(const Input&, const WorldQueries&);
     void gripInputs(const Input&, const WorldQueries&);

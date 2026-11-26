@@ -126,6 +126,9 @@ add_test(NAME swing_kick COMMAND spidy_swing_kick_tests)
 add_executable(spidy_grip_tests tests/grip_tests.cpp)
 target_link_libraries(spidy_grip_tests PRIVATE spidy_core)
 add_test(NAME grip COMMAND spidy_grip_tests)
+add_executable(spidy_wall_feel_tests tests/wall_feel_tests.cpp)
+target_link_libraries(spidy_wall_feel_tests PRIVATE spidy_core)
+add_test(NAME wall_feel COMMAND spidy_wall_feel_tests)
 
 # HAND GRAB (hand_grab.hpp): the reach, hold, cost, release and slam math, and WebGrab holding bodies by hand.
 add_executable(spidy_hand_grab_tests tests/hand_grab_tests.cpp)

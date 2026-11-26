@@ -7331,13 +7331,18 @@ DWORD WINAPI run(void*) {
                             ask.flags = values.wallGripToStick ? 1u : 0u;
                             ask.frictionPct =
                                 static_cast<uint32_t>(std::clamp(values.wallSlideFriction, 0, 100));
+                            // WALL RUN PUSH (beta3n, wall_feel.hpp): the stick at the wall runs a slide.
+                            if (values.wallRunPush)
+                                ask.flags |= 2u;
+                            ask.runBlendMs = static_cast<uint32_t>(std::clamp(values.wallRunBlendMs, 0, 1000));
                             const bool taken = wallStickCall(&ask) == 0;
                             if (taken != wallStickTaken)
-                                diag_log::writef("grip to stick: %s (slide friction %u%%)",
+                                diag_log::writef("grip to stick: %s (slide friction %u%%); wall run push: %s (%u ms)",
                                                  !taken                   ? "the swing took no settings"
                                                  : values.wallGripToStick ? "on: walls slide until a grip"
                                                                           : "off: walls hold at once",
-                                                 ask.frictionPct);
+                                                 ask.frictionPct, values.wallRunPush ? "on" : "off",
+                                                 ask.runBlendMs);
                             wallStickTaken = taken;
                         }
                         if (const volatile game_swing::WallStickLive* wl = wallStickLive) {

@@ -1,7 +1,8 @@
 // Off equals the previous build: beta3g's new switches come on once at revision 23,
 // a 0 chosen after that stays, rope weight 200% becomes 100%, Crime Run stays off
 // with no revision bump (missing keys take the struct defaults), and revision 24
-// turns WEB GRIP, PUNCH FISTS and WEB IN HAND on once (THICK SWING LINE was removed in beta3n).
+// turns WEB GRIP, PUNCH FISTS and WEB IN HAND on once (THICK SWING LINE was removed in beta3n), and
+// revision 25 (beta3n) turns WALL RUN PUSH on once.
 #include "spidy/vr_settings.hpp"
 #include <cstdio>
 #include <cstdlib>
@@ -23,7 +24,7 @@ void check(bool ok, const char* what) {
 }
 
 int main() {
-    check(movementDefaultsRevision == 24, "this tree is not at revision 24");
+    check(movementDefaultsRevision == 25, "this tree is not at revision 25");
     check(!Values{}.crimeRun && Values{}.crimeStartScore == 20000 && Values{}.crimeHud && Values{}.crimeRealCrimes,
           "Crime Run's defaults (off, 20,000, HUD, real crimes)");
     const std::string onlyRev = "movement_defaults=23\n";
@@ -64,7 +65,16 @@ int main() {
 
     const std::string text = tabOnlyText(Values{});
     check(text.find("crime_run=0\n") != std::string::npos, "the defaults' text did not carry crime_run=0");
-    check(text.find("movement_defaults=24\n") != std::string::npos, "the defaults' text did not carry movement_defaults=24");
+    check(text.find("movement_defaults=25\n") != std::string::npos, "the defaults' text did not carry movement_defaults=25");
+
+    // Revision 25 (beta3n): the walls' feel comes on once; a 0 chosen after it stays; off is beta3m's wall.
+    const std::string rev24 = "movement_defaults=24\nwall_run_push=0\n";
+    const Values n = withMovementDefaults(withTabOnly({}, rev24), rev24);
+    check(n.wallRunPush && n.wallRunBlendMs == 250, "revision 25 did not turn WALL RUN PUSH on once");
+    const std::string kept25 = "movement_defaults=25\nwall_run_push=0\nwall_run_blend_ms=0\n";
+    const Values k = withMovementDefaults(withTabOnly({}, kept25), kept25);
+    check(!k.wallRunPush && k.wallRunBlendMs == 0, "a 0 chosen after revision 25 was overwritten");
+    check(withTabOnly({}, "wall_run_blend_ms=5000\n").wallRunBlendMs == 1000, "the blend is not held to 1000 ms");
 
     // Off of Crime Run matches "no mode": the previous build has no run, no HUD key, no fifth app.
     Values off;

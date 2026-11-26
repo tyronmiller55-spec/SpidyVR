@@ -302,6 +302,7 @@ void Swing::leaveWall() {
     climbing_ = {};
     wallLost_ = 0;
     wrapWay_ = {};
+    runBlend_ = 0;
 }
 void Swing::joinWall(const RayHit& hit) {
     const Vec3 n = hit.normal;
@@ -877,12 +878,25 @@ void Swing::wallMotion(float dt, const Input& in) {
         // GRIP TO STICK (wall_slide.hpp): not stuck, the body slides - gravity along the wall less friction,
         // the speed it came with kept; the stick does not crawl. A grip sticks it (stickInputs).
         const float out = dot(body_.velocity, n);
-        const Vec3 along = wall_slide::step(body_.velocity - n * out, n, config_.gravity, slideFriction_, dt);
+        const Vec3 now = body_.velocity - n * out;
+        Vec3 along = wall_slide::step(now, n, config_.gravity, slideFriction_, dt);
+        // WALL FEEL, wall run (wall_feel.hpp): the stick pushed toward the wall blends the slide into the
+        // stick's wall run, the stuck wall's below, in the stick's direction; let go, back into the slide.
+        if (runPush_) {
+            const Vec3 move = finite(in.move) ? limited(in.move, 1) : Vec3{};
+            runBlend_ = wall_feel::blend(runBlend_, -dot(move, n), runBlendSeconds_, dt);
+            if (runBlend_ > 0)
+                along = wall_feel::mix(along, wallRun(now, n, in, dt), runBlend_);
+        }
         body_.velocity = limited(along + n * (press_ ? -config_.pressSpeed : out), config_.maxSpeed);
         return;
     }
+    runBlend_ = 0;
     const float out = dot(body_.velocity, n);
-    Vec3 along = body_.velocity - n * out;
+    const Vec3 along = wallRun(body_.velocity - n * out, n, in, dt);
+    body_.velocity = limited(along + n * (press_ ? -config_.pressSpeed : out), config_.maxSpeed);
+}
+Vec3 Swing::wallRun(Vec3 along, Vec3 n, const Input& in, float dt) const {
     // What of the stick points into the wall goes up it: pushed at a wall,
     // the body climbs.
     const Vec3 up = normalized(Vec3{0, 1, 0} - n * n.y);
@@ -901,7 +915,7 @@ void Swing::wallMotion(float dt, const Input& in) {
             along = along * (std::max(0.f, slower) / speed);
         }
     }
-    body_.velocity = limited(along + n * (press_ ? -config_.pressSpeed : out), config_.maxSpeed);
+    return along;
 }
 void Swing::holdWall(float dt, float before, const World* collision) {
     const Vec3 n = wall_.normal;

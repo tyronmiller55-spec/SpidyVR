@@ -1355,6 +1355,7 @@ Values sanitized(Values v) {
     v.crimeBestStops = std::clamp(v.crimeBestStops, 0, 1000);
     v.swingRopeWeightPct = std::clamp(v.swingRopeWeightPct, 0, 300);
     v.wallSlideFriction = std::clamp(v.wallSlideFriction, 0, 100);
+    v.wallRunBlendMs = std::clamp(v.wallRunBlendMs, 0, 1000);
     v.swingReelOutSpeed = std::clamp(v.swingReelOutSpeed, 50, 1500);
     v.swingReelOutTapMs = std::clamp(v.swingReelOutTapMs, 150, 600);
     v.showtimeAutoPunchCooldownMs = std::clamp(v.showtimeAutoPunchCooldownMs, 0, 60000);
@@ -3351,6 +3352,8 @@ constexpr TabOnly tabOnly[] = {
     {"point_jump_wall_cancel", &Values::pointJumpWallCancel, nullptr},
     {"wall_grip_to_stick", &Values::wallGripToStick, nullptr},
     {"wall_slide_friction", nullptr, &Values::wallSlideFriction},
+    {"wall_run_push", &Values::wallRunPush, nullptr},
+    {"wall_run_blend_ms", nullptr, &Values::wallRunBlendMs},
     {"swing_rope_weight_pct", nullptr, &Values::swingRopeWeightPct},
     {"swing_rope_drag_pct", nullptr, &Values::swingRopeDragPct},
     {"kick_lunge", &Values::kickLunge, nullptr},
@@ -3668,6 +3671,12 @@ Values withMovementDefaults(Values v, std::string_view text) {
         v.animatedWebGrip = true;
         v.animatedPunchFists = true;
         v.webHoldInHand = true;
+    }
+    if (seen < 25) {
+        // Revision 25 (0.8.7-na-beta3n; the owner, Nov 26 t141u: wall running back, and the walls' feel): WALL
+        // RUN PUSH comes on once (a new key, on by default for testing); a 0 chosen after this revision stays.
+        v.wallRunPush = true;
+        // BETA3N MIGRATION END
     }
     v.movementDefaults = movementDefaultsRevision;
     return sanitized(v);
