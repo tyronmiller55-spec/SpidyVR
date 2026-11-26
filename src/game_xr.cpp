@@ -2085,7 +2085,11 @@ DWORD WINAPI run(void*) {
         std::array<AimMarkerMotion, 2> aimMotion;
         GameTrackingRig rig;
         GameMotionFrame motion;
-        NativeEyeHistory history;
+        // The eye-frame history (256 frames, about 825 KB) lives on the heap,
+        // not on the VR thread's stack, where it left too little room for the
+        // OpenXR runtime and the graphics driver (beta3l dumps, Nov 26).
+        const auto historyStore = std::make_unique<NativeEyeHistory>();
+        NativeEyeHistory& history = *historyStore;
         // Where the HUD panel faces in the room: it follows the head lazily
         // (native_hud::Follow), and starts in front of it again with play,
         // the immersive view and a recentred room.
