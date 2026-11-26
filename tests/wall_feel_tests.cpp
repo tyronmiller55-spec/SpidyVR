@@ -159,6 +159,51 @@ int main() {
         check(fast.body.velocity.z < -12, "the run lost its speed along the wall");
         check(fast.body.velocity.y > -1, "a pushed run fell like a slide");
     }
+    // WALL FLING ANY WAY: gripping the wall (GRIP TO STICK, hand climbing off: the owner's settings), a pull
+    // let go of flings him off it any way it points out; off, only a hard push straight out leaves (beta3m).
+    {
+        check(wall_feel::flingLeaves(.5f, true) && !wall_feel::flingLeaves(.5f, false) &&
+                  wall_feel::flingLeaves(2.f, false) && !wall_feel::flingLeaves(-3.f, true) &&
+                  !wall_feel::flingLeaves(NAN, true),
+              "the leave speeds");
+        const auto fling = [](bool anyWay, Vec3 pull) {
+            WallRig r;
+            r.s.gripSettings(false, true);
+            r.s.wallFlingAnyWay(anyWay);
+            r.body = {{4.1f, 50, 0}, {1, 0, 0}, false};
+            r.s.wallGripToStick(true, 50);
+            r.advance();
+            check(r.s.wall().on, "the fling body is not on the wall");
+            auto& h = r.in.hands[0];
+            h.tracked = true;
+            h.aim.orientation = arc({0, 0, -1}, {1, 0, 0});
+            h.gripRelativeToHead = {.4f, 0, 0};
+            h.wallPosition = {4.95f, r.body.position.y, 0};
+            r.advance();
+            h.wallPosition = {4.95f, r.body.position.y, 0};
+            h.wallGrip = 1;
+            r.advance();
+            check(r.s.wall().stuck, "the grip did not stick the body");
+            for (int i = 0; i < 10; ++i) {
+                h.gripRelativeToHead += pull / 60.f;
+                h.wallPosition = Vec3{4.95f, r.body.position.y, 0};
+                r.advance();
+            }
+            h.wallGrip = 0;
+            r.advance();
+            return std::pair{r.s.wall().on, r.body.velocity};
+        };
+        // The hand drawn down and in at the wall (1 m/s each): the body goes up and out.
+        const Vec3 upAndOut{1, -1, 0};
+        const auto [onAfter, v] = fling(true, upAndOut);
+        check(!onAfter, "on, an up-and-out fling did not leave the wall");
+        check(v.x < -.5f && v.y > .5f, "on, the fling did not go along its own way (up and out)");
+        const auto [offOn, offV] = fling(false, upAndOut);
+        check(offOn && std::abs(offV.x) < .05f, "off, a soft push out left the wall (beta3m strokes it along)");
+        // Pulled away from the wall (a fling into it) still strokes along it, on or off.
+        const auto [inOn, inV] = fling(true, Vec3{-1, 0, 1});
+        check(inOn && inV.z < -.5f, "a fling into the wall left it, or did not stroke along it");
+    }
     std::printf("%d wall feel checks passed\n", passed);
     return 0;
 }

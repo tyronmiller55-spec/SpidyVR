@@ -788,7 +788,8 @@ static_assert(sizeof(ReelOutAsk) == 32);
 // sent every frame to SpidyWallStick; an ask older than 200 ms is off. `flags` bit 0: on. `frictionPct`: the
 // slide's friction, 0 to 100 (% of gravity). Not a Command or Settings field: an older module has no export
 // and XR then sends none (every wall holds at once, as before). Version 2 (beta3n, WALL FEEL, wall_feel.hpp):
-// flags bit 1, WALL RUN PUSH (wall_run_push), and `runBlendMs` its blend (0 to 1000); a version 1 ask is
+// flags bit 1, WALL RUN PUSH (wall_run_push), and `runBlendMs` its blend (0 to 1000); bit 2, WALL FLING ANY
+// WAY (wall_fling_any_way); a version 1 ask is
 // beta3m's (none of version 2's on).
 struct WallStickAsk {
     uint32_t magic = 0x53575753, version = 2, bytes = sizeof(WallStickAsk), serial{};
@@ -801,7 +802,7 @@ inline bool validWallStick(const WallStickAsk& a) {
         return false;
     if (a.version == 1)
         return !(a.flags & ~1u);
-    return a.version == 2 && !(a.flags & ~3u) && a.runBlendMs <= 1000;
+    return a.version == 2 && !(a.flags & ~7u) && a.runBlendMs <= 1000;
 }
 // SpidyWallStickLive: GRIP TO STICK's account for XR's log. `on` whether the switch is in force; `stuck` 1
 // while the body is on SpidyVR's wall and stuck to it, 2 while it slides there, 0 off any; `slides` the walls

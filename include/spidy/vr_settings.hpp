@@ -892,6 +892,12 @@ struct Values {
     bool wallRunPush = true;
     // (ms, 0 to 1000) WALL RUN PUSH's blend from the slide into the run and back. 0: at once.
     int wallRunBlendMs = 250;
+    // WALL FLING ANY WAY (0.8.7-na-beta3n, settings revision 25; the owner, Nov 26 t141u: "Gripping the wall, I
+    // want to be able to fling myself in any direction via grip fling"; a feel change, wall_feel.hpp): a grip
+    // fling let go of on SpidyVR's wall leaves it along the whole fling as soon as any of it (0.3 m/s) points
+    // out of the wall - up, down, sideways or out. A fling into the wall still strokes along it. Off: as beta3m
+    // (only a push 2 m/s or more straight out leaves; the rest strokes along the wall).
+    bool wallFlingAnyWay = true;
     // (%, 0 to 300) ROPE WEIGHT (0.8.7-na-beta3e; the owner, Nov 22 t94u: "I want a weight slider for the webs,
     // right now they're so light I can't control the swing"): the swing line's mass for ROPE PHYSICS, the sim and
     // the pull alike (swing_line::Input::weight). Heavier hangs and swings on with what it has - more inertia to

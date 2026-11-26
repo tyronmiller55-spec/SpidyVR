@@ -710,6 +710,16 @@ class Swing {
     bool wallRunPushEnabled() const {
         return runPush_;
     }
+    // WALL FLING ANY WAY (0.8.7-na-beta3n, wall_feel.hpp; off: beta3m's). A grip fling let go of on a wall
+    // leaves the wall along the whole fling once any of it (wall_feel::flingLeaveSpeed) points out of the wall:
+    // up, down, sideways and out, not only a push straight out of 2 m/s or more. A fling into the wall still
+    // strokes along it.
+    void wallFlingAnyWay(bool on) {
+        flingAnyWay_ = on;
+    }
+    bool wallFlingAnyWayEnabled() const {
+        return flingAnyWay_;
+    }
     // How far the slide has blended into the stick's run (0..1).
     float wallRunBlend() const {
         return runBlend_;
@@ -1203,7 +1213,7 @@ class Swing {
     void stickWall();
     void stickInputs(const Input&, const WorldQueries&);
     // WALL RUN PUSH (beta3n): the switch, the run's blend (0..1) and its time.
-    bool runPush_{};
+    bool runPush_{}, flingAnyWay_{};
     float runBlendSeconds_ = wall_feel::defaultBlendMs / 1000.f, runBlend_{};
     Vec3 wallRun(Vec3 along, Vec3 n, const Input&, float dt) const;
     float climbSeconds_{};

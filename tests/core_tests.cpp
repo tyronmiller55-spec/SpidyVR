@@ -26022,6 +26022,7 @@ int main() {
                   "wall_slide_friction=50\n"
                   "wall_run_push=1\n"
                   "wall_run_blend_ms=250\n"
+                  "wall_fling_any_way=1\n"
                   "swing_rope_weight_pct=100\n"
                   "swing_rope_drag_pct=100\n"
                   "kick_lunge=1\n"

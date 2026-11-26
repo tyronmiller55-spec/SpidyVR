@@ -24,6 +24,14 @@ namespace spidy::wall_feel {
 inline constexpr int defaultBlendMs = 250;
 // How much of the stick must point at the wall (0..1) to start the run: a stick along the wall only does not.
 inline constexpr float pushInto = .25f;
+// WALL FLING ANY WAY: a grip fling off a wall leaves it along the whole fling with this much of it out of the
+// wall (m/s); off, beta3m's 2 m/s (less only strokes along the wall).
+inline constexpr float flingLeaveSpeed = .3f, flingLeaveSpeedOff = 2.f;
+// The speed out of the wall a fling (`out`, m/s, + away from it) leaves the wall with.
+inline bool flingLeaves(float out, bool anyWay) {
+    return std::isfinite(out) && out >= (anyWay ? flingLeaveSpeed : flingLeaveSpeedOff);
+}
+
 // The run's blend after `dt`: toward 1 while the stick pushes at the wall (`into`, 0..1, of the stick toward
 // it), toward 0 otherwise, over `seconds` (0: at once).
 inline float blend(float now, float into, float seconds, float dt) {

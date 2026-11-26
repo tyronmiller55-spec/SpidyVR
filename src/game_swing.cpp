@@ -2017,6 +2017,7 @@ void visit(const native_rays::QueryContext& world) {
             // WALL RUN PUSH (beta3n, wall_feel.hpp): version 2's; a version 1 ask has it off.
             const bool v2 = fresh && ws.version >= 2;
             solver.wallRunPush(v2 && (ws.flags & 2u), static_cast<int>(v2 ? ws.runBlendMs : 0u));
+            solver.wallFlingAnyWay(v2 && (ws.flags & 4u));
             volatile WallStickLive& wl = SpidyWallStickLive;
             const auto& wall = solver.wall();
             wl.on = solver.wallGripToStickEnabled() ? 1u : 0u;

@@ -3354,6 +3354,7 @@ constexpr TabOnly tabOnly[] = {
     {"wall_slide_friction", nullptr, &Values::wallSlideFriction},
     {"wall_run_push", &Values::wallRunPush, nullptr},
     {"wall_run_blend_ms", nullptr, &Values::wallRunBlendMs},
+    {"wall_fling_any_way", &Values::wallFlingAnyWay, nullptr},
     {"swing_rope_weight_pct", nullptr, &Values::swingRopeWeightPct},
     {"swing_rope_drag_pct", nullptr, &Values::swingRopeDragPct},
     {"kick_lunge", &Values::kickLunge, nullptr},
@@ -3676,6 +3677,8 @@ Values withMovementDefaults(Values v, std::string_view text) {
         // Revision 25 (0.8.7-na-beta3n; the owner, Nov 26 t141u: wall running back, and the walls' feel): WALL
         // RUN PUSH comes on once (a new key, on by default for testing); a 0 chosen after this revision stays.
         v.wallRunPush = true;
+        // WALL FLING ANY WAY comes on once (t141u, a new key); a 0 chosen after this revision stays.
+        v.wallFlingAnyWay = true;
         // BETA3N MIGRATION END
     }
     v.movementDefaults = movementDefaultsRevision;

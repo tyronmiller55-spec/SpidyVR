@@ -3378,6 +3378,8 @@ void App::options(ImVec2 origin, ImVec2 size) {
                    S(42), [&] { flagToggle("##wallrunpush", tabOnly_.wallRunPush); });
             settingOption(Item::none, "Wall run push: blend", "How long the slide takes to become the run, and the run the slide again. 0 ms: at once. Default: 250 ms.",
                    S(150), [&] { fineSlider("##wallrunblend", tabOnly_.wallRunBlendMs, 0, 1000, 25, "%d ms", "At once"); });
+            settingOption(Item::none, "Wall fling any way", "Changes the feel: holding a wall with a grip, pull and let go to fling off it in any direction - up, down, sideways or out. A fling into the wall still carries you along it. Needs Grip fling on. Off: only a hard push straight out leaves the wall, as beta3m. Default: on.",
+                   S(42), [&] { flagToggle("##wallflinganyway", tabOnly_.wallFlingAnyWay); });
             // BETA3E LAUNCHER END
         });
         // KICKS (0.8.7-na-beta3f): the air kick's lunge and the kicks' feel, each on by default for testing. The same

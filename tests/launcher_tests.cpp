@@ -825,7 +825,7 @@ int main() {
             // CRIME RUN (prototype): a mode and its rules, the player's own (and the best, written by the game).
             if (key.rfind("crime_", 0) == 0)
                 continue;
-            if (key == "wall_run_push" || key == "wall_run_blend_ms")
+            if (key == "wall_run_push" || key == "wall_run_blend_ms" || key == "wall_fling_any_way")
                 continue;
             if (key == "wall_slide_friction")
                 continue;

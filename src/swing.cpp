@@ -1809,10 +1809,11 @@ void Swing::step(float dt, const Input& in, const WorldQueries& world, const Wor
         flingVelocity_ = {};
         std::uint32_t source = 0;
         if (wall_.on) {
-            // Along the wall: a stroke coasts; a push out of it (2 m/s or more) leaves it.
+            // Along the wall: a stroke coasts; a push out of it (2 m/s or more) leaves it. WALL FLING ANY WAY
+            // (wall_feel.hpp): any of it out of the wall leaves it, along the whole fling.
             const Vec3 n = wall_.normal;
             const float out = dot(v, n);
-            if (out >= 2.f) {
+            if (wall_feel::flingLeaves(out, flingAnyWay_)) {
                 body_.velocity = limited(v, config_.maxSpeed);
                 leaveWall();
                 sinceWallJump_ = 0;

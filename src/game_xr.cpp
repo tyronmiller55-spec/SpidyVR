@@ -7335,14 +7335,18 @@ DWORD WINAPI run(void*) {
                             if (values.wallRunPush)
                                 ask.flags |= 2u;
                             ask.runBlendMs = static_cast<uint32_t>(std::clamp(values.wallRunBlendMs, 0, 1000));
+                            // WALL FLING ANY WAY (beta3n): a grip fling leaves a wall any way it points out.
+                            if (values.wallFlingAnyWay)
+                                ask.flags |= 4u;
                             const bool taken = wallStickCall(&ask) == 0;
                             if (taken != wallStickTaken)
-                                diag_log::writef("grip to stick: %s (slide friction %u%%); wall run push: %s (%u ms)",
+                                diag_log::writef("grip to stick: %s (slide friction %u%%); wall run push: %s (%u ms); "
+                                                 "wall fling any way: %s",
                                                  !taken                   ? "the swing took no settings"
                                                  : values.wallGripToStick ? "on: walls slide until a grip"
                                                                           : "off: walls hold at once",
                                                  ask.frictionPct, values.wallRunPush ? "on" : "off",
-                                                 ask.runBlendMs);
+                                                 ask.runBlendMs, values.wallFlingAnyWay ? "on" : "off");
                             wallStickTaken = taken;
                         }
                         if (const volatile game_swing::WallStickLive* wl = wallStickLive) {
