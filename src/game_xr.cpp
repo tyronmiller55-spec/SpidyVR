@@ -15312,7 +15312,11 @@ extern "C" __declspec(dllexport) DWORD WINAPI SpidyXrStart(void* input) {
     // The startup stages anew; the worker starts the watchdog with RUN LOGS on.
     startupStages.reset();
     frameSteps.reset();
-    worker = CreateThread(nullptr, 0, run, nullptr, 0, nullptr);
+    // The VR worker reserves 16 MB of stack (committed only as used). The default
+    // 1 MB overflowed (0xC00000FD) inside the OpenXR runtime and the graphics
+    // driver once run()'s own frame had taken most of it (beta3l dumps, Nov 26).
+    constexpr SIZE_T vrWorkerStack = SIZE_T{16} << 20;
+    worker = CreateThread(nullptr, vrWorkerStack, run, nullptr, STACK_SIZE_PARAM_IS_A_RESERVATION, nullptr);
     if (worker) {
         // The watchdog holds its own handle to the worker and ends with it.
         HANDLE watched{};
