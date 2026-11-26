@@ -500,6 +500,42 @@ int main() {
         check(heroSide(h) == -1 && airPoseTorso(AirPose::superhero, heroSide(h)).yaw < 0, "the right: right");
         check(airPoseTorso(AirPose::starfish).pitch < 0 && airPoseTorso(AirPose::none).pitch == 0, "starfish opens");
     }
+    // WALL SLIDE POSE (beta3o): off the air, SpidyVR's wall sliding him shows the braced crouch; off, as beta3n.
+    {
+        check(wallSlideWanted(true, 3.f, 0.f, false), "a slide straight down: the pose");
+        check(wallSlideWanted(true, 0.f, .2f, false), "a slow slide: the pose");
+        check(!wallSlideWanted(true, 1.f, 4.f, false), "a run along the wall: the run's legs");
+        check(!wallSlideWanted(false, 3.f, 0.f, false), "stuck (or off the wall): no pose");
+        check(!wallSlideWanted(true, NAN, 0.f, false), "a bad speed: no pose");
+        check(wallSlideWanted(true, 1.f, 1.5f, true) && !wallSlideWanted(true, 1.f, 1.5f, false),
+              "the hysteresis keeps it on at the edge");
+        Settings set;
+        Input in;
+        in.dt = dt;
+        in.wallSlide = true;
+        Mixer m;
+        Output o = m.update(in, set);
+        check(o.layer == Layer::off && !o.run, "the switch off: as beta3n (no layer on the wall)");
+        set.wallSlide = true;
+        for (int i = 0; i < 40; ++i)
+            o = m.update(in, set);
+        check(o.layer == Layer::wallSlide && o.run && !o.useStick && o.couplingScale == 0 && !o.torsoOn,
+              "on: the wall slide layer, no turn on the body");
+        check(o.amount > .99f && o.pose[0].pitch == wallSlidePose[0].pitch && o.pose[1].side < 0,
+              "the pose shown in full, eased");
+        check(wallSlidePose[0].knee <= leg_control::kneeMax && wallSlidePose[1].knee <= leg_control::kneeMax &&
+                  wallSlidePose[0].pitch <= leg_control::pitchMax,
+              "within leg_control's limits");
+        Input up = in;
+        up.air = true;
+        o = m.update(up, set);
+        check(o.layer != Layer::wallSlide, "in the air the air's layers have the legs");
+        in.wallSlide = false;
+        o = m.update(in, set);
+        check(o.layer == Layer::off && o.amount < .99f, "the slide over: it eases out");
+        check(std::strcmp(layerName(Layer::wallSlide), "wall slide") == 0, "the log's name");
+        check(vr_settings::Values{}.wallSlidePose, "on by default");
+    }
     std::printf("passive legs: %d checks passed\n", passed);
     return 0;
 }

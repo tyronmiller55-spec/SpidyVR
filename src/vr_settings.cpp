@@ -3359,6 +3359,7 @@ constexpr TabOnly tabOnly[] = {
     {"wall_fling_any_way", &Values::wallFlingAnyWay, nullptr},
     {"sticky_palms", &Values::stickyPalms, nullptr},
     {"sticky_palms_pct", nullptr, &Values::stickyPalmsPct},
+    {"wall_slide_pose", &Values::wallSlidePose, nullptr},
     {"swing_rope_weight_pct", nullptr, &Values::swingRopeWeightPct},
     {"swing_rope_drag_pct", nullptr, &Values::swingRopeDragPct},
     {"kick_lunge", &Values::kickLunge, nullptr},
@@ -3688,6 +3689,12 @@ Values withMovementDefaults(Values v, std::string_view text) {
         // GRIP HOLDS THE HANDSTAND comes on once (t146u, a new key); a 0 chosen after this revision stays.
         v.handstandGripHold = true;
         // BETA3N MIGRATION END
+    }
+    if (seen < 26) {
+        // Revision 26 (0.8.7-na-beta3o; the owner, Nov 26 t147u): WALL SLIDE POSE comes on once (a new key); a 0
+        // chosen after this revision stays.
+        v.wallSlidePose = true;
+        // BETA3O MIGRATION END
     }
     v.movementDefaults = movementDefaultsRevision;
     return sanitized(v);

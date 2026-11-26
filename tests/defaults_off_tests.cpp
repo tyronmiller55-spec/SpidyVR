@@ -3,7 +3,7 @@
 // with no revision bump (missing keys take the struct defaults), and revision 24
 // turns WEB GRIP, PUNCH FISTS and WEB IN HAND on once (THICK SWING LINE was removed in beta3n), and
 // revision 25 (beta3n) turns WALL RUN PUSH, WALL FLING ANY WAY, STICKY PALMS and
-// GRIP HOLDS THE HANDSTAND on once.
+// GRIP HOLDS THE HANDSTAND on once, and revision 26 (beta3o) WALL SLIDE POSE.
 #include "spidy/vr_settings.hpp"
 #include <cstdio>
 #include <cstdlib>
@@ -25,7 +25,7 @@ void check(bool ok, const char* what) {
 }
 
 int main() {
-    check(movementDefaultsRevision == 25, "this tree is not at revision 25");
+    check(movementDefaultsRevision == 26, "this tree is not at revision 26");
     check(!Values{}.crimeRun && Values{}.crimeStartScore == 20000 && Values{}.crimeHud && Values{}.crimeRealCrimes,
           "Crime Run's defaults (off, 20,000, HUD, real crimes)");
     const std::string onlyRev = "movement_defaults=23\n";
@@ -66,7 +66,7 @@ int main() {
 
     const std::string text = tabOnlyText(Values{});
     check(text.find("crime_run=0\n") != std::string::npos, "the defaults' text did not carry crime_run=0");
-    check(text.find("movement_defaults=25\n") != std::string::npos, "the defaults' text did not carry movement_defaults=25");
+    check(text.find("movement_defaults=26\n") != std::string::npos, "the defaults' text did not carry movement_defaults=26");
 
     // Revision 25 (beta3n): the walls' feel comes on once; a 0 chosen after it stays; off is beta3m's wall.
     const std::string rev24 = "movement_defaults=24\nwall_run_push=0\nwall_fling_any_way=0\nsticky_palms=0\nhandstand_grip_hold=0\n";
@@ -79,6 +79,12 @@ int main() {
     const Values k = withMovementDefaults(withTabOnly({}, kept25), kept25);
     check(!k.wallRunPush && k.wallRunBlendMs == 0 && !k.wallFlingAnyWay && !k.stickyPalms && k.stickyPalmsPct == 30 && !k.handstandGripHold, "a 0 chosen after revision 25 was overwritten");
     check(withTabOnly({}, "wall_run_blend_ms=5000\n").wallRunBlendMs == 1000, "the blend is not held to 1000 ms");
+
+    // Revision 26 (beta3o): WALL SLIDE POSE comes on once; a 0 chosen after it stays.
+    const std::string rev25 = "movement_defaults=25\nwall_slide_pose=0\n";
+    check(withMovementDefaults(withTabOnly({}, rev25), rev25).wallSlidePose, "revision 26 did not turn WALL SLIDE POSE on once");
+    const std::string kept26 = "movement_defaults=26\nwall_slide_pose=0\n";
+    check(!withMovementDefaults(withTabOnly({}, kept26), kept26).wallSlidePose, "a 0 chosen after revision 26 was overwritten");
 
     // Off of Crime Run matches "no mode": the previous build has no run, no HUD key, no fifth app.
     Values off;

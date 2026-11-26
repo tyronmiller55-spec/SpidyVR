@@ -1670,6 +1670,7 @@ DWORD WINAPI run(void*) {
         ground_flip::Trigger groundFlipTrigger;
         ground_flip::TapTrigger groundFlipTap; // side flips: a directional A tap
         bool torsoChannelLogged{}; // TORSO CHANNEL (J1): last logged on/off
+        bool wallSlidePoseOn{};    // WALL SLIDE POSE (beta3o): the legs' slide pose shows (and was logged so)
         unsigned groundFlips{}, groundFlipDenied{}, groundFlipRefused{}, groundFlipReleasedSeen{}, groundFlipLapsedSeen{};
         // DOUBLE-TAP A: UPSIDE DOWN: the rig's count logged, and whether a hold was on.
         unsigned airFlipInvertSeen{};
@@ -12342,8 +12343,37 @@ DWORD WINAPI run(void*) {
                                                                            reachHand[i]);
                                 }
                             }
+                            // WALL SLIDE POSE (wall_slide_pose, beta3o; leg_layers::wallSlidePose): SpidyVR's own
+                            // wall sliding him (GRIP TO STICK, not stuck: SpidyWallStickLive's stuck 2), mostly
+                            // down or slow; the wall crawl's and the wall run's bodies stand down for it (below).
+                            {
+                                bool slideNow = false;
+                                float down = 0, across = 0;
+                                const volatile game_swing::WallStickLive* wl = wallStickLive;
+                                if (values.wallSlidePose && values.body && !flatScreen && !calibrationInput && wl &&
+                                    wl->stuck == 2 && swingFresh && swingState.owned && !swingState.grounded &&
+                                    swingState.wall == static_cast<uint32_t>(game_swing::Surface::wall) &&
+                                    !motion.standing && !motion.ventCrawl && (pose.flags & native_body::airborne) &&
+                                    !(pose.flags & native_body::kick) && finite(swingState.velocity)) {
+                                    Vec3 v = swingState.velocity;
+                                    if (finite(swingState.wallNormal) && length(swingState.wallNormal) > .5f) {
+                                        const Vec3 n = normalized(swingState.wallNormal);
+                                        v -= n * dot(v, n);
+                                    }
+                                    down = -v.y;
+                                    across = std::hypot(v.x, v.z);
+                                    if (down < 0)
+                                        across = std::hypot(across, down); // going up is across too
+                                    slideNow = leg_layers::wallSlideWanted(true, down, across, wallSlidePoseOn);
+                                }
+                                if (slideNow != wallSlidePoseOn)
+                                    diag_log::writef("legs: wall slide pose %s (%.1f m/s down, %.1f m/s across)",
+                                                     slideNow ? "on" : "off", down, across);
+                                wallSlidePoseOn = slideNow;
+                            }
                             leg_layers::Input layerIn;
                             layerIn.dt = legDt;
+                            layerIn.wallSlide = wallSlidePoseOn;
                             layerIn.air = legAir;
                             layerIn.active = legBase && legHoldOut.engaged;
                             layerIn.easing = legEasing;
@@ -12408,6 +12438,7 @@ DWORD WINAPI run(void*) {
                             layerSet.crouch = values.legAirCrouch;
                             layerSet.reach = values.legReachSpread;
                             layerSet.poses = values.airPoses; // MIDAIR POSES (their own switch since Nov 18 1:09 PM)
+                            layerSet.wallSlide = values.wallSlidePose; // WALL SLIDE POSE (beta3o)
                             const auto layered = legMixer.update(layerIn, layerSet);
                             const auto poseExitWhy = [&] {
                                 return leg_layers::poseExitWhy(
@@ -12475,7 +12506,8 @@ DWORD WINAPI run(void*) {
                             }
                             // The legs' turn on the body: the flips' momentum models take it
                             // (CONTROLLED: FlipMotion; REALISTIC: RealisticFlip).
-                            if (legMode && (values.controlledFlips || values.realisticFlips))
+                            if (legMode && layered.layer != leg_layers::Layer::wallSlide &&
+                                (values.controlledFlips || values.realisticFlips))
                                 rig.legCoupling(legOut.reactionPitch, legOut.reactionRoll, legOut.spinScale);
                             if (layered.layerChanged) {
                                 legModeLogged = legMode;
@@ -12529,7 +12561,7 @@ DWORD WINAPI run(void*) {
                             climbState, frame.predictedDisplayTime > 0 ? frame.predictedDisplayTime : 0);
                         const bool runningPose = wallRunBody.update(motion, hold, swingState.velocity,
                             swingFresh && values.handClimb && values.body && !flatScreen &&
-                            !(pose.flags & native_body::kick), swingState.grounded != 0, wallGrip ? climbState.hands : 0, frame.seconds,
+                            !(pose.flags & native_body::kick) && !wallSlidePoseOn, swingState.grounded != 0, wallGrip ? climbState.hands : 0, frame.seconds,
                             vr_settings::fixedMomentumStepPace * .01f);
                         if (motion.ventCrawl && values.handClimb && values.body && !flatScreen) {
                             pose.flags |= native_body::ventHands |
@@ -12544,7 +12576,7 @@ DWORD WINAPI run(void*) {
                             pose.floor = hold.anchor - motion.anchor;
                         }
                         if (wallCrawlBody.update(motion, hold,
-                            values.handClimb && values.body && !flatScreen && !runningPose,
+                            values.handClimb && values.body && !flatScreen && !runningPose && !wallSlidePoseOn,
                             frame.seconds, wallGrip ? climbState.hands : 0)) {
                             pose.flags |= native_body::crawl | native_body::crawlPlanted |
                                           native_body::crawlHandSync;

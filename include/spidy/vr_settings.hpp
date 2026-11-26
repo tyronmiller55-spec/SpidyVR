@@ -316,7 +316,7 @@ struct Values {
     // from before it gets RUN CURVE on and EARLY JUMP QUICK TAP once (the
     // user: "movement fixes will be defaults"); after that the player's own
     // choice stands. Not a row. movement_defaults.
-    int movementDefaults = 25; // movementDefaultsRevision: a new file has seen them
+    int movementDefaults = 26; // movementDefaultsRevision: a new file has seen them
     // SOFT LANDING (the tab's SOFT LANDING; Swing::allowSoftLanding,
     // run_update::softLandVertical): a fall the swing flies, with no web
     // holding, eases to 9 m/s down over its last 3 m (or 0.35 s), its speed
@@ -917,6 +917,13 @@ struct Values {
     // (%, 0 to 200) STICKY PALMS' strength: how firmly a touching palm holds. 100: a still palm takes a 6 m/s
     // slide under 1 m/s in about half a second.
     int stickyPalmsPct = 100;
+    // WALL SLIDE POSE (0.8.7-na-beta3o, settings revision 26; the owner, Nov 26 t147u: "we need an animation for
+    // wall sliding. Maybe we can pose his legs like the image whenever he's sliding, similar to the old classic
+    // Spiderman 2 Playstation game"; visual only, leg_layers::wallSlidePose): while SpidyVR's own wall slides him
+    // (GRIP TO STICK, not stuck) mostly down or slowly, his legs take a braced crouch - knees up and wide, one foot
+    // higher - in place of the wall crawl's planted legs or the wall run's stride. A slide the stick runs along the
+    // wall keeps the wall run. Off: as beta3n.
+    bool wallSlidePose = true;
     // (%, 0 to 300) ROPE WEIGHT (0.8.7-na-beta3e; the owner, Nov 22 t94u: "I want a weight slider for the webs,
     // right now they're so light I can't control the swing"): the swing line's mass for ROPE PHYSICS, the sim and
     // the pull alike (swing_line::Input::weight). Heavier hangs and swings on with what it has - more inertia to
@@ -1557,7 +1564,7 @@ std::string tabOnlyText(const Values&);
 // key, or whose value is no whole number, is passed over.
 Values withTabOnly(Values, std::string_view text);
 // The movement defaults' revision (Values::movementDefaults) this build has.
-inline constexpr int movementDefaultsRevision = 25;
+inline constexpr int movementDefaultsRevision = 26;
 // November 12 movement cleanup: a settings file (that text) older than
 // movementDefaultsRevision gets the new movement defaults once - RUN CURVE
 // on, EARLY JUMP at least QUICK TAP - and is marked as having seen them; a

@@ -3392,6 +3392,8 @@ void App::options(ImVec2 origin, ImVec2 size) {
                    S(42), [&] { flagToggle("##stickypalms", tabOnly_.stickyPalms); });
             settingOption(Item::none, "Sticky palms: strength", "How firmly a touching palm holds. 100%: a still palm takes a quick slide to a crawl in about half a second. 0%: none. Default: 100%.",
                    S(150), [&] { fineSlider("##stickypalmspct", tabOnly_.stickyPalmsPct, 0, 200, 10, "%d%%", "None"); });
+            settingOption(Item::none, "Wall slide pose", "Looks only: while you slide down one of SpidyVR's walls (before a grip sticks you), his legs brace in a crouch - knees up and wide, one foot higher - like the classic wall slide. A slide you run along the wall keeps the wall run's legs. Off: the crawl's or the run's legs, as beta3n. Default: on.",
+                   S(42), [&] { flagToggle("##wallslidepose", tabOnly_.wallSlidePose); });
             // BETA3E LAUNCHER END
         });
         // KICKS (0.8.7-na-beta3f): the air kick's lunge and the kicks' feel, each on by default for testing. The same
