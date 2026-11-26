@@ -3,6 +3,18 @@
 Every build, newest first, with what changed, why, and what was measured.
 Per-check results are in [VALIDATION.md](VALIDATION.md).
 
+**0.8.7-na-beta3p (November 26, the owner's t151u and "Build A and make LEVEL the default, Build the smoothing
+clock fix"; branch `feat/087-next`, on beta3o):** a test package
+([checklist](NA_BETA3.md#beta3p-level-keeps-him-with-you-head-level-by-default-the-smoothing-clock-fix)).
+Settings revision 27. CURRENT is unchanged.
+
+- **Level keeps him with you** (`level_head_lock=1`). HEAD LEVEL (with HYBRID and HEADSET FIRST) joins FULL's head
+  lock: the view turns only with you, the game turns him back under it after dodges, rolls and landings, and the
+  view stays level. Without the lock, LEVEL's latch skips the fast-dive re-latch and the crown's yaw. Off: beta3o.
+- **HEAD LEVEL is the default.** Revision 27 turns a saved FULL into LEVEL once; FULL is still a choice.
+- **Smoothing clock fix.** The animated view's smoothing is timed on the performance counter and steps once a
+  frame; the level latch is shared safely between the eyes' and the hands' threads. A bug fix, no setting.
+
 **0.8.7-na-beta3o (November 26, the owner's t147u-t149u; branch `feat/087-next`, on beta3n):** a test package
 ([checklist](NA_BETA3.md#beta3o-grip-locks-the-wall-jump-a-wall-slide-pose-the-held-line-inside-the-fist-a-rope-grip)).
 Settings revision 26: the three new switches come on once; off of each equals beta3n. CURRENT is unchanged.

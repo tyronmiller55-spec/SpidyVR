@@ -11,7 +11,7 @@
 // and cutscenes stay with the mod's body. Point-jump / perch: perch is ground
 // yield (ANIMATED MOVES); point-jump air uses this gate once ungrounded.
 //
-// ANIMATED HEAD (vr_settings::Values::animatedHead, Off|Level|Full, default Off):
+// ANIMATED HEAD (vr_settings::Values::animatedHead, Off|Level|Full, default Level from beta3p, Full before):
 // while yieldsBody, attach the VR view to the hero's gameplay head the way
 // finishers do (anchored 2/4 → resolvedOnHead), without turning on the cutscene
 // worker (game_fp::want). Full honors pitch/roll from the anim head in every

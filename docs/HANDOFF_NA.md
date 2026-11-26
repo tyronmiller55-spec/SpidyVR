@@ -117,13 +117,23 @@ All of these are on `tyronmiller55-spec/SpidyVR`. Do not rewrite them.
 | `29996b0` | Grip locks the wall jump; point jumps go through the grip (beta3o) |
 | `bb9796e` | Web in hand: the held line starts in the fist's channel (beta3o) |
 | `193ea31` | Rope grip (beta3o) |
-| (next) | Docs: 0.8.7-na-beta3o |
+| `7a68938` | Docs: 0.8.7-na-beta3o |
+| `2a8dd95` | Smoothing clock fix (beta3p) |
+| `186038c` | Level keeps him with you (beta3p) |
+| `bbbac4e` | HEAD LEVEL is the default (beta3p) |
+| (next) | Docs: 0.8.7-na-beta3p |
 
 ---
 
 ## 4. Settings revision and toggles
 
-`movementDefaultsRevision` is **26** (set at beta3o). It was 25 at beta3n, 24 at beta3i, 23 at beta3g / Crime Run / polish.
+`movementDefaultsRevision` is **27** (set at beta3p). It was 26 at beta3o, 25 at beta3n, 24 at beta3i, 23 at beta3g / Crime Run / polish.
+
+beta3p (revision 27): `level_head_lock` — LEVEL KEEPS HIM WITH YOU (`level_head_lock.hpp`; game_xr's lockWanted /
+fullLockGate / levelTurnGate, the HYBRID steering and HEADSET FIRST basis, `game_fp::levelHeadLock` and frameLevel;
+launcher Native Animation group), **ON by default**, OFF = beta3o's LEVEL. `animated_head` defaults to 1 (LEVEL);
+revision 27 turns a saved 2 (FULL) into 1 once. The smoothing clock fix (stereo_probe resolveScene: QPC, one step a
+frame; game_fp's latch under an SRW lock) has no setting.
 
 beta3o's switches, **ON by default** (revision 26 turns them on once). OFF plays like beta3n:
 
@@ -259,6 +269,10 @@ Public search did not turn up a matching Meta 1.210 / OpenXR / D3D12 / NVIDIA st
 ---
 
 ## 9. Ranked next steps
+
+**Status, Nov 26 (evening):** beta3p builds the owner's t151u answer: Option A of
+`plans/level-head-cohesion-1126.md` (Level keeps him with you), HEAD LEVEL as the default and the smoothing clock
+fix, as a test zip (CI publish=false). Options B (dodge tilt) and C (animated-rotation reprojection) are not built.
 
 **Status, Nov 26 (later):** beta3o adds the owner's t147u-t149u (above): the wall slide pose, the grip jump lock,
 the held line in the fist and the rope grip, built as a test zip (CI publish=false).

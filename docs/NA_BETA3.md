@@ -860,6 +860,68 @@ How the game plays is unchanged. No new settings, no new migration revision.
 4. **If it crashes**, upload the usual logs, `spidy-vr-start.log` and the new
    `.mdmp`.
 
+## beta3p: Level keeps him with you, HEAD LEVEL by default, the smoothing clock fix
+
+The owner, Nov 26 (t151u), after trying the HEAD choices: FULL's choppiness goes with LEVEL, and "Level was the
+one that felt like something that should be default, felt great. The only problem was it didn't track all
+animation moves, so the dodges didn't roll, and the body and the head had no cohesion, so you'd frequently be
+looking backwards after moves in animation. If we could lock it better, while still keeping it relatively level,
+it would be an improvement". His answer to the plan (`plans/level-head-cohesion-1126.md`): "Build A and make
+LEVEL the default, Build the smoothing clock fix". Option B (a dodge tilt) and C (reprojecting the animated
+rotation) are not built.
+
+**Why LEVEL lost him.** LEVEL froze its heading from the head bone at the start of each yield and at every cut,
+and nothing turned the hero back under that frozen heading - FULL's head lock (the HYBRID heading, the landing
+turn, the facing check, turn-in-place, the HEADSET FIRST stick basis) was FULL-only. After a dodge, a roll, a
+turn-around or a landing on the game's stored facing he faced one way and the frozen view another. The latch
+could also jump mid-move: the one-metre cut test fires at a fast dive's speed and re-latched onto wherever the
+head bone faced, and a latch while the head looked steeply up took the crown's yaw.
+
+This build:
+
+1. **LEVEL KEEPS HIM WITH YOU** (`level_head_lock=1`; `level_head_lock.hpp`). With HEAD LEVEL, HYBRID movement and
+   HEADSET FIRST (all three are the defaults), LEVEL joins FULL's head lock: the view's turn is the lock's - your
+   headset, the right stick (smooth or snap turn), snap realign, a recenter - and the animation never turns it.
+   The game's own turns bring Spider-Man back under the view after a dodge, roll or landing (the landing turn,
+   the facing check, turn-in-place, and the stick taking the view again), as in FULL. The view stays level: no
+   pitch or roll from the bone, so it is as smooth as LEVEL was. The eyes and the hands now read the one published
+   heading (the eyes' level frame is built from it every frame), so they can no longer disagree after a latch.
+   Where the lock is not live (another movement mode, HEADSET FIRST off), LEVEL keeps its latch but no longer
+   re-latches on the one-metre test during a fast dive or swing, and never latches onto the crown's yaw while
+   the head looks steeply up or down (it waits for a head that faces somewhere). A first-person scene's level
+   frame is unchanged. Off: LEVEL as beta3o. Dodges still don't roll the view - that was Option B, not built.
+2. **HEAD LEVEL is the default** (`animated_head=1`). Settings revision 27 turns a saved FULL (the old default)
+   into LEVEL once; a saved OFF stays, and FULL chosen after this build stays. NATIVE ANIMATION on now applies
+   LEVEL. The game's HEAD row, the launcher's Head row and NA HELP say so. Going back: HEAD FULL.
+3. **SMOOTHING CLOCK FIX** (a bug fix, no setting). The animated view's smoothing (CAMERA SMOOTHING and CAMERA
+   MOTION's bob) took its time step from a clock that moves in 15.6 ms steps, so at a 20 ms game frame each step
+   read 15.6 or 31.2 ms and the glide was uneven; and the head is resolved twice a frame, which could step the
+   filter twice. It now uses the performance counter and steps once a frame, on the newest head. The level
+   latch and the cut test, shared by the eyes' and the hands' threads, are now under one lock.
+
+No view yaw is written by the animation; the headset heading stays the only direction authority. Settings
+revision **27**. Level keeps him with you is in the launcher's **Native Animation** group, after Head. Not
+verified in a headset yet.
+
+### beta3p checklist
+
+1. **The default.** Start with your saved settings: HEAD reads LEVEL (game NA tab and launcher). The log has
+   `view yaw lock: HYBRID latched ...` on the first yield, and `view yaw: ... level` lines every half second.
+2. **Cohesion.** HEAD LEVEL: dodge, roll, do a 180 turn-around, land from swings, run a combat chain. You should
+   never be left facing his back or side; after each move he turns back under you within the game's turn time
+   (about a quarter second standing). Stick and hands match what you see.
+3. **Turning.** Right stick (smooth or snap) and the snap realign taps turn the view as in FULL; a recenter puts
+   the view where you look.
+4. **Fast moves.** A fast dive and a fast swing in LEVEL: no sudden yaw pop. Backflips and wall runs up: no
+   frozen view behind him afterwards.
+5. **Still smooth.** LEVEL should feel as smooth as beta3o's LEVEL. With SMOOTHING on (Low to Max) the glide
+   should be even, with no frame-to-frame unevenness.
+6. **FULL against LEVEL.** Switch HEAD to FULL and back, for the default decision. FULL plays like beta3o
+   (apart from the smoother smoothing).
+7. **Off check.** Level keeps him with you off (launcher, Native Animation): LEVEL plays like beta3o.
+8. **Logs to send.** A short LEVEL session's log: the direction audit's imposed view turn should sit near 0, and
+   `landing rear turn` / facing-check lines should show the hero turning onto the view.
+
 ## beta3o: grip locks the wall jump, a wall slide pose, the held line inside the fist, a rope grip
 
 The owner, Nov 26: "Only point jumps should work through the grip. Normal jumps should stay locked. Also, we need
