@@ -93,7 +93,7 @@ A 0xC0000409 at close is not a crash. A mid-play fault writes a .mdmp. Logs are 
 | Setting | Default | Where |
 |---|---|---|
 | NATIVE ANIMATION | ON | game and launcher |
-| HEAD | FULL | game and launcher |
+| HEAD | LEVEL | game and launcher |
 | SMOOTHING | OFF | game and launcher |
 | ARMS | ON | game and launcher |
 | TORSO | ON | game and launcher |

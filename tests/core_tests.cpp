@@ -25919,7 +25919,7 @@ int main() {
                   "flip_reprojection=0\nsteady_hud=0\nreel_haptics=0\nswing_haptics=0\n"
                   "pc_media=0\nsingle_hand_yank_percent=100\nweb_tie=0\nnative_run=1\nair_slingshot=0\nweb_angle_"
                   "degrees=0\nwrist_shooters=0\n"
-                  "dodge_tumble=0\nrun_curve=1\nnative_run_at_percent=70\nrun_logs=0\nrunning_leap=0\nearly_jump=1\nsoft_landing=0\nspidy_run=1\nspidy_run_from_standing=0\nweb_aim_source=0\nforearm_blend=100\nweb_landing_smooth=0\nweb_landing_impact_speed=24\nsteady_states=0\ncombat_responsive=0\nspidy_run_jump=1\nforearm_aim_limit=180\npalm_shooters=0\nhead_probe=0\nanimated_moves=1\nanimated_head=2\nanimated_headset_smooth=0\nrun_speed_percent=100\nslow_motion_seconds=12\nsoft_lock_metres=15\nanimated_air=0\nanimated_steering=0\nanimated_arms=1\nanimated_torso=1\nanimated_model_yaw=1\nanimated_only=0\nanimated_air_spin=0\nanimated_hybrid=1\nanimated_hybrid_speed_ms=200\nweb_lines=0\nanimated_full_arms=1\n"
+                  "dodge_tumble=0\nrun_curve=1\nnative_run_at_percent=70\nrun_logs=0\nrunning_leap=0\nearly_jump=1\nsoft_landing=0\nspidy_run=1\nspidy_run_from_standing=0\nweb_aim_source=0\nforearm_blend=100\nweb_landing_smooth=0\nweb_landing_impact_speed=24\nsteady_states=0\ncombat_responsive=0\nspidy_run_jump=1\nforearm_aim_limit=180\npalm_shooters=0\nhead_probe=0\nanimated_moves=1\nanimated_head=1\nanimated_headset_smooth=0\nrun_speed_percent=100\nslow_motion_seconds=12\nsoft_lock_metres=15\nanimated_air=0\nanimated_steering=0\nanimated_arms=1\nanimated_torso=1\nanimated_model_yaw=1\nanimated_only=0\nanimated_air_spin=0\nanimated_hybrid=1\nanimated_hybrid_speed_ms=200\nweb_lines=0\nanimated_full_arms=1\n"
                   "camera_stabilization=0\ncamera_vertical_ms=0\ncamera_horizontal_ms=0\ncamera_angle_ms=0\n"
                   "camera_light_vertical_ms=75\ncamera_light_horizontal_ms=50\ncamera_light_angle_ms=75\n"
                   "camera_heavy_vertical_ms=200\ncamera_heavy_horizontal_ms=150\ncamera_heavy_angle_ms=200\n"
@@ -32843,7 +32843,7 @@ int main() {
     test("Native Animation: recommended defaults, compound master and saved values", [] {
         using namespace vr_settings;
         Values v;
-        check(v.animatedMoves && v.animatedHybrid && v.animatedHead == 2 && !v.animatedHeadsetSmooth &&
+        check(v.animatedMoves && v.animatedHybrid && v.animatedHead == 1 && !v.animatedHeadsetSmooth &&
                   v.animatedArms && v.animatedTorso && v.animatedModelYaw && v.nativeRun && v.spidyRun &&
                   v.animatedHybridSpeedMs == 200,
               "recommended first-launch set");
@@ -32859,7 +32859,7 @@ int main() {
                   !saved.animatedArms && !saved.animatedTorso && !saved.animatedModelYaw &&
                   !saved.nativeRun && !saved.spidyRun && saved.webLines,
               "saved choices overwritten");
-        check(withTabOnly({}, "animated_torso=0\n").animatedHead == 2, "missing keys lost defaults");
+        check(withTabOnly({}, "animated_torso=0\n").animatedHead == 1, "missing keys lost defaults");
         v.webTie = true;
         v.swingSpeed = 65;
         v.animatedAir = v.animatedOnly = v.animatedSteering = true;
@@ -32873,7 +32873,7 @@ int main() {
               "master off scope");
         v.nativeRun = v.spidyRun = false;
         check(choose(Item::nativeAnimation, 1, v) && choice(Item::nativeAnimation, v) == 1 &&
-                  v.animatedHead == 2 && v.animatedArms && v.animatedTorso && v.animatedModelYaw &&
+                  v.animatedHead == 1 && v.animatedArms && v.animatedTorso && v.animatedModelYaw &&
                   v.animatedHeadsetSmooth == 3 && v.nativeRun && v.spidyRun,
               "master on companion set");
         check(choose(Item::animatedTorso, 0, v) && choice(Item::nativeAnimation, v) == 1,

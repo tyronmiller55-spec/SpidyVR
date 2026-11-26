@@ -1812,7 +1812,8 @@ void App::nativeAnimation(ImVec2 origin, ImVec2 size) {
                S(42), [&] { tabToggle("##nativeanimation", Item::nativeAnimation); });
         option(
             "Head",
-            "Full follows the animated head, including flips. Level keeps the horizon level; Off unlocks it.",
+            "Level (the default) keeps the horizon level and turns only with you. Full follows the animated head, "
+            "including flips. Off unlocks it.",
             S(150), [&] { tabCombo("##nativehead", Item::animatedHead); });
         option("Level keeps him with you",
                "Head Level with Hybrid and Headset first: the view's turn is yours alone (headset, right stick, "

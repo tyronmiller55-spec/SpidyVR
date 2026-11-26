@@ -1627,7 +1627,7 @@ const std::array<Row, rowTotal>& rows() {
          "NATIVE ANIMATION",
          "On: animations + tracked arms. Off: classic body; run options stay independent.",
          {}},
-        {Item::animatedHead, "HEAD", "FULL follows the animated head; LEVEL keeps the horizon level.",
+        {Item::animatedHead, "HEAD", "LEVEL (default) keeps the horizon level; FULL follows the animated head.",
          animatedHeadChoices},
         {Item::animatedHeadsetSmooth, "SMOOTHING",
          "Calms animation wobble. OFF is as now; headset look and travel stay with you.",
@@ -2581,7 +2581,7 @@ bool choose(Item item, int index, Values& v) {
         const Values before = v;
         const bool on = index == 1;
         v.animatedMoves = v.animatedHybrid = on;
-        v.animatedHead = on ? 2 : 0;
+        v.animatedHead = on ? Values{}.animatedHead : 0; // the recommended head: LEVEL from beta3p
         v.animatedArms = v.animatedTorso = v.animatedModelYaw = on;
         if (on) {
             v.nativeRun = v.spidyRun = true;
@@ -3707,6 +3707,10 @@ Values withMovementDefaults(Values v, std::string_view text) {
         // Revision 27 (0.8.7-na-beta3p; the owner, Nov 26 t151u and "Build A"): LEVEL KEEPS HIM WITH YOU comes on
         // once (a new key); a 0 chosen after this revision stays.
         v.levelHeadLock = true;
+        // HEAD: LEVEL is the default (t151u, "Build A and make LEVEL the default"): a saved FULL (the old default)
+        // becomes LEVEL once; OFF stays, and FULL chosen after this revision stays.
+        if (v.animatedHead == 2)
+            v.animatedHead = 1;
         // BETA3P MIGRATION END
     }
     v.movementDefaults = movementDefaultsRevision;

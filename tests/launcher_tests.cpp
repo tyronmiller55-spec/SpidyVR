@@ -610,7 +610,7 @@ int main() {
     test("built-in presets preserve every Native Animation profile preference", [&] {
         PlaySettings settings;
         settings.tab.animatedMoves = settings.tab.animatedHybrid = false;
-        settings.tab.animatedHead = 1;
+        settings.tab.animatedHead = 2;
         settings.tab.animatedHeadsetSmooth = 3;
         settings.tab.animatedHybridSpeedMs = 500;
         settings.tab.headProbe = true;
@@ -1112,7 +1112,7 @@ int main() {
         t.palmShooters = true;
         t.headProbe = true;
         t.animatedMoves = false;
-        t.animatedHead = 1;
+        t.animatedHead = 2; // not the default (LEVEL from beta3p)
         t.animatedHeadsetSmooth = 3;
         t.animatedAir = true;
         t.animatedSteering = true;
@@ -1161,7 +1161,7 @@ int main() {
         PlaySettings partial;
         applyProfile(*readProfile("animated_torso=0\n"), partial);
         check(!partial.tab.animatedTorso && partial.tab.animatedMoves && partial.tab.animatedHybrid &&
-                  partial.tab.animatedHead == 2 && partial.tab.nativeRun && partial.tab.spidyRun,
+                  partial.tab.animatedHead == 1 && partial.tab.nativeRun && partial.tab.spidyRun,
               "missing profile keys lost recommended defaults");
     });
     test("a profile's text: what it is, its name, its Spidy, then each setting in the tab's order", [&] {
@@ -1179,7 +1179,7 @@ int main() {
                   "ui_style=0\ncombat_visuals=1\nnear_clip_mm=20\nseated=0\nflips=0\ncontrolled_flips=0\nflip_speed=180\nhand_climb=0\n"
                   "joystick_wall_run_camera=1\nwall_run_camera_tilt=1\nhalf_punch_damage=0\nair_fists=1\nanimated_web_grip=1\nanimated_punch_fists=1\nweb_hold_in_hand=1\nenemy_types=0\nweb_tie=0\nnative_run=1\n"
                   "air_slingshot=0\nweb_angle_degrees=0\nwrist_shooters=0\ndodge_tumble=0\n"
-                  "run_curve=1\nnative_run_at_percent=70\nrun_logs=0\nrunning_leap=0\nearly_jump=1\nsoft_landing=0\nspidy_run=1\nspidy_run_from_standing=0\nweb_aim_source=0\nforearm_blend=100\nweb_landing_smooth=0\nweb_landing_impact_speed=24\nsteady_states=0\ncombat_responsive=0\nspidy_run_jump=1\nforearm_aim_limit=180\npalm_shooters=0\nhead_probe=0\nanimated_moves=1\nanimated_head=2\nanimated_headset_smooth=0\nrun_speed_percent=100\nslow_motion_seconds=12\nsoft_lock_metres=15\nanimated_air=0\nanimated_steering=0\nanimated_arms=1\nanimated_torso=1\nanimated_model_yaw=1\nanimated_only=0\nanimated_air_spin=0\nanimated_hybrid=1\nanimated_hybrid_speed_ms=200\n"
+                  "run_curve=1\nnative_run_at_percent=70\nrun_logs=0\nrunning_leap=0\nearly_jump=1\nsoft_landing=0\nspidy_run=1\nspidy_run_from_standing=0\nweb_aim_source=0\nforearm_blend=100\nweb_landing_smooth=0\nweb_landing_impact_speed=24\nsteady_states=0\ncombat_responsive=0\nspidy_run_jump=1\nforearm_aim_limit=180\npalm_shooters=0\nhead_probe=0\nanimated_moves=1\nanimated_head=1\nanimated_headset_smooth=0\nrun_speed_percent=100\nslow_motion_seconds=12\nsoft_lock_metres=15\nanimated_air=0\nanimated_steering=0\nanimated_arms=1\nanimated_torso=1\nanimated_model_yaw=1\nanimated_only=0\nanimated_air_spin=0\nanimated_hybrid=1\nanimated_hybrid_speed_ms=200\n"
                   "web_lines=0\n"
                   "wall_distance_cm=25\n"
                   "realistic_flips=0\nrotation_strength=50\nrotation_speed=240\nflight_speed_min=3\n"

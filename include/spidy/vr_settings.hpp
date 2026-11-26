@@ -390,11 +390,13 @@ struct Values {
     // (NATIVE RUN). Swing / web / zip / wall-run stay with the mod. On in this package
     // (animated_moves.hpp).
     bool animatedMoves = true;
-    // ANIMATED HEAD (the tab's ANIMATED HEAD; Off|Level|Full, default Full):
+    // ANIMATED HEAD (the tab's ANIMATED HEAD; Off|Level|Full, default Level from
+    // 0.8.7-na-beta3p, settings revision 27 - the owner, Nov 26 t151u: "Level was
+    // the one that felt like something that should be default"; Full before):
     // while a pose yield is active, attach the view to the hero's gameplay head
     // like finishers (anchored 4 Level / 2 Full). Full keeps anim pitch/roll
-    // in air too; Level only when chosen (animated_moves.hpp).
-    int animatedHead = 2;
+    // in air too (animated_moves.hpp).
+    int animatedHead = 1;
     // LEVEL KEEPS HIM WITH YOU (0.8.7-na-beta3p, settings revision 27; the owner, Nov 26 t151u: LEVEL "felt
     // great ... the body and the head had no cohesion, so you'd frequently be looking backwards after moves",
     // and his answer "Build A"; level_head_lock.hpp): with HEAD LEVEL, HYBRID and HEADSET FIRST, LEVEL joins

@@ -4,7 +4,8 @@
 // turns WEB GRIP, PUNCH FISTS and WEB IN HAND on once (THICK SWING LINE was removed in beta3n), and
 // revision 25 (beta3n) turns WALL RUN PUSH, WALL FLING ANY WAY, STICKY PALMS and
 // GRIP HOLDS THE HANDSTAND on once, and revision 26 (beta3o) WALL SLIDE POSE and
-// GRIP LOCKS THE WALL JUMP and ROPE GRIP, and revision 27 (beta3p) LEVEL KEEPS HIM WITH YOU.
+// GRIP LOCKS THE WALL JUMP and ROPE GRIP, and revision 27 (beta3p) LEVEL KEEPS HIM WITH YOU and HEAD LEVEL
+// as the default (a saved FULL becomes LEVEL once).
 #include "spidy/vr_settings.hpp"
 #include <cstdio>
 #include <cstdlib>
@@ -98,6 +99,17 @@ int main() {
     const std::string kept27 = "movement_defaults=27\nlevel_head_lock=0\n";
     check(!withMovementDefaults(withTabOnly({}, kept27), kept27).levelHeadLock,
           "a 0 chosen after revision 27 was overwritten");
+    // Revision 27 (beta3p): HEAD LEVEL is the default; a saved FULL becomes LEVEL once, OFF stays, and FULL
+    // chosen after it stays.
+    check(Values{}.animatedHead == 1, "HEAD's default is not LEVEL");
+    const std::string full26 = "movement_defaults=26\nanimated_head=2\n";
+    check(withMovementDefaults(withTabOnly({}, full26), full26).animatedHead == 1,
+          "revision 27 did not turn a saved FULL into LEVEL");
+    const std::string off26 = "movement_defaults=26\nanimated_head=0\n";
+    check(withMovementDefaults(withTabOnly({}, off26), off26).animatedHead == 0, "revision 27 changed a saved OFF");
+    const std::string full27 = "movement_defaults=27\nanimated_head=2\n";
+    check(withMovementDefaults(withTabOnly({}, full27), full27).animatedHead == 2,
+          "a FULL chosen after revision 27 was overwritten");
 
     // Off of Crime Run matches "no mode": the previous build has no run, no HUD key, no fifth app.
     Values off;
