@@ -359,6 +359,40 @@ int main(){
     ++count;
    }
  }
+ // WEB IN HAND's fist channel (beta3o): from the solved, closed hero hand's own bones, in the solved grip's frame.
+ {
+  unsigned fists=0;
+  for(bool odd : {false,true}) for(Quat turn : {Quat::yaw(.6f),Quat::yaw(-1.3f)*Quat::around({1,0,0},.25f)}) {
+   auto b=testBody(odd,true);auto data=b.rest;
+   body::Pose pose(data.data(),static_cast<int>(b.rig.parent.size()));
+   body::Targets t;t.armsOnly=true;t.viewMapped=true;t.armWeight={1,1};
+   t.eyes=pose.position(b.rig.head);t.facing={};t.up={0,1,0};
+   for(unsigned h=0;h<2;++h)t.hands[h]={true,t.eyes+Vec3{h?-.28f:.28f,-.35f,-.3f},turn,1,0};
+   body::State state;body::Config config;config.hideHead=false;
+   check(body::solve(pose,b.rig,t,config,state,true,1.f/90,1,1).solved,"fist pose did not solve");
+   for(unsigned h=0;h<2;++h){
+    spidy::Pose actual;check(body::solvedGrip(pose,b.rig,config,h,actual),"fist grip rejected");
+    Vec3 channel{};check(body::solvedFistChannel(pose,b.rig,h,channel),"fist channel rejected");
+    const Vec3 local=actual.orientation.conjugate().rotate(channel-actual.position);
+    check(fistChannelOk(local),"fist channel out of the hand's reach");
+    const Vec3 start=webLineStart(actual,h,true,&local);
+    check(length(start-channel)<1e-5f,"the held line does not start at the channel");
+    const Vec3 knuckles=webLineStart(actual,h,true);
+    const auto& mid=b.rig.arms[h].fingers[1];
+    const Vec3 knuckle=pose.position(mid[1]),tip=pose.position(mid[4]);
+    check(length(start-knuckle)<length(knuckles-knuckle)+.02f,"the channel is farther out than the knuckle point");
+    check(length(start-knuckle)<.06f && length(start-tip)<.08f,"the channel is not inside the closed fingers");
+    check(webLineStart(actual,h,true,nullptr).x==actual.position.x,"no channel: the grip's own point");
+    check(length(webLineStart(actual,h,false,&local)-webShooter(actual,h).position)<1e-6f,"not held: the shooter");
+    ++fists;
+   }
+  }
+  auto bare=testBody();body::Pose barePose(bare.rest.data(),static_cast<int>(bare.rig.parent.size()));
+  Vec3 none{9,9,9};check(!body::solvedFistChannel(barePose,bare.rig,0,none),"one finger is no fist channel");
+  check(!body::solvedFistChannel(barePose,bare.rig,2,none),"no third hand");
+  check(!fistChannelOk({0,.2f,0}) && !fistChannelOk({NAN,0,0}),"far or broken channels refused");
+  std::printf("PASS: %u fist channels from the solved bones\n",fists);
+ }
  auto b=testBody();body::Pose pose(b.rest.data(),static_cast<int>(b.rig.parent.size()));
  spidy::Pose unchanged{{1,2,3},{}};check(!body::solvedGrip(pose,b.rig,{},2,unchanged),"invalid hand accepted");
  check(length(unchanged.position-Vec3{1,2,3})==0,"rejection mutated output");

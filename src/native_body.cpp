@@ -822,6 +822,16 @@ void solveHero(float* out, uintptr_t job, uintptr_t instance) {
             overlayTrackingSample.actualGrip[i] = overlayTrackingSample.actualValid[i]
                 ? spidy::Pose{toWorld.rotate(actualGrip.position), toWorld * actualGrip.orientation}
                 : spidy::Pose{};
+            // WEB IN HAND's fist channel: from this solve's own finger bones, in the solved grip's frame.
+            {
+                Vec3 channel{};
+                const bool have = overlayTrackingSample.actualValid[i] &&
+                                  body::solvedFistChannel(pose, cache.ik, i, channel);
+                const Vec3 local = have ? actualGrip.orientation.conjugate().rotate(channel - actualGrip.position)
+                                        : Vec3{};
+                overlayTrackingSample.holdValid[i] = have && fistChannelOk(local);
+                overlayTrackingSample.holdLocal[i] = overlayTrackingSample.holdValid[i] ? local : Vec3{};
+            }
             if (lastTargets.viewMapped && overlayTrackingSample.actualValid[i])
                 overlayTrackingSample.aim[i] = webShooter(overlayTrackingSample.actualGrip[i], i).orientation;
             overlayTrackingSample.residual[i] = result.handError[i];

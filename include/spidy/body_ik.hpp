@@ -517,6 +517,12 @@ struct Result {
 // matrix. Calibrated hand axes preserve mirrored model rigs; no requested
 // target or authored chest orientation is substituted. Internal pose API.
 bool solvedGrip(const Pose& pose, const Rig& rig, const Config& config, unsigned hand, spidy::Pose& out);
+// WEB IN HAND's fist channel (beta3o; the owner, Nov 26 t148u/t149u: the held line "just floats outside his fist"):
+// the middle of the loop a closed hand makes, from the solved finger bones themselves - for the middle and ring
+// fingers (with fewer than three fingers in the rig, the first two), the midpoint of the bone after the knuckle (knuckle to
+// middle joint) and the midpoint of the bone in the palm (base to knuckle), all averaged. No constant: the
+// bones are the data. False when the rig has fewer than two such fingers or a joint is not finite.
+bool solvedFistChannel(const Pose& pose, const Rig& rig, unsigned hand, Vec3& out);
 Result solve(Pose& pose, const Rig& rig, const Targets& targets, const Config& config, State& state, bool wanted,
              float dt, float scale = 1, float armScale = 1);
 // ANIMATED HYBRID: the animation takes the body back from the full-body solve

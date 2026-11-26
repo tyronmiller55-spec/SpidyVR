@@ -354,6 +354,10 @@ struct OverlayTracking {
     uint32_t headValid{};
     Pose actualGrip[2]{};
     uint32_t actualValid[2]{};
+    // WEB IN HAND's fist channel (beta3o, body::solvedFistChannel): the closed fist's loop from the solved finger
+    // bones, in the solved grip's own frame (actualGrip's axes, metres); holdValid 0: none this solve.
+    Vec3 holdLocal[2]{};
+    uint32_t holdValid[2]{};
     uint64_t deadlineMs{}; // originating body command lease, not last read time
     float residual[2]{-1, -1}, angle[2]{-1, -1};
     uint32_t valid[2]{}, reachClamped[2]{};

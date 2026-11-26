@@ -190,10 +190,12 @@ struct Values {
     // stay, as before. The VR-owned body already fists a punch.
     bool animatedPunchFists = true;
     // WEB IN HAND (0.8.7-na-beta3i, settings revision 24; the owner, Nov 25 t51u):
-    // a held web's line leaves from inside the closed fist (webHoldPoint, the
-    // measured knuckles 15.5 cm along the hand from the web shooter). A shot
-    // still leaves from the wrist shooter. Off: every line leaves from the
-    // shooter, as beta3h.
+    // a held web's line leaves from inside the closed fist. Until beta3n that was webHoldPoint, the
+    // knuckles 15.5 cm along the hand from the web shooter - the front of the fist, so the line floated
+    // outside it (the owner, Nov 26 t148u). From beta3o (t149u) it is the fist's channel, taken each
+    // solve from the drawn hand's own finger bones (body::solvedFistChannel), or with no solved hand the
+    // OpenXR grip pose's own point. A shot still leaves from the wrist shooter. Off: every line leaves
+    // from the shooter, as beta3h.
     bool webHoldInHand = true;
     // Aiming with the eyes (the tab's EYE AIM; eyeAimShots, eyeAimZips): web
     // balls go where the eyes look, from the hand that pulled; a zip goes to

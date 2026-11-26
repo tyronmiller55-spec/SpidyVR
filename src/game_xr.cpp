@@ -1675,6 +1675,10 @@ DWORD WINAPI run(void*) {
         // GRIP LOCKS THE WALL JUMP (beta3o, grip_jump.hpp): an A pressed while a grip holds SpidyVR's wall is
         // swallowed until let go of; the count for the log.
         grip_jump::Lock gripJumpLock;
+        // WEB IN HAND's fist channel (beta3o): each hand's, in the drawn grip's frame, from the last solve
+        // (bit per hand in fistHoldMask; none: the grip's own point).
+        Vec3 fistHoldLocal[2]{};
+        uint32_t fistHoldMask{}, fistHoldMaskLogged{~0u};
         uint32_t gripJumpLocked{};
         unsigned groundFlips{}, groundFlipDenied{}, groundFlipRefused{}, groundFlipReleasedSeen{}, groundFlipLapsedSeen{};
         // DOUBLE-TAP A: UPSIDE DOWN: the rig's count logged, and whether a hold was on.
@@ -8303,6 +8307,30 @@ DWORD WINAPI run(void*) {
                             webLineCountSeen = lineState.count;
                             // ROPE PHYSICS ON THE SWING: the lines' pull this frame, both hands.
                             Vec3 ropePullSum{};
+                            // WEB IN HAND's fist channel (beta3o): the last solve's (a shape of the hand, in its
+                            // own frame), while a body is drawn.
+                            {
+                                const auto held = native_body::overlayTracking();
+                                const bool live = values.body && !flatScreen;
+                                fistHoldMask = 0;
+                                for (unsigned i = 0; i < 2; ++i)
+                                    if (live && held.holdValid[i] && fistChannelOk(held.holdLocal[i])) {
+                                        fistHoldLocal[i] = held.holdLocal[i];
+                                        fistHoldMask |= 1u << i;
+                                    }
+                                if (fistHoldMask != fistHoldMaskLogged) {
+                                    fistHoldMaskLogged = fistHoldMask;
+                                    diag_log::writef("web in hand: held lines from the fist's channel - left %s "
+                                                     "(%.3f, %.3f, %.3f), right %s (%.3f, %.3f, %.3f) from the grip",
+                                                     fistHoldMask & 1u ? "bones" : "grip point", fistHoldLocal[0].x,
+                                                     fistHoldLocal[0].y, fistHoldLocal[0].z,
+                                                     fistHoldMask & 2u ? "bones" : "grip point", fistHoldLocal[1].x,
+                                                     fistHoldLocal[1].y, fistHoldLocal[1].z);
+                                }
+                            }
+                            const auto fistOf = [&](unsigned h) -> const Vec3* {
+                                return (fistHoldMask >> h) & 1u ? &fistHoldLocal[h] : nullptr;
+                            };
                             webs.feet = motion.anchor;
                             for (unsigned i = 0; i < 2; ++i) {
                                 auto& hand = webs.hands[i];
@@ -8322,7 +8350,8 @@ DWORD WINAPI run(void*) {
                                     hand.anchor = flightVisual[from].tip();
                                 hand.wrist = webLineStart(actionGrips[from], from,
                                                           values.webHoldInHand && hand.attached == 1 &&
-                                                              !flightVisual[from].flying());
+                                                              !flightVisual[from].flying(),
+                                                          fistOf(from));
                                 if (hand.attached == 1 && flightVisual[from].flying() &&
                                     native_webs::drawsHeld()) {
                                     bent[i].count = native_webs::maxRopeBends;
@@ -8607,7 +8636,7 @@ DWORD WINAPI run(void*) {
                                         rope.tracked = 1;
                                         rope.attachedAt = static_cast<int64_t>(lineState.zipKey);
                                         rope.anchor = lineState.zipTo;
-                                        rope.wrist = webLineStart(actionGrips[hand], hand, values.webHoldInHand);
+                                        rope.wrist = webLineStart(actionGrips[hand], hand, values.webHoldInHand, fistOf(hand));
                                         bent[i].count = 0;
                                         break;
                                     }
@@ -8618,7 +8647,7 @@ DWORD WINAPI run(void*) {
                                 const auto lower = static_cast<unsigned>(1 - upper);
                                 const int slot = webRopes.slot(lower);
                                 if (slot >= 0 && motion.swing.hands[lower].tracked) {
-                                    const Vec3 wrist = webLineStart(actionGrips[lower], lower, values.webHoldInHand);
+                                    const Vec3 wrist = webLineStart(actionGrips[lower], lower, values.webHoldInHand, fistOf(lower));
                                     webs.held.rope = static_cast<uint32_t>(slot) + 1;
                                     webs.held.wrist = wrist;
                                     webs.held.slack =
@@ -14233,6 +14262,8 @@ DWORD WINAPI run(void*) {
                     }
                     saved.webSlots = {webRopes.slot(0), webRopes.slot(1)};
                     saved.strandUpper = webRopes.upper();
+                    saved.fistHold = {fistHoldLocal[0], fistHoldLocal[1]};
+                    saved.fistHoldMask = fistHoldMask;
                     saved.tiesByGame = native_webs::tiesDrawn();
                     saved.linesByGame = native_webs::linesDrawn();
                     saved.lineTarget = lineState.target;
@@ -14551,7 +14582,10 @@ DWORD WINAPI run(void*) {
                                 const bool otherHold = values.webHoldInHand && otherWeb.attached &&
                                                        saved->webFlight.durations[static_cast<size_t>(upper)] == 0 &&
                                                        !saved->flightVisual[static_cast<size_t>(upper)].flying();
-                                line.end = webLineStart(other, static_cast<unsigned>(upper), otherHold);
+                                line.end = webLineStart(other, static_cast<unsigned>(upper), otherHold,
+                                                        (saved->fistHoldMask >> upper) & 1u
+                                                            ? &saved->fistHold[static_cast<size_t>(upper)]
+                                                            : nullptr);
                                 line.slack = std::max(
                                     web.length - saved->webs[static_cast<size_t>(upper)].length -
                                         length(line.end - line.start),
@@ -14574,7 +14608,9 @@ DWORD WINAPI run(void*) {
                             const bool holdLine =
                                 values.webHoldInHand && web.attached &&
                                 !(saved->webFlight.durations[hand] > 0 && saved->flightVisual[hand].flying());
-                            const Vec3 start = webLineStart(grip, hand, holdLine);
+                            const Vec3 start = webLineStart(grip, hand, holdLine,
+                                                            (saved->fistHoldMask >> hand) & 1u ? &saved->fistHold[hand]
+                                                                                               : nullptr);
                             shooters[hand] = start;
                             shooterHands |= 1u << hand;
                             const WebLook look{};

@@ -531,6 +531,35 @@ bool solvedGrip(const Pose& pose, const Rig& rig, const Config& c, unsigned hand
     return true;
 }
 
+bool solvedFistChannel(const Pose& pose, const Rig& rig, unsigned hand, Vec3& out) {
+    if (hand > 1 || !rig.ready)
+        return false;
+    const auto& fingers = rig.arms[hand].fingers;
+    // Index 0 the first finger: the middle and the ring (1, 2), or with only three fingers the first two too.
+    const size_t first = fingers.size() >= 3 ? 1 : 0, last = std::min<size_t>(fingers.size(), first + 2);
+    Vec3 sum{};
+    int count = 0;
+    for (size_t f = first; f < last; ++f) {
+        const auto& chain = fingers[f];
+        if (chain.size() < 3)
+            continue;
+        bool inRig = true;
+        for (size_t k = 0; k < 3; ++k)
+            inRig = inRig && chain[k] >= 0 && chain[k] < pose.count();
+        if (!inRig)
+            continue;
+        const Vec3 base = pose.position(chain[0]), knuckle = pose.position(chain[1]), middle = pose.position(chain[2]);
+        if (!finite(base) || !finite(knuckle) || !finite(middle))
+            return false;
+        sum += (base + knuckle) / 2 + (knuckle + middle) / 2;
+        count += 2;
+    }
+    if (count < 4)
+        return false;
+    out = sum / static_cast<float>(count);
+    return finite(out);
+}
+
 // Close a hand toward a fist and/or the web-shooting pose, `fist` and `shoot`
 // of the way (0..1) from the pose as it stands. The angles are the ones
 // measured from the game's own fist (docs/BODY.md, docs/VALIDATION.md: Fingers

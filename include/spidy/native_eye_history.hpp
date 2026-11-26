@@ -28,6 +28,10 @@ struct NativeEyeFrame {
     // part running from wrist to wrist; -1 otherwise.
     std::array<int, 2> webSlots{-1, -1};
     int strandUpper = -1;
+    // WEB IN HAND's fist channel (beta3o): each hand's, in its drawn grip's frame (a bit per hand: none, the
+    // grip's point).
+    std::array<Vec3, 2> fistHold{};
+    uint32_t fistHoldMask{};
     // The web tie's webs (game_grab::TieData): from where each sticks to its
     // surface to the enemy it holds there.
     struct TieStrand {
