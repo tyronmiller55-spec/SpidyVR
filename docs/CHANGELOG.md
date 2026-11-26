@@ -3,6 +3,16 @@
 Every build, newest first, with what changed, why, and what was measured.
 Per-check results are in [VALIDATION.md](VALIDATION.md).
 
+**0.8.7-na-beta3m (November 26, the owner's t133u-t138u; branch `feat/087-next`, on beta3l):** a test package
+([checklist](NA_BETA3.md#beta3m-a-bigger-vr-thread-stack-for-the-0xc00000fd-crash)). No new setting; how the game
+plays is unchanged. CURRENT is unchanged.
+
+- **Stack overflow fix.** beta3l's VR start worked, but Link 1.210 and SteamVR sessions still died 20 to 30 s in
+  with `0xC00000FD`. In each dump, the default 1 MB stack of the VR worker thread was full: run()'s own 867 KB frame,
+  mostly the 256-frame eye history, left about 150 KB for the OpenXR runtime and the graphics driver. The VR worker
+  now reserves 16 MB, and the eye history lives on the heap.
+- **Start log.** `spidy-vr-start.log` names the VR thread's stack reserve and its use at start.
+
 **0.8.7-na-beta3, build beta3i (November 25, the owner's t49u-t53u; branch `feat/087-next`, on beta3h-polish):**
 the same version, a ninth test package
 ([checklist](NA_BETA3.md#beta3i-web-in-hand-thick-swing-line-grip-and-fists)). Settings revision 24. The four new

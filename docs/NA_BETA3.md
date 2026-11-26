@@ -813,3 +813,50 @@ workarounds if this still dies.
 4. **Other runtimes.** Virtual Desktop or SteamVR as the OpenXR runtime, or
    rolling Meta Quest Link back to 1.208, remain useful if this still dies.
 
+## beta3m: a bigger VR thread stack for the 0xC00000FD crash
+
+The owner, Nov 26 (t133u, t135u, t138u): beta3l still crashed, on Meta Quest
+Link 1.210 and on SteamVR alike. Its logs showed that the start itself was fixed.
+
+What the beta3l sessions showed (Nov 26, 7:34 to 9:35 AM PT, Dev3 Drive folder):
+
+- Build confirmed: **0.8.7-na-beta3l**, commit `3baaecff59`, folder
+  `C:\Games\Spidy-0.8.7-player-torso-3baaecf`, on all six sessions.
+- Runtimes: **Oculus 1.210.0** (37 extensions) and **SteamVR/OpenXR 2.18.4 in Meta
+  compatibility mode** (42 extensions).
+- The start log shows `GPU bridge started` *before* `begin session`, then
+  `first headset frame submitted` and `running (300 frames submitted)`. No
+  start step dies any more.
+- Three sessions then died 20 to 30 s in, during the opening cutscene or
+  gameplay: two on Link and one on SteamVR. Each left an `.mdmp` with
+  `0xC00000FD` (stack overflow). The faulting function differed each time:
+  ucrtbase, spidy_ray_bridge, ntdll. Two Link sessions closed normally.
+- In all three dumps the overflowing stack is **the VR worker thread's**, the
+  default **1 MB**, overflowing at about 1003 to 1008 KB. Its outermost function,
+  `run()` in `src/game_xr.cpp`, reserves a fixed **867 KB** frame per the
+  DLL's unwind data. Most of that is `NativeEyeHistory` (256 eye frames of
+  about 3.2 KB each). That left about 150 KB for everything run() calls, so the
+  OpenXR runtime, D3D11/D3D12 and the NVIDIA driver ran out of stack. The frame
+  record grew on Nov 22 and 23 (kick target ring, Crime Run beacons and HUD).
+
+This build:
+
+1. Starts the VR worker with a **16 MB reserved stack**, committed only as used
+   (`CreateThread` with `STACK_SIZE_PARAM_IS_A_RESERVATION`).
+2. Moves the **eye-frame history to the heap**, so run()'s own frame is small again.
+3. Writes the VR thread's stack bounds to `spidy-vr-start.log` once
+   (`GetCurrentThreadStackLimits`).
+
+How the game plays is unchanged. No new settings, no new migration revision.
+
+### beta3m checklist
+
+1. **Use this zip, not official 0.8.8.** Leave the launcher's Update button alone.
+2. Right after its `writing flushed steps` line, the start log should read
+   `vr start: VR thread stack 16384 KB reserved (...), N KB in use at start`,
+   with N a few KB, not hundreds.
+3. **Play past a minute on Link 1.210**, through the opening cutscene and into
+   gameplay. Then do one **SteamVR** run.
+4. **If it crashes**, upload the usual logs, `spidy-vr-start.log` and the new
+   `.mdmp`.
+
