@@ -1201,6 +1201,24 @@ DWORD WINAPI run(void*) {
             snprintf(line, sizeof(line), "vr start: writing flushed steps to %s", diag_log::durablePath());
             game_prompts::note(line);
             diag_log::durable(line);
+            // The VR thread's stack once (beta3m): its reserve, and how much run() has used here,
+            // so a later stack overflow (0xC00000FD) can be read against them.
+            using StackLimits = void(WINAPI*)(PULONG_PTR, PULONG_PTR);
+            ULONG_PTR low{}, high{};
+            if (HMODULE kernel = GetModuleHandleW(L"kernel32.dll"))
+                if (auto limits = reinterpret_cast<StackLimits>(GetProcAddress(kernel, "GetCurrentThreadStackLimits")))
+                    limits(&low, &high);
+            if (high > low) {
+                const auto here = reinterpret_cast<ULONG_PTR>(&line[0]);
+                snprintf(line, sizeof(line),
+                         "vr start: VR thread stack %llu KB reserved (0x%llx-0x%llx), %llu KB in use at start",
+                         static_cast<unsigned long long>((high - low) / 1024), static_cast<unsigned long long>(low),
+                         static_cast<unsigned long long>(high),
+                         static_cast<unsigned long long>(here < high && here > low ? (high - here) / 1024 : 0));
+            } else
+                snprintf(line, sizeof(line), "vr start: VR thread stack limits unavailable");
+            game_prompts::note(line);
+            diag_log::durable(line);
         }
         // A headset the runtime calls unavailable is waited for (November 11: Meta Quest Link said so
         // five starts in a row, seconds after the launcher's probe had found it), up to two minutes,
