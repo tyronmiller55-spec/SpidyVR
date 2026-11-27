@@ -101,7 +101,7 @@ int main() {
     // The switch: on by default, a key of its own, revision 27 turns it on once.
     using namespace spidy::vr_settings;
     check(Values{}.levelHeadLock, "LEVEL KEEPS HIM WITH YOU is on by default");
-    check(movementDefaultsRevision == 27, "revision 27");
+    check(movementDefaultsRevision >= 27, "revision 27 or later");
     const std::string old = "movement_defaults=26\nlevel_head_lock=0\n";
     check(withMovementDefaults(withTabOnly({}, old), old).levelHeadLock, "revision 27 turns it on once");
     const std::string kept = "movement_defaults=27\nlevel_head_lock=0\n";

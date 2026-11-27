@@ -1320,6 +1320,10 @@ Values sanitized(Values v) {
     v.punchCameraLockMs = std::clamp(v.punchCameraLockMs, 0, 1000);
     v.snapTapMs = std::clamp(v.snapTapMs, 60, 400);
     v.landingBodyEaseMs = std::clamp(v.landingBodyEaseMs, 100, 1500);
+    // BODY FOLLOWS VIEW (body_follow.hpp): soft 20-170 deg (at most the hard line), 0-3000 ms; hard 60-170 deg.
+    v.bodyFollowHardDeg = std::clamp(v.bodyFollowHardDeg, 60, 170);
+    v.bodyFollowSoftDeg = std::clamp(v.bodyFollowSoftDeg, 20, v.bodyFollowHardDeg);
+    v.bodyFollowSoftMs = std::clamp(v.bodyFollowSoftMs, 0, 3000);
     v.handoffEaseCurve = std::clamp(v.handoffEaseCurve, 0, 1);
     v.handoffGlideCmS = std::clamp(v.handoffGlideCmS, 0, 1000);
     v.handoffGlideMaxMs = std::clamp(v.handoffGlideMaxMs, 150, 2000);
@@ -3363,6 +3367,11 @@ constexpr TabOnly tabOnly[] = {
     {"wall_grip_jump_lock", &Values::wallGripJumpLock, nullptr},
     {"web_rope_grip", &Values::webRopeGrip, nullptr},
     {"level_head_lock", &Values::levelHeadLock, nullptr},
+    {"body_follows_view", &Values::bodyFollowsView, nullptr},
+    {"body_follow_fights", &Values::bodyFollowFights, nullptr},
+    {"body_follow_soft_deg", nullptr, &Values::bodyFollowSoftDeg},
+    {"body_follow_soft_ms", nullptr, &Values::bodyFollowSoftMs},
+    {"body_follow_hard_deg", nullptr, &Values::bodyFollowHardDeg},
     {"swing_rope_weight_pct", nullptr, &Values::swingRopeWeightPct},
     {"swing_rope_drag_pct", nullptr, &Values::swingRopeDragPct},
     {"kick_lunge", &Values::kickLunge, nullptr},
@@ -3712,6 +3721,12 @@ Values withMovementDefaults(Values v, std::string_view text) {
         if (v.animatedHead == 2)
             v.animatedHead = 1;
         // BETA3P MIGRATION END
+    }
+    if (seen < 28) {
+        // Revision 28 (0.8.7-na-beta3q; the owner, Nov 27, answer t158s981): BODY FOLLOWS VIEW comes on once (a new key);
+        // a 0 chosen after this revision stays. BODY FOLLOW IN FIGHTS stays as it is (off by default).
+        v.bodyFollowsView = true;
+        // BETA3Q MIGRATION END
     }
     v.movementDefaults = movementDefaultsRevision;
     return sanitized(v);

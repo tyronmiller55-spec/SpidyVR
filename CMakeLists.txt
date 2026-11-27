@@ -135,6 +135,9 @@ add_test(NAME grip_jump COMMAND spidy_grip_jump_tests)
 add_executable(spidy_level_head_lock_tests tests/level_head_lock_tests.cpp)
 target_link_libraries(spidy_level_head_lock_tests PRIVATE spidy_core)
 add_test(NAME level_head_lock COMMAND spidy_level_head_lock_tests)
+add_executable(spidy_body_follow_tests tests/body_follow_tests.cpp)
+target_link_libraries(spidy_body_follow_tests PRIVATE spidy_core)
+add_test(NAME body_follow COMMAND spidy_body_follow_tests)
 
 # HAND GRAB (hand_grab.hpp): the reach, hold, cost, release and slam math, and WebGrab holding bodies by hand.
 add_executable(spidy_hand_grab_tests tests/hand_grab_tests.cpp)

@@ -36,6 +36,7 @@
 #include "spidy/ground_kick.hpp"
 #include "spidy/game_fp.hpp"
 #include "spidy/level_head_lock.hpp"
+#include "spidy/body_follow.hpp"
 #include "spidy/game_joints.hpp"
 #include "spidy/web_aim.hpp"
 #include "spidy/game_grab.hpp"
@@ -1761,6 +1762,13 @@ DWORD WINAPI run(void*) {
         // fullLockGate: the R stick turns it (Full on the ground, not softlock).
         view_yaw_lock::Lock viewLock{};
         view_yaw_lock::TurnInPlace turnInPlace{};
+        // BODY FOLLOWS VIEW (body_follow.hpp): the actor's follow, the drawn body's catch, whether the turn under way is
+        // the follow's, and the 10 s summary's counts.
+        body_follow::Follow bodyFollow{};
+        body_follow::Catch bodyCatch{};
+        bool bodyFollowTurn = false, bodyFollowForced = false, bodyCatchWas = false;
+        float bodyFollowWaitLog = 0, bodyFollowSummaryClock = 0;
+        uint32_t bodyFollowFrames = 0, bodyFollowPast90 = 0, bodyFollowDrawnPast90 = 0, bodyFollowTurnsDone = 0;
         // FACING CHECK (facing_check.hpp): armed on each ownership event, a forced
         // hero turn waiting for the next frame's walk stick.
         facing_check::Check facingCheck{};
@@ -10074,9 +10082,85 @@ DWORD WINAPI run(void*) {
                                         tin.forceYaw = punchTrackYaw;
                                     }
                                 }
+                                // BODY FOLLOWS VIEW (body_follow.hpp; body_follows_view): past the soft line for a
+                                // moment, or the hard line at once, the hero is turned onto where the player looks by
+                                // this same forced turn - the lowest priority (any turn above goes first), never
+                                // giving up (a blocker makes it wait), the left stick winning. The view is not written.
+                                bool followFightTurn = false;
+                                bodyFollowForced = false;
+                                {
+                                    const bool followLive =
+                                        values.bodyFollowsView &&
+                                        hybrid_movement::modeOf(values.movementMode) == hybrid_movement::Mode::hybrid &&
+                                        values.headsetFirst && viewLockActive &&
+                                        hybridOwner.domain != hybrid_owner::Domain::vr && !showtimeMachine.out() &&
+                                        std::isfinite(hsViewNow) && heroOk;
+                                    const bool stickIdle = hybridInputL < stable_yaw::steerZone;
+                                    const char* followBlock =
+                                        !yieldingPose            ? "a locked move (the animation does not yield him)"
+                                        : !swingFresh            ? "a stale swing sample"
+                                        : !swingState.grounded   ? "not grounded"
+                                        : !stickIdle             ? "your left stick runs him"
+                                        : dodging                ? "dodging"
+                                        : zipping                ? "zipping"
+                                        : legStickActive         ? "the leg stick"
+                                        : motion.onSurface       ? "on a wall"
+                                        : midairAnimation        ? "a midair animation"
+                                        : motion.basicFlipControls ? "flip controls"
+                                                                   : nullptr;
+                                    const bool ownTurn = bodyFollowTurn && turnInPlace.turning;
+                                    body_follow::Follow::In fin;
+                                    fin.dt = frame.seconds;
+                                    fin.live = followLive;
+                                    fin.gap = followLive ? stable_yaw::wrap(hsViewNow - heroYaw) : NAN;
+                                    fin.canTurn = followBlock == nullptr;
+                                    fin.busy = tin.force || landingBody.active() ||
+                                               ((turnInPlace.turning || turnInPlace.forcePending) && !ownTurn);
+                                    fin.fight = fightBlocks;
+                                    fin.fightsAllowed = values.bodyFollowFights;
+                                    const auto fo = bodyFollow.update(
+                                        fin, body_follow::tuningOf(values.bodyFollowSoftDeg, values.bodyFollowSoftMs,
+                                                                   values.bodyFollowHardDeg));
+                                    if (fo.started)
+                                        diag_log::writef("body follow: %s, the view %+.0f deg off him (view %.0f hero %.0f); "
+                                                         "he is turned onto it, #%u",
+                                                         fo.why == body_follow::Why::hard ? "hard catch" : "soft follow",
+                                                         fo.startGap * toDeg, hsViewNow * toDeg, heroYaw * toDeg,
+                                                         bodyFollow.starts);
+                                    if (fo.ended == body_follow::End::arrived)
+                                        diag_log::writef("body follow: he faces your view after %d ms (%d ms of it waiting), "
+                                                         "from %+.0f deg; %u arrived",
+                                                         static_cast<int>(fo.seconds * 1000 + .5f),
+                                                         static_cast<int>(fo.waited * 1000 + .5f), fo.startGap * toDeg,
+                                                         bodyFollow.arrivals);
+                                    else if (fo.ended == body_follow::End::cancelled)
+                                        diag_log::writef("body follow: stood down after %d ms (%s)",
+                                                         static_cast<int>(fo.seconds * 1000 + .5f),
+                                                         !values.bodyFollowsView ? "off"
+                                                         : hybridOwner.domain == hybrid_owner::Domain::vr
+                                                             ? "SpidyVR has him: its body follows the headset"
+                                                         : showtimeMachine.out() ? "Showtime"
+                                                                                 : "no view or facing");
+                                    bodyFollowWaitLog += std::isfinite(frame.seconds) ? std::clamp(frame.seconds, 0.f, .1f) : 0.f;
+                                    if (bodyFollow.engaged && !fo.force && bodyFollowWaitLog >= 2.f) {
+                                        bodyFollowWaitLog = 0;
+                                        diag_log::writef("body follow: waiting %d ms, gap %+.0f deg (%s)",
+                                                         static_cast<int>(bodyFollow.waited * 1000 + .5f),
+                                                         fin.gap * toDeg,
+                                                         followBlock ? followBlock
+                                                         : fin.busy  ? "another turn has him"
+                                                                     : "a fight (Body follows in fights is off)");
+                                    }
+                                    if (fo.force) {
+                                        tin.force = true;
+                                        tin.forceYaw = hsViewNow;
+                                        bodyFollowForced = true;
+                                        followFightTurn = fo.fightTurn;
+                                    }
+                                }
                                 // HEADSET FIRST: a landing's turn onto the view is not held off by a fight's
                                 // tail (the 4d58169 landings: the body faced the momentum, not the view).
-                                const bool fightHoldsOff =
+                                const bool fightHoldsOff = !followFightTurn &&
                                     fightBlocks && !(values.headsetFirst && facingTurnEvent == facing_check::Event::landing) &&
                                     // SNAP BODY TURN / DODGE RE-FACE (the owner, Nov 15): fights included.
                                     !(nextPassTurnAge < 3.f &&
@@ -10102,6 +10186,17 @@ DWORD WINAPI run(void*) {
                                 // TURN SPEED (turn_push_pct): the walk stick's push while he turns.
                                 tin.push = static_cast<float>(std::clamp(values.turnPushPct, 20, 100)) * .01f;
                                 const auto turned = turnInPlace.update(tin);
+                                // BODY FOLLOWS VIEW: whose turn this is (another system's force takes it over).
+                                if (turned.started && turned.forced)
+                                    bodyFollowTurn = bodyFollowForced;
+                                else if (tin.force && !bodyFollowForced)
+                                    bodyFollowTurn = false;
+                                const bool followTurnLog = bodyFollowTurn;
+                                if (turned.ended != view_yaw_lock::TurnInPlace::End::none) {
+                                    if (bodyFollowTurn && turned.ended == view_yaw_lock::TurnInPlace::End::done)
+                                        ++bodyFollowTurnsDone;
+                                    bodyFollowTurn = false;
+                                }
                                 if (turned.dropped && values.headsetFirst && turned.dropWhy == Block::stick)
                                     diag_log::writef(
                                         "facing check: %s hero turn handed to the left stick after %d ms (it runs along "
@@ -10123,7 +10218,10 @@ DWORD WINAPI run(void*) {
                                     walk.right = stick.right;
                                     walk.forward = stick.forward;
                                 }
-                                if (turned.started && turned.forced)
+                                if (turned.started && turned.forced && followTurnLog)
+                                    diag_log::writef("body follow: hero turn start, gap %+.0f deg, hero %.0f to %.0f",
+                                                     turned.startGap * toDeg, heroYaw * toDeg, tin.forceYaw * toDeg);
+                                else if (turned.started && turned.forced)
                                     diag_log::writef("facing check: %s hero turn start, gap %+.0f deg, hero %.0f to %.0f",
                                                      facing_check::eventName(facingTurnEvent), turned.startGap * toDeg,
                                                      heroYaw * toDeg, tin.forceYaw * toDeg);
@@ -10132,7 +10230,13 @@ DWORD WINAPI run(void*) {
                                         "turn in place: start (#%u, %s) gap %+.0f deg, angle %d, hero %.0f heading %.0f",
                                         turnInPlace.starts, turned.byStick ? "R stick" : "look", turned.startGap * toDeg,
                                         values.turnInPlaceDeg, heroYaw * toDeg, viewLockHeading * toDeg);
-                                if (turned.ended != view_yaw_lock::TurnInPlace::End::none && turned.forced)
+                                if (turned.ended != view_yaw_lock::TurnInPlace::End::none && turned.forced &&
+                                    followTurnLog)
+                                    diag_log::writef("body follow: hero turn %s after %d ms, turned %+.0f of %+.0f, left %+.0f deg",
+                                                     view_yaw_lock::endName(turned.ended),
+                                                     static_cast<int>(turned.seconds * 1000 + .5f),
+                                                     turned.swept * toDeg, turned.startGap * toDeg, turned.gap * toDeg);
+                                else if (turned.ended != view_yaw_lock::TurnInPlace::End::none && turned.forced)
                                     diag_log::writef("facing check: %s hero turn %s after %d ms, turned %+.0f of %+.0f, "
                                                      "left %+.0f deg",
                                                      facing_check::eventName(facingTurnEvent),
@@ -13020,7 +13124,16 @@ DWORD WINAPI run(void*) {
                         // turned about the head onto the view while the walk stick brings the hero round, then eases back
                         // onto his facing. The pose job only (setYieldTilt, hands kept on the controllers): no game write,
                         // and the camera (the head) does not move. The air spin owns the tilt when it runs.
-                        if (landingBody.active() || landingTiltWas) {
+                        // BODY FOLLOWS VIEW's CATCH (body_follow.hpp): where the game cannot turn him yet, the drawn body
+                        // is turned about the head so his torso is never more than 90 degrees off the view - the pose
+                        // only, merged with the landing body's turn (one writer). Not on a wall, in Showtime, under the
+                        // air spin or the head ride, nor in SpidyVR's own air (its body follows the headset there).
+                        const bool bodyCatchLive =
+                            values.bodyFollowsView && hybridOn && values.headsetFirst && yieldAnim &&
+                            hybridOwner.domain != hybrid_owner::Domain::vr && !airSpinWas && !headRide.active() &&
+                            !motion.onSurface && !showtimeMachine.out() && std::isfinite(hsViewNow) &&
+                            std::hypot(body[8], body[10]) > .2f;
+                        if (landingBody.active() || landingTiltWas || bodyCatchLive || bodyCatch.active()) {
                             constexpr float toDeg = 180.f / 3.14159265f;
                             const bool heroOk = std::hypot(body[8], body[10]) > .2f;
                             const float heroY = heroOk ? hybrid_handoff::actorLookYaw({body[8], body[9], body[10]}) : NAN;
@@ -13044,7 +13157,52 @@ DWORD WINAPI run(void*) {
                             if (lb.ended != landing_body::End::none)
                                 diag_log::writef("landing body: done (%s; gap at the start %+.0f deg)",
                                                  landing_body::endName(lb.ended), landingBody.startGap * toDeg);
-                            const float shown = yieldAnim ? lb.yaw : 0.f;
+                            // The catch (off: 0, beta3p's pose exactly) and the one drawn turn.
+                            const float caught =
+                                values.bodyFollowsView ? bodyCatch.update(armDt, viewY - heroY, bodyCatchLive) : 0.f;
+                            if (!values.bodyFollowsView)
+                                bodyCatch.reset();
+                            const bool catchOn = caught != 0.f;
+                            if (catchOn && !bodyCatchWas)
+                                diag_log::writef("body follow: the drawn body turns with you (the game cannot turn him yet: "
+                                                 "%s), gap %+.0f deg, #%u",
+                                                 !swingState.grounded ? "in the air" : "a locked move or a fight",
+                                                 std::isfinite(viewY - heroY) ? stable_yaw::wrap(viewY - heroY) * toDeg : 0.f,
+                                                 bodyCatch.begun);
+                            else if (!catchOn && bodyCatchWas) {
+                                diag_log::writef("body follow: the drawn body is back on his facing (largest turn %.0f deg)",
+                                                 bodyCatch.worstDeg);
+                                bodyCatch.worstDeg = 0;
+                            }
+                            bodyCatchWas = catchOn;
+                            const float drawnTurn = body_follow::merged(lb.yaw, lb.yaw != 0.f, caught);
+                            // The 10 s summary: how often he was more than 90 degrees off the view, and his drawn body.
+                            if (values.bodyFollowsView && bodyCatchLive && std::isfinite(viewY - heroY)) {
+                                const float g = std::abs(stable_yaw::wrap(viewY - heroY));
+                                ++bodyFollowFrames;
+                                bodyFollowPast90 += g > body_follow::catchDeg * body_follow::degrees ? 1u : 0u;
+                                bodyFollowDrawnPast90 +=
+                                    std::abs(stable_yaw::wrap(viewY - heroY - drawnTurn)) >
+                                            (body_follow::catchDeg + 1.f) * body_follow::degrees
+                                        ? 1u
+                                        : 0u;
+                            }
+                            bodyFollowSummaryClock += std::isfinite(armDt) ? std::clamp(armDt, 0.f, .1f) : 0.f;
+                            if (bodyFollowSummaryClock >= 10.f) {
+                                bodyFollowSummaryClock = 0;
+                                if (bodyFollowFrames)
+                                    diag_log::writef(
+                                        "body follow: 10 s: the view more than 90 deg off his facing %.0f%% of %u frames, off "
+                                        "his drawn body %.0f%%; %u follows (%u soft, %u hard), %u arrived, %u turns done, "
+                                        "%u drawn catches",
+                                        100.f * static_cast<float>(bodyFollowPast90) / static_cast<float>(bodyFollowFrames),
+                                        bodyFollowFrames,
+                                        100.f * static_cast<float>(bodyFollowDrawnPast90) / static_cast<float>(bodyFollowFrames),
+                                        bodyFollow.starts, bodyFollow.softStarts, bodyFollow.hardStarts, bodyFollow.arrivals,
+                                        bodyFollowTurnsDone, bodyCatch.begun);
+                                bodyFollowFrames = bodyFollowPast90 = bodyFollowDrawnPast90 = 0;
+                            }
+                            const float shown = yieldAnim ? drawnTurn : 0.f;
                             if (!airSpinWas && (shown != 0.f || landingTiltWas))
                                 native_body::setYieldTilt(landing_body::turnOf(shown), landing_body::turnOf(shown));
                             landingTiltWas = shown != 0.f;

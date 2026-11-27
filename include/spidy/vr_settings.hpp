@@ -324,7 +324,7 @@ struct Values {
     // from before it gets RUN CURVE on and EARLY JUMP QUICK TAP once (the
     // user: "movement fixes will be defaults"); after that the player's own
     // choice stands. Not a row. movement_defaults.
-    int movementDefaults = 27; // movementDefaultsRevision: a new file has seen them
+    int movementDefaults = 28; // movementDefaultsRevision: a new file has seen them
     // SOFT LANDING (the tab's SOFT LANDING; Swing::allowSoftLanding,
     // run_update::softLandVertical): a fall the swing flies, with no web
     // holding, eases to 9 m/s down over its last 3 m (or 0.35 s), its speed
@@ -405,6 +405,19 @@ struct Values {
     // roll or landing - while the view stays level. Its latch, where the lock is not live, no longer re-latches
     // on a fast dive's one-metre test or onto the crown's yaw looking up. Off: LEVEL as beta3o.
     bool levelHeadLock = true;
+    // BODY FOLLOWS VIEW (0.8.7-na-beta3q, settings revision 28; the owner, Nov 27 t158u: "the player NEVER is looking
+    // behind the body", and his answer "Build body follows view"; body_follow.hpp): with HYBRID and HEADSET FIRST, while
+    // the animation has him, the hero is brought round onto where you look by the game's own walk-stick turn once the
+    // view is past BODY FOLLOW SOFT (body_follow_soft_deg, 60) for body_follow_soft_ms (400), or past
+    // body_follow_hard_deg (100) at once; it never gives up (a blocker makes it wait), the left stick wins, and other
+    // turns go first. Where the game cannot turn him yet (a locked or midair animation, a fight), the drawn body (the
+    // pose only) is turned about the head so his torso is never more than 90 degrees off the view, merged with the
+    // landing body's turn. Never on a wall, in Showtime or in SpidyVR's air; the view is never written. Off: beta3p.
+    bool bodyFollowsView = true;
+    // BODY FOLLOW IN FIGHTS (body_follow_fights, off): the hard catch may turn him during a fight's 3 s tail too (a
+    // punch track, a dodge and the leg stick still go first). Off: in a fight he waits, the drawn body catches.
+    bool bodyFollowFights = false;
+    int bodyFollowSoftDeg = 60, bodyFollowSoftMs = 400, bodyFollowHardDeg = 100;
     // SMOOTHING (the tab's SMOOTHING; Off|Low|Medium|High|Max, default Off):
     // ease the view toward the headset's look. Translation stays current, so
     // leaning and travel do not trail. Not a Settings / Command field.
@@ -1588,7 +1601,7 @@ std::string tabOnlyText(const Values&);
 // key, or whose value is no whole number, is passed over.
 Values withTabOnly(Values, std::string_view text);
 // The movement defaults' revision (Values::movementDefaults) this build has.
-inline constexpr int movementDefaultsRevision = 27;
+inline constexpr int movementDefaultsRevision = 28;
 // November 12 movement cleanup: a settings file (that text) older than
 // movementDefaultsRevision gets the new movement defaults once - RUN CURVE
 // on, EARLY JUMP at least QUICK TAP - and is marked as having seen them; a

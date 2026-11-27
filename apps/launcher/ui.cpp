@@ -1826,6 +1826,27 @@ void App::nativeAnimation(ImVec2 origin, ImVec2 size) {
                        tabChanged = true;
                    }
                });
+        option("Body follows view",
+               "Hybrid with Headset first: when you look well away from Spider-Man (60 degrees for 0.4 s, or 100 at "
+               "once), the game turns him round to face where you look; where it can't yet, his drawn body is "
+               "turned so you never look behind it. Your view is never moved. Off: as beta3p. Default: on.",
+               S(42), [&] {
+                   bool on = tabOnly_.bodyFollowsView;
+                   if (toggle("##bodyfollowsview", &on)) {
+                       tabOnly_.bodyFollowsView = on;
+                       tabChanged = true;
+                   }
+               });
+        option("Body follows in fights",
+               "With Body follows view: in a fight's 3 s tail the hard catch (100 degrees) may turn him too. "
+               "Off: in a fight he waits and only his drawn body turns. Default: off.",
+               S(42), [&] {
+                   bool on = tabOnly_.bodyFollowFights;
+                   if (toggle("##bodyfollowfights", &on)) {
+                       tabOnly_.bodyFollowFights = on;
+                       tabChanged = true;
+                   }
+               });
         option("Smoothing",
                "How much animation wobble is calmed while Native Animation owns the view. "
                "Off is as now. Headset look, leaning and travel stay with you.",
