@@ -1,8 +1,144 @@
-# SpidyVR Native Animation handoff (as of 2026-11-26, Pacific time)
+# SpidyVR Native Animation handoff (as of 2026-11-27, Pacific time)
 
-Written the morning of Thursday, November 26, 2026 (America/Los_Angeles), so a fresh assistant on another account can pick this up with no prior history. This supersedes the November 22 beta3g `docs/HANDOFF_NA.md`. Also read [NA_BETA3.md](NA_BETA3.md), [CRIME_RUN.md](CRIME_RUN.md), [HANDOFF_CRIME_RUN.md](HANDOFF_CRIME_RUN.md), [REFERENCE.md](REFERENCE.md), [VALIDATION.md](VALIDATION.md), [CHANGELOG.md](CHANGELOG.md), and [NA_HELP.md](NA_HELP.md).
+Written the morning of Friday, November 27, 2026 (America/Los_Angeles), so a fresh assistant can resume this work
+cold, with no prior history: the previous assistant ran out of capacity (the owner, t159u). Section 0 is the whole
+current state; sections 1-10 are the detailed reference and history (some of it, like the beta3l crash plan, is
+resolved and kept for history). Also read [NA_BETA3.md](NA_BETA3.md), [NA_VS_SPIDYVR.md](NA_VS_SPIDYVR.md),
+[CRIME_RUN.md](CRIME_RUN.md), [HANDOFF_CRIME_RUN.md](HANDOFF_CRIME_RUN.md), [REFERENCE.md](REFERENCE.md),
+[VALIDATION.md](VALIDATION.md), [CHANGELOG.md](CHANGELOG.md), [NA_HELP.md](NA_HELP.md) and [AGENTS.md](../AGENTS.md).
 
-**Urgent, open work:** under Meta Quest Link **Oculus 1.210.0**, the game dies about three seconds into VR with a stack overflow (`0xC00000FD`) in NVIDIA `nvwgf2umx.dll`. The last shipped attempt is **0.8.7-na-beta3l** (`3baaecf`). The owner reported on Nov 26 (t63u) that **beta3l still breaks**. **No beta3l logs or dumps were attached with that message.** Do not ship another guessed fix until you have a beta3l `spidy-vr-start.log` and, if it crashed, a `.mdmp`.
+---
+
+## 0. Start here (Nov 27)
+
+**Where things stand.** Work branch `feat/087-next` on the fork `tyronmiller55-spec/SpidyVR`. The newest build is
+**0.8.7-na-beta3q** (docs tip `a4bc15c`), built as a test zip for the owner; it is **not** CURRENT. CURRENT (what
+testers get) is **beta3p**. The Nov 25-26 Link 1.210 stack-overflow crash was fixed in beta3m (16 MB VR-thread
+stack; the owner: "No MDMP, game ran fine"). Nothing in beta3q is verified in a headset yet.
+
+### 0.1 Builds (all CI runs `publish=false`, Release workflow on `feat/087-next`)
+
+| Build | Commits (feature..docs) | CI run | Zip (box: `/workspace/animated-hybrid-build/`) | Bytes | SHA-256 |
+| --- | --- | --- | --- | --- | --- |
+| beta3o | `46d3589` wall slide pose, `29996b0` grip jump lock, `bb9796e` line in the fist, `193ea31` rope grip, docs `7a68938` | [45887550836](https://github.com/tyronmiller55-spec/SpidyVR/actions/runs/45887550836) (success) | `Spidy-0.8.7-na-beta3o-win64-7a68938.zip` | 18,638,875 | `f6c6cdeb5e9c9f6d3e0b528317e9539722b19bdb1348eec32c49a3a761a5b8ae` |
+| beta3p (CURRENT) | `2a8dd95` smoothing clock fix, `186038c` Level keeps him with you, `bbbac4e` HEAD LEVEL default, docs `b426479` | [45896082078](https://github.com/tyronmiller55-spec/SpidyVR/actions/runs/45896082078) (success) | `Spidy-0.8.7-na-beta3p-win64-b426479.zip` | 18,640,598 | `3e725db0fd5f5161f5ea50087dd23c193c6c874c90afcd16326add37a471221f` |
+| beta3q | `73ec6d1` Body follows view, `5b6c662` View jump log, `1c0344c` Smooth view handoff, docs `a4bc15c` | [46010957792](https://github.com/tyronmiller55-spec/SpidyVR/actions/runs/46010957792) (success, 54/54 ctest, Nov 27 5:53-5:56 AM PST); also 46008825506 (`73ec6d1`) and 46009995352 (`5b6c662`), both success | `Spidy-0.8.7-na-beta3q-win64-a4bc15c.zip` | 18,596,138 | `d17439a93d1f386db8f2867c3fadc2cd40e2e40dccbffad83013825a8b67ed80` |
+
+The CI artifact is `Spidy-0.8.7-win64.zip`; `gh run download` unpacks it to a folder
+`Spidy-0.8.7-player-torso-<sha7>/`, which is re-zipped as the named zip above (89 files). Zips go to the owner as chat
+attachments. The owner installs to a folder named after the sha7: always confirm the folder sha7 and the console's
+version label (`0.8.7-na-beta3q`) before blaming a build for anything.
+
+### 0.2 CURRENT release state
+
+[tyronmiller55-spec/SpidyVR-NativeAnimation](https://github.com/tyronmiller55-spec/SpidyVR-NativeAnimation):
+CURRENT is **0.8.7-na-beta3p** (`b426479`), merged by [PR #8](https://github.com/tyronmiller55-spec/SpidyVR-NativeAnimation/pull/8)
+(merge `402506c`), tag **`CURRENT-NativeAnimationv0.8.7-beta3p`**, release asset `Spidy-0.8.7-na-beta3p-win64-b426479.zip`
+(SHA-256 above). beta2 is retitled OLD and pre-release. Update CURRENT only when the owner asks (the recipe is in
+section 1). Discord posts for beta3p were drafted in `/workspace/plans/discord-beta3p-posts.md`; the owner posts
+them himself.
+
+### 0.3 Standing rules (all of them; break none without the owner's explicit words)
+
+- **Owner sign-off (t141u):** no feature, visual, overlay, setting or behavior he did not explicitly ask for.
+  Propose, then build only what he picks. Ask before any play-feel change.
+- **A 👍 reaction is NOT approval** (nor a build choice). Only his words or a widget answer are.
+- Push only to the fork `tyronmiller55-spec/SpidyVR`, as normal pushes: never force-push, never rewrite a branch.
+- Never push to or open a PR on **IlyaMez/SpidyVR** unless asked. Never add or push to **SpidyVR-builds**. Leave
+  fork PRs **#1** and **#2** alone.
+- Never edit workflow files (the `gh` login lacks the `workflow` scope). CI always `publish=false`. No tags or
+  releases unless asked; the release repo only for CURRENT, only when asked.
+- Discord and any other message: **draft only**, never send as the owner.
+- Each new feature: its own toggle, **ON by default**, **OFF = the previous build**, through one
+  `movementDefaultsRevision` migration per build (now **28**). Crime Run is the exception: it ships OFF.
+- One feature per commit (player-facing subject), plus one docs commit per build. Commit identity:
+  `Spidy contributor <contributor@example.invalid>`. Unit tests for each feature (header + test, as
+  `level_head_lock`).
+- The headset heading is the only direction authority: **never write view yaw**. **The air belongs to SpidyVR.**
+  Leave the wall jump and its sound as they are.
+- Never invent offsets or addresses; cite `REFERENCE.md` / `VALIDATION.md`. Never modify the game folder.
+- **Tell the owner not to press the launcher's Update button**: it installs official 0.8.8 over NA.
+- Do not start until the owner asks: R2 enemy limb zones, trigger-squeeze cancel, tumble-roll, any IlyaMez PR.
+
+### 0.4 beta3q: what's in it, its settings, and what to ask the owner to test
+
+Built from the owner's answer t158s981 ("Build body follows view, Build smooth view handoff with comfort cap, Add
+the view jump log"), plans `/workspace/plans/never-behind-body-1127.md` (Option B) and
+`/workspace/plans/handoff-blend-1127.md` (O1 + O4). Revision 28 turns each switch on once; with all three off it
+plays as beta3p. Details and the checklist: [NA_BETA3.md](NA_BETA3.md#beta3q-body-follows-view-smooth-view-handoff-the-view-jump-log).
+
+| `spidy_vr.ini` key | Default | Range | Launcher row (Native Animation) |
+| --- | --- | --- | --- |
+| `body_follows_view` | 1 | 0/1 | Body follows view |
+| `body_follow_fights` | 0 | 0/1 | Body follows in fights |
+| `body_follow_soft_deg` | 60 | 20 to the hard line | ini only |
+| `body_follow_soft_ms` | 400 | 0-3000 | ini only |
+| `body_follow_hard_deg` | 100 | 60-170 | ini only |
+| `smooth_view_handoff` | 1 | 0/1 | Smooth view handoff |
+| `smooth_view_handoff_ms` | 300 | 100-1000 | ini only |
+| `smooth_view_handoff_speed_cm_s` | 150 | 20-1000 | ini only |
+| `smooth_view_cap_mm` | 20 | 5-200 | ini only |
+| `smooth_view_cap_cdeg` | 100 (1 degree) | 25-1000 | ini only |
+| `view_jump_log` | 1 | 0/1 | ini only (logging only) |
+
+Fixed (not settings): re-arm under 80 degrees, done under 12, drawn-body catch at 90 (eased 0.25 s); the cap's
+handoff window is 0.6 s after a switch; a teleport over 3 m / 90 degrees passes through; the offset is held to
+2 m / 60 degrees.
+
+Code map: `include/spidy/body_follow.hpp` (Follow, Catch, merged; test `tests/body_follow_tests.cpp`, 46 checks),
+`include/spidy/view_step.hpp` (Measure, Smoother, JumpLog, appliedNative, offHead; test `tests/view_step_tests.cpp`,
+42 checks). In `src/game_xr.cpp`: the Follow sits in the TURN-IN-PLACE block (it forces `view_yaw_lock::TurnInPlace`'s
+walk-stick turn; no facing write), the Catch in the landing-body block (`native_body::setYieldTilt`, pose only, not
+while the air spin owns it), and the measure + smoother + log just before "Slice C" (`hybridShown`), on the XR
+thread. Cause bits are set at the landing view snap / handoff place, blend end, latch, reseat and view guard.
+
+**Ask the owner to test** (the NA_BETA3 beta3q checklist): never seeing his back on the ground (soft 60 degrees /
+0.4 s and hard 100 degrees turns), the left stick winning, the drawn torso turning during locked moves, dodges and
+zips; nothing on walls, in Showtime or the air; landings and jumps gliding with no one-frame hop; flips, tumbles,
+zips and wall runs unchanged; each switch off plays as beta3p; and **send a log** of landings, jumps and a fight
+(`view jump:` and `body follow:` lines).
+
+**Known risks:** the Follow can't turn him while the game blocks the turn (it waits and logs why; the drawn body
+covers it); the comfort cap slows a handoff's view by design (a long blend could feel floaty: raise
+`smooth_view_cap_mm` / `_cdeg` or lower `smooth_view_handoff_ms`); the measure's anchor for tracked eyes is the
+rig, so a fast SpidyVR rig move outside a handoff is measured but never capped. None of this is headset-verified.
+
+### 0.5 Open items (none started unless noted; each needs the owner's ask)
+
+1. **Headset disconnects:** waiting on the owner's **beta3p game-vr logs** and **Oculus OVRServer logs**
+   (`%LOCALAPPDATA%\Oculus\OVRServer_P*.txt`, `OVRServerMgr*.txt` around each drop, plus the drop times). beta3m's
+   session showed the runtime's own stop sequence (FOCUSED->VISIBLE->SYNCHRONIZED->STOPPING, no LOSS_PENDING): most
+   likely Link/USB/runtime. See `/workspace/plans/handoff-blend-1127.md` section 4.
+2. **Kicks:** built and on, almost no hit proof (beta3f 0/26, beta3g 0/8, Nov 18 one hit). The owner said he would do
+   a **kicks test on real thugs** next. Then proposals **S3** (ground stance), **S4** (wider cone for enemies
+   behind), **S5** (animation pass 2) - all held until that test.
+3. **Jump grunt:** wire the game sound `dab33491` as the jump grunt once movement is final (and turn the default
+   sound trace off).
+4. **SMPG-2, memory and 0.8.8 smoothness:** `/workspace/plans/smoothness-memory-1126-findings.md`. Waiting on the
+   0.8.8 session's `game-vr-20261126-094136.json` / `-summary.json` and a 3-5 min beta3m+ session on the same swing
+   route; low free RAM (10-12 of 15.5 GB in use before launch) affects both builds.
+5. **Wall slide pose** (beta3o, `wall_slide_pose`): an approximation of the owner's picture; awaiting his headset
+   verdict to tune the one pose table.
+6. **Handstand point jump:** open owner request; check `docs/HANDSTAND.md` and `docs/POINT_JUMP.md` and ask the owner
+   what he wants before building.
+7. **Wrist option C** (the wrist and elbow along the rope, from `/workspace/plans/web-in-hand-1126.md`): held by the
+   owner; A and B shipped in beta3o.
+8. **Audio clips:** 11 owner-made ElevenLabs jump sounds; waiting on him to trim, tag and say where each goes, then a
+   bundled-playback build with its own toggle and a revision.
+9. **Crime Run:** never played in a headset; checklist in `docs/CRIME_RUN.md`. Ships OFF.
+10. **On hold until the owner asks:** R2 enemy limb zones; any IlyaMez PR (leg-control `6028730`, point-jump
+    `6d752df` waited on Ilya's yes on Discord); trigger-squeeze cancel; tumble-roll.
+11. Not built from the beta3p plan: Option B (dodge tilt) and C (animated-rotation reprojection).
+
+### 0.6 Box and tools
+
+- Repo checkout: `/workspace/SpidyVR` (remote `origin` here is the fork). Local Linux test build:
+  `/workspace/spidy-linux-tests` (`cmake --build . -j16`, then run each `spidy_*tests`; DXGI/MSVC stubs are already
+  set up). `game_xr.cpp` only builds on Windows CI.
+- CI: `gh workflow run release.yml -R tyronmiller55-spec/SpidyVR --ref feat/087-next -f publish=false`, then
+  `gh run download <id>`. `gh` is signed in as `tyronmiller55-spec`.
+- Plans and findings: `/workspace/plans/`. This handoff's box copy: `/workspace/plans/HANDOFF-1127.md`.
+- Box clock is Pacific; CI times are UTC (subtract 8 hours).
 
 ---
 
@@ -10,7 +146,7 @@ Written the morning of Thursday, November 26, 2026 (America/Los_Angeles), so a f
 
 - **What:** the Native Animation (NA) line of SpidyVR (GPL-3.0), Ilya Mezerowsky's fan VR mod for Marvel's Spider-Man Remastered (PC). Insomniac's own animations drive the body on the ground; SpidyVR owns the air. Keep the Spidy launcher's identity and the credits to Ilya and upstream contributors.
 - **Tester:** the owner ("SpidyVR Modder") on a **Meta Quest 3S** over **Meta Quest Link**.
-- **Work repo:** [tyronmiller55-spec/SpidyVR](https://github.com/tyronmiller55-spec/SpidyVR). Current work branch: **`feat/087-next`**, tip **`3baaecff595b30116e2c44243d7e1328de776363`** (`3baaecf`).
+- **Work repo:** [tyronmiller55-spec/SpidyVR](https://github.com/tyronmiller55-spec/SpidyVR). Current work branch: **`feat/087-next`** (see section 0 for the tip; beta3q docs `a4bc15c`).
 - **Remotes on the work box:** `fork` = `tyronmiller55-spec/SpidyVR` (push here only); `origin` = `IlyaMez/SpidyVR` (**fetch only, never push, never open a PR unless the owner explicitly asks**); `crimerun` = `tyronmiller55-spec/SpidyVR-CrimeRun` (reference only). There is no `SpidyVR-builds` remote in this checkout; **never add or push to `tyronmiller55-spec/SpidyVR-builds`**.
 - **Release repo:** [tyronmiller55-spec/SpidyVR-NativeAnimation](https://github.com/tyronmiller55-spec/SpidyVR-NativeAnimation). **CURRENT** is **0.8.7-na-beta3p** at **`b4264797406743020969c19bdc7ddb42f2e2b475`** (`b426479`, Nov 26; the owner, t153u: "Ok, this is fine. Let's update the CURRENT beta on git with this version"). Tag `CURRENT-NativeAnimationv0.8.7-beta3p` on main's merge `402506c` ([PR #8](https://github.com/tyronmiller55-spec/SpidyVR-NativeAnimation/pull/8)), [release](https://github.com/tyronmiller55-spec/SpidyVR-NativeAnimation/releases/tag/CURRENT-NativeAnimationv0.8.7-beta3p), asset `Spidy-0.8.7-na-beta3p-win64-b426479.zip` (SHA-256 `3e725db0fd5f5161f5ea50087dd23c193c6c874c90afcd16326add37a471221f`, 18,640,598 bytes, verified by download). beta2 (`1418992`, tag `CURRENT-NativeAnimationv0.8.7-beta2`) is retitled OLD and marked pre-release. How it was done (same as beta2): a `publish/native-animation-<sha7>` branch from live main with the exact source tree minus `.github/workflows/release.yml`, plus the publication README and provenance doc; a normal-merge PR; a release on the merge commit marked Latest; the old release retitled "OLD — superseded by …" and pre-release; the repo description names the CURRENT. Update CURRENT **only when the owner asks**. Builds after beta3p are test zips sent as chat attachments.
 - **Upstream official:** Ilya released **0.8.8** on Nov 25 at 12:49 AM Pacific time, commit **`cf0b2791bc335a49d17f999c999d61a6a11cf2c2`** (`cf0b279`, tag `v0.8.8`): first-time VR setup and a comfort vignette. It is **not** a known fix for the 1.210 crash and was **not** ported. The launcher's **Update** button is only a notice that 0.8.8 exists (our `kVersion` is still `0.8.7-na-beta3`). **Tell the owner not to press Update** — it would replace the NA folder with official 0.8.8.
@@ -125,7 +261,8 @@ All of these are on `tyronmiller55-spec/SpidyVR`. Do not rewrite them.
 | `73ec6d1` | Body follows view (beta3q) |
 | `5b6c662` | View jump log (beta3q) |
 | `1c0344c` | Smooth view handoff (beta3q) |
-| (next) | Docs: 0.8.7-na-beta3q |
+| `a4bc15c` | Docs: 0.8.7-na-beta3q |
+| (next) | Docs: handoff, Nov 27 |
 
 ---
 
@@ -340,4 +477,4 @@ Attachments on this box sometimes appear late; `Path.exists()` on the exact hash
 - Confirm every headset test's **folder sha7 and version label** before attributing a crash to a build. The 2:41–2:43 PM "How about now?" batch was still beta3k `990d384`.
 - Do not push to `origin` (IlyaMez). Do not force-push. Do not touch CURRENT. Do not edit workflows.
 - Discord: draft only.
-- This document's box copy is `/workspace/SPIDYVR_NA_HANDOFF.md`. The in-repo copy is `docs/HANDOFF_NA.md` on `feat/087-next`.
+- This document's box copy is `/workspace/plans/HANDOFF-1127.md` (older: `/workspace/SPIDYVR_NA_HANDOFF.md`). The in-repo copy is `docs/HANDOFF_NA.md` on `feat/087-next`.
