@@ -423,6 +423,16 @@ struct Values {
     // headset nor what the view sits on (the rig, the animated head) made; over 2 cm or 1 degree it is logged with its
     // cause ('view jump: ...', at most 8 lines a second, and a once-a-second count). No feel change. Off: no lines.
     bool viewJumpLog = true;
+    // SMOOTH VIEW HANDOFF (0.8.7-na-beta3q, settings revision 28; the owner's answer t158s981 "Build smooth view handoff
+    // with comfort cap"; plan handoff-blend-1127.md O1 + O4; view_step.hpp): one offset on the shown view that always
+    // decays - a critically damped spring settling in smooth_view_handoff_ms (300; 100-1000), never faster than
+    // smooth_view_handoff_speed_cm_s (150 cm/s; 20-1000), seeded on a switch with the old view's velocity - and a comfort
+    // cap: while a handoff is under way (a blend, a switch's first 0.6 s, a latch, reseat, guard, snap or place) at most
+    // smooth_view_cap_mm (20 mm; 5-200) and smooth_view_cap_cdeg (100 = 1 degree; 25-1000) of motion your head didn't
+    // make reach the eyes in a frame. Outside a handoff nothing is capped (the air is SpidyVR's). Never writes view yaw
+    // (the offset is on the eyes drawn, not the heading). Off: the view as beta3p.
+    bool smoothViewHandoff = true;
+    int smoothViewHandoffMs = 300, smoothViewHandoffSpeedCmS = 150, smoothViewCapMm = 20, smoothViewCapCdeg = 100;
     // SMOOTHING (the tab's SMOOTHING; Off|Low|Medium|High|Max, default Off):
     // ease the view toward the headset's look. Translation stays current, so
     // leaning and travel do not trail. Not a Settings / Command field.

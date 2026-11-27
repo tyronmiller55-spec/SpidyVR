@@ -1324,6 +1324,11 @@ Values sanitized(Values v) {
     v.bodyFollowHardDeg = std::clamp(v.bodyFollowHardDeg, 60, 170);
     v.bodyFollowSoftDeg = std::clamp(v.bodyFollowSoftDeg, 20, v.bodyFollowHardDeg);
     v.bodyFollowSoftMs = std::clamp(v.bodyFollowSoftMs, 0, 3000);
+    // SMOOTH VIEW HANDOFF (view_step.hpp): 100-1000 ms, 20-1000 cm/s, 5-200 mm, 25-1000 hundredths of a degree.
+    v.smoothViewHandoffMs = std::clamp(v.smoothViewHandoffMs, 100, 1000);
+    v.smoothViewHandoffSpeedCmS = std::clamp(v.smoothViewHandoffSpeedCmS, 20, 1000);
+    v.smoothViewCapMm = std::clamp(v.smoothViewCapMm, 5, 200);
+    v.smoothViewCapCdeg = std::clamp(v.smoothViewCapCdeg, 25, 1000);
     v.handoffEaseCurve = std::clamp(v.handoffEaseCurve, 0, 1);
     v.handoffGlideCmS = std::clamp(v.handoffGlideCmS, 0, 1000);
     v.handoffGlideMaxMs = std::clamp(v.handoffGlideMaxMs, 150, 2000);
@@ -3373,6 +3378,11 @@ constexpr TabOnly tabOnly[] = {
     {"body_follow_soft_ms", nullptr, &Values::bodyFollowSoftMs},
     {"body_follow_hard_deg", nullptr, &Values::bodyFollowHardDeg},
     {"view_jump_log", &Values::viewJumpLog, nullptr},
+    {"smooth_view_handoff", &Values::smoothViewHandoff, nullptr},
+    {"smooth_view_handoff_ms", nullptr, &Values::smoothViewHandoffMs},
+    {"smooth_view_handoff_speed_cm_s", nullptr, &Values::smoothViewHandoffSpeedCmS},
+    {"smooth_view_cap_mm", nullptr, &Values::smoothViewCapMm},
+    {"smooth_view_cap_cdeg", nullptr, &Values::smoothViewCapCdeg},
     {"swing_rope_weight_pct", nullptr, &Values::swingRopeWeightPct},
     {"swing_rope_drag_pct", nullptr, &Values::swingRopeDragPct},
     {"kick_lunge", &Values::kickLunge, nullptr},
@@ -3729,6 +3739,8 @@ Values withMovementDefaults(Values v, std::string_view text) {
         v.bodyFollowsView = true;
         // VIEW JUMP LOG comes on once (logging only).
         v.viewJumpLog = true;
+        // SMOOTH VIEW HANDOFF comes on once.
+        v.smoothViewHandoff = true;
         // BETA3Q MIGRATION END
     }
     v.movementDefaults = movementDefaultsRevision;

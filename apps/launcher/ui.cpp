@@ -1837,6 +1837,17 @@ void App::nativeAnimation(ImVec2 origin, ImVec2 size) {
                        tabChanged = true;
                    }
                });
+        option("Smooth view handoff",
+               "When the view changes hands (a landing, a jump, a switch to or from the animation), it glides over "
+               "about 0.3 s instead of jumping, and no more than 2 cm or 1 degree your head didn't make reaches your "
+               "eyes in a frame while it does. Your heading is never moved. Off: as beta3p. Default: on.",
+               S(42), [&] {
+                   bool on = tabOnly_.smoothViewHandoff;
+                   if (toggle("##smoothviewhandoff", &on)) {
+                       tabOnly_.smoothViewHandoff = on;
+                       tabChanged = true;
+                   }
+               });
         option("Body follows in fights",
                "With Body follows view: in a fight's 3 s tail the hard catch (100 degrees) may turn him too. "
                "Off: in a fight he waits and only his drawn body turns. Default: off.",

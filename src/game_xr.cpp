@@ -1774,6 +1774,7 @@ DWORD WINAPI run(void*) {
         // where they happen and read where the eye command is final), the last owner switch, the head's R-stick turn.
         view_step::Measure viewStep{};
         view_step::JumpLog viewJumps{};
+        view_step::Smoother viewSmooth{};
         uint32_t viewStepCause = 0;
         int64_t viewStepSwitchNs = -1;
         const char* viewStepSwitchName = "none";
@@ -14017,7 +14018,7 @@ DWORD WINAPI run(void*) {
                         const bool onHeadEyes = eyes.anchored == 2 || eyes.anchored == 4;
                         view_step::Frame vf;
                         vf.dt = frame.seconds;
-                        vf.ok = values.viewJumpLog && eyes.enabled == 1 && !flatScreen && !showtimeMachine.out() &&
+                        vf.ok = (values.viewJumpLog || values.smoothViewHandoff) && eyes.enabled == 1 && !flatScreen && !showtimeMachine.out() &&
                                 (onHeadEyes ? haveAnimHead : eyes.anchored == 1 && motion.active);
                         if (vf.ok) {
                             vf.shown = animated_view::fromNative(onHeadEyes ? native_eyes::onHead(eyes.eyes[0].world, animHeadNow)
@@ -14035,25 +14036,78 @@ DWORD WINAPI run(void*) {
                         const view_step::Step vs = viewStep.step(vf);
                         if (vs.cut)
                             viewStepCause |= vs.anchorJump ? view_step::anchorCut : view_step::sourceChange;
-                        if (vs.measured && viewJumps.add(vs.metres, vs.deg, viewStepCause, false)) {
+                        // SMOOTH VIEW HANDOFF (smooth_view_handoff; view_step.hpp, plan handoff-blend-1127.md O1 + O4):
+                        // the offset that decays (a spring, seeded on a switch with the old view's velocity) and the
+                        // comfort cap while a handoff is under way. On the eyes drawn only: never the heading.
+                        view_step::Smoother::Out so{};
+                        bool smoothed = false;
+                        if (!values.smoothViewHandoff || !vf.ok || vf.playerCut) {
+                            viewSmooth.reset();
+                        } else {
+                            const view_step::Params sp = view_step::paramsOf(
+                                values.smoothViewHandoffMs, values.smoothViewHandoffSpeedCmS, values.smoothViewCapMm,
+                                values.smoothViewCapCdeg);
+                            constexpr uint32_t windowBits = view_step::ownerSwitch | view_step::sourceChange |
+                                                            view_step::anchorCut | view_step::landingSnap |
+                                                            view_step::place | view_step::blend |
+                                                            view_step::blendEnd | view_step::latch |
+                                                            view_step::seat | view_step::guard;
+                            const bool window =
+                                (viewStepCause & windowBits) != 0 ||
+                                (viewStepSwitchNs >= 0 &&
+                                 static_cast<float>(eyeBlendNow - viewStepSwitchNs) * 1e-9f < sp.windowSeconds);
+                            so = viewSmooth.update(frame.seconds, vs, window, sp);
+                            if (viewSmooth.active()) {
+                                Mat4 w[2];
+                                for (unsigned i = 0; i < 2; ++i)
+                                    w[i] = onHeadEyes ? native_eyes::onHead(eyes.eyes[i].world, animHeadNow)
+                                                      : eyes.eyes[i].world;
+                                const Vec3 centre{(w[0][12] + w[1][12]) * .5f, (w[0][13] + w[1][13]) * .5f,
+                                                  (w[0][14] + w[1][14]) * .5f};
+                                bool fine = finite(centre);
+                                Mat4 out[2]{};
+                                for (unsigned i = 0; i < 2 && fine; ++i) {
+                                    const Mat4 moved = view_step::appliedNative(w[i], centre, so.offset, so.turn);
+                                    for (float x : moved)
+                                        fine = fine && std::isfinite(x);
+                                    out[i] = onHeadEyes ? view_step::offHead(moved, animHeadNow) : moved;
+                                }
+                                if (fine) {
+                                    for (unsigned i = 0; i < 2; ++i)
+                                        eyes.eyes[i].world = out[i];
+                                    smoothed = true;
+                                } else {
+                                    viewSmooth.reset();
+                                }
+                            }
+                        }
+                        if (values.viewJumpLog && vs.measured &&
+                            viewJumps.add(vs.metres, vs.deg, viewStepCause, so.capped)) {
                             char causes[96];
                             view_step::causeList(viewStepCause, causes, sizeof(causes));
                             diag_log::writef(
                                 "view jump: %.3f m %.1f deg not from your head (%s; %s), owner %s, eyes %s, %.0f ms "
-                                "after the last switch (%s), last action %s",
+                                "after the last switch (%s), last action %s; shown %.3f m %.1f deg%s",
                                 vs.metres, vs.deg, view_step::causeName(viewStepCause), causes,
                                 hybridOwner.domain == hybrid_owner::Domain::vr ? "SpidyVR" : "animation",
                                 eyes.anchored == 2 ? "on the head (full)"
                                 : eyes.anchored == 4 ? "on the head (level)"
                                                      : "tracked",
                                 viewStepSwitchNs >= 0 ? static_cast<float>(eyeBlendNow - viewStepSwitchNs) / 1e6f : -1.f,
-                                viewStepSwitchName, direction_report::actionName(dirReport.last()));
+                                viewStepSwitchName, direction_report::actionName(dirReport.last()),
+                                smoothed || so.teleport ? so.shownM : vs.metres, smoothed || so.teleport ? so.shownDeg : vs.deg,
+                                so.teleport  ? " (a teleport, let through)"
+                                : so.capped  ? " (the comfort cap held it)"
+                                : smoothed   ? " (smoothed)"
+                                             : "");
                         }
                         if (viewJumps.tick(frame.seconds)) {
                             diag_log::writef("view jump: %u frames of %u in the last second over 2 cm or 1 deg not from "
-                                             "your head (worst %.3f m / %.1f deg, %s); %u in all",
+                                             "your head (worst %.3f m / %.1f deg, %s), %u held by the comfort cap; %u "
+                                             "in all",
                                              viewJumps.jumps, viewJumps.frames, viewJumps.worstM, viewJumps.worstDeg,
-                                             view_step::causeName(viewJumps.worstCause), viewJumps.total);
+                                             view_step::causeName(viewJumps.worstCause), viewJumps.capped,
+                                             viewJumps.total);
                             viewJumps.clear();
                         }
                         viewStepCause = 0;

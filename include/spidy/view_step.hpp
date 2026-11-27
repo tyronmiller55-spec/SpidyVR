@@ -209,6 +209,7 @@ struct Params {
     float capRad = 1.f * degrees; // smooth_view_cap_cdeg / 100 degrees
     float teleportM = 3.f, teleportRad = 90.f * degrees; // a real teleport: let through
     float maxOffsetM = 2.f, maxOffsetRad = 60.f * degrees;
+    float windowSeconds = .6f; // a switch's handoff window (the cap applies to the whole step in it)
 };
 inline Params paramsOf(int ms, int speedCmS, int capMm, int capCdeg) {
     Params p;
@@ -297,6 +298,18 @@ class Smoother {
 inline Pose applied(const Pose& eye, Vec3 centre, Vec3 offset, Vec3 turn) {
     const Quat q = fromRotVec(turn);
     return {centre + offset + q.rotate(eye.position - centre), unit(q * eye.orientation)};
+}
+// The same on a native world matrix (rows the axes, then the position), its axes' lengths kept.
+inline Mat4 appliedNative(const Mat4& m, Vec3 centre, Vec3 offset, Vec3 turn) {
+    const Quat q = fromRotVec(turn);
+    Mat4 out = m;
+    for (int row = 0; row < 3; ++row) {
+        const Vec3 a = q.rotate(Vec3{m[row * 4], m[row * 4 + 1], m[row * 4 + 2]});
+        out[row * 4] = a.x, out[row * 4 + 1] = a.y, out[row * 4 + 2] = a.z;
+    }
+    const Vec3 p = centre + offset + q.rotate(Vec3{m[12], m[13], m[14]} - centre);
+    out[12] = p.x, out[13] = p.y, out[14] = p.z;
+    return out;
 }
 // A pose in the world back into a head's own axes (native rows right, down, forward, position): the inverse of
 // native_eyes::onHead for a head whose axes are perpendicular (each divided by its own length).

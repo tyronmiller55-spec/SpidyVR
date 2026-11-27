@@ -267,11 +267,32 @@ int main() {
               "onHead is the head composed with the eye");
         const Pose moved = applied(resolved, resolved.position, {0, .1f, 0}, {0, 0, 0});
         check(near(moved.position.y, resolved.position.y + .1f, 1e-5f), "applied moves the eye");
+        const Vec3 c{1, 2, 3}, off{.05f, -.02f, .01f}, turn{0, .1f, .02f};
+        const Pose a = animated_view::fromNative(appliedNative(world, c, off, turn));
+        const Pose b = applied(resolved, c, off, turn);
+        check(length(a.position - b.position) < 1e-5f &&
+                  length(toRotVec(unit(a.orientation * b.orientation.conjugate()))) < 1e-4f,
+              "appliedNative is applied on the matrix");
     }
 
     // The switches: on by default, their own keys, revision 28 turns them on once, a 0 after it stays.
     using namespace spidy::vr_settings;
     check(Values{}.viewJumpLog, "VIEW JUMP LOG on by default");
+    {
+        const Values d{};
+        check(d.smoothViewHandoff && d.smoothViewHandoffMs == 300 && d.smoothViewHandoffSpeedCmS == 150 &&
+                  d.smoothViewCapMm == 20 && d.smoothViewCapCdeg == 100,
+              "SMOOTH VIEW HANDOFF on by default, 300 ms, 150 cm/s, 20 mm, 1 degree");
+        const std::string o = "movement_defaults=27\nsmooth_view_handoff=0\n";
+        check(withMovementDefaults(withTabOnly({}, o), o).smoothViewHandoff, "revision 28 turns the smoothing on once");
+        const std::string k = "movement_defaults=28\nsmooth_view_handoff=0\nsmooth_view_cap_mm=1\n";
+        const Values kv = withMovementDefaults(withTabOnly({}, k), k);
+        check(!kv.smoothViewHandoff, "a 0 after revision 28 stays");
+        const std::string t = tabOnlyText(Values{});
+        check(t.find("smooth_view_handoff=1\n") != std::string::npos &&
+                  t.find("smooth_view_cap_cdeg=100\n") != std::string::npos,
+              "its keys in spidy_vr.ini");
+    }
     const std::string old = "movement_defaults=27\nview_jump_log=0\n";
     check(withMovementDefaults(withTabOnly({}, old), old).viewJumpLog, "revision 28 turns the log on once");
     const std::string kept = "movement_defaults=28\nview_jump_log=0\n";
