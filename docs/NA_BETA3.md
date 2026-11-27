@@ -860,6 +860,62 @@ How the game plays is unchanged. No new settings, no new migration revision.
 4. **If it crashes**, upload the usual logs, `spidy-vr-start.log` and the new
    `.mdmp`.
 
+## beta3q: body follows view, smooth view handoff, the view jump log
+
+The owner, Nov 27: the handoffs are "jerky, jumpy" - find a way to blend the camera and hunt down the view jumps
+(t157u) - and find a way the player NEVER looks behind the body (t158u). His answer to the two plans
+(`plans/never-behind-body-1127.md` Option B, `plans/handoff-blend-1127.md` O1 + O4): "Build body follows view,
+Build smooth view handoff with comfort cap, Add the view jump log". Each is its own switch, on by default (settings
+revision **28** turns each on once); with all three off it plays as beta3p. No view yaw is written: the headset
+heading stays the only direction authority, and the air stays SpidyVR's.
+
+1. **BODY FOLLOWS VIEW** (`body_follows_view=1`; `body_follow.hpp`). With HYBRID and HEADSET FIRST, on the ground
+   (not a wall, Showtime or SpidyVR's air), when your view is past 60 degrees from his facing for 0.4 s, or past
+   100 degrees at once, the game's own turn-in-place (the forced walk-stick turn) turns him to face where you look,
+   until he is within 12 degrees. It re-arms once under 80 degrees, never gives up (a blocker - a locked move, a
+   dodge, a zip, the legs, a wall, a midair animation - makes it wait, and the log says why), is the lowest
+   priority (the landing turn and other turns go first) and the left stick always wins. Where the game can't turn
+   him yet, his DRAWN body is turned (pose only, eased in 0.25 s, merged with the landing ease) so it is never more
+   than 90 degrees off your view. A fight's 3 s tail waits unless `body_follow_fights=1` (off). Tunable:
+   `body_follow_soft_deg` (60; 20 to the hard line), `body_follow_soft_ms` (400; 0-3000), `body_follow_hard_deg`
+   (100; 60-170). Launcher: Native Animation, **Body follows view** and **Body follows in fights**.
+2. **SMOOTH VIEW HANDOFF** (`smooth_view_handoff=1`; `view_step.hpp`). The view's change that your head didn't make
+   during a handoff (a landing's snap or place, the blend, its end, a fresh latch, a reseat, the guard, an owner or
+   eye-mode switch) goes into one offset on the eyes that always decays: a critically damped spring that settles
+   in `smooth_view_handoff_ms` (300; 100-1000), never faster than `smooth_view_handoff_speed_cm_s` (150; 20-1000),
+   seeded on a switch with the old view's velocity so the motion carries through. The comfort cap: while a
+   handoff is under way (those frames, and 0.6 s after a switch) at most `smooth_view_cap_mm` (20; 5-200) and
+   `smooth_view_cap_cdeg` (100 = 1 degree; 25-1000) of that motion reaches the eyes in a frame. Outside a handoff
+   nothing is capped (SpidyVR's flips, tumbles and zips are as they were); a real teleport (over 3 m or 90 degrees)
+   goes through at once. A recenter, snap turn or realign drops the offset. Not in the flat screen or Showtime.
+   Launcher: Native Animation, **Smooth view handoff**.
+3. **VIEW JUMP LOG** (`view_jump_log=1`; `view_step.hpp`). Logging only. Each frame, the shown eye's change minus
+   what the headset did and what the view sits on did (the rig, or the animated head with its lock turn). Over
+   2 cm or 1 degree: `view jump: <m> m <deg> deg not from your head (<cause>; <all causes>), owner ..., eyes ...,
+   <ms> ms after the last switch (<why>), last action ...; shown <m> m <deg> deg (smoothed / the comfort cap held
+   it)`, at most 8 a second, and a once-a-second count with the worst and how many the cap held. spidy_vr.ini only.
+
+Offsets: none new. The thresholds are the owner's (60/100/90 degrees from t158u's plan, 2 cm / 1 degree and
+250-350 ms from the handoff plan); `REFERENCE.md` and `VALIDATION.md` hold no number these replace. Not verified in
+a headset yet.
+
+### beta3q checklist
+
+1. **Never behind him.** HEAD LEVEL, on the ground: look 70 degrees to one side and hold - within about half a
+   second he turns to face you (`body follow:` lines: the start, then "he faces your view after ... ms"). Turn
+   your head 120 degrees fast: he turns at once. You should never see his back.
+2. **The stick wins.** Push the left stick while he is turning: your direction wins at once.
+3. **Where he can't turn.** During a locked move, dodge or zip, look behind: his drawn torso turns with you
+   (`body follow: the drawn body turns with you` lines), and once the move ends he turns to face you. The 10 s `body follow:` summary should show
+   near 0% of frames past 90 degrees off his drawn body.
+4. **Not where it shouldn't.** On a wall, in Showtime and in the air: nothing turns him.
+5. **Landings and jumps.** Land from swings and jump off the ground in LEVEL and FULL: the view should glide, with no
+   one-frame hop. `view jump:` lines during handoffs should read "the comfort cap held it" with shown values at or
+   under 0.020 m / 1.0 deg.
+6. **Air untouched.** Flips, tumbles, zips and wall runs feel as in beta3p.
+7. **Off checks.** Each switch off on its own (launcher, Native Animation; the log in spidy_vr.ini) plays as beta3p.
+8. **Logs to send.** A session with landings, jumps and a fight: the `view jump:` lines name what still jumps.
+
 ## beta3p: Level keeps him with you, HEAD LEVEL by default, the smoothing clock fix
 
 The owner, Nov 26 (t151u), after trying the HEAD choices: FULL's choppiness goes with LEVEL, and "Level was the

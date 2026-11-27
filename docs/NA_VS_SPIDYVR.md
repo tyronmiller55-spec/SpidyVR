@@ -20,10 +20,13 @@ Controls). In the headset, use the **NA ·** tabs in the menu, and **NA · HELP*
   under you after dodges, rolls, turn-arounds and landings. FULL lets the animation's head bob, nod and tilt
   move your view. OFF is the plain SpidyVR camera. Set it under **Head** in the launcher's Native Animation tab
   or **HEAD** on the **NA · CORE** tab.
+- **He faces where you look.** On the ground, look well away from Spider-Man and he turns round to face you; where
+  the game can't turn him yet, his upper body turns so you never look behind him (**Body follows view**, on).
 - **Camera feel controls.** **NA · CAMERA** sets how much of the animation's motion reaches your view (CAMERA
   MOTION, PITCH, ROLL, BOB) and how much it's smoothed (STABILIZATION). Lower is calmer.
 - **Smooth hand-offs.** Switching between animation and SpidyVR (landing, jumping, starting a swing) blends
-  instead of snapping. **NA · HANDOFF** tunes how fast.
+  instead of snapping, and **Smooth view handoff** (on) glides out what's left, never more than 2 cm or 1 degree a
+  frame your head didn't make. **NA · HANDOFF** tunes how fast.
 - **Taking control mid-animation.** Tilt the left stick or squeeze a grip during a game jump or move to take
   the body over at once. Shooting a web on the ground or a perch does it too.
 - **Showtime.** Hold **X + B** for a moment to step outside Spider-Man and watch him from behind. Use the right

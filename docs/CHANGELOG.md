@@ -3,6 +3,22 @@
 Every build, newest first, with what changed, why, and what was measured.
 Per-check results are in [VALIDATION.md](VALIDATION.md).
 
+**0.8.7-na-beta3q (November 27, the owner's t157u/t158u and his answer t158s981 "Build body follows view, Build
+smooth view handoff with comfort cap, Add the view jump log"; branch `feat/087-next`, on beta3p):** a test package
+([checklist](NA_BETA3.md#beta3q-body-follows-view-smooth-view-handoff-the-view-jump-log)). Settings revision 28: the
+three new switches come on once; off of each equals beta3p. CURRENT is unchanged (beta3p).
+
+- **Body follows view** (`body_follows_view=1`). With HYBRID and HEADSET FIRST on the ground, when you look 60 degrees
+  away for 0.4 s (or 100 at once) the game's own turn-in-place turns Spider-Man to face where you look; where it
+  can't yet, his drawn body is turned (pose only) so the view is never more than 90 degrees off it. Never on walls,
+  in Showtime or in SpidyVR's air; the left stick wins; the view is never moved. `body_follow_fights` (off) lets the
+  hard catch turn him in a fight's tail too.
+- **Smooth view handoff** (`smooth_view_handoff=1`). A handoff's view change glides out over about 300 ms with its
+  speed carried (at most 1.5 m/s), and while a handoff is under way no more than 2 cm or 1 degree your head didn't
+  make reaches the eyes in a frame. Outside a handoff nothing is capped.
+- **View jump log** (`view_jump_log=1`). Logging only: every frame the view moves more than 2 cm or 1 degree that
+  your head didn't move gets a `view jump:` line with its cause.
+
 **0.8.7-na-beta3p (November 26, the owner's t151u and "Build A and make LEVEL the default, Build the smoothing
 clock fix"; branch `feat/087-next`, on beta3o):** a test package
 ([checklist](NA_BETA3.md#beta3p-level-keeps-him-with-you-head-level-by-default-the-smoothing-clock-fix)).

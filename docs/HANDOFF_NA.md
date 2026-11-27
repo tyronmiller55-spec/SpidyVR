@@ -121,13 +121,23 @@ All of these are on `tyronmiller55-spec/SpidyVR`. Do not rewrite them.
 | `2a8dd95` | Smoothing clock fix (beta3p) |
 | `186038c` | Level keeps him with you (beta3p) |
 | `bbbac4e` | HEAD LEVEL is the default (beta3p) |
-| (next) | Docs: 0.8.7-na-beta3p |
+| `b426479` | Docs: 0.8.7-na-beta3p |
+| `73ec6d1` | Body follows view (beta3q) |
+| `5b6c662` | View jump log (beta3q) |
+| `1c0344c` | Smooth view handoff (beta3q) |
+| (next) | Docs: 0.8.7-na-beta3q |
 
 ---
 
 ## 4. Settings revision and toggles
 
-`movementDefaultsRevision` is **27** (set at beta3p). It was 26 at beta3o, 25 at beta3n, 24 at beta3i, 23 at beta3g / Crime Run / polish.
+`movementDefaultsRevision` is **28** (set at beta3q). It was 27 at beta3p, 26 at beta3o, 25 at beta3n, 24 at beta3i, 23 at beta3g / Crime Run / polish.
+
+beta3q (revision 28), each **ON by default**, OFF = beta3p: `body_follows_view` (`body_follow.hpp`; tunables
+`body_follow_soft_deg` 60, `body_follow_soft_ms` 400, `body_follow_hard_deg` 100; `body_follow_fights` ships OFF),
+`smooth_view_handoff` (`view_step.hpp`; `smooth_view_handoff_ms` 300, `smooth_view_handoff_speed_cm_s` 150,
+`smooth_view_cap_mm` 20, `smooth_view_cap_cdeg` 100) and `view_jump_log` (logging only, ini only). See
+[NA_BETA3.md](NA_BETA3.md#beta3q-body-follows-view-smooth-view-handoff-the-view-jump-log).
 
 beta3p (revision 27): `level_head_lock` — LEVEL KEEPS HIM WITH YOU (`level_head_lock.hpp`; game_xr's lockWanted /
 fullLockGate / levelTurnGate, the HYBRID steering and HEADSET FIRST basis, `game_fp::levelHeadLock` and frameLevel;
@@ -269,6 +279,9 @@ Public search did not turn up a matching Meta 1.210 / OpenXR / D3D12 / NVIDIA st
 ---
 
 ## 9. Ranked next steps
+
+**Status, Nov 27:** beta3q builds the owner's t158s981 answer: body follows view, smooth view handoff with the
+comfort cap, and the view jump log, as a test zip (CI publish=false).
 
 **Status, Nov 26 (evening):** beta3p builds the owner's t151u answer: Option A of
 `plans/level-head-cohesion-1126.md` (Level keeps him with you), HEAD LEVEL as the default and the smoothing clock
