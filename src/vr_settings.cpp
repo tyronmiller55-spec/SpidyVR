@@ -3372,6 +3372,7 @@ constexpr TabOnly tabOnly[] = {
     {"body_follow_soft_deg", nullptr, &Values::bodyFollowSoftDeg},
     {"body_follow_soft_ms", nullptr, &Values::bodyFollowSoftMs},
     {"body_follow_hard_deg", nullptr, &Values::bodyFollowHardDeg},
+    {"view_jump_log", &Values::viewJumpLog, nullptr},
     {"swing_rope_weight_pct", nullptr, &Values::swingRopeWeightPct},
     {"swing_rope_drag_pct", nullptr, &Values::swingRopeDragPct},
     {"kick_lunge", &Values::kickLunge, nullptr},
@@ -3726,6 +3727,8 @@ Values withMovementDefaults(Values v, std::string_view text) {
         // Revision 28 (0.8.7-na-beta3q; the owner, Nov 27, answer t158s981): BODY FOLLOWS VIEW comes on once (a new key);
         // a 0 chosen after this revision stays. BODY FOLLOW IN FIGHTS stays as it is (off by default).
         v.bodyFollowsView = true;
+        // VIEW JUMP LOG comes on once (logging only).
+        v.viewJumpLog = true;
         // BETA3Q MIGRATION END
     }
     v.movementDefaults = movementDefaultsRevision;

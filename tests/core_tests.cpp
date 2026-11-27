@@ -26034,6 +26034,7 @@ int main() {
                   "body_follow_soft_deg=60\n"
                   "body_follow_soft_ms=400\n"
                   "body_follow_hard_deg=100\n"
+                  "view_jump_log=1\n"
                   "swing_rope_weight_pct=100\n"
                   "swing_rope_drag_pct=100\n"
                   "kick_lunge=1\n"

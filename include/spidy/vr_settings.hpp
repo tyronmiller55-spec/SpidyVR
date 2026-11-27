@@ -418,6 +418,11 @@ struct Values {
     // punch track, a dodge and the leg stick still go first). Off: in a fight he waits, the drawn body catches.
     bool bodyFollowFights = false;
     int bodyFollowSoftDeg = 60, bodyFollowSoftMs = 400, bodyFollowHardDeg = 100;
+    // VIEW JUMP LOG (0.8.7-na-beta3q, settings revision 28; the owner, Nov 27 t157u "hunt down the view jumps", and his
+    // answer "Add the view jump log"; view_step.hpp): logging only. Every frame, the shown view's change that neither the
+    // headset nor what the view sits on (the rig, the animated head) made; over 2 cm or 1 degree it is logged with its
+    // cause ('view jump: ...', at most 8 lines a second, and a once-a-second count). No feel change. Off: no lines.
+    bool viewJumpLog = true;
     // SMOOTHING (the tab's SMOOTHING; Off|Low|Medium|High|Max, default Off):
     // ease the view toward the headset's look. Translation stays current, so
     // leaning and travel do not trail. Not a Settings / Command field.

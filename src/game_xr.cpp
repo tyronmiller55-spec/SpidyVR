@@ -37,6 +37,7 @@
 #include "spidy/game_fp.hpp"
 #include "spidy/level_head_lock.hpp"
 #include "spidy/body_follow.hpp"
+#include "spidy/view_step.hpp"
 #include "spidy/game_joints.hpp"
 #include "spidy/web_aim.hpp"
 #include "spidy/game_grab.hpp"
@@ -1769,6 +1770,14 @@ DWORD WINAPI run(void*) {
         bool bodyFollowTurn = false, bodyFollowForced = false, bodyCatchWas = false;
         float bodyFollowWaitLog = 0, bodyFollowSummaryClock = 0;
         uint32_t bodyFollowFrames = 0, bodyFollowPast90 = 0, bodyFollowDrawnPast90 = 0, bodyFollowTurnsDone = 0;
+        // VIEW JUMP LOG (view_step.hpp): the measure, the log's account, this frame's causes (view_step::Cause bits, set
+        // where they happen and read where the eye command is final), the last owner switch, the head's R-stick turn.
+        view_step::Measure viewStep{};
+        view_step::JumpLog viewJumps{};
+        uint32_t viewStepCause = 0;
+        int64_t viewStepSwitchNs = -1;
+        const char* viewStepSwitchName = "none";
+        float viewStepLastTurn = 0;
         // FACING CHECK (facing_check.hpp): armed on each ownership event, a forced
         // hero turn waiting for the next frame's walk stick.
         facing_check::Check facingCheck{};
@@ -11857,6 +11866,7 @@ DWORD WINAPI run(void*) {
                                             softPlaced = true;
                                         }
                                         if (plan.place && !softPlaced) {
+                                            viewStepCause |= view_step::place;
                                             hybridBlend.placed = true;
                                             ++handoffPlaces;
                                             diag_log::writef("handoff place: %s %.2f m onto the head, placed at once (over "
@@ -11865,6 +11875,9 @@ DWORD WINAPI run(void*) {
                                                              handoffPlaces);
                                         } else if (plan.place || plan.ms > baseMs ||
                                                    (snap && plan.ms != baseMs)) {
+                                            viewStepCause |= softPlaced && snap ? view_step::landingSnap
+                                                             : softPlaced         ? view_step::place
+                                                                                  : 0u;
                                             if (softPlaced && snap) {
                                                 diag_log::writef(
                                                     "landing view snap: %s %.2f m from the head, %.2f m "
@@ -13291,6 +13304,7 @@ DWORD WINAPI run(void*) {
                         if (seatWhy == head_seat::Why::owner || seatWhy == head_seat::Why::recenter)
                             animHeadRefSet = false;
                         if (!animHeadRefSet) {
+                            viewStepCause |= view_step::latch;
                             viewLockRelatch = true; // the yaw lock starts afresh with it
                             animHeadRef = {frame.head.position, screenAhead(frame.head, 0).orientation};
                             animHeadRefSet = validTrackedPose(frame.head);
@@ -13313,6 +13327,7 @@ DWORD WINAPI run(void*) {
                             if (seatWhy != head_seat::Why::none &&
                                 head_seat::reseat(animHeadSeat, animHeadRef, frame.head.position, eyeBlendNow,
                                                   &off)) {
+                                viewStepCause |= view_step::seat;
                                 ++animSeatCount;
                                 ++armEpoch; // a reseat glides the frame, not the hands
                                 if (eyeBlendNow - animSeatDiagAt > 250'000'000) {
@@ -13770,6 +13785,7 @@ DWORD WINAPI run(void*) {
                                     if (values.headsetFirst && hybridLock && viewLockActive && !df.discontinuity) {
                                         const float fix = viewGuard.correct(dirReport.lastImposed(), frame.seconds);
                                         if (fix != 0.f) {
+                                            viewStepCause |= view_step::guard;
                                             viewLock.yaw = stable_yaw::wrap(viewLock.yaw + fix);
                                             hybridHeading.yaw = stable_yaw::wrap(hybridHeading.yaw + fix);
                                             lock.yaw = viewLock.yaw;
@@ -13978,11 +13994,69 @@ DWORD WINAPI run(void*) {
                         eyes.anchored = 1;
                     }
                     if (hybridBlend.active && hybrid_handoff::blendDoneFor(eyeBlendElapsed, eyeBlendAllNs)) {
+                        viewStepCause |= view_step::blendEnd;
                         if (hybridBlend.delayArmsClear)
                             animatedArmsState = {};
                         hybridBlend.delayArmsClear = false;
                         hybridBlend.delayModelYaw = false;
                         hybridBlend.active = false;
+                    }
+                    // VIEW JUMP LOG (view_step.hpp; view_jump_log): the shown view's change that neither the headset
+                    // nor what it sits on (the rig, or the animated head) made. Over 2 cm or 1 degree a frame it is logged
+                    // with its cause. Logging only.
+                    {
+                        if (hybridOwner.enterVr || hybridOwner.enterAnim) {
+                            viewStepCause |= view_step::ownerSwitch;
+                            viewStepSwitchNs = eyeBlendNow;
+                            viewStepSwitchName = hybridOwner.enterAnim
+                                                     ? hybrid_owner::enterAnimName(hybridOwner.lastEnterAnim)
+                                                     : hybrid_owner::enterVrName(hybridOwner.lastEnterVr);
+                        }
+                        if (hybridBlend.active)
+                            viewStepCause |= view_step::blend;
+                        const bool onHeadEyes = eyes.anchored == 2 || eyes.anchored == 4;
+                        view_step::Frame vf;
+                        vf.dt = frame.seconds;
+                        vf.ok = values.viewJumpLog && eyes.enabled == 1 && !flatScreen && !showtimeMachine.out() &&
+                                (onHeadEyes ? haveAnimHead : eyes.anchored == 1 && motion.active);
+                        if (vf.ok) {
+                            vf.shown = animated_view::fromNative(onHeadEyes ? native_eyes::onHead(eyes.eyes[0].world, animHeadNow)
+                                                                            : eyes.eyes[0].world);
+                            vf.anchor = onHeadEyes ? animated_view::fromNative(animHeadNow)
+                                                   : compose(motion.headPose, inverse(frame.head));
+                            vf.anchorOk = onHeadEyes || validTrackedPose(frame.head);
+                            vf.tracked = frame.eyes[0].pose;
+                            vf.trackedOk = validTrackedPose(frame.eyes[0].pose);
+                            vf.source = eyes.anchored | (hybridOwner.domain == hybrid_owner::Domain::vr ? 0x100u : 0u);
+                            vf.relTurn = onHeadEyes ? stable_yaw::wrap(animHeadTurn - viewStepLastTurn) : 0.f;
+                            vf.playerCut = frame.recentered || seatWhy == head_seat::Why::recenter || viewLockSnapped;
+                        }
+                        viewStepLastTurn = animHeadTurn;
+                        const view_step::Step vs = viewStep.step(vf);
+                        if (vs.cut)
+                            viewStepCause |= vs.anchorJump ? view_step::anchorCut : view_step::sourceChange;
+                        if (vs.measured && viewJumps.add(vs.metres, vs.deg, viewStepCause, false)) {
+                            char causes[96];
+                            view_step::causeList(viewStepCause, causes, sizeof(causes));
+                            diag_log::writef(
+                                "view jump: %.3f m %.1f deg not from your head (%s; %s), owner %s, eyes %s, %.0f ms "
+                                "after the last switch (%s), last action %s",
+                                vs.metres, vs.deg, view_step::causeName(viewStepCause), causes,
+                                hybridOwner.domain == hybrid_owner::Domain::vr ? "SpidyVR" : "animation",
+                                eyes.anchored == 2 ? "on the head (full)"
+                                : eyes.anchored == 4 ? "on the head (level)"
+                                                     : "tracked",
+                                viewStepSwitchNs >= 0 ? static_cast<float>(eyeBlendNow - viewStepSwitchNs) / 1e6f : -1.f,
+                                viewStepSwitchName, direction_report::actionName(dirReport.last()));
+                        }
+                        if (viewJumps.tick(frame.seconds)) {
+                            diag_log::writef("view jump: %u frames of %u in the last second over 2 cm or 1 deg not from "
+                                             "your head (worst %.3f m / %.1f deg, %s); %u in all",
+                                             viewJumps.jumps, viewJumps.frames, viewJumps.worstM, viewJumps.worstDeg,
+                                             view_step::causeName(viewJumps.worstCause), viewJumps.total);
+                            viewJumps.clear();
+                        }
+                        viewStepCause = 0;
                     }
                     // Slice C: keep what this command shows, in the world, as the next
                     // edge's blend source (head-locked eyes put on this frame's head).
