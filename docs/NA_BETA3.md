@@ -860,6 +860,45 @@ How the game plays is unchanged. No new settings, no new migration revision.
 4. **If it crashes**, upload the usual logs, `spidy-vr-start.log` and the new
    `.mdmp`.
 
+## beta3r: Smooth view handoff, the cap only on a real landing switch
+
+The owner, Nov 27 (t161u), after beta3q: "my head takes too long to reseat and moves way too slow to even follow
+the body, and nothing I set could fix it. This update completely broke the head and body connection. Half of the
+time my head wasn't even on my body." His answer to the fix options (`plans/beta3q-regression-1127.md` Option A):
+"Fix it: cap only real landing switches."
+
+**What went wrong.** Smooth view handoff's comfort cap (2 cm and 1 degree a frame) was meant to hold only a
+handoff. It also treated a 0.4 m rig/anchor step and a head-seat reseat as a handoff, so swings, zips and SpidyVR's
+air were capped, and reseats (which already have their own glide) were too. What the cap held back piled up as an
+offset (up to 2 m). In the 17:59 session (687 s, build a4bc15c) 986 logged jumps said "the comfort cap held it";
+298 of those were more than 0.6 s after the last switch, almost all "anchor jump", 259 in SpidyVR's air. Head-seat
+pull reports averaged 0.49 m off the neck over 10 s, worst 1.51 m. The sliders he changed (handoff, camera,
+head-seat) could not turn this cap off; he never changed `smooth_view_handoff` or its ini-only numbers.
+
+This build, no new setting, revision still **28**:
+
+1. The cap's window is a real handoff only (`view_step::capWindowBits`): an owner switch, a view-source change, a
+   landing snap or place, a blend or its end, a latch, a guard, or the first 0.6 s after a switch. An anchor jump
+   and a head-seat reseat are not in it.
+2. Outside that window the view is left as it is (the air stays SpidyVR's), and any leftover offset is dropped so
+   the head cannot sit off the body. The spring is unchanged.
+3. Off still plays as beta3p. The three beta3q switches are not turned back on; if the restore ini is in place,
+   `smooth_view_handoff` is 0 until he turns it on.
+
+### beta3r checklist
+
+1. **With the cap on.** In `spidy_vr.ini` set `smooth_view_handoff=1` (or the launcher row Smooth view handoff). Keep
+   `movement_defaults=28`. A swing, a zip and a wall run should follow the body as in beta3p, with no lagging head.
+2. **Reseat.** After a move that reseats the head, it should sit back on the neck in its usual 165 ms glide, not a
+   crawl.
+3. **Landings and jumps.** Land from swings and jump off the ground: the view should still glide, with no one-frame
+   hop. During those handoffs `view jump:` may still say "the comfort cap held it", with shown values at or under
+   0.020 m / 1.0 deg.
+4. **Air.** Mid-swing and mid-zip `view jump:` lines, if any, should not say "the comfort cap held it" unless a
+   real handoff is under way.
+5. **Off check.** `smooth_view_handoff=0` plays as beta3p.
+6. **Logs to send.** A short session with swings, zips, landings and a reseat.
+
 ## beta3q: body follows view, smooth view handoff, the view jump log
 
 The owner, Nov 27: the handoffs are "jerky, jumpy" - find a way to blend the camera and hunt down the view jumps

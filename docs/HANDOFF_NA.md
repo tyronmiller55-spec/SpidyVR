@@ -1,4 +1,4 @@
-# SpidyVR Native Animation handoff (as of 2026-11-27, Pacific time)
+# SpidyVR Native Animation handoff (as of 2026-11-28, Pacific time)
 
 Written the morning of Friday, November 27, 2026 (America/Los_Angeles), so a fresh assistant can resume this work
 cold, with no prior history: the previous assistant ran out of capacity (the owner, t159u). Section 0 is the whole
@@ -9,12 +9,13 @@ resolved and kept for history). Also read [NA_BETA3.md](NA_BETA3.md), [NA_VS_SPI
 
 ---
 
-## 0. Start here (Nov 27)
+## 0. Start here (Nov 28)
 
 **Where things stand.** Work branch `feat/087-next` on the fork `tyronmiller55-spec/SpidyVR`. The newest build is
-**0.8.7-na-beta3q** (docs tip `a4bc15c`), built as a test zip for the owner; it is **not** CURRENT. CURRENT (what
-testers get) is **beta3p**. The Nov 25-26 Link 1.210 stack-overflow crash was fixed in beta3m (16 MB VR-thread
-stack; the owner: "No MDMP, game ran fine"). Nothing in beta3q is verified in a headset yet.
+**0.8.7-na-beta3r** (the cap fix; docs tip on this commit), built as a test zip for the owner; it is **not**
+CURRENT. CURRENT (what testers get) is **beta3p**. beta3q's comfort cap broke the head/body connection (t161u; see
+`/workspace/plans/beta3q-regression-1127.md`); the owner chose Option A (t162s1012). The Nov 25-26 Link 1.210
+stack-overflow crash was fixed in beta3m (the owner: "No MDMP, game ran fine").
 
 ### 0.1 Builds (all CI runs `publish=false`, Release workflow on `feat/087-next`)
 
@@ -23,11 +24,12 @@ stack; the owner: "No MDMP, game ran fine"). Nothing in beta3q is verified in a 
 | beta3o | `46d3589` wall slide pose, `29996b0` grip jump lock, `bb9796e` line in the fist, `193ea31` rope grip, docs `7a68938` | [45887550836](https://github.com/tyronmiller55-spec/SpidyVR/actions/runs/45887550836) (success) | `Spidy-0.8.7-na-beta3o-win64-7a68938.zip` | 18,638,875 | `f6c6cdeb5e9c9f6d3e0b528317e9539722b19bdb1348eec32c49a3a761a5b8ae` |
 | beta3p (CURRENT) | `2a8dd95` smoothing clock fix, `186038c` Level keeps him with you, `bbbac4e` HEAD LEVEL default, docs `b426479` | [45896082078](https://github.com/tyronmiller55-spec/SpidyVR/actions/runs/45896082078) (success) | `Spidy-0.8.7-na-beta3p-win64-b426479.zip` | 18,640,598 | `3e725db0fd5f5161f5ea50087dd23c193c6c874c90afcd16326add37a471221f` |
 | beta3q | `73ec6d1` Body follows view, `5b6c662` View jump log, `1c0344c` Smooth view handoff, docs `a4bc15c` | [46010957792](https://github.com/tyronmiller55-spec/SpidyVR/actions/runs/46010957792) (success, 54/54 ctest, Nov 27 5:53-5:56 AM PST); also 46008825506 (`73ec6d1`) and 46009995352 (`5b6c662`), both success | `Spidy-0.8.7-na-beta3q-win64-a4bc15c.zip` | 18,596,138 | `d17439a93d1f386db8f2867c3fadc2cd40e2e40dccbffad83013825a8b67ed80` |
+| beta3r | `1787c0a` Smooth view handoff cap only on a real landing switch, docs (this commit) | CI `publish=false` on this tip; zip `Spidy-0.8.7-na-beta3r-win64-<docs-sha>.zip` | (after the run) |  |  |
 
 The CI artifact is `Spidy-0.8.7-win64.zip`; `gh run download` unpacks it to a folder
 `Spidy-0.8.7-player-torso-<sha7>/`, which is re-zipped as the named zip above (89 files). Zips go to the owner as chat
 attachments. The owner installs to a folder named after the sha7: always confirm the folder sha7 and the console's
-version label (`0.8.7-na-beta3q`) before blaming a build for anything.
+version label (`0.8.7-na-beta3r`) before blaming a build for anything.
 
 ### 0.2 CURRENT release state
 
@@ -102,6 +104,15 @@ zips and wall runs unchanged; each switch off plays as beta3p; and **send a log*
 covers it); the comfort cap slows a handoff's view by design (a long blend could feel floaty: raise
 `smooth_view_cap_mm` / `_cdeg` or lower `smooth_view_handoff_ms`); the measure's anchor for tracked eyes is the
 rig, so a fast SpidyVR rig move outside a handoff is measured but never capped. None of this is headset-verified.
+
+### 0.4b beta3r: the cap fix (Nov 28)
+
+The owner's t162s1012: cap only real landing switches. `view_step::capWindowBits` / `capWindow` no longer include
+`anchorCut` or `seat`. Outside a real handoff the smoother drops any leftover offset. No new setting, no revision
+bump (still 28). The restore ini at `/workspace/plans/spidy_vr-beta3p-restore.ini` has `smooth_view_handoff=0`; to
+test the fix, change that line to `smooth_view_handoff=1` (or turn on the launcher row) and keep
+`movement_defaults=28`. Do not turn the other two beta3q switches back on unless he asks. Details:
+[NA_BETA3.md](NA_BETA3.md#beta3r-smooth-view-handoff-the-cap-only-on-a-real-landing-switch).
 
 ### 0.5 Open items (none started unless noted; each needs the owner's ask)
 
@@ -416,6 +427,9 @@ Public search did not turn up a matching Meta 1.210 / OpenXR / D3D12 / NVIDIA st
 ---
 
 ## 9. Ranked next steps
+
+**Status, Nov 28:** beta3r is the owner's t162s1012 fix: the smooth view handoff cap holds only a real landing
+switch, never a swing, zip, reseat or SpidyVR's air (test zip, CI publish=false). No new setting.
 
 **Status, Nov 27:** beta3q builds the owner's t158s981 answer: body follows view, smooth view handoff with the
 comfort cap, and the view jump log, as a test zip (CI publish=false).

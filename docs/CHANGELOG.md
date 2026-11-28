@@ -3,6 +3,17 @@
 Every build, newest first, with what changed, why, and what was measured.
 Per-check results are in [VALIDATION.md](VALIDATION.md).
 
+**0.8.7-na-beta3r (November 28, the owner's t161u and his answer t162s1012 "Fix it: cap only real landing
+switches"; branch `feat/087-next`, on beta3q):** a test package
+([checklist](NA_BETA3.md#beta3r-smooth-view-handoff-the-cap-only-on-a-real-landing-switch)). No new setting; revision
+stays 28. CURRENT is unchanged (beta3p).
+
+- **Smooth view handoff cap fix.** The 2 cm / 1 degree comfort cap only holds a real handoff (an owner switch, a
+  landing snap or place, a blend, a latch, a guard, or the first 0.6 s after a switch). A swing, a zip, a head-seat
+  reseat and SpidyVR's air are no longer capped; a leftover offset is dropped so the head cannot sit off the body.
+  The spring is unchanged. Off still plays as beta3p. The owner's restore ini leaves this switch off: turn
+  `smooth_view_handoff` on to try the fix.
+
 **0.8.7-na-beta3q (November 27, the owner's t157u/t158u and his answer t158s981 "Build body follows view, Build
 smooth view handoff with comfort cap, Add the view jump log"; branch `feat/087-next`, on beta3p):** a test package
 ([checklist](NA_BETA3.md#beta3q-body-follows-view-smooth-view-handoff-the-view-jump-log)). Settings revision 28: the
