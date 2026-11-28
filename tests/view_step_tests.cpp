@@ -187,7 +187,7 @@ int main() {
         quiet.measured = true;
         float worst = 0;
         for (int i = 0; i < 180; ++i) {
-            o = sm.update(dt, quiet, false, p);
+            o = sm.update(dt, quiet, true, p);
             worst = std::max(worst, o.shownDeg);
         }
         check(worst <= 1.f + 1e-3f && length(o.turn) < .2f * degrees, "decays at most 1 degree a frame, settled");
@@ -207,6 +207,44 @@ int main() {
         far.pos = {5.f, 0, 0};
         o = sm.update(dt, far, true, p);
         check(o.teleport && length(o.offset) == 0.f && !sm.active(), "a 5 m teleport passes, the offset dropped");
+    }
+    // beta3r (t162s1012): the cap is only on a real handoff. An anchor jump, a reseat, a swing or zip is not
+    // capped, and a leftover offset does not last past the window.
+    {
+        check(!capWindow(anchorCut, false) && !capWindow(seat, false) && !capWindow(anchorCut | seat, false),
+              "an anchor jump or a reseat is not a cap window");
+        check(capWindow(landingSnap, false) && capWindow(place, false) && capWindow(blend, false) &&
+                  capWindow(blendEnd, false) && capWindow(latch, false) && capWindow(guard, false) &&
+                  capWindow(ownerSwitch, false) && capWindow(sourceChange, false) && capWindow(0, true),
+              "a real handoff (switch, snap, place, blend, latch, guard, or 0.6 s after a switch) is");
+        const Params p{};
+        Smoother sm;
+        Step cut;
+        cut.measured = true;
+        cut.pos = {.5f, 0, 0};
+        cut.metres = .5f;
+        cut.anchorJump = true;
+        cut.cut = true;
+        auto o = sm.update(dt, cut, capWindow(anchorCut, false), p);
+        check(!o.capped && near(o.shownM, .5f, 1e-4f) && !sm.active(),
+              "a 0.5 m anchor step outside a handoff is not capped");
+        Step reseat;
+        reseat.measured = true;
+        reseat.pos = {0, .2f, 0};
+        reseat.metres = .2f;
+        o = sm.update(dt, reseat, capWindow(seat, false), p);
+        check(!o.capped && near(o.shownM, .2f, 1e-4f) && !sm.active(), "a reseat is not capped");
+        Step snap;
+        snap.measured = true;
+        snap.pos = {.3f, 0, 0};
+        snap.metres = .3f;
+        o = sm.update(dt, snap, capWindow(landingSnap, false), p);
+        check(o.capped && near(o.shownM, .02f, 1e-4f) && sm.active(), "in a handoff the 2 cm cap still holds");
+        Step quiet;
+        quiet.measured = true;
+        o = sm.update(dt, quiet, false, p);
+        check(!o.capped && length(o.offset) == 0.f && !sm.active(),
+              "a leftover offset is dropped once the handoff window ends");
     }
     // The switch's speed carried: seeded, the offset moves on the old way before it comes back.
     {

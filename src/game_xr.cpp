@@ -14036,9 +14036,12 @@ DWORD WINAPI run(void*) {
                         const view_step::Step vs = viewStep.step(vf);
                         if (vs.cut)
                             viewStepCause |= vs.anchorJump ? view_step::anchorCut : view_step::sourceChange;
-                        // SMOOTH VIEW HANDOFF (smooth_view_handoff; view_step.hpp, plan handoff-blend-1127.md O1 + O4):
-                        // the offset that decays (a spring, seeded on a switch with the old view's velocity) and the
-                        // comfort cap while a handoff is under way. On the eyes drawn only: never the heading.
+                        // SMOOTH VIEW HANDOFF (smooth_view_handoff; view_step.hpp, plan handoff-blend-1127.md O1 + O4;
+                        // beta3r, t162s1012: the cap only on a real handoff). The offset that decays (a spring, seeded
+                        // on a switch with the old view's velocity) and the comfort cap while a real handoff is under
+                        // way (a switch, a landing snap or place, a blend, a latch, a guard, or the switch's first
+                        // 0.6 s). An anchor jump, a head-seat reseat, a swing, a zip and SpidyVR's air are not capped;
+                        // a leftover offset is dropped. On the eyes drawn only: never the heading.
                         view_step::Smoother::Out so{};
                         bool smoothed = false;
                         if (!values.smoothViewHandoff || !vf.ok || vf.playerCut) {
@@ -14047,15 +14050,10 @@ DWORD WINAPI run(void*) {
                             const view_step::Params sp = view_step::paramsOf(
                                 values.smoothViewHandoffMs, values.smoothViewHandoffSpeedCmS, values.smoothViewCapMm,
                                 values.smoothViewCapCdeg);
-                            constexpr uint32_t windowBits = view_step::ownerSwitch | view_step::sourceChange |
-                                                            view_step::anchorCut | view_step::landingSnap |
-                                                            view_step::place | view_step::blend |
-                                                            view_step::blendEnd | view_step::latch |
-                                                            view_step::seat | view_step::guard;
-                            const bool window =
-                                (viewStepCause & windowBits) != 0 ||
-                                (viewStepSwitchNs >= 0 &&
-                                 static_cast<float>(eyeBlendNow - viewStepSwitchNs) * 1e-9f < sp.windowSeconds);
+                            const bool afterSwitch =
+                                viewStepSwitchNs >= 0 &&
+                                static_cast<float>(eyeBlendNow - viewStepSwitchNs) * 1e-9f < sp.windowSeconds;
+                            const bool window = view_step::capWindow(viewStepCause, afterSwitch);
                             so = viewSmooth.update(frame.seconds, vs, window, sp);
                             if (viewSmooth.active()) {
                                 Mat4 w[2];

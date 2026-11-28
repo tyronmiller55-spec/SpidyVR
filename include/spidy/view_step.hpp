@@ -1,7 +1,7 @@
 #pragma once
-// VIEW STEP: what moves the view that the player's head did not (0.8.7-na-beta3q; the owner, Nov 27 t157u: "jerky,
-// jumpy handoffs ... hunt down the view jumps", and his answer t158s981 "Add the view jump log" and "Build smooth view
-// handoff with comfort cap"; plan handoff-blend-1127.md O1 + O4).
+// VIEW STEP: what moves the view that the player's head did not (0.8.7-na-beta3r; the owner, Nov 27 t157u / t158s981,
+// and the cap fix t162s1012 "cap only real landing switches"; plan handoff-blend-1127.md O1 + O4, regression
+// beta3q-regression-1127.md Option A).
 //
 // MEASURE: every frame, the shown eye's change minus what the headset itself did and what the view's anchor did (the
 // rig - SpidyVR's own placement, flips and snap turns included - or the animated head the view sits on, its lock turn
@@ -13,12 +13,12 @@
 //
 // SMOOTH VIEW HANDOFF (smooth_view_handoff): one offset on the shown view that always decays - a critically damped
 // spring (settles in `settleSeconds`, 250-350 ms; at most `maxSpeed` 1.5 m/s), seeded on a switch with the old
-// source's velocity so the speed carries through - and a comfort cap: while a handoff is under way (a blend, a switch's
-// first `windowSeconds`, a latch, reseat or guard frame) no more than `capM` (2 cm) and `capRad` (1 degree) of
-// non-head motion reaches the eyes in a frame; the excess goes into the offset. Outside those windows the view is left
-// as it is (the air is SpidyVR's: its flips, tumbles and zips are not capped); only the offset's own decay is
-// limited to the cap. A real teleport (over `teleportM` or `teleportRad`) is let through and the offset dropped.
-// Portable, pure.
+// source's velocity so the speed carries through - and a comfort cap: while a real handoff is under way (a blend, a
+// switch's first `windowSeconds`, a landing snap or place, a latch or guard frame; `capWindowBits`) no more than
+// `capM` (2 cm) and `capRad` (1 degree) of non-head motion reaches the eyes in a frame; the excess goes into the
+// offset. An anchor jump, a head-seat reseat, a swing, a zip and SpidyVR's air are not a handoff: they are not
+// capped, and any leftover offset is dropped so it cannot hold the head off the body (beta3r). A real teleport
+// (over `teleportM` or `teleportRad`) is let through and the offset dropped. Portable, pure.
 #include "spidy/math.hpp"
 #include <algorithm>
 #include <cmath>
@@ -97,6 +97,15 @@ inline void causeList(uint32_t bits, char* out, size_t size) {
         }
     if (!n)
         std::snprintf(out, size, "none");
+}
+
+// The comfort cap's window (beta3r, t162s1012): a real handoff only. An anchor cut (a 0.4 m rig step in the air,
+// a swing or a zip) and a head-seat reseat (it keeps its own glide) are not in this. `afterSwitch` is the
+// switch's first windowSeconds.
+inline constexpr uint32_t capWindowBits =
+    ownerSwitch | sourceChange | landingSnap | place | blend | blendEnd | latch | guard;
+inline bool capWindow(uint32_t cause, bool afterSwitch) {
+    return (cause & capWindowBits) != 0 || afterSwitch;
 }
 
 struct Frame {
@@ -228,7 +237,8 @@ class Smoother {
         float shownM = 0, shownDeg = 0; // the non-head motion the eyes showed this frame, after the cap
         bool capped = false, teleport = false;
     };
-    // `window`: a handoff is under way (the cap applies to the whole of the step).
+    // `window`: a real handoff is under way (the cap applies to the whole of the step). Outside it the step is
+    // left as it is and any leftover offset is dropped (the head stays on the body).
     Out update(float dtIn, const Step& s, bool window, const Params& p) {
         Out out;
         const float dt = std::isfinite(dtIn) ? std::clamp(dtIn, 0.f, .1f) : 0.f;
@@ -237,6 +247,12 @@ class Smoother {
         if (s.measured && (length(r) > p.teleportM || length(rr) > p.teleportRad)) {
             reset();
             out.teleport = true;
+            out.shownM = length(r);
+            out.shownDeg = length(rr) / degrees;
+            return out;
+        }
+        if (!window) {
+            reset();
             out.shownM = length(r);
             out.shownDeg = length(rr) / degrees;
             return out;
